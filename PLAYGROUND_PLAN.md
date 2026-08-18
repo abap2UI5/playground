@@ -197,59 +197,57 @@ Beispielklasse (Editor kommt in Phase 4/5).
 
 ## Phase 4 — Editor: Monaco + abaplint
 
-Ziel: Links ein Editor mit VS-Code-Gefühl — Live-Diagnostik, Completion,
-Hover, Pretty Printer — gegen die echten Framework-Definitionen.
+Ziel: Links ein Editor mit VS-Code-Gefühl — Live-Diagnostik, Hover,
+Go-to-Definition, Rename, Pretty Printer — gegen die echten
+Framework-Definitionen.
 
-- [ ] **P4.1 Monaco einbetten.** Monaco-Editor in der Shell, ABAP-Sprach-ID,
-  Light/Dark folgt dem System. Bundling beachten (Monaco braucht seine
-  Worker; mit esbuild/vite das dokumentierte Monaco-Setup verwenden).
-  *Abnahme:* Editor rendert, ABAP-Beispieltext mit Grund-Highlighting.
-- [ ] **P4.2 abaplint-Worker + Registry.** Web Worker mit `@abaplint/core`:
-  Registry enthält die downgeporteten Framework-Quellen aus dem Build
-  (als JSON-Manifest `dist/editor/registry.json` mitliefern) plus die
-  Nutzerdatei. abaplint-Konfiguration: Syntax-Target passend zum Transpiler
-  (702-Downport-Ziel), Regeln moderat (Syntaxfehler ja, Stil-Nörgelei nein).
-  *Abnahme:* Headless-Test — absichtlicher Syntaxfehler in der Nutzerdatei
-  erzeugt eine Diagnostik mit korrekter Zeile; Referenz auf
-  `z2ui5_cl_ui5_view_builder` ohne Fehler (beweist, dass die Registry die
-  Framework-Definitionen kennt).
-- [ ] **P4.3 @abaplint/monaco verdrahten.** Diagnostik als Marker,
-  Completion, Hover, Format-Aktion (Pretty Printer) über `@abaplint/monaco`
-  anbinden (API im Paket nachlesen; Vorbild ist der abaplint-Playground).
-  *Abnahme:* Playwright-Test: Tippen von `z2ui5_cl_` liefert
-  Completion-Vorschläge; kaputter Code zeigt rote Marker.
+- [x] **P4.1 Monaco einbetten.** `src/editor/editor.mjs`: Monaco aus npm,
+  ABAP-Grammatik aus `monaco-editor/languages/definitions/abap`, Theme folgt
+  `prefers-color-scheme`. Monacos eigene Worker werden bewusst nicht gebaut
+  (siehe Erkenntnisse).
+  *Abnahme:* Test — Editor rendert den Beispielcode mit Highlighting.
+- [x] **P4.2 abaplint-Registry.** *(kein Web Worker — siehe Erkenntnisse.)*
+  `src/editor/registry.mjs` baut eine Registry mit den **Original**-Quellen
+  von abap2UI5 + open-abap-core als Dependencies (`dist/editor/corpus.json`,
+  910 Dateien, 3,8 MB) plus der Nutzerdatei. Syntax-Target v750, Regelsatz
+  auf „würde das laufen" beschränkt. Erster Parse über `parseAsync` mit
+  Fortschritt, damit die Seite nicht einfriert.
+  *Abnahme:* Tests — Syntaxfehler erzeugt Marker in der richtigen Zeile;
+  eine Klasse, die nur korrekt aufs Framework zugreift, meldet **nichts**
+  (beweist, dass die Registry das Framework kennt); ein nicht existierender
+  Klassenname und eine fehlende Methodenimplementierung werden gemeldet.
+- [x] **P4.3 @abaplint/monaco verdrahten.** Diagnostik als Marker, Hover,
+  Definition, Rename, Referenzen, Symbole, Quick Fixes, semantisches
+  Highlighting und der Pretty Printer über `registerABAP( )`.
+  Namens-Completion ist **selbst gebaut** — abaplint hat dafür keine API
+  (siehe Erkenntnisse).
+  *Abnahme:* Tests — Completion schlägt `z2ui5_cl_ui5_view_builder` vor,
+  Hover zeigt etwas, Format rückt die Klasse wieder ein.
 
 ## Phase 5 — Live-Transpile: der eigentliche Playground-Kern
 
 Ziel: Der Code aus dem Editor läuft nach "Run" rechts als App.
 
-- [ ] **P5.1 Downport der Nutzerklasse im Worker.** Die gleichen
-  abaplint-Fix-Regeln wie im Build (P1.1), aber programmatisch auf die eine
-  Nutzerdatei angewandt (abaplint `applyFixes`-API). Moderne Syntax
-  (Inline-Deklarationen, String-Templates, VALUE #) muss danach 702-tauglich
-  sein.
-  *Abnahme:* Unit-Test mit einer Klasse voller moderner Syntax → Downport-
-  Ergebnis kompiliert im Transpiler.
-- [ ] **P5.2 Einzelobjekt-Transpile.** `@abaplint/transpiler` im Worker:
-  transpiliert NUR die Nutzerklasse gegen die volle Registry (Framework als
-  Kontext, aber nicht neu ausgeben — API dafür im Transpiler nachlesen;
-  falls es kein Einzelobjekt-API gibt: alles transpilieren und nur das
-  Nutzer-Modul verwenden, Performance messen und dokumentieren).
-  *Abnahme:* Test — Ausgabe ist ein ESM-Modul-String der Nutzerklasse;
-  Transpile-Dauer im Browser < ~5 s (messen, im README notieren).
-- [ ] **P5.3 Laden + Registrieren.** Modul-String als Blob-URL dynamisch
-  importieren, Klasse in `abap.Classes` registrieren (Namenskonvention der
-  Transpiler-Ausgabe beachten), bei erneutem Run die alte Registrierung
-  ersetzen.
-  *Abnahme:* Playwright-Test: Editor-Code → Run → App rendert rechts;
-  Code ändern → Run → geänderte App rendert (kein Reload der Gesamtseite
-  nötig außer dem iframe).
-- [ ] **P5.4 Fehler-UX.** Transpiler-/Laufzeitfehler landen lesbar in einem
-  Ausgabe-Panel (nicht nur in der Konsole): abaplint-Diagnostik vor Run
-  erzwingen (Run bei Syntaxfehlern blockieren mit Hinweis), Runtime-Dumps
-  (`abap.Classes`-Exceptions) abfangen und mit Klasse/Methode anzeigen.
-  *Abnahme:* Test mit drei Fehlerbildern — Syntaxfehler (blockt Run),
-  Transpiler-Limitierung (Meldung im Panel), Laufzeitfehler (Dump im Panel).
+- [x] **P5.1 Downport der Nutzerklasse.** **Entfällt vollständig** — der
+  Transpiler versteht modernes ABAP direkt (siehe Erkenntnisse Phase 5).
+  *Abnahme:* Test „modern ABAP is compiled without a downport step" —
+  `VALUE #( FOR … )`, `COND #`, String-Templates, Inline-Deklarationen und
+  Tabellenausdrücke laufen als App.
+- [x] **P5.2 Einzelobjekt-Transpile.** `src/editor/transpile.mjs`: Der
+  Transpiler bekommt einen Proxy auf die Registry, in dem nur die
+  Nutzerklasse existiert. 20 s → **10–50 ms**.
+  *Abnahme:* Test — Editor ändern, Run, die neue App rendert.
+- [x] **P5.3 Laden + Registrieren.** `defineClass( )` in
+  `src/runtime/index.mjs` führt den erzeugten Code mit `new Function` aus
+  (kein Blob-Import — der würde gecacht) und leert anschließend die
+  Typ-Caches des Frameworks.
+  *Abnahme:* Test „a second run replaces the class" — zweiter Run mit
+  anderen Attributen rendert korrekt.
+- [x] **P5.4 Fehler-UX.** Run ist bei Fehlern blockiert und nennt die Zeile;
+  ein falsch benannter Klassenname bekommt eine eigene Meldung statt
+  abaplints „must match filename"; eine ABAP-Ausnahme landet im
+  Framework-Fehlerbild mit vollem Dump.
+  *Abnahme:* drei Tests, je ein Fehlerbild.
 
 ## Phase 6 — Playground-UX
 
@@ -368,6 +366,40 @@ weil `init.mjs` jedes Objekt lädt. Tree-Shaking ist nicht möglich, solange ABA
 Klassen dynamisch über `abap.Classes[name]` auflöst. 0,8 MB gzip ist für einen
 Playground unkritisch.
 
+### Erkenntnisse Phase 2
+
+**Der geplante fetch-ICF-Shim entfällt — das war der falsche Weg.**
+`z2ui5_cl_ui5_http_handler` hat mit `_main( is_req )` eine *öffentliche
+Klassenmethode*, die eine schlichte Struktur (`method`, `body`, `path`,
+`t_params`) nimmt und eine schlichte Struktur (`body`, `status_code`,
+`status_reason`) zurückgibt. Der ganze `if_http_server`-Apparat existiert nur,
+um genau diese beiden Strukturen zu füllen und zu leeren. Statt ihn
+nachzubauen, ruft `zcl_pg_bridge` die Methode direkt auf — 40 Zeilen ABAP
+statt einer Fake-ICF-Schicht.
+
+Was dabei wegfällt, fällt zu Recht weg: Kompression, Stateful-Sessions und der
+`sap-contextid`-Header-Tanz haben auf einer statischen Seite keine Bedeutung,
+und die CSRF-Prüfung existiert, um Cross-Origin-POSTs abzuweisen — hier
+verlässt die Anfrage den Browser nie.
+
+**Strukturen aus JavaScript zu *lesen* ist einfach, sie zu *bauen* nicht.**
+Deshalb nimmt die Brücke einen String und gibt eine Struktur zurück:
+`res.get().body.get()`. Umgekehrt hätte man `abap.types.Structure` von Hand
+zusammensetzen müssen.
+
+**Der App-Klassenname kommt aus der URL-Query**, nicht aus einem eigenen
+JSON-Feld: das Frontend schickt `S_FRONT.SEARCH`, und
+`z2ui5_cl_ui5_handler=>request_app_start` liest daraus `app_start`. Für den
+iframe heißt das: `?app_start=<KLASSE>` an die iframe-URL hängen, sonst nichts.
+
+**Eine transpilierte globale Klasse ist selbstgenügsam** — kein Import, kein
+Export, sie liest `abap` aus dem globalen Scope und trägt sich am Ende selbst
+in `abap.Classes` ein. Für Phase 5 heißt das: der live transpilierte
+Nutzercode lässt sich mit `new Function("abap", src)` laden und erneut laden.
+Ein Blob-URL-Import wäre hier sogar schädlich, weil der Browser Blob-Module für
+die Lebensdauer der Seite cacht und ein zweites „Run" die alte Fassung
+registrieren würde.
+
 ### Erkenntnisse Phase 3
 
 **Der UI5-CDN entfällt — OpenUI5 wird mitgeliefert.** Der ursprüngliche Plan
@@ -413,36 +445,90 @@ der ABAP-Code tatsächlich gewählt hat. Der Input trägt seinen Wert im
 `z2ui5_if_app=>version` ist im Transpilat
 `abap.Classes["Z2UI5_IF_APP"]["z2ui5_if_app$version"]`, nicht `.version`.
 
-### Erkenntnisse Phase 2
+### Erkenntnisse Phase 4
 
-**Der geplante fetch-ICF-Shim entfällt — das war der falsche Weg.**
-`z2ui5_cl_ui5_http_handler` hat mit `_main( is_req )` eine *öffentliche
-Klassenmethode*, die eine schlichte Struktur (`method`, `body`, `path`,
-`t_params`) nimmt und eine schlichte Struktur (`body`, `status_code`,
-`status_reason`) zurückgibt. Der ganze `if_http_server`-Apparat existiert nur,
-um genau diese beiden Strukturen zu füllen und zu leeren. Statt ihn
-nachzubauen, ruft `zcl_pg_bridge` die Methode direkt auf — 40 Zeilen ABAP
-statt einer Fake-ICF-Schicht.
+**Kein Web Worker — und das ist keine Bequemlichkeit.** `@abaplint/monaco`
+ruft die LanguageServer-Methoden **synchron** in den Monaco-Providern auf; die
+Registry muss also im selben Thread liegen. Das Problem war der erste Parse
+(~3 s in Node, ~4 s im Browser), der die Seite einfrieren würde. Lösung:
+`reg.parseAsync({progress})` — der `tick`-Hook wird **awaited**, also kann man
+darin ans Event-Loop zurückgeben. Alle 25 Objekte ein `setTimeout(0)` reicht:
+die Seite bleibt bedienbar und zeigt einen Fortschritt. Achtung: das
+Progress-Objekt braucht **auch** `tickSync()`, sonst wirft die zweite
+Parse-Hälfte (`FindGlobalDefinitions`).
 
-Was dabei wegfällt, fällt zu Recht weg: Kompression, Stateful-Sessions und der
-`sap-contextid`-Header-Tanz haben auf einer statischen Seite keine Bedeutung,
-und die CSRF-Prüfung existiert, um Cross-Origin-POSTs abzuweisen — hier
-verlässt die Anfrage den Browser nie.
+Danach ist alles inkrementell: eine Änderung an der Nutzerdatei kostet
+**3–4 ms** für Reparse + Diagnostik, unabhängig von der Korpusgröße.
 
-**Strukturen aus JavaScript zu *lesen* ist einfach, sie zu *bauen* nicht.**
-Deshalb nimmt die Brücke einen String und gibt eine Struktur zurück:
-`res.get().body.get()`. Umgekehrt hätte man `abap.types.Structure` von Hand
-zusammensetzen müssen.
+**`keepNames: true` wird auch im Seiten-Bundle gebraucht.** Ohne das
+löst abaplint `z2ui5_if_client` nicht mehr auf und meldet „unable to
+resolve" — derselbe Fehlermechanismus wie im Framework-Bundle (Phase 1,
+Punkt 2), nur eine Ebene höher. `Buffer` braucht abaplint ebenfalls (beim
+Aufbau seiner DDIC-Built-ins).
 
-**Der App-Klassenname kommt aus der URL-Query**, nicht aus einem eigenen
-JSON-Feld: das Frontend schickt `S_FRONT.SEARCH`, und
-`z2ui5_cl_ui5_handler=>request_app_start` liest daraus `app_start`. Für den
-iframe heißt das: `?app_start=<KLASSE>` an die iframe-URL hängen, sonst nichts.
+**abaplint hat keine Completion-API.** `@abaplint/monaco` registriert zwar
+einen `CompletionItemProvider`, der liefert aber nur eine Handvoll fester
+Snippets (`method`, `bool`, `true`, …) — keine Symbole. Der LanguageServer
+kennt `hover`, `gotoDefinition`, `rename`, `references`, `documentSymbol`,
+`codeActions`, `documentFormatting`, `semanticTokens` — aber kein
+`completion`. Die Namens-Completion im Playground ist deshalb selbst gebaut
+und bewusst bescheiden: sie vervollständigt **Objektnamen** aus der Registry,
+keine Member. Wer wissen will, wie eine Methode heißt, nimmt Hover oder
+Go-to-Definition.
 
-**Eine transpilierte globale Klasse ist selbstgenügsam** — kein Import, kein
-Export, sie liest `abap` aus dem globalen Scope und trägt sich am Ende selbst
-in `abap.Classes` ein. Für Phase 5 heißt das: der live transpilierte
-Nutzercode lässt sich mit `new Function("abap", src)` laden und erneut laden.
-Ein Blob-URL-Import wäre hier sogar schädlich, weil der Browser Blob-Module für
-die Lebensdauer der Seite cacht und ein zweites „Run" die alte Fassung
-registrieren würde.
+**Der URI muss exakt der Registry-Dateiname sein.** `LanguageServer.diagnostics`
+schlägt das Dokument über `reg.getFileByName(uri)` nach. Monacos Model-URI und
+der abaplint-`MemoryFile`-Name müssen zeichengleich sein — sonst kommen
+stillschweigend null Diagnosen zurück, was wie „alles in Ordnung" aussieht.
+
+**Der Pretty Printer indentet immer**, auch wenn alle Formatierungsregeln aus
+sind: `PrettyPrinter` benutzt die Regel-Config nur für Optionen, nicht als
+Schalter.
+
+### Erkenntnisse Phase 5
+
+**Der geplante Browser-Downport entfällt ersatzlos.** Der Transpiler versteht
+modernes ABAP direkt — getestet mit `VALUE #( FOR i = 1 WHILE … )`, `COND #`,
+String-Templates, Inline-`DATA(…)`, Tabellenausdrücken und der
+Builder-Kette: 56 ms, keine Beanstandung. Der Downport im *Framework*-Build
+bleibt trotzdem, weil er dort erprobt ist und die Bibliothek gegen die
+702-Semantik absichert; für Nutzercode ist er überflüssig.
+
+**Der Transpiler transpiliert immer die ganze Registry** — `Transpiler.run(reg)`
+läuft über `reg.getObjects()`, und `addDependencies( )` ändert daran nichts:
+684 Objekte, **18 Sekunden**. Für einen Run-Button unbrauchbar.
+
+Die Lösung ist ein **Proxy auf die Registry**, in dem `getObjects()` nur die
+Nutzerklasse liefert. Entscheidend dabei ist das `this`: Der Proxy gibt
+Methoden **ungebunden** zurück (`Reflect.get(target, prop, receiver)`), damit
+sie mit dem Proxy als Empfänger laufen. Dadurch iterieren auch `setConfig`
+(markiert dirty) und `findIssues` nur über die gefilterte Liste. Bindet man
+stattdessen an das Original, markiert jeder Compile den gesamten Korpus dirty
+und erzwingt einen 3,5-s-Reparse. Mit korrektem Empfänger: **10–50 ms**.
+
+Der Transpiler **stellt die Config nicht zurück**, die er setzt (anderes
+Release, `errorNamespace: VOID_EVERYTHING`). Der Playground setzt sie danach
+selbst zurück — ebenfalls über den Proxy, sonst kostet die Rückgabe wieder
+einen Vollreparse.
+
+**`Transpiler.run` ist async und lässt sich nicht synchron auspacken.** Ein
+erster Versuch, das Promise synchron auszulesen, funktionierte nirgends —
+`compile( )` ist jetzt korrekt `async`.
+
+**Der wichtigste Fund der Phase: Typ-Caches sind auf den Klassennamen
+geschlüsselt.** Ein zweiter Run mit geänderten Attributen ergab
+`BINDING_ERROR - No class attribute for binding found` für ein Attribut, das
+sichtbar im Quelltext stand. Ursache: `cl_abap_objectdescr=>mt_cache` (RTTI,
+open-abap) und die `mt_attri_cache`/`mt_bool_cache` in
+`z2ui5_cl_ui5_util_context` beschreiben nach dem Neu-Definieren noch die
+*alte* Fassung der Klasse.
+
+`defineClass( )` leert deshalb nach jedem Laden alle statischen Attribute,
+deren Name `cache` enthält — **generisch statt per Liste**, weil eine Liste
+veraltet, sobald abap2UI5 einen Cache hinzufügt. Ein unnötig geleerter Cache
+kostet einen Neuaufbau; ein übersehener kostet einen Fehler, den niemand
+erklären kann.
+
+**Eine transpilierte Klasse wird mit `new Function` geladen, nicht als
+Blob-Modul**: Blob-URLs cacht der Browser für die Lebensdauer der Seite, ein
+zweiter Run würde die erste Fassung erneut registrieren.

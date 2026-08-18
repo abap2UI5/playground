@@ -9,15 +9,57 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
+import { nodeStubPlugin } from "./esbuild-plugins.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "src", "shell");
+const DEPS = path.join(ROOT, "deps");
 const DIST = path.join(ROOT, "dist");
 const ASSETS = path.join(DIST, "assets");
 
 const log = (m) => console.log(`build-site: ${m}`);
 
 fs.mkdirSync(ASSETS, { recursive: true });
+writeCorpus();
+
+// --------------------------------------------------------------- ABAP corpus
+
+// The ABAP sources the editor knows about: abap2UI5 itself and the open-abap
+// standard library. abaplint needs them to answer anything at all about the
+// class in the editor - without z2ui5_if_app it cannot say whether main( ) is
+// implemented, and without open-abap it cannot resolve the types that interface
+// is written in.
+//
+// Shipped as one JSON file rather than 900 fetches. abaplint identifies an
+// object by the file's base name, so the tree is flattened; package files are
+// left out because they are the one base name that repeats and the editor has
+// no use for them.
+function writeCorpus() {
+  const files = {};
+  const add = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        add(p);
+        continue;
+      }
+      if (!/\.(abap|xml)$/.test(e.name)) continue;
+      if (e.name.includes(".testclasses.") || e.name.endsWith(".devc.xml")) continue;
+      if (files[e.name] !== undefined) {
+        throw new Error(`build-site: two source files are both called ${e.name}`);
+      }
+      files[e.name] = fs.readFileSync(p, "utf8");
+    }
+  };
+  add(path.join(DEPS, "abap2ui5", "src"));
+  add(path.join(DEPS, "open-abap-core", "src"));
+
+  const out = path.join(DIST, "editor");
+  fs.mkdirSync(out, { recursive: true });
+  fs.writeFileSync(path.join(out, "corpus.json"), JSON.stringify(files));
+  const mb = (fs.statSync(path.join(out, "corpus.json")).size / 1048576).toFixed(1);
+  log(`corpus.json: ${Object.keys(files).length} ABAP sources (${mb} MB)`);
+}
 
 const result = await esbuild.build({
   entryPoints: [path.join(SHELL, "main.mjs")],
@@ -27,12 +69,24 @@ const result = await esbuild.build({
   platform: "browser",
   target: "es2022",
   minify: true,
+  // abaplint identifies some of its own node types by class name, so a bundler
+  // that renames classes changes what it resolves - the same trap the framework
+  // bundle hits through open-abap's RTTI.
+  keepNames: true,
   sourcemap: true,
   logLevel: "warning",
   metafile: true,
+  // Monaco pulls in its stylesheet and its icon font through the module graph;
+  // the CSS lands next to the bundle as assets/shell.css (the shell's own
+  // stylesheet is imported by main.mjs so both end up in that one file), and
+  // the font is copied out with a hashed name.
+  loader: { ".ttf": "file" },
+  plugins: [nodeStubPlugin(ROOT)],
+  // abaplint reaches for Buffer when it builds its DDIC built-ins, the same way
+  // the transpiled standard library does.
+  inject: [path.join(ROOT, "src", "runtime", "buffer-shim.mjs")],
 });
 
-fs.copyFileSync(path.join(SHELL, "shell.css"), path.join(ASSETS, "shell.css"));
 fs.copyFileSync(path.join(SHELL, "index.html"), path.join(DIST, "index.html"));
 
 const kb = (p) => `${Math.round(fs.statSync(p).size / 1024)} KB`;

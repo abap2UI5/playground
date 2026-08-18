@@ -17,6 +17,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { browserConsolePlugin, nodeStubPlugin, percentEncodedPlugin } from "./esbuild-plugins.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DEPS = path.join(ROOT, "deps");
@@ -186,86 +187,6 @@ if (!fs.existsSync(path.join(OUTPUT, "init.mjs"))) {
 
 // -------------------------------------------------------------------- bundle
 
-// Several open-abap-core classes reach for Node's standard library: cl_abap_gzip
-// wants zlib, cl_abap_message_digest and cl_abap_hmac want crypto, cl_http_client
-// wants http/https/net/tls. Almost none of them is reachable from abap2UI5
-// (checked against build/downport), but init.mjs imports every object in the
-// library, so the modules have to resolve for the bundle to build.
-//
-// They resolve to a stub whose every entry point throws with the reason - if one
-// of these classes is ever reached the message says what happened, instead of
-// "createHash is not a function" from somewhere inside a transpiled method.
-//
-// `crypto` is the exception and resolves to a real implementation: every
-// roundtrip mints a draft id through cl_system_uuid, which asks Node's crypto
-// for randomUUID. See src/runtime/node-crypto-shim.mjs.
-const NODE_STUBS = {
-  zlib: ["constants", "deflateRawSync", "inflateRawSync", "gunzipSync", "gzipSync", "deflateSync", "inflateSync"],
-  http: ["request", "get", "createServer"],
-  https: ["request", "get", "createServer"],
-  net: ["connect", "createConnection", "createServer", "Socket"],
-  tls: ["connect", "createServer", "TLSSocket"],
-  fs: ["readFileSync", "writeFileSync", "existsSync", "promises"],
-  path: ["join", "resolve", "dirname", "basename", "extname", "sep"],
-  url: ["fileURLToPath", "pathToFileURL", "parse", "format"],
-  util: ["promisify", "inspect", "format", "types"],
-};
-
-const nodeStubPlugin = {
-  name: "node-builtin-stubs",
-  setup(build) {
-    build.onResolve({ filter: /^(node:)?crypto$/ }, () => ({
-      path: path.join(ROOT, "src", "runtime", "node-crypto-shim.mjs"),
-    }));
-    const names = Object.keys(NODE_STUBS).join("|");
-    build.onResolve({ filter: new RegExp(`^(node:)?(${names})$`) }, (args) => ({
-      path: args.path.replace(/^node:/, ""),
-      namespace: "node-stub",
-    }));
-    build.onLoad({ filter: /.*/, namespace: "node-stub" }, (args) => {
-      const message =
-        `The playground runs in a browser. The ABAP that was called needs Node's ` +
-        `'${args.path}' module, which does not exist here.`;
-      const exports = NODE_STUBS[args.path]
-        .map((n) => `export const ${n} = unavailable;`)
-        .join("\n");
-      return {
-        loader: "js",
-        contents:
-          `function unavailable() { throw new Error(${JSON.stringify(message)}); }\n` +
-          `${exports}\n` +
-          `export default { ${NODE_STUBS[args.path].map((n) => `${n}: unavailable`).join(", ")} };\n`,
-      };
-    });
-  },
-};
-
-// The transpiler percent-encodes characters that are not URL-safe into its
-// import specifiers - `#ui2#cl_json.clas.mjs` is imported as
-// `./%23ui2%23cl_json.clas.mjs`. Node's module loader decodes that; a bundler
-// looking for a file of that literal name does not.
-const percentEncodedPlugin = {
-  name: "decode-percent-encoded-specifiers",
-  setup(build) {
-    build.onResolve({ filter: /%[0-9A-Fa-f]{2}/ }, (args) => {
-      if (!args.path.startsWith(".")) return null;
-      return { path: path.resolve(args.resolveDir, decodeURIComponent(args.path)) };
-    });
-  },
-};
-
-// The transpiler runtime picks its console before any playground code runs, and
-// its default one writes to process.stdout. Resolving that module to a browser
-// implementation is the only way in: by the time anything could assign
-// abap.console, open-abap has already WRITEd during a class constructor.
-const browserConsolePlugin = {
-  name: "browser-console",
-  setup(build) {
-    const replacement = path.join(ROOT, "src", "runtime", "browser-console.mjs");
-    build.onResolve({ filter: /console\/standard_out_console(\.js)?$/ }, () => ({ path: replacement }));
-  },
-};
-
 async function bundle() {
   const esbuild = await import("esbuild");
   const outfile = path.join(ROOT, "dist", "runtime", "framework.mjs");
@@ -286,7 +207,7 @@ async function bundle() {
     // the wrong type and the framework fails while building its type cache.
     keepNames: true,
     sourcemap: false,
-    plugins: [nodeStubPlugin, percentEncodedPlugin, browserConsolePlugin],
+    plugins: [nodeStubPlugin(ROOT), percentEncodedPlugin, browserConsolePlugin(ROOT)],
     inject: [path.join(ROOT, "src", "runtime", "buffer-shim.mjs")],
     logLevel: "warning",
     metafile: true,

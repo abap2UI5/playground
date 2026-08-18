@@ -43,6 +43,28 @@ export async function roundtrip(body) {
 export function defineClass(source) {
   const define = new Function("abap", `${source}\nreturn true;`);
   define(globalThis.abap);
+  forgetCachedTypeInformation();
+}
+
+// Everything the running system remembers about what a class looks like.
+//
+// A class name is the key to every type cache there is: open-abap's RTTI keeps
+// one descriptor per name (cl_abap_objectdescr=>mt_cache), and abap2UI5 keeps
+// its own for the attributes it binds to a view. Redefining a class leaves all
+// of them describing the version that is gone - the app then starts, renders,
+// and fails on the first binding with "No class attribute for binding found",
+// naming an attribute that is right there in the source.
+//
+// So they are dropped, by their name rather than by a list: the framework calls
+// a cache a cache, and a list of the ones that exist today is a list that goes
+// stale the next time abap2UI5 adds one. A cache that is cleared for nothing
+// costs a rebuild; one that is missed costs an error nobody can explain.
+function forgetCachedTypeInformation() {
+  for (const cls of Object.values(globalThis.abap.Classes)) {
+    for (const [name, value] of Object.entries(cls)) {
+      if (/cache/i.test(name)) value?.clear?.();
+    }
+  }
 }
 
 // True once the class of that name can be instantiated - used to tell "the app
