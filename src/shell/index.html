@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>abap2UI5 Playground</title>
+<link rel="stylesheet" href="assets/shell.css">
+</head>
+<body>
+<header class="bar">
+  <span class="brand">abap2UI5 <span class="brand-dim">Playground</span></span>
+  <button id="run" class="primary" disabled>Run</button>
+  <span id="status" class="status">starting the ABAP runtime…</span>
+  <span class="spacer"></span>
+  <span id="versions" class="versions"></span>
+</header>
+
+<main class="panes">
+  <section class="pane pane-left">
+    <div class="pane-head">ABAP</div>
+    <div id="editor" class="editor"></div>
+  </section>
+  <section class="pane pane-right">
+    <div class="pane-head">App</div>
+    <div class="app-frame">
+      <iframe id="app" title="the running app" src="about:blank"></iframe>
+    </div>
+  </section>
+</main>
+
+<div id="output" class="output" hidden>
+  <div class="output-head">
+    <span id="output-title">Output</span>
+    <button id="output-close" class="ghost" aria-label="close">✕</button>
+  </div>
+  <pre id="output-body"></pre>
+</div>
+
+<script type="module" src="assets/shell.mjs"></script>
+</body>
+</html>

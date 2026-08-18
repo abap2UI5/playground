@@ -1,39 +1,51 @@
 #!/usr/bin/env node
-// Assembles dist/ - the static site that GitHub Pages serves.
+// Assembles dist/ - the static site GitHub Pages serves.
 //
-// Everything here is a file copy or an esbuild bundle; nothing is fetched at
-// page load except the UI5 core from the CDN. The framework bundle is built
-// separately by tools/build-framework.mjs (it is the slow half) and is
-// expected to be present under dist/runtime/ when this script runs.
+// The two slow halves are built elsewhere and left where they are:
+// tools/build-framework.mjs writes dist/runtime, tools/build-ui5.mjs writes
+// dist/app. This step is the page itself: the shell bundle, its stylesheet, and
+// whatever static assets the shell needs.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import * as esbuild from "esbuild";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const SHELL = path.join(ROOT, "src", "shell");
 const DIST = path.join(ROOT, "dist");
+const ASSETS = path.join(DIST, "assets");
 
-fs.mkdirSync(DIST, { recursive: true });
+const log = (m) => console.log(`build-site: ${m}`);
 
-// Placeholder shell - replaced by the real playground in a later phase. It
-// exists from the first commit on so the Pages deployment has something to
-// publish and the deploy path is never the thing that is untested.
-const index = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>abap2UI5 Playground</title>
-<style>
-  body { font-family: system-ui, sans-serif; margin: 4rem auto; max-width: 40rem; padding: 0 1rem; }
-  code { background: #f0f0f0; padding: .1rem .3rem; border-radius: 3px; }
-</style>
-</head>
-<body>
-<h1>abap2UI5 Playground</h1>
-<p>Under construction. See <code>PLAYGROUND_PLAN.md</code> in the repository.</p>
-</body>
-</html>
-`;
-fs.writeFileSync(path.join(DIST, "index.html"), index);
+fs.mkdirSync(ASSETS, { recursive: true });
 
-console.log("build-site: wrote dist/index.html");
+const result = await esbuild.build({
+  entryPoints: [path.join(SHELL, "main.mjs")],
+  outfile: path.join(ASSETS, "shell.mjs"),
+  bundle: true,
+  format: "esm",
+  platform: "browser",
+  target: "es2022",
+  minify: true,
+  sourcemap: true,
+  logLevel: "warning",
+  metafile: true,
+});
+
+fs.copyFileSync(path.join(SHELL, "shell.css"), path.join(ASSETS, "shell.css"));
+fs.copyFileSync(path.join(SHELL, "index.html"), path.join(DIST, "index.html"));
+
+const kb = (p) => `${Math.round(fs.statSync(p).size / 1024)} KB`;
+log(`shell.mjs (${kb(path.join(ASSETS, "shell.mjs"))})`);
+
+// Fail loudly rather than publish a page whose two halves are missing - the
+// symptom would otherwise be a blank frame and a 404 in the console.
+for (const required of ["runtime/framework.mjs", "runtime/sql-wasm.wasm", "app/index.html"]) {
+  if (!fs.existsSync(path.join(DIST, required))) {
+    console.error(`build-site: ERROR dist/${required} is missing - run the full build (npm run build)`);
+    process.exit(1);
+  }
+}
+
+fs.writeFileSync(path.join(ROOT, "build", "site.metafile.json"), JSON.stringify(result.metafile));
+log("dist/ complete");

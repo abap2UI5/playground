@@ -51,6 +51,9 @@ export function hasClass(name) {
   return globalThis.abap.Classes[name.toUpperCase()] !== undefined;
 }
 
+// The framework version, read where the framework itself keeps it. Interface
+// constants are transpiled onto the interface object under their fully
+// qualified name, which is why this is not simply `.version`.
 export function abapVersion() {
-  return globalThis.abap.Classes["Z2UI5_IF_APP"]?.version?.get?.() ?? "unknown";
+  return globalThis.abap.Classes["Z2UI5_IF_APP"]?.["z2ui5_if_app$version"]?.get() ?? "unknown";
 }

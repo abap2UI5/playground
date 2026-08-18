@@ -174,25 +174,26 @@ Das war als riskanteste Einzelkomponente geplant; es wurde die einfachste.
 Ziel: Rechts rendert eine echte abap2UI5-App, noch mit fest eingebauter
 Beispielklasse (Editor kommt in Phase 4/5).
 
-- [ ] **P3.1 Frontend statisch hosten.** `deps/abap2ui5/build/cloud/app/webapp`
-  nach `dist/app/` übernehmen; `index.html` so anpassen, dass
-  `sap-ui-core.js` vom UI5-CDN geladen wird (`https://ui5.sap.com/<gepinnte
-  Version>/resources/sap-ui-core.js`) und Theme/Bootstrap unverändert bleiben.
-  *Abnahme:* iframe lädt ohne 404s (Playwright: keine failed requests außer
-  erwartbaren optionalen Ressourcen).
-- [ ] **P3.2 fetch-Interception im iframe.** Injektionsscript, das VOR dem
-  UI5-Bootstrap läuft und `window.fetch` nur für die Backend-URL
-  (`AppState`-`url` des Frontends — nachlesen, wie sie konfiguriert wird)
-  auf `parent.handleRoundtrip` umbiegt; alle anderen fetches unverändert.
-  Same-origin (gleiche GitHub Page), also kein CORS-Thema.
-  *Abnahme:* Playwright-Test: Playground-Seite mit iframe lädt, die fest
-  verdrahtete Demoklasse rendert sichtbar (Selektor auf ein UI5-Control),
-  ein Klick löst einen Event-Roundtrip aus und die UI reagiert.
-- [ ] **P3.3 Reload-Zyklus.** `runApp(className)`: Session-Reset + iframe
-  neu laden + Startklasse setzen (wie abap2UI5 die Startklasse bestimmt —
-  URL-Parameter/Config — im Frontend nachlesen und dokumentieren).
-  *Abnahme:* Test ruft `runApp` zweimal hintereinander auf, beide Male
-  rendert die App frisch.
+- [x] **P3.1 Frontend mitliefern statt CDN.** *(umformuliert — siehe
+  Erkenntnisse Phase 3.)* `tools/build-ui5.mjs` baut
+  `deps/abap2ui5/build/cloud/app/webapp` mit der UI5-Tooling-Kette gegen
+  eine gepinnte OpenUI5-Version; die Bibliotheken kommen aus npm und landen
+  unter `dist/app/resources/`. Statt CDN-Link.
+  *Abnahme:* Test — beim Start der App geht kein einziger Request an eine
+  fremde Origin, und nichts liefert 404.
+- [x] **P3.2 fetch-Interception im iframe.** `src/shell/frontend-bridge.js`
+  läuft als klassisches Script vor dem UI5-Bootstrap, setzt
+  `z2ui5.checkLocal = true` (damit das Frontend auf die eigene URL POSTet)
+  und ersetzt `window.fetch` für genau diesen einen Request; alles andere
+  geht unverändert ans Netz.
+  *Abnahme:* Test — die App rendert sichtbar, ein Klick auf den Button löst
+  einen Roundtrip aus und der in ABAP berechnete Text erscheint.
+- [x] **P3.3 Reload-Zyklus.** `run(appClass)` in `src/shell/main.mjs`:
+  Datenbank neu, dann iframe mit
+  `app/index.html?app_start=<KLASSE>&run=<n>` neu laden. Der Zähler macht
+  jeden Lauf zu einem eigenen Dokument, sodass der Browser keinen Cache
+  ausspielen kann.
+  *Abnahme:* Test — Zustand ändern, "Run", die App steht wieder auf Anfang.
 
 ## Phase 4 — Editor: Monaco + abaplint
 
@@ -366,6 +367,51 @@ kommen aus open-abap-core, und der ICF-Weg wird gar nicht beschritten.
 weil `init.mjs` jedes Objekt lädt. Tree-Shaking ist nicht möglich, solange ABAP
 Klassen dynamisch über `abap.Classes[name]` auflöst. 0,8 MB gzip ist für einen
 Playground unkritisch.
+
+### Erkenntnisse Phase 3
+
+**Der UI5-CDN entfällt — OpenUI5 wird mitgeliefert.** Der ursprüngliche Plan
+sah `https://sdk.openui5.org/...` vor (das ist auch abap2UI5s eigener
+Standard). Dagegen sprach zunächst nur, dass die Build-Umgebung diese Domain
+blockiert und damit kein einziger Render-Test lief. Beim Durchdenken war die
+gelieferte Variante aber ohnehin die bessere:
+
+- Die Version ist gepinnt, der Playground damit reproduzierbar.
+- Er überlebt einen Ausfall von sdk.openui5.org.
+- Die Regel „alles statisch" aus den Arbeitsregeln gilt dann wirklich.
+- **Und die Tests können rendern** — davon hängen die Phasen 5 und 6 ab.
+
+Kosten: `tools/build-ui5.mjs`, ~60 s Buildzeit (plus einmaligem
+Framework-Download) und **103 MB in `dist/app`**. Das klingt viel, ist es aber
+nicht: UI5 lädt Library-Preload-Bundles bedarfsgesteuert, eine typische App
+zieht wenige MB. Seitengröße ≠ Transfergröße. GitHub Pages erlaubt 1 GB.
+
+**Beim Trimmen war weniger mehr.** Ein erster Wurf warf zusätzlich alle
+Übersetzungen (`messagebundle_*.properties`) und die RTL-Stylesheets weg —
+das sparte 22 MB und erzeugte prompt 404s, weil UI5 die Bundles *nach Locale*
+anfragt und nicht stillschweigend auf das Basis-Bundle zurückfällt. Geblieben
+sind nur die eindeutig unerreichbaren Dateien: `-dbg.js`, `.js.map`, `.less`,
+`test-resources/` und `sap/ui/test/` — zusammen immer noch 6266 Dateien und
+gut ein Drittel des Baums.
+
+**`sap-ui-version.json` muss man selbst schreiben.** `ui5 build` erzeugt die
+Datei nur für Library-Projekte, nicht für Applikationen — das Frontend fragt
+sie aber bei jedem Start ab (`core/Server.js` liest `sap/ui/VersionInfo`).
+Ohne sie: 404 plus UI5-Fehlermeldung bei jedem Seitenaufruf.
+
+**Der Klassenname geht über die iframe-URL rein**, der Cache-Buster gleich
+mit. Die fetch-Interception vergleicht deshalb nur `origin` + `pathname`, nie
+die volle URL — sonst würde der Zähler im Query-String den Roundtrip nicht
+mehr als solchen erkennbar machen.
+
+**UI5 präfixt Control-IDs mit der View-ID** (`mainView--btnGreet`). Tests
+sollten auf das Suffix matchen (`[id$="--btnGreet"]`) — das ist der Teil, den
+der ABAP-Code tatsächlich gewählt hat. Der Input trägt seinen Wert im
+`-inner`-Element.
+
+**Ein Interface-Konstante liegt unter ihrem qualifizierten Namen**:
+`z2ui5_if_app=>version` ist im Transpilat
+`abap.Classes["Z2UI5_IF_APP"]["z2ui5_if_app$version"]`, nicht `.version`.
 
 ### Erkenntnisse Phase 2
 
