@@ -1,13 +1,12 @@
-// What the playground knows about itself. One object, so the modules that make
-// up the page do not have to reach into each other.
+// What the playground knows about itself, beyond what the editor and the DOM
+// already hold. Two fields, on purpose: everything else about the current state
+// - which files are open, what is in them, which one is showing - is the
+// editor's, and a second copy of it would only ever be the stale one.
 export const state = {
   // The transpiled framework, once it has loaded (src/runtime/index.mjs).
   runtime: undefined,
 
-  // The class the app frame starts. Until the editor exists this is the
-  // built-in demo; from then on it is the class the editor holds.
-  appClass: "ZCL_PG_HELLO",
-
-  // Bumped on every run so each frame load is its own document.
+  // Bumped on every run so each frame load is its own document, which is what
+  // keeps the browser from serving a cached one.
   runCounter: 0,
 };
