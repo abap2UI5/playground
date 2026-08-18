@@ -48,10 +48,9 @@ GitHub Pages (statisch, aus dist/)
 ├── editor/               Monaco + @abaplint/monaco, abaplint im Web Worker
 │                         Registry enthält die (downgeporteten) Framework-Quellen
 ├── runtime/
-│   ├── framework.mjs     Build-zeitlich transpiliertes abap2UI5 + open-abap-core
-│   ├── init.mjs          initializeABAP() + sql.js-Setup (Schema + Inserts)
-│   └── fetch-shim.mjs    fetch-ICF-Shim: POST-Body → if_http_extension →
-│                         z2ui5_cl_ui5_http_handler → JSON-Response
+│   ├── framework.mjs     Build-zeitlich transpiliertes abap2UI5 + open-abap-core,
+│   │                     inklusive sql.js-Setup und der Brücke roundtrip()
+│   └── sql-wasm.wasm     SQLite als WebAssembly
 ├── app/                  abap2UI5-UI5-Frontend (webapp aus build/cloud),
 │                         läuft im iframe, UI5-Core vom CDN,
 │                         window.fetch der Backend-URL wird auf den Shim umgebogen
@@ -61,7 +60,7 @@ GitHub Pages (statisch, aus dist/)
 Roundtrip zur Laufzeit: Editor → Run → Web Worker (Downport-Fixes +
 Transpile der Nutzerklasse gegen die Registry) → Blob-Modul importieren →
 Klasse in `abap.Classes` registrieren → iframe (neu) laden → das UI5-Frontend
-POSTet per `fetch()` → Shim ruft den transpilierten HTTP-Handler → JSON zurück
+POSTet per `fetch()` → Brücke ruft den transpilierten HTTP-Handler → JSON zurück
 → App rendert. Zustand (Drafts) liegt in sql.js im Speicher.
 
 Bereits verifizierte Fakten (Analyse 2026-08-18):
@@ -74,9 +73,9 @@ Bereits verifizierte Fakten (Analyse 2026-08-18):
   zustandslose Roundtrips, ideal zum Abfangen.
 - `@abaplint/monaco` existiert und wird gepflegt (Monaco = VS-Code-Editor);
   playground.abaplint.org beweist Transpiler + Runtime + Editor im Browser.
-- Einstiegspunkt Backend: `if_http_extension` → `z2ui5_cl_ui5_http_handler=>factory( server )->main( )`
-  (siehe `node/srv/zcl_sicf.clas.abap`); unter Node adaptiert der kleine
-  `express-icf-shim` darauf — der fetch-Shim macht dasselbe mit Fake-req/res.
+- Einstiegspunkt Backend: `z2ui5_cl_ui5_http_handler=>_main( is_req )` — eine
+  öffentliche Klassenmethode über eine schlichte Struktur, kein ICF nötig
+  (siehe Erkenntnisse Phase 2).
 
 ---
 
@@ -114,7 +113,7 @@ Ziel: Das komplette Framework + open-abap-core liegt als ein statisches
 ESM-Bundle vor und lässt sich in einer Browser-Umgebung initialisieren.
 Das ist die Portierung von `node/output` + `setup.mjs` in den Browser.
 
-- [ ] **P1.1 Downport + Transpile im Build.** Build-Script
+- [x] **P1.1 Downport + Transpile im Build.** Build-Script
   `tools/build-framework.mjs`: kopiert `deps/abap2ui5/src` nach
   `build/downport/`, wendet das Downport-Rezept aus dem abap2UI5-`package.json`
   an (`abaplint --fix` mit der 702-Config, plus die dortigen `syfixes`/
@@ -125,13 +124,13 @@ Das ist die Portierung von `node/output` + `setup.mjs` in den Browser.
   *Abnahme:* `build/output/` enthält `init.mjs` und die `.clas.mjs`-Module;
   ein Node-Smoke-Test (`node -e "import('./build/output/init.mjs')"` mit dem
   sqlite-Setup aus P1.2) wirft keinen Fehler.
-- [ ] **P1.2 Browser-Setup für die Datenbank.** `src/runtime/db-setup.mjs`:
+- [x] **P1.2 Browser-Setup für die Datenbank.** `src/runtime/db-setup.mjs`:
   Adaption von `node/setup/setup.mjs` — sql.js so laden, dass es im Browser
   funktioniert (WASM-Datei `sql-wasm.wasm` mit nach `dist/` kopieren und
   per `locateFile` auflösen), dann Schema + Inserts ausführen.
   *Abnahme:* Unit-Test (Node reicht, sql.js verhält sich identisch), der
   `setup()` ausführt und danach eine SELECT auf eine z2ui5-Tabelle absetzt.
-- [ ] **P1.3 Bundling.** `npm run build:framework` bündelt `build/output/*`
+- [x] **P1.3 Bundling.** `npm run build:framework` bündelt `build/output/*`
   + Runtime + db-setup mit esbuild zu `dist/runtime/framework.mjs`
   (ESM, ein File oder wenige Chunks). Auf Node-only-Importe prüfen
   (`fs`, `path`, `child_process` dürfen im Bundle nicht landen bzw. müssen
@@ -140,41 +139,35 @@ Das ist die Portierung von `node/output` + `setup.mjs` in den Browser.
   Chromium ist im Container unter `/opt/pw-browsers/chromium` vorinstalliert)
   lädt eine Testseite, ruft `initializeABAP()` + DB-Setup auf und meldet Erfolg.
   Bundle-Größe im README notieren.
-- [ ] **P1.4 Erkenntnisse festhalten.** Abschnitt "Erkenntnisse Phase 1"
+- [x] **P1.4 Erkenntnisse festhalten.** Abschnitt "Erkenntnisse Phase 1"
   unten ergänzen: Welche Module mussten gestubbt werden, wie groß ist das
   Bundle, wie lange dauert `initializeABAP()` im Browser.
 
-## Phase 2 — fetch-ICF-Shim: ein Roundtrip ohne UI
+## Phase 2 — Ein Roundtrip ohne UI
 
 Ziel: Ein POST-Body wie ihn das UI5-Frontend schickt geht rein, die
 JSON-Antwort des Frameworks kommt raus — komplett im Browser, noch ohne UI5.
-Das ist die riskanteste Einzelkomponente; deshalb isoliert und zuerst.
+Das war als riskanteste Einzelkomponente geplant; es wurde die einfachste.
 
-- [ ] **P2.1 Shim implementieren.** `src/runtime/fetch-shim.mjs`: baut
-  Fake-`req`/`res`-Objekte im Stil von express (Methode, URL, Header,
-  Body als Uint8Array; res sammelt Status/Header/Body) und ruft damit den
-  transpilierten Einstieg auf — entweder über die transpilierte
-  `cl_express_icf_shim` (open-abap/express-icf-shim, liegt als gepinnte dep
-  vor) mit `{req, res, class: "ZCL_SICF"}` oder, falls die zu express-lastig
-  ist, direkt über eine eigene Implementierung der `if_http_*`-Fakes nach
-  deren Vorbild. Eine `zcl_sicf`-Kopie (aus `node/srv/`) wird mittranspiliert.
-  Export: `async function handleRoundtrip(bodyString): Promise<{status, body}>`.
-  *Abnahme:* Unit-Test in Node gegen das Bundle.
-- [ ] **P2.2 App-Start-Roundtrip als Test.** Eine Demoklasse (z. B.
-  `zcl_tst_focus` aus `node/srv/` oder eine minimale eigene
-  `z2ui5_if_app`-Klasse) mittranspilieren. Test: den App-Start-POST-Body
-  nachbauen (Wire-Format ist in `app/webapp/core/Server.js` von abap2UI5
-  dokumentiert: `{ "value": { "S_FRONT": { "APP_START": ..., ... } } }` —
-  exakte Felder dort nachlesen, nicht raten) und prüfen, dass die Antwort
-  gültiges JSON mit XML-View-Inhalt ist.
-  *Abnahme:* Playwright-Headless-Test: Seite lädt Bundle, feuert
-  `handleRoundtrip` mit App-Start-Body, Response enthält die erwartete View;
-  ein zweiter Roundtrip mit der Draft-ID aus der ersten Antwort (Event)
-  funktioniert ebenfalls → beweist, dass die Draft-Persistenz via sql.js trägt.
-- [ ] **P2.3 Session-Reset.** Funktion `resetSession()`: DB neu aufsetzen
-  (oder Draft-Tabellen leeren), damit "Run" im Playground immer frisch startet.
-  *Abnahme:* Test — Roundtrip, Reset, alte Draft-ID ist danach ungültig,
-  neuer App-Start funktioniert.
+- [x] **P2.1 Brücke ins Framework.** *(umformuliert gegenüber dem
+  ursprünglichen Plan — siehe Erkenntnisse Phase 2.)* Statt einen
+  `if_http_server` nachzubauen: `src/abap/zcl_pg_bridge.clas.abap` ruft
+  `z2ui5_cl_ui5_http_handler=>_main( )` auf, eine öffentliche Klassenmethode
+  über eine einfache Struktur rein / raus. `src/runtime/index.mjs` exportiert
+  das als `roundtrip(body) -> {status, reason, body}`.
+  *Abnahme:* Browser-Test gegen das gebaute Bundle.
+- [x] **P2.2 App-Start-Roundtrip als Test.** `src/abap/zcl_pg_hello.clas.abap`
+  als eingebaute Demo-App. Wire-Format aus `app/webapp/core/Server.js`
+  nachgelesen: der App-Start-Body ist
+  `{"value":{"S_FRONT":{"SEARCH":"?app_start=<KLASSE>"}}}` — der Klassenname
+  kommt aus der URL-Query, nicht aus einem eigenen Feld.
+  *Abnahme:* `tests/runtime.spec.js` — App-Start liefert 200 mit der View,
+  ein zweiter Roundtrip mit der Draft-ID feuert ein Event und sieht den
+  Zustand des ersten (beweist die Draft-Persistenz über sql.js), eine
+  unbekannte App-Klasse liefert einen lesbaren 500.
+- [x] **P2.3 Session-Reset.** `resetDatabase()` in `src/runtime/db-setup.mjs`
+  baut die Datenbank neu auf.
+  *Abnahme:* Test — Roundtrip, Reset, alte Draft-ID ist danach unbrauchbar.
 
 ## Phase 3 — UI5-Frontend im iframe: erste sichtbare App
 
@@ -314,4 +307,96 @@ wurden aufgemacht.
 
 ### Erkenntnisse Phase 1
 
-*(noch leer)*
+**Messwerte** (abap2UI5 @ 67f214d, abaplint 2.120.26, Transpiler 2.13.59):
+
+| | |
+|---|---|
+| Downport (`abaplint --fix`, 106 Iterationen) | ~3 min, 0 Issues |
+| Transpile | ~20 s, 735 Objekte |
+| Bundle `dist/runtime/framework.mjs` | 8,7 MB, **0,8 MB gzip** |
+| `sql-wasm.wasm` | 643 KB |
+| Framework-Boot im Browser (Import bis bereit) | ~1,2 s |
+
+**Fünf Fallen, jede davon ein harter Stopper.** Sie stehen hier, weil keine
+davon aus der Dokumentation ersichtlich ist und jede als unverständlicher
+Laufzeitfehler auftritt:
+
+1. **`addCommonJS: true` ist Pflicht, obwohl wir ESM bauen.** Ohne den Flag
+   schreibt der Transpiler `.mjs`-Dateien *ohne jeden Import/Export*, die sich
+   per nacktem Bezeichner referenzieren (`class cl_abap_classdescr extends
+   cl_abap_objectdescr`). Das funktioniert in *keinem* Loader, auch nicht unter
+   Node — verifiziert. Mit dem Flag entsteht ein echter Modulgraph mit
+   `await import(...)` und `export {...}`, den esbuild normal bündelt. Der
+   Flag-Name ist irreführend: es entsteht kein CommonJS.
+2. **`keepNames: true` ist Pflicht.** open-abap implementiert RTTI über
+   `@KERNEL`-Escapes, die den **JavaScript-Konstruktornamen** lesen
+   (`cl_abap_typedescr=>describe_by_data` → `p_data.constructor.name`).
+   Jeder Bundler benennt Klassen bei Namenskollision um — und `abap.types.String`
+   kollidiert sofort mit dem globalen `String`. Ohne `keepNames` liefert jedes
+   DESCRIBE den falschen Typ; der Fehler erscheint als `CONVT_NO_NUMBER` beim
+   Aufbau des Typcaches, meilenweit von der Ursache entfernt.
+3. **`Buffer` wird gebraucht, bevor irgendein Anwendungscode läuft.**
+   `cl_abap_char_utilities` baut MAXCHAR/MINCHAR im Klassenkonstruktor aus Hex.
+   Lösung: npm-Paket `buffer` per esbuild-`inject`.
+4. **Die Default-Konsole der Runtime schreibt auf `process.stdout`.** Der erste
+   ABAP-`WRITE` passiert in einem Klassenkonstruktor von open-abap (ein
+   „todo"-WRITE in `describe_by_data`) — also bevor man `abap.console`
+   überhaupt zuweisen könnte. Lösung: das Modul
+   `@abaplint/runtime/.../console/standard_out_console` per esbuild-Plugin auf
+   eine eigene In-Memory-Konsole umbiegen.
+5. **`crypto` darf kein Wegwerf-Stub sein.** `cl_system_uuid` prüft
+   `if (CRYPTO.randomUUID)` und fällt sonst auf `window.crypto` zurück — ein
+   Stub, dessen `randomUUID` *existiert* und wirft, bricht diesen Fallback.
+   Jeder Roundtrip zieht eine Draft-ID darüber. Lösung:
+   `src/runtime/node-crypto-shim.mjs` implementiert `randomUUID`/`randomBytes`
+   echt über WebCrypto und wirft nur bei `createHash`/`createHmac`
+   (synchrones Hashing gibt es im Browser nicht — wird von abap2UI5 nicht
+   benutzt).
+
+Weitere Node-Module (`zlib`, `http`, `https`, `net`, `tls`, `fs`, `path`,
+`url`, `util`) werden von open-abap-core-Klassen importiert, die abap2UI5 nie
+aufruft. Sie werden auf werfende Stubs aufgelöst — die Meldung nennt das
+fehlende Modul, statt als „x is not a function" irgendwo aufzuschlagen.
+
+**Nicht gebraucht:** `express-icf-shim` und `steampunk-2305-api-intersect-702`
+(beide im Ursprungsplan als deps vorgesehen) — die `if_http_*`-Interfaces
+kommen aus open-abap-core, und der ICF-Weg wird gar nicht beschritten.
+
+**Bundle-Größe:** Das Bundle enthält die gesamte open-abap-Standardbibliothek,
+weil `init.mjs` jedes Objekt lädt. Tree-Shaking ist nicht möglich, solange ABAP
+Klassen dynamisch über `abap.Classes[name]` auflöst. 0,8 MB gzip ist für einen
+Playground unkritisch.
+
+### Erkenntnisse Phase 2
+
+**Der geplante fetch-ICF-Shim entfällt — das war der falsche Weg.**
+`z2ui5_cl_ui5_http_handler` hat mit `_main( is_req )` eine *öffentliche
+Klassenmethode*, die eine schlichte Struktur (`method`, `body`, `path`,
+`t_params`) nimmt und eine schlichte Struktur (`body`, `status_code`,
+`status_reason`) zurückgibt. Der ganze `if_http_server`-Apparat existiert nur,
+um genau diese beiden Strukturen zu füllen und zu leeren. Statt ihn
+nachzubauen, ruft `zcl_pg_bridge` die Methode direkt auf — 40 Zeilen ABAP
+statt einer Fake-ICF-Schicht.
+
+Was dabei wegfällt, fällt zu Recht weg: Kompression, Stateful-Sessions und der
+`sap-contextid`-Header-Tanz haben auf einer statischen Seite keine Bedeutung,
+und die CSRF-Prüfung existiert, um Cross-Origin-POSTs abzuweisen — hier
+verlässt die Anfrage den Browser nie.
+
+**Strukturen aus JavaScript zu *lesen* ist einfach, sie zu *bauen* nicht.**
+Deshalb nimmt die Brücke einen String und gibt eine Struktur zurück:
+`res.get().body.get()`. Umgekehrt hätte man `abap.types.Structure` von Hand
+zusammensetzen müssen.
+
+**Der App-Klassenname kommt aus der URL-Query**, nicht aus einem eigenen
+JSON-Feld: das Frontend schickt `S_FRONT.SEARCH`, und
+`z2ui5_cl_ui5_handler=>request_app_start` liest daraus `app_start`. Für den
+iframe heißt das: `?app_start=<KLASSE>` an die iframe-URL hängen, sonst nichts.
+
+**Eine transpilierte globale Klasse ist selbstgenügsam** — kein Import, kein
+Export, sie liest `abap` aus dem globalen Scope und trägt sich am Ende selbst
+in `abap.Classes` ein. Für Phase 5 heißt das: der live transpilierte
+Nutzercode lässt sich mit `new Function("abap", src)` laden und erneut laden.
+Ein Blob-URL-Import wäre hier sogar schädlich, weil der Browser Blob-Module für
+die Lebensdauer der Seite cacht und ein zweites „Run" die alte Fassung
+registrieren würde.
