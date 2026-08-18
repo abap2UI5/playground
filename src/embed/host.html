@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Embedded playground, on its own</title>
+<style>body { margin: 0 } iframe { width: 100%; height: 320px; border: 0; display: block }</style>
+</head>
+<body>
+<!-- The smallest possible embedding: one app-only playground in a frame. It is
+     what tests/embed.spec.js listens to, and what somebody copying two lines
+     into their own page ends up with. -->
+<iframe id="demo" title="abap2UI5 demo"
+        src="../?embed=1&view=app&src=../examples/zcl_linked_example.clas.abap"></iframe>
+<script>
+  // Grow to what the app said it needs.
+  window.addEventListener("message", (e) => {
+    if (e.data?.source !== "abap2ui5-playground") return;
+    if (e.data.type === "height") document.getElementById("demo").style.height = `${e.data.height}px`;
+  });
+</script>
+</body>
+</html>

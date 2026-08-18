@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Embedding the abap2UI5 playground</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    max-width: 52rem; margin: 0 auto; padding: 2rem 1.25rem 6rem;
+  }
+  h1 { font-size: 1.7rem; letter-spacing: -.02em; }
+  h2 { font-size: 1.15rem; margin-top: 2.5rem; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  pre {
+    background: color-mix(in srgb, canvas 92%, canvastext); padding: .9rem 1rem;
+    border-radius: 8px; overflow-x: auto;
+  }
+  .abap2ui5-demo {
+    border: 1px solid color-mix(in srgb, canvas 80%, canvastext);
+    border-radius: 10px; overflow: hidden; margin: 1.25rem 0; background: canvas;
+  }
+  .abap2ui5-demo-start {
+    display: block; width: 100%; padding: 2.5rem 1rem; border: 0; cursor: pointer;
+    background: transparent; color: inherit; font: inherit; font-weight: 600;
+  }
+  .abap2ui5-demo-start:hover { background: color-mix(in srgb, canvas 92%, canvastext); }
+  .note { color: color-mix(in srgb, canvastext 60%, canvas); font-size: 14px; }
+</style>
+</head>
+<body>
+
+<h1>Embedding the playground</h1>
+
+<p>
+  A documentation page can put a running abap2UI5 app next to the code that
+  produces it. This page is that documentation, and every demo on it is real —
+  the same playground, in an iframe.
+</p>
+
+<h2>A demo with the editor</h2>
+
+<p>
+  The reader can change the ABAP and press Run. <code>data-src</code> points at
+  the same file the documentation prints, so the printed code and the running
+  code cannot drift apart.
+</p>
+
+<div class="abap2ui5-demo" data-src="../examples/zcl_linked_example.clas.abap"></div>
+
+<pre>&lt;div class="abap2ui5-demo"
+     data-src="https://raw.githubusercontent.com/.../z2ui5_cl_demo.clas.abap"&gt;&lt;/div&gt;
+&lt;script src="https://abap2ui5.github.io/test-live/embed/abap2ui5-embed.js"&gt;&lt;/script&gt;</pre>
+
+<h2>A demo without the editor</h2>
+
+<p>
+  <code>data-view="app"</code> shows the result on its own, for a paragraph that
+  is about what the app does rather than how it is written. It still compiles
+  and runs the ABAP, and it reports its height so the frame fits what was
+  rendered instead of guessing.
+</p>
+
+<div class="abap2ui5-demo" data-view="app" data-src="../examples/zcl_linked_example.clas.abap"
+     data-label="Show the app"></div>
+
+<h2>Code that lives only in this page</h2>
+
+<p>
+  <code>data-code</code> carries the ABAP itself, deflated into the playground's
+  URL fragment. Nothing has to be hosted.
+</p>
+
+<div class="abap2ui5-demo" data-label="Run the inline example" data-code="CLASS zcl_playground DEFINITION PUBLIC CREATE PUBLIC.
+  PUBLIC SECTION.
+    INTERFACES z2ui5_if_app.
+  PROTECTED SECTION.
+ENDCLASS.
+CLASS zcl_playground IMPLEMENTATION.
+  METHOD z2ui5_if_app~main.
+    IF client->check_on_init( ) IS INITIAL.
+      RETURN.
+    ENDIF.
+    DATA(view) = z2ui5_cl_ui5_view_builder=>factory(
+        )->ele( n = `View` ns = `mvc`
+            )->a( n = `xmlns`     v = `sap.m`
+            )->a( n = `xmlns:mvc` v = `sap.ui.core.mvc` ).
+    view->ele( `Page`
+        )->a( n = `title` v = `Written in the documentation`
+        )->tag( `Text`
+            )->a( n = `id`   v = `txtInline`
+            )->a( n = `text` v = `This ABAP travelled in the URL.` ).
+    client->view_display( view->stringify( ) ).
+  ENDMETHOD.
+ENDCLASS."></div>
+
+<h2>Why nothing loads until it is clicked</h2>
+
+<p class="note">
+  Each demo is a complete ABAP runtime plus an abaplint parse of nine hundred
+  sources — a second or two of processor and a few hundred megabytes, per frame.
+  Demos on the same page share the browser's cache, so the bytes are paid once,
+  but the parsing is not. A page with ten examples that all booted on scroll
+  would be the slowest thing in the manual, so each one stays a button until
+  somebody wants it. <code>data-auto="1"</code> overrides that for a page that
+  is only about its one demo.
+</p>
+
+<script src="abap2ui5-embed.js"></script>
+</body>
+</html>
