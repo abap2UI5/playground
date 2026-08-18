@@ -6,10 +6,19 @@ laufende abap2UI5-App. Der ABAP-Code wird im Browser mit dem
 abaplint-Transpiler nach JavaScript übersetzt und komplett clientseitig
 ausgeführt — kein Server, kein SAP-System. Vorbild: https://playground.abaplint.org/
 
-Dieses Dokument ist die Arbeitsvorlage: Jede AI-Session nimmt sich die
-nächste offene Aufgabe (oberste unerledigte Checkbox der niedrigsten
-offenen Phase), erledigt sie inklusive Abnahmekriterien, hakt sie hier ab
-und committet Code + Plan-Update zusammen.
+**Stand: alle Phasen 0–8 sind umgesetzt.** Der Playground läuft, 61 Tests
+decken ihn ab, CI ist grün. Zwei Punkte aus Phase 8 sind bewusst *nicht*
+gebaut — mit Begründung an Ort und Stelle.
+
+Damit ist dieses Dokument zweierlei: die Arbeitsvorlage, nach der gebaut
+wurde, **und** das Protokoll, was es tatsächlich gekostet hat. Der Teil, der
+für die nächste Session zählt, ist der Abschnitt **Erkenntnisse** ganz unten:
+dort steht jede Falle, die einen halben Tag gefressen hat, und warum die
+Lösung so aussieht, wie sie aussieht. Wer den Build anfasst, liest ihn vorher.
+
+Für weitere Aufgaben gilt die ursprüngliche Regel: die oberste unerledigte
+Checkbox der niedrigsten offenen Phase nehmen, inklusive Abnahmekriterien
+erledigen, hier abhaken, Code und Plan-Update zusammen committen.
 
 ---
 
@@ -44,9 +53,9 @@ und committet Code + Plan-Update zusammen.
 ```
 GitHub Pages (statisch, aus dist/)
 │
-├── index.html            Playground-Shell: Splitter, Toolbar, Run-Button
-├── editor/               Monaco + @abaplint/monaco, abaplint im Web Worker
-│                         Registry enthält die (downgeporteten) Framework-Quellen
+├── index.html            Playground-Shell: Splitter, Toolbar, Datei-Tabs
+├── editor/corpus.json    die abap2UI5- und open-abap-Quellen, gegen die
+│                         abaplint im Hauptthread prüft (910 Dateien)
 ├── runtime/
 │   ├── framework.mjs     Build-zeitlich transpiliertes abap2UI5 + open-abap-core,
 │   │                     inklusive sql.js-Setup und der Brücke roundtrip()
@@ -54,14 +63,16 @@ GitHub Pages (statisch, aus dist/)
 ├── app/                  abap2UI5-UI5-Frontend (webapp aus build/cloud),
 │                         läuft im iframe, UI5-Core vom CDN,
 │                         window.fetch der Backend-URL wird auf den Shim umgebogen
-└── samples/              Beispielklassen (Quelle: abap2UI5-Demos)
+└── examples/             ABAP als statische Datei, damit `?src=` etwas
+                          zum Verlinken hat
 ```
 
-Roundtrip zur Laufzeit: Editor → Run → Web Worker (Downport-Fixes +
-Transpile der Nutzerklasse gegen die Registry) → Blob-Modul importieren →
-Klasse in `abap.Classes` registrieren → iframe (neu) laden → das UI5-Frontend
-POSTet per `fetch()` → Brücke ruft den transpilierten HTTP-Handler → JSON zurück
-→ App rendert. Zustand (Drafts) liegt in sql.js im Speicher.
+Roundtrip zur Laufzeit: Editor → Run → Transpile der Nutzerklassen gegen die
+Registry (im Hauptthread, ~20 ms) → mit `new Function` ausführen, wodurch sie
+sich selbst in `abap.Classes` eintragen → Typ-Caches leeren → iframe neu laden
+→ das UI5-Frontend POSTet per `fetch()` → Brücke ruft den transpilierten
+HTTP-Handler → JSON zurück → App rendert. Zustand (Drafts) liegt in sql.js im
+Speicher.
 
 Bereits verifizierte Fakten (Analyse 2026-08-18):
 
