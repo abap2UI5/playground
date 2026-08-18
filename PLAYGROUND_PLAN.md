@@ -717,3 +717,11 @@ Ein Themewechsel bei *laufender* App tauscht das Theme zur Laufzeit
 `sap.ui.getCore().applyTheme`), statt den Frame neu zu laden. Ein Reload würde
 die App neu starten — und ein halb ausgefülltes Formular wegzuwerfen, weil die
 Sonne untergegangen ist, wäre die falsche Reaktion auf einen Sonnenuntergang.
+
+**Der Unterpfad war das letzte ungeprüfte Deployment-Risiko.** GitHub Pages
+serviert eine Projektseite unter `/<repo>/`, nie unter `/`. Alles im Code baut
+seine URLs über `new URL(x, document.baseURI)` — richtig, aber ungeprüft, weil
+ein Test an der Wurzel so oder so grün ist. `tools/serve.mjs` mountet den Baum
+deshalb zusätzlich unter einem Präfix, und `tests/subpath.spec.js` fährt den
+kompletten Weg dort: Framework laden, Korpus laden, App rendern, Roundtrip
+auslösen, kein 404.

@@ -30,8 +30,18 @@ const TYPES = {
   ".properties": "text/plain; charset=utf-8",
 };
 
+// GitHub Pages serves a project site under /<repo>/, never at the root, so the
+// same tree is mounted twice here: at / for convenience and under a prefix so
+// the tests can prove that nothing in the page assumes it is at the root.
+const SUBPATH = "/under-a-subpath";
+
 const server = http.createServer((req, res) => {
-  const url = decodeURIComponent((req.url || "/").split("?")[0]);
+  let url = decodeURIComponent((req.url || "/").split("?")[0]);
+  if (url === SUBPATH) {
+    res.writeHead(301, { location: `${SUBPATH}/` }).end();
+    return;
+  }
+  if (url.startsWith(`${SUBPATH}/`)) url = url.slice(SUBPATH.length);
   // Resolve inside ROOT - a request may not escape dist/ via ../
   let file = path.join(ROOT, path.normalize(url).replace(/^(\.\.[/\\])+/, ""));
   if (!file.startsWith(ROOT)) {
