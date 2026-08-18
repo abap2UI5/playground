@@ -76,18 +76,62 @@ export async function compile(files) {
     reg.parse();
   }
 
-  // Interfaces before classes: a transpiled class reads its interface's
-  // constants off the interface object at definition time, so an interface that
-  // is defined afterwards is not there yet.
-  const chunks = output.objects
-    .filter((o) => o.chunk)
-    .sort((a, b) => rank(a) - rank(b))
-    .map((o) => ({ object: o.object.name, js: o.chunk.getCode() }));
+  const chunks = ordered(output.objects.filter((o) => o.chunk)).map((o) => ({
+    object: o.object.name,
+    js: prologue(o) + o.chunk.getCode(),
+  }));
 
   if (!chunks.some((c) => c.object === entry)) {
     throw new Error(`The transpiler produced no JavaScript for ${entry}.`);
   }
   return chunks;
+}
+
+// Each chunk runs in a scope of its own (see defineClasses), and almost every
+// reference it makes goes through abap.Classes at call time - except the one
+// the language resolves at definition time: the superclass. `class zcl_child
+// extends zcl_base` names it bare, and the transpiler records exactly these
+// names in `requires`. So they are bound at the top of the chunk, from where
+// the runtime keeps every class - the framework's from the bundle, the user's
+// from the chunk that ran just before this one.
+function prologue(o) {
+  const own = o.object.name.toUpperCase();
+  const lines = [];
+  for (const name of new Set(o.requires.map((r) => r.name))) {
+    if (name.toUpperCase() === own) continue;
+    lines.push(
+      `const ${name} = abap.Classes[${JSON.stringify(name.toUpperCase())}];`,
+      // Without this, a missing superclass surfaces as "Class extends value
+      // undefined is not a constructor", which names neither class.
+      `if (${name} === undefined) throw new Error(${JSON.stringify(`${own} needs ${name.toUpperCase()}, which the runtime does not have.`)});`,
+    );
+  }
+  return lines.length === 0 ? "" : lines.join("\n") + "\n";
+}
+
+// Definition order. Interfaces first - a class reads its interfaces' constants
+// off abap.Classes while it is being defined - and a superclass before every
+// class that extends it, because the prologue binds whatever is in abap.Classes
+// at that moment. `requires` gives the superclass edges; inheritance cannot be
+// cyclic, but if the transpiler ever hands back something that is, the rest is
+// appended as-is rather than dropped.
+function ordered(objects) {
+  const pending = [...objects].sort((a, b) => rank(a) - rank(b));
+  const placed = new Set();
+  const inBatch = new Set(pending.map((o) => o.object.name.toUpperCase()));
+  const result = [];
+  while (pending.length > 0) {
+    const i = pending.findIndex((o) =>
+      o.requires.every((r) => {
+        const name = r.name.toUpperCase();
+        return !inBatch.has(name) || placed.has(name) || name === o.object.name.toUpperCase();
+      }),
+    );
+    const next = i === -1 ? pending.shift() : pending.splice(i, 1)[0];
+    placed.add(next.object.name.toUpperCase());
+    result.push(next);
+  }
+  return result;
 }
 
 const rank = (o) => (o.object.type === "INTF" ? 0 : 1);

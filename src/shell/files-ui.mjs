@@ -1,8 +1,8 @@
 // The strip of file tabs above the editor.
 //
-// It only appears once there is more than one file, or once somebody has
-// pressed "+". A playground that opens with a tab bar over a single class is
-// claiming a complexity it does not have.
+// Always visible, even over a single file: the one tab is what tells a reader
+// that files have abapGit names and that "+" exists at all. It starts hidden in
+// the markup only so nothing flashes before boot puts real tabs into it.
 import { addFile, closeFile, currentFile, getFiles, openFile } from "../editor/editor.mjs";
 import { nameProblem, skeletonFor } from "../editor/files.mjs";
 

@@ -37,9 +37,11 @@ function nameFrom(url) {
 }
 
 export async function fetchLinkedFiles(params) {
-  const files = [];
+  // Checked before anything is fetched: a link that is going to be refused for
+  // its second file should not have cost a request for its first. The checks
+  // are also what make the fetches safe to run together afterwards.
   const seen = new Set();
-  for (const raw of linkedSources(params)) {
+  const links = linkedSources(params).map((raw) => {
     let url;
     try {
       url = new URL(raw, window.location.href);
@@ -52,16 +54,22 @@ export async function fetchLinkedFiles(params) {
       throw new Error(`Two of the linked files are both called ${name}, and an ABAP object has one name.`);
     }
     seen.add(name);
+    return { name, url };
+  });
 
-    const response = await fetch(url.href).catch(() => {
-      // A cross-origin fetch that the other host does not allow fails without
-      // a status, so this is the only place the reason can be guessed at.
-      throw new Error(`${url.href} could not be fetched. The host has to allow being read from a browser.`);
-    });
-    if (!response.ok) {
-      throw new Error(`${url.href} answered ${response.status}.`);
-    }
-    files.push({ name, source: await response.text() });
-  }
-  return files;
+  // Together, not one after another - the files are independent and this is the
+  // startup path of every documentation link.
+  return Promise.all(
+    links.map(async ({ name, url }) => {
+      const response = await fetch(url.href).catch(() => {
+        // A cross-origin fetch that the other host does not allow fails without
+        // a status, so this is the only place the reason can be guessed at.
+        throw new Error(`${url.href} could not be fetched. The host has to allow being read from a browser.`);
+      });
+      if (!response.ok) {
+        throw new Error(`${url.href} answered ${response.status}.`);
+      }
+      return { name, source: await response.text() };
+    }),
+  );
 }

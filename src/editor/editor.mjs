@@ -213,8 +213,14 @@ function abapNameCompletion() {
         endColumn: position.column,
       };
 
+      // Ranked before it is cut: names that start with what was typed beat
+      // names that merely contain it, and the cut to 200 has to respect that -
+      // an alphabetical cut would happily drop the one class being typed while
+      // keeping two hundred incidental substring matches.
+      const starts = (o) => (o.name.toLowerCase().startsWith(lower) ? 0 : 1);
       const suggestions = knownObjectNames()
         .filter((o) => o.name.toLowerCase().includes(lower))
+        .sort((a, b) => starts(a) - starts(b) || a.name.localeCompare(b.name))
         .slice(0, 200)
         .map((o) => ({
           label: o.name.toLowerCase(),
