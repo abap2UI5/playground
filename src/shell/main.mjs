@@ -13,7 +13,7 @@ import { DEFAULT_SOURCE, SAMPLES, sampleById } from "../editor/samples.mjs";
 import { setUpSplitter, setUpTabs } from "./layout.mjs";
 import { copyToClipboard, shareUrl, sourceFromLocation } from "./share.mjs";
 import { state } from "./state.mjs";
-import { setStatus, showOutput } from "./ui.mjs";
+import { hideOutput, setStatus, showOutput } from "./ui.mjs";
 
 // The framework bundle is 8 MB and built by a separate step, so it is not part
 // of this bundle - it is fetched at run time. The URL is built rather than
@@ -147,6 +147,8 @@ async function share() {
 // the load event is unambiguous.
 export async function run() {
   runButton.disabled = true;
+  // Whatever the last run had to say about itself is no longer true.
+  hideOutput();
   try {
     // Checked before the diagnostics, because a class under a different name
     // makes abaplint report a filename mismatch - true, and no help at all to

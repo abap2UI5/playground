@@ -121,3 +121,17 @@ test("a second run replaces the class rather than keeping the first version", as
   await expect(control(page, "txtOut")).toContainText("two", { timeout: 60000 });
   await expect(page.frameLocator("#app").getByText("Second")).toBeVisible();
 });
+
+test("the output panel does not outlive the error it reported", async ({ page }) => {
+  await open(page);
+
+  await setSource(page, app("Broken", "out = = `no`."));
+  await page.locator("#run").click();
+  await expect(page.locator("#output")).toBeVisible();
+
+  await setSource(page, app("Fixed", "out = `fixed`."));
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+  await expect(page.locator("#output")).toBeHidden();
+  await expect(control(page, "txtOut")).toContainText("fixed");
+});

@@ -11,6 +11,7 @@
     "build:ui5": "node tools/build-ui5.mjs",
     "build:site": "node tools/build-site.mjs",
     "build": "npm run deps && npm run build:framework && npm run build:ui5 && npm run build:site",
+    "check:size": "node tools/check-size.mjs",
     "test": "playwright test",
     "serve": "node tools/serve.mjs"
   },

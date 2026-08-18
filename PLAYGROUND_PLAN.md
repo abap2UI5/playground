@@ -278,19 +278,27 @@ Ziel: Aus dem Technik-Demo wird ein Playground, den man verlinken kann.
 
 ## Phase 7 — Qualität, CI, Doku
 
-- [ ] **P7.1 CI-Gates.** `check.yml` fährt: Framework-Build, alle
-  Unit-/Headless-Tests, Playwright-e2e (Samples-Matrix), Bundle-Size-Limit
-  (Budget festlegen und begründen). Pages-Deploy nur bei grünem Check.
-- [ ] **P7.2 Version-Bump-Prozess.** Dokumentierter Ablauf (README):
-  abap2UI5-SHA bumpen → Build → Tests → committen. Optional ein
-  wöchentlicher Scheduled-Workflow, der den Bump als Branch vorbereitet.
-- [ ] **P7.3 Doku.** README final: Screenshot/GIF, Architekturdiagramm,
-  "Wie funktioniert das?"-Abschnitt (Transpiler, sql.js, fetch-Shim),
-  bekannte Grenzen (Sprachumfang = Transpiler-Umfang, keine echten
-  HTTP-Aufrufe nach draußen, Performance-Hinweise).
-- [ ] **P7.4 Ankündigungsreife.** Abschlussprüfung gegen die ursprüngliche
-  Idee: Editor mit abaplint links, App rechts, alles im Browser, als GitHub
-  Page erreichbar. Offene Punkte als Phase-8-Kandidaten einsortieren.
+- [x] **P7.1 CI-Gates.** `.github/actions/build` (Composite Action, von
+  `check.yml` und `pages.yml` gemeinsam benutzt) installiert, stellt die
+  teuren Zwischenstände aus dem Cache her (`deps/`, `~/.ui5`,
+  `build/downport`), baut und prüft das Größenbudget
+  (`tools/check-size.mjs`). Danach laufen die Tests. Pages deployt erst nach
+  grünen Tests.
+  *Abnahme:* Lauf auf GitHub grün (~5 min); `npm run check:size` läuft lokal.
+- [x] **P7.2 Version-Bump-Prozess.** Im README dokumentiert. Zusätzlich
+  `.github/workflows/upstream.yml`: baut und testet **wöchentlich gegen
+  Upstream-HEAD**, ohne die Pins anzufassen, und legt bei Fehlschlag ein
+  Issue an (bzw. kommentiert das bestehende). `tools/fetch-deps.mjs --latest`
+  ist der Schalter dafür.
+- [x] **P7.3 Doku.** README mit Screenshot, Architekturdiagramm, „wie es
+  funktioniert", **was es nicht kann** (eine Klasse, keine eigene Datenbank,
+  nur der Sprachumfang des Transpilers, nur die eingebauten UI5-Bibliotheken)
+  und der Landkarte der Build-Scripts. Der Plan hier bleibt die
+  Detailbegründung und wird im README verlinkt.
+- [x] **P7.4 Ankündigungsreife.** Abgleich mit der ursprünglichen Idee:
+  Editor mit abaplint links ✓, App rechts ✓, alles im Browser ✓, als
+  GitHub Page ✓. Einzige verbleibende Handlung für einen Menschen:
+  Settings → Pages → Source → „GitHub Actions" einschalten.
 
 ## Phase 8 — Optionale Ausbaustufen (nur nach explizitem Auftrag)
 
@@ -565,3 +573,28 @@ Media Query und ordnet im Breitbild nur die Tab-Markierung.
 **Share-Links sind klein genug.** Ein Sample von ~2500 Zeichen wird als
 `deflate-raw` + base64url zu unter 700 Zeichen — ABAP komprimiert
 hervorragend. Der Code steht im **Fragment**, verlässt den Browser also nie.
+
+### Erkenntnisse Phase 7
+
+**Was ein Besucher wirklich lädt: ~3 MB komprimiert.** Aufgeschlüsselt
+(`npm run check:size`):
+
+| | komprimiert | roh |
+|---|---|---|
+| `assets/shell.mjs` (Monaco, abaplint, Transpiler) | 1,33 MB | 5,73 MB |
+| `runtime/framework.mjs` (abap2UI5 + open-abap) | 0,80 MB | 8,51 MB |
+| `editor/corpus.json` (ABAP-Quellen für den Editor) | 0,60 MB | 3,80 MB |
+| `runtime/sql-wasm.wasm` | 0,31 MB | 0,63 MB |
+
+Die veröffentlichte Seite ist mit **127 MB** deutlich größer — das ist fast
+ausschließlich UI5, das bedarfsgesteuert nachgeladen wird. Seitengröße und
+Transfergröße sind hier zwei verschiedene Dinge, und das Budget in
+`tools/check-size.mjs` misst beide getrennt.
+
+**Der CI-Lauf dauert etwa 5 Minuten** — inklusive Downport, Transpile,
+UI5-Build und 39 Browser-Tests. Ohne Caches wären es eher zehn.
+
+**Die Testsuite hat sich zweimal bezahlt gemacht**, an Stellen, die kein
+Lint gefunden hätte: der fehlende Namensraum an einer Aggregation (die App
+terminiert beim Laden, nicht beim Rendern) und die Typ-Caches nach einem
+zweiten Run. Beides wäre einem Menschen erst beim Benutzen aufgefallen.

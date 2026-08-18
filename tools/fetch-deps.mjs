@@ -46,21 +46,27 @@ if (process.argv.includes("--print-latest")) {
   process.exit(0);
 }
 
+const useLatest = process.argv.includes("--latest");
+
 let failures = 0;
 for (const p of PINS) {
   const dir = path.join(DEPS_DIR, p.name);
   try {
-    if (fs.existsSync(path.join(dir, ".git")) && git(["rev-parse", "HEAD"], dir) === p.sha) {
-      console.log(`fetch-deps: ${p.name} already at ${p.sha.slice(0, 12)}`);
+    const wanted = useLatest ? git(["ls-remote", p.url, "HEAD"]).split("\t")[0] : p.sha;
+    if (useLatest && wanted !== p.sha) {
+      console.log(`fetch-deps: ${p.name} @ ${wanted.slice(0, 12)} (upstream HEAD, pin is ${p.sha.slice(0, 12)})`);
+    }
+    if (fs.existsSync(path.join(dir, ".git")) && git(["rev-parse", "HEAD"], dir) === wanted) {
+      console.log(`fetch-deps: ${p.name} already at ${wanted.slice(0, 12)}`);
       continue;
     }
     fs.rmSync(dir, { recursive: true, force: true });
     fs.mkdirSync(dir, { recursive: true });
     git(["init", "--quiet"], dir);
     git(["remote", "add", "origin", p.url], dir);
-    git(["fetch", "--quiet", "--depth", "1", "origin", p.sha], dir);
+    git(["fetch", "--quiet", "--depth", "1", "origin", wanted], dir);
     git(["checkout", "--quiet", "--detach", "FETCH_HEAD"], dir);
-    console.log(`fetch-deps: ${p.name} @ ${p.sha.slice(0, 12)}`);
+    console.log(`fetch-deps: ${p.name} @ ${wanted.slice(0, 12)}`);
   } catch (e) {
     // Leave nothing half-checked-out behind - a partial tree would fail much
     // later, in the middle of a transpile, with an error that points nowhere.
@@ -74,4 +80,4 @@ if (failures) {
   console.error(`fetch-deps: ${failures} dependency/dependencies could not be pinned`);
   process.exit(1);
 }
-console.log("fetch-deps: all dependencies at pinned SHAs");
+console.log(useLatest ? "fetch-deps: all dependencies at upstream HEAD" : "fetch-deps: all dependencies at pinned SHAs");
