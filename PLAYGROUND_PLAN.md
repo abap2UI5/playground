@@ -85,7 +85,7 @@ Bereits verifizierte Fakten (Analyse 2026-08-18):
 Ziel: test-live kann bauen und nach GitHub Pages deployen, bevor es
 irgendetwas Fachliches gibt. Damit ist der Deploy-Weg nie der Blocker.
 
-- [ ] **P0.1 npm-Grundgerüst.** `package.json` mit gepinnten devDependencies
+- [x] **P0.1 npm-Grundgerüst.** `package.json` mit gepinnten devDependencies
   (`@abaplint/cli`, `@abaplint/transpiler-cli`, `@abaplint/runtime`,
   `@abaplint/database-sqlite`, `@abaplint/monaco`, `monaco-editor`, esbuild
   oder vite als Bundler), `.gitignore` (node_modules, dist, deps, output),
@@ -93,7 +93,7 @@ irgendetwas Fachliches gibt. Damit ist der Deploy-Weg nie der Blocker.
   dieses Dokument.
   *Abnahme:* `npm ci && npm run build` läuft lokal durch (build darf zunächst
   nur eine leere `dist/index.html` erzeugen).
-- [ ] **P0.2 Pages-Workflow.** GitHub Action `.github/workflows/pages.yml`:
+- [x] **P0.2 Pages-Workflow.** GitHub Action `.github/workflows/pages.yml`:
   bei Push auf den Default-Branch `npm ci && npm run build`, `dist/` als
   Pages-Artefakt deployen (actions/deploy-pages). Zusätzlich ein
   `check.yml`, der auf jedem Branch `npm run build` + spätere Tests fährt.
@@ -101,7 +101,7 @@ irgendetwas Fachliches gibt. Damit ist der Deploy-Weg nie der Blocker.
   `node -e` YAML-Parse); im Workflow-Log eines Branch-Laufs ist der
   Build grün. (Pages-Aktivierung selbst macht der Mensch im Repo-Setting —
   im README als TODO für den Menschen vermerken.)
-- [ ] **P0.3 Pinning-Script.** `tools/fetch-deps.mjs` nach dem Vorbild von
+- [x] **P0.3 Pinning-Script.** `tools/fetch-deps.mjs` nach dem Vorbild von
   `abap2ui5/node/setup/fetch-deps.mjs`: pinnt per SHA die Klone von
   `abap2ui5/abap2ui5`, `open-abap/open-abap-core` und
   `abapedia/steampunk-2305-api-intersect-702` unter `deps/` (gitignored).
