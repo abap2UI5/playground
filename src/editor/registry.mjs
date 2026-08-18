@@ -13,9 +13,7 @@
 // parseAsync so the page keeps responding while it happens. Everything after
 // that is incremental: only the file that changed is dirty.
 import * as abaplint from "@abaplint/core";
-import { MAIN_FILE, parseName, sidecarFor, uriFor } from "./files.mjs";
-
-export { MAIN_FILE };
+import { parseName, sidecarFor, uriFor } from "./files.mjs";
 
 // v750 is the release abap2UI5 lints itself against, so the playground holds
 // the user to the same bar - and the transpiler accepts everything up to it.

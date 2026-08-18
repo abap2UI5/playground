@@ -8,8 +8,8 @@
 import "./shell.css";
 
 import { connectRegistry, createEditor, focusProblem, format, getFiles, refresh, setFiles } from "../editor/editor.mjs";
-import { declaredObjectName, entryClass, MAIN_FILE } from "../editor/registry.mjs";
-import { checkFileSet, parseName } from "../editor/files.mjs";
+import { declaredObjectName, entryClass } from "../editor/registry.mjs";
+import { checkFileSet, MAIN_FILE, parseName } from "../editor/files.mjs";
 import { fetchLinkedFiles, linkedSources } from "./deep-link.mjs";
 import { DEFAULT_FILES, SAMPLES, sampleById } from "../editor/samples.mjs";
 import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
