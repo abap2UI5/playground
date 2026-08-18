@@ -16,13 +16,28 @@ export const control = (page, id, suffix = "") =>
 // Replaces what is in the editor. The editor reacts to a change on a short
 // debounce, so this waits out that delay rather than leaving every caller to
 // remember it.
-export async function setSource(page, source) {
-  await page.evaluate((s) => window.monaco.editor.getModels()[0].setValue(s), source);
+export async function setSource(page, source, file = "zcl_playground.clas.abap") {
+  await page.evaluate(
+    ([s, f]) => window.monaco.editor.getModel(window.monaco.Uri.parse(`file:///${f}`)).setValue(s),
+    [source, file],
+  );
   await page.waitForTimeout(400);
 }
 
-export async function getSource(page) {
-  return page.evaluate(() => window.monaco.editor.getModels()[0].getValue());
+export async function getSource(page, file = "zcl_playground.clas.abap") {
+  return page.evaluate(
+    (f) => window.monaco.editor.getModel(window.monaco.Uri.parse(`file:///${f}`))?.getValue(),
+    file,
+  );
+}
+
+export async function openFiles(page) {
+  return page.evaluate(() =>
+    window.monaco.editor
+      .getModels()
+      .filter((m) => m.uri.scheme === "file")
+      .map((m) => m.uri.path.replace(/^\//, "")),
+  );
 }
 
 // The problems abaplint is reporting on the current source, as Monaco shows

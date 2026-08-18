@@ -89,6 +89,14 @@ const result = await esbuild.build({
 
 fs.copyFileSync(path.join(SHELL, "index.html"), path.join(DIST, "index.html"));
 
+// A same-origin ABAP file, so ?src= can be exercised without depending on
+// somebody else's host being up. It is also the smallest possible worked
+// example for anyone wondering what a linkable file looks like.
+fs.mkdirSync(path.join(DIST, "examples"), { recursive: true });
+for (const name of fs.readdirSync(path.join(ROOT, "src", "examples"))) {
+  fs.copyFileSync(path.join(ROOT, "src", "examples", name), path.join(DIST, "examples", name));
+}
+
 const kb = (p) => `${Math.round(fs.statSync(p).size / 1024)} KB`;
 log(`shell.mjs (${kb(path.join(ASSETS, "shell.mjs"))})`);
 

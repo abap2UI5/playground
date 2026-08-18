@@ -31,18 +31,24 @@ export async function roundtrip(body) {
   };
 }
 
-// Registers a class that was transpiled after the bundle was built - the class
-// the user is editing. A transpiled global class is self-contained: it reads
-// `abap` off the global scope and ends by putting itself into abap.Classes, so
-// running its source is all it takes. Re-running it replaces the previous
-// version, which is what a second press of Run must do.
+// Registers objects that were transpiled after the bundle was built - the
+// classes the user is editing. A transpiled global object is self-contained: it
+// reads `abap` off the global scope and ends by putting itself into
+// abap.Classes, so running its source is all it takes. Running it again replaces
+// the previous version, which is what a second press of Run must do.
 //
-// Deliberately not a blob import: a blob URL module is cached by the browser
-// for the lifetime of the page, so the second Run of an edited class would
-// silently re-register the first version.
-export function defineClass(source) {
-  const define = new Function("abap", `${source}\nreturn true;`);
-  define(globalThis.abap);
+// Deliberately not a blob import: a blob URL module is cached by the browser for
+// the lifetime of the page, so the second Run of an edited class would silently
+// re-register the first version.
+//
+// The caches are dropped once, at the end, rather than between objects - a class
+// defined halfway through the batch would otherwise repopulate them from a
+// half-loaded picture.
+export function defineClasses(sources) {
+  for (const source of sources) {
+    const define = new Function("abap", `${source}\nreturn true;`);
+    define(globalThis.abap);
+  }
   forgetCachedTypeInformation();
 }
 
@@ -65,12 +71,6 @@ function forgetCachedTypeInformation() {
       if (/cache/i.test(name)) value?.clear?.();
     }
   }
-}
-
-// True once the class of that name can be instantiated - used to tell "the app
-// class the URL names was never transpiled" apart from "the app crashed".
-export function hasClass(name) {
-  return globalThis.abap.Classes[name.toUpperCase()] !== undefined;
 }
 
 // The framework version, read where the framework itself keeps it. Interface

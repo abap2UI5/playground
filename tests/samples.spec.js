@@ -64,6 +64,15 @@ const CHECKS = {
     await expect(page.frameLocator("#app").getByText("a third note")).toBeVisible();
   },
 
+  navigation: async (page) => {
+    await control(page, "btnPick").click();
+    // A second app of the user's own, called with nav_app_call.
+    await expect(page.frameLocator("#app").getByText("Pick one")).toBeVisible();
+    await control(page, "btnGreen").click();
+    // It left with nav_app_leave, and the hub read its public attribute.
+    await expect(control(page, "txtPicked")).toContainText("GREEN");
+  },
+
   popup: async (page) => {
     await expect(control(page, "txtStatus")).toContainText("nothing deleted yet");
     await control(page, "btnDelete").click();

@@ -300,13 +300,46 @@ Ziel: Aus dem Technik-Demo wird ein Playground, den man verlinken kann.
   GitHub Page ✓. Einzige verbleibende Handlung für einen Menschen:
   Settings → Pages → Source → „GitHub Actions" einschalten.
 
-## Phase 8 — Optionale Ausbaustufen (nur nach explizitem Auftrag)
+## Phase 8 — Ausbaustufen
 
-- [ ] Mehrdatei-Support (mehrere Klassen/Interfaces, Datei-Tabs).
-- [ ] IndexedDB-Persistenz der sql.js-DB über Reloads hinweg.
-- [ ] Deep-Links in die abap2UI5-Samples-Repos (Sample im Playground öffnen).
-- [ ] Konfigurierbare abaplint-Regeln im UI.
-- [ ] Embedding-Modus (Playground als iframe für Doku-Seiten).
+- [x] **Mehrdatei-Support.** Der Playground hält jetzt mehrere ABAP-Dateien,
+  benannt wie in abapGit (`zcl_detail.clas.abap`, `zif_thing.intf.abap`), mit
+  Datei-Tabs über dem Editor. **Die erste Datei ist die App** — das ersetzt
+  die frühere Regel „die Klasse muss ZCL_PLAYGROUND heißen".
+  *Abnahme:* `tests/files.spec.js` (8 Tests) plus das neue Sample „Two apps",
+  das `nav_app_call` zwischen zwei eigenen Klassen zeigt.
+- [x] **Deep-Links.** `?src=<url>` öffnet ABAP, das woanders liegt; mehrere
+  `src`-Parameter öffnen mehrere Dateien. Erlaubt sind die eigene Origin und
+  GitHubs Raw-Hosts — der Playground holt im Namen dessen, der den Link
+  öffnet, und soll kein offener Leseproxy sein.
+  *Abnahme:* `tests/link.spec.js` gegen mitgelieferte Beispieldateien unter
+  `dist/examples/` (same-origin, damit der Test nicht von einem fremden Host
+  abhängt).
+- [x] **Embedding-Modus.** `?embed=1` blendet Marke, Sample-Menü, Share und
+  Versionszeile aus und lässt Editor, Run und App stehen. Ein eingebetteter
+  Playground schreibt außerdem **nicht** in den Entwurfsspeicher — er zeigt,
+  was die einbettende Seite verlangt hat, und überschreibt nicht die Arbeit
+  des Lesers.
+  *Abnahme:* zwei Tests, einer davon genau für das Nicht-Überschreiben.
+
+- [ ] **IndexedDB-Persistenz der sql.js-Datenbank — bewusst nicht gebaut.**
+  Beim Durchdenken trägt die Idee nicht: Die Datenbank hält *Drafts*, also
+  serialisierte Instanzen der App, adressiert über IDs, die das Frontend
+  ebenfalls hält. Nach einem Reload startet das Frontend ohne Draft-ID, die
+  wiederhergestellten Zeilen wären also verwaiste Daten und kein
+  wiederhergestellter Zustand. Wollte man wirklich fortsetzen, müsste man die
+  Draft-ID mitspeichern — und dann würde eine Instanz der *alten* Klassenform
+  wiederbelebt, exakt die Stale-State-Klasse von Fehlern, die in Phase 5 den
+  `BINDING_ERROR` verursacht hat. „Run fängt frisch an" ist die verlässlichere
+  Zusage.
+- [ ] **Konfigurierbare abaplint-Regeln im UI — bewusst nicht gebaut.**
+  188 Regeln als Schalterwand hilft niemandem, und die Regeln, die für
+  abap2UI5 wirklich zählen (Chain-Layout, View-Display-on-navigated), sind
+  nicht abaplints, sondern die des abap2UI5-Linters. Ein „Strict"-Schalter mit
+  generischen Stilregeln (Keyword-Case, Indentation) wäre ein Knopf, den man
+  erklären muss, für einen Nutzen, den ein Playground nicht hat. Stattdessen
+  steht die aktive Regelliste im README, damit die Frage „warum warnt er hier
+  nicht?" eine Antwort hat.
 
 ---
 
@@ -598,3 +631,27 @@ UI5-Build und 39 Browser-Tests. Ohne Caches wären es eher zehn.
 Lint gefunden hätte: der fehlende Namensraum an einer Aggregation (die App
 terminiert beim Laden, nicht beim Rendern) und die Typ-Caches nach einem
 zweiten Run. Beides wäre einem Menschen erst beim Benutzen aufgefallen.
+
+### Erkenntnisse Phase 8
+
+**Die bessere Regel ist positionell.** „Die Klasse muss ZCL_PLAYGROUND heißen"
+war eine Krücke aus der Einzeldatei-Zeit: Sie hätte jeden Deep-Link gezwungen,
+die verlinkte Klasse umzubenennen. **Die erste Datei ist die App** ist kürzer
+zu erklären, macht Mehrdatei und Deep-Links zugleich möglich, und die
+Fehlermeldung („die erste Datei deklariert keine Klasse") ist konkreter als
+abaplints „Class definition name must match filename".
+
+**Doppelte Dateinamen hängen Monaco auf.** Zwei `?src=`-Parameter auf dieselbe
+Datei ließen die Seite bei „starting…" stehen — `createModel` mit einer schon
+vergebenen URI. Jetzt ist ein doppelter Objektname ein erklärter Fehler, kein
+Hänger: ein ABAP-Objekt hat einen Namen.
+
+**Reihenfolge beim Definieren: Interfaces vor Klassen.** Eine transpilierte
+Klasse liest die Konstanten ihres Interfaces beim *Definieren* vom
+Interface-Objekt; ein danach definiertes Interface ist noch nicht da.
+
+**Ein Embedding darf den Entwurf des Lesers nicht anfassen.** Der
+eingebettete Playground liest und schreibt `localStorage` nicht — sonst würde
+eine Doku-Seite die Arbeit überschreiben, die jemand im normalen Playground
+liegen hat. Dafür gibt es einen eigenen Test, weil der Fehler sonst erst
+auffällt, wenn er passiert ist.

@@ -21,7 +21,7 @@ pipeline and moves the last step into the browser.
   abap2UI5 sources ──┼──▶│ registry:       │          │ abap2UI5,        │      │
   (910 files)        │   │ the real        │  Run     │ transpiled at    │      │
                      │   │ framework       │──ABAP───▶│ build time       │      │
-  abap2UI5 src ──────┼──▶│ + your class    │  → JS    │ + your class     │      │
+  abap2UI5 src ──────┼──▶│ + your classes  │  → JS    │ + your classes   │      │
   downported,        │   └─────────────────┘          └────────┬─────────┘      │
   transpiled,        │                                         │ roundtrip      │
   bundled            │   ┌─────────────────────────────────────▼─────────┐      │
@@ -38,11 +38,11 @@ pipeline and moves the last step into the browser.
 - **Page load.** That bundle boots the ABAP runtime, and an in-memory SQLite
   (sql.js, compiled to WebAssembly) takes the place of the database abap2UI5
   keeps its drafts in. In parallel, abaplint parses the real framework sources so
-  the editor can check your class against them.
+  the editor can check your classes against them.
 - **Editing.** Monaco — the editor from VS Code — with abaplint behind it:
   diagnostics against the actual framework, hover, go to definition, rename,
   references, quick fixes and the pretty printer.
-- **Run.** Only the class in the editor is compiled, in about 20 ms, and
+- **Run.** Only the classes in the editor are compiled, in about 20 ms, and
   registered with the running runtime.
 - **Rendering.** The abap2UI5 frontend runs in an iframe and talks to its backend
   over a plain `fetch` POST, so the playground replaces `window.fetch` for that
@@ -63,9 +63,10 @@ table expressions.
 
 Where it stops:
 
-- **One class.** The playground compiles and starts a single global class called
-  `ZCL_PLAYGROUND`. Local classes inside it are fine; a second global class is
-  not.
+- **A few classes, not a package.** The playground holds several ABAP files,
+  named as abapGit names them, and **the first one is the app** - the playground
+  starts the class it declares. What it does not have is anything else a package
+  brings: no database tables of your own, no message classes, no CDS.
 - **No database of your own, no RFC, no files.** There is a database, but it
   holds the framework's own tables. `SELECT` from a business table has nothing to
   select from, and nothing can reach outside the browser.
@@ -79,11 +80,39 @@ Where it stops:
 - **State lives in the tab.** Reloading the page starts over, and so does
   pressing Run. Your code is kept in local storage; the app's data is not.
 
-## Sharing
+## Which problems it reports
 
-**Share** puts the whole class in the URL fragment, deflated: a 2500-character
+abaplint runs with a deliberately small rule set: the ones that answer *would
+this work*, not the ones that answer *is this the house style*. A playground
+that underlines a missing pragma teaches nothing.
+
+`check_syntax`, `parser_error`, `implement_methods`, `method_implemented_twice`,
+`definitions_top`, `global_class`, `begin_end_names`, `superclass_final`,
+`unknown_types` — checked against release v750, the one abap2UI5 lints itself
+against. The list lives in `src/editor/registry.mjs`.
+
+## Linking a playground
+
+**Share** puts every open file in the URL fragment, deflated: a 2500-character
 class becomes a link of about 700 characters. Being a fragment, it never leaves
 the browser — it is not sent to the server and does not appear in any log.
+
+**`?src=`** opens ABAP that lives somewhere else, which is what a documentation
+page links when it wants to show its example running rather than only printed:
+
+```
+?src=https://raw.githubusercontent.com/abap2UI5/samples/main/src/z2ui5_cl_demo.clas.abap
+```
+
+Several `src` parameters open several files; the first is the app. Sources are
+limited to this site and GitHub's raw hosts — the playground fetches on behalf
+of whoever opened the link, and should not be a general-purpose reader for
+arbitrary URLs.
+
+**`?embed=1`** drops the brand, the sample menu and the share button, leaving
+the editor, Run and the app — for embedding in a documentation page. An
+embedded playground never touches the stored draft, so it cannot overwrite what
+a reader has open in a normal one.
 
 ## Development
 
@@ -107,8 +136,9 @@ seconds.
 | `tools/check-size.mjs` | the budget for what a visitor downloads |
 
 `src/runtime` is the ABAP side of the page, `src/editor` is Monaco and abaplint,
-`src/shell` is the page around them, and `src/abap` is the handful of ABAP the
-playground adds to the framework.
+`src/shell` is the page around them, `src/abap` is the handful of ABAP the
+playground adds to the framework, and `src/examples` is ABAP served as static
+files so `?src=` has something to point at.
 
 ### Bumping abap2UI5 or OpenUI5
 

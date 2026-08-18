@@ -93,7 +93,7 @@ test("a class under the wrong name is explained rather than silently ignored", a
   await page.locator("#run").click();
 
   await expect(page.locator("#output")).toBeVisible({ timeout: 30000 });
-  expect(await outputText(page)).toContain("has to be called ZCL_PLAYGROUND");
+  expect(await outputText(page)).toContain("zcl_playground.clas.abap");
   expect(await outputText(page)).toContain("ZCL_SOMETHING_ELSE");
 });
 

@@ -7,11 +7,14 @@
 // frame is only a screen.
 import "./shell.css";
 
-import { connectRegistry, createEditor, format, getSource, refresh, setSource } from "../editor/editor.mjs";
-import { buildRegistry, declaredClassName, USER_CLASS } from "../editor/registry.mjs";
-import { DEFAULT_SOURCE, SAMPLES, sampleById } from "../editor/samples.mjs";
+import { connectRegistry, createEditor, focusProblem, format, getFiles, refresh, setFiles } from "../editor/editor.mjs";
+import { declaredObjectName, entryClass, MAIN_FILE } from "../editor/registry.mjs";
+import { parseName } from "../editor/files.mjs";
+import { fetchLinkedFiles, linkedSources } from "./deep-link.mjs";
+import { DEFAULT_FILES, SAMPLES, sampleById } from "../editor/samples.mjs";
+import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
 import { setUpSplitter, setUpTabs } from "./layout.mjs";
-import { copyToClipboard, shareUrl, sourceFromLocation } from "./share.mjs";
+import { copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
 import { state } from "./state.mjs";
 import { hideOutput, setStatus, showOutput } from "./ui.mjs";
 
@@ -21,7 +24,7 @@ import { hideOutput, setStatus, showOutput } from "./ui.mjs";
 // resolves under a GitHub Pages project path as well as at a site root.
 const asset = (p) => new URL(p, document.baseURI).href;
 
-const SOURCE_KEY = "abap2ui5-playground:source";
+const STORAGE_KEY = "abap2ui5-playground:files";
 
 const runButton = document.getElementById("run");
 const formatButton = document.getElementById("format");
@@ -29,30 +32,59 @@ const shareButton = document.getElementById("share");
 const sampleSelect = document.getElementById("samples");
 const frame = document.getElementById("app");
 
-// Where the editor starts, in order of how deliberate the choice was: a shared
-// link is what somebody was sent, the stored draft is what they were last
-// working on, and the sample is the fallback.
-async function startingSource() {
+// Embedded in somebody else's page: no chrome, no sample menu, just the code it
+// was given and the app it produces. `?embed=1` in the query, the code in the
+// fragment as usual.
+const params = new URLSearchParams(window.location.search);
+const embedded = params.get("embed") === "1";
+
+// Set when a ?src= link could not be followed, so boot can say so once the page
+// is far enough along to have somewhere to say it.
+let linkFailure;
+
+// Where the editor starts, in order of how deliberate the choice was: a link is
+// what somebody was sent, a stored draft is what they were last working on, and
+// the sample is the fallback. An embedded playground never restores a draft -
+// it shows what the page that embedded it asked for.
+async function startingFiles() {
   try {
-    const shared = await sourceFromLocation();
-    if (shared) return { source: shared, from: "a shared link" };
+    const shared = await filesFromLocation(MAIN_FILE);
+    if (shared) return { files: shared, from: "a shared link" };
   } catch {
     // A fragment that will not decode is somebody else's link or a truncated
     // paste. Opening on the sample beats an error page nobody can act on.
   }
-  const stored = localStorage.getItem(SOURCE_KEY);
-  if (stored) return { source: stored, from: "your last session" };
-  return { source: DEFAULT_SOURCE, from: "sample" };
+
+  // ?src=<url> - what a documentation page links when it wants to show one of
+  // its examples running. Failing here is worth saying out loud: somebody
+  // followed a link expecting particular code and did not get it.
+  if (linkedSources(params).length > 0) {
+    try {
+      return { files: await fetchLinkedFiles(params), from: "a link" };
+    } catch (e) {
+      linkFailure = e;
+    }
+  }
+  if (!embedded) {
+    try {
+      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
+      if (Array.isArray(stored) && stored.length > 0) return { files: stored, from: "your last session" };
+    } catch {
+      // A draft that will not parse is a draft that is gone.
+    }
+  }
+  return { files: DEFAULT_FILES, from: "sample" };
 }
 
 async function boot() {
+  if (embedded) document.body.classList.add("is-embedded");
+
   setUpSplitter();
   const tabs = setUpTabs();
 
-  const { source, from } = await startingSource();
-  createEditor(document.getElementById("editor"), source, {
-    onChange: (value) => localStorage.setItem(SOURCE_KEY, value),
-  });
+  const { files, from } = await startingFiles();
+  createEditor(document.getElementById("editor"), files, { onChange: remember });
+  setUpFiles({ onChanged: remember });
 
   fillSampleMenu(from);
 
@@ -74,7 +106,8 @@ async function boot() {
     setStatus("reading the abap2UI5 sources…");
     const corpus = await corpusReady;
 
-    await buildRegistry(corpus, source, (done, total) => {
+    const { buildRegistry } = await import("../editor/registry.mjs");
+    await buildRegistry(corpus, files, (done, total) => {
       setStatus(`checking the sources… ${Math.round((done / total) * 100)}%`);
     });
     connectRegistry();
@@ -85,6 +118,10 @@ async function boot() {
   }
 
   for (const control of [runButton, formatButton, shareButton, sampleSelect]) control.disabled = false;
+
+  if (linkFailure) {
+    showOutput("Link", String(linkFailure.message || linkFailure));
+  }
 
   runButton.addEventListener("click", () => run());
   formatButton.addEventListener("click", () => format());
@@ -99,6 +136,12 @@ async function boot() {
   });
 
   await run();
+}
+
+function remember(files) {
+  renderFiles();
+  if (embedded) return;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(files ?? getFiles()));
 }
 
 // The sample menu. When the editor did not start on a sample, the menu opens on
@@ -119,15 +162,15 @@ function fillSampleMenu(from) {
 function loadSample(id, tabs) {
   const sample = sampleById(id);
   if (!sample) return;
-  setSource(sample.source);
-  localStorage.setItem(SOURCE_KEY, sample.source);
+  setFiles(sample.files.map((f) => ({ ...f })));
+  renderFiles();
   // Picking a sample is a request to see it, so it runs without a second click.
   run().then(() => tabs.show("right"));
 }
 
 async function share() {
   try {
-    const url = await shareUrl(getSource());
+    const url = await shareUrl(getFiles());
     history.replaceState(null, "", url);
     const copied = await copyToClipboard(url);
     setStatus(copied ? "link copied to the clipboard" : "link is in the address bar");
@@ -137,8 +180,29 @@ async function share() {
   }
 }
 
-// Starts the class in the editor: compile it, register it with the runtime,
-// then a new database and a new frame.
+// What has to be true before the transpiler is worth asking. Each of these
+// would otherwise surface as an abaplint message about a filename, which means
+// nothing to somebody looking at an editor.
+function structuralProblem(files) {
+  if (files.length === 0) return "There is nothing to run.";
+  if (parseName(files[0].name)?.kind !== "clas") {
+    return `The playground starts the class in the first file, and ${files[0].name} is not a class.`;
+  }
+  for (const file of files) {
+    const expected = parseName(file.name)?.object;
+    const declared = declaredObjectName(file.source);
+    if (declared === undefined) {
+      return `${file.name} declares no global class or interface.`;
+    }
+    if (declared !== expected) {
+      return `${file.name} has to declare ${expected}, not ${declared} - the name and the file go together.`;
+    }
+  }
+  return undefined;
+}
+
+// Starts what is in the editor: compile it, register it with the runtime, then
+// a new database and a new frame.
 //
 // The frame is reloaded rather than told to restart, because a reload is the
 // only thing that resets everything the frontend keeps outside the model - view
@@ -150,42 +214,39 @@ export async function run() {
   // Whatever the last run had to say about itself is no longer true.
   hideOutput();
   try {
-    // Checked before the diagnostics, because a class under a different name
-    // makes abaplint report a filename mismatch - true, and no help at all to
-    // somebody who is looking at an editor and not at a file.
-    const declared = declaredClassName(getSource());
-    if (declared !== USER_CLASS) {
-      setStatus(`the playground runs ${USER_CLASS}`, true);
-      showOutput(
-        "ABAP",
-        `The playground runs one class, and it has to be called ${USER_CLASS}.\n` +
-          (declared ? `This one is called ${declared}.` : "No global class declaration was found."),
-      );
+    const files = getFiles();
+
+    const structural = structuralProblem(files);
+    if (structural) {
+      setStatus("the playground cannot start this", true);
+      showOutput("ABAP", structural);
       return;
     }
 
-    const issues = refresh();
-    const errors = issues.filter((i) => i.severity === 1);
+    const errors = refresh().filter((i) => i.severity === 1);
     if (errors.length > 0) {
       setStatus(`${errors.length} error${errors.length > 1 ? "s" : ""} in the ABAP - fix them and run again`, true);
       showOutput(
         "ABAP",
-        errors.map((i) => `line ${i.range.start.line + 1}: ${i.message}`).join("\n"),
+        errors
+          .map((i) => `${files.length > 1 ? `${i.file} ` : ""}line ${i.range.start.line + 1}: ${i.message}`)
+          .join("\n"),
       );
+      focusProblem(errors[0].file, errors[0].range.start.line + 1, errors[0].range.start.character + 1);
       return;
     }
 
     setStatus("compiling…");
     const { compile } = await import("../editor/transpile.mjs");
-    const js = await compile(getSource());
-    state.runtime.defineClass(js);
+    const chunks = await compile(files);
+    state.runtime.defineClasses(chunks.map((c) => c.js));
 
     setStatus("starting the app…");
     await state.runtime.resetDatabase();
 
     state.runCounter += 1;
     const src = new URL("app/index.html", document.baseURI);
-    src.searchParams.set("app_start", USER_CLASS);
+    src.searchParams.set("app_start", entryClass(files));
     src.searchParams.set("run", String(state.runCounter));
 
     await new Promise((resolve) => {

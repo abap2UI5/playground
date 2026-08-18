@@ -1,31 +1,28 @@
 // The abaplint registry the playground thinks with.
 //
 // One registry holds the whole corpus - abap2UI5 and the open-abap standard
-// library as dependencies, plus the single class the user is editing. It answers
-// two very different questions from that one parse:
+// library as dependencies, plus the files the user is editing. It answers two
+// very different questions from that one parse:
 //
 //   - the editor's:  what is wrong with this class, what is this symbol,
 //                    where is it defined  (src/editor/editor.mjs)
-//   - the runner's:  what JavaScript does this class compile to
+//   - the runner's:  what JavaScript do these classes compile to
 //                    (src/editor/transpile.mjs)
 //
 // Parsing the corpus takes a few seconds and is done once, at startup, through
-// parseAsync so the page keeps responding while it happens.
+// parseAsync so the page keeps responding while it happens. Everything after
+// that is incremental: only the file that changed is dirty.
 import * as abaplint from "@abaplint/core";
+import { MAIN_FILE, parseName, sidecarFor, uriFor } from "./files.mjs";
 
-// The name the user's class lives under, in both the registry and Monaco. The
-// two have to agree exactly: abaplint's language server looks a document up by
-// its uri, and the uri it compares against is this filename.
-export const USER_FILE = "file:///zcl_playground.clas.abap";
-export const USER_XML = "file:///zcl_playground.clas.xml";
-export const USER_CLASS = "ZCL_PLAYGROUND";
+export { MAIN_FILE };
 
 // v750 is the release abap2UI5 lints itself against, so the playground holds
 // the user to the same bar - and the transpiler accepts everything up to it.
 const RELEASE = "v750";
 
-// Which rules run. Deliberately only the ones that answer "would this class
-// work", not the ones that answer "is this the house style" - a playground that
+// Which rules run. Deliberately only the ones that answer "would this work",
+// not the ones that answer "is this the house style" - a playground that
 // underlines a missing pragma teaches nothing.
 const RULES = {
   check_syntax: true,
@@ -50,39 +47,38 @@ function config() {
   return new abaplint.Config(JSON.stringify(conf));
 }
 
-// The abapGit metadata sidecar every global class needs. abaplint reads the
-// class's name and its "class-local types" flag out of it; without one the
-// object is not a class at all and nothing resolves.
-const userXml = (name) => `<?xml version="1.0" encoding="utf-8"?>
-<abapGit version="v1.0.0" serializer="LCL_OBJECT_CLAS" serializer_version="v1.0.0">
- <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
-  <asx:values>
-   <VSEOCLASS>
-    <CLSNAME>${name}</CLSNAME>
-    <LANGU>E</LANGU>
-    <DESCRIPT>playground</DESCRIPT>
-    <STATE>1</STATE>
-    <CLSCCINCL>X</CLSCCINCL>
-    <FIXPT>X</FIXPT>
-    <UNICODE>X</UNICODE>
-   </VSEOCLASS>
-  </asx:values>
- </asx:abap>
-</abapGit>`;
-
 let registry;
+// The user's files as the registry currently holds them, so a change can be
+// reduced to what actually differs.
+let held = new Map();
+
+function addFile(reg, file) {
+  reg.addFile(new abaplint.MemoryFile(uriFor(file.name), file.source));
+  const sidecar = sidecarFor(file.name);
+  if (sidecar) reg.addFile(new abaplint.MemoryFile(uriFor(sidecar.name), sidecar.source));
+}
+
+function removeFile(reg, name) {
+  reg.removeFile(reg.getFileByName(uriFor(name)));
+  const sidecar = sidecarFor(name);
+  const xml = sidecar && reg.getFileByName(uriFor(sidecar.name));
+  if (xml) reg.removeFile(xml);
+}
 
 // Builds the registry and parses it. `onProgress(done, total)` is called as it
 // goes and gets a chance to paint between objects, because parseAsync awaits the
 // progress hook - which is the whole reason for using it over parse().
-export async function buildRegistry(corpus, source, onProgress) {
+export async function buildRegistry(corpus, files, onProgress) {
   const reg = new abaplint.Registry(config());
 
   reg.addDependencies(
     Object.entries(corpus).map(([name, contents]) => new abaplint.MemoryFile(`/lib/${name}`, contents)),
   );
-  reg.addFile(new abaplint.MemoryFile(USER_FILE, source));
-  reg.addFile(new abaplint.MemoryFile(USER_XML, userXml(USER_CLASS)));
+  held = new Map();
+  for (const file of files) {
+    addFile(reg, file);
+    held.set(file.name, file.source);
+  }
 
   let done = 0;
   let total = reg.getObjectCount().total;
@@ -116,22 +112,52 @@ export function getRegistry() {
   return registry;
 }
 
-// Replaces the user's class and re-parses. Only that one object is dirty, so
+// Brings the registry in line with the editor. Only what changed is touched, so
 // this costs a few milliseconds however large the corpus is.
-export function updateSource(source) {
-  registry.updateFile(new abaplint.MemoryFile(USER_FILE, source));
+export function updateFiles(files) {
+  const wanted = new Map(files.map((f) => [f.name, f.source]));
+
+  for (const name of [...held.keys()]) {
+    if (!wanted.has(name)) {
+      removeFile(registry, name);
+      held.delete(name);
+    }
+  }
+  for (const [name, source] of wanted) {
+    if (!held.has(name)) {
+      addFile(registry, { name, source });
+    } else if (held.get(name) !== source) {
+      registry.updateFile(new abaplint.MemoryFile(uriFor(name), source));
+    }
+    held.set(name, source);
+  }
+
   registry.parse();
 }
 
-// Everything wrong with the class in the editor, in the shape Monaco wants.
-export function diagnostics() {
-  return new abaplint.LanguageServer(registry).diagnostics({ uri: USER_FILE });
+// Everything wrong with one of the user's files, in the shape Monaco wants.
+export function diagnostics(fileName) {
+  return new abaplint.LanguageServer(registry).diagnostics({ uri: uriFor(fileName) });
 }
 
-// The objects the user's own file produced - one class, unless the source is so
-// broken that abaplint cannot see a class in it at all.
+// The objects the user's own files produced. Derived from the file names rather
+// than from a namespace, so a class the user called z2ui5_something is still
+// theirs and a framework object never is.
 export function userObjects() {
-  return [...registry.getObjects()].filter((o) => o.getName() === USER_CLASS);
+  const names = new Set([...held.keys()].map((n) => parseName(n)?.object).filter(Boolean));
+  return [...registry.getObjects()].filter((o) => names.has(o.getName()));
+}
+
+// The class the playground starts: the one the first file declares.
+export function entryClass(files) {
+  return declaredObjectName(files[0]?.source ?? "");
+}
+
+// True once that class is something the registry could build an object from -
+// the one thing a run cannot do without.
+export function hasEntryClass(files) {
+  const name = entryClass(files);
+  return name !== undefined && userObjects().some((o) => o.getName() === name && o.getType() === "CLAS");
 }
 
 // Every global object the corpus defines, for name completion. Read once and
@@ -142,17 +168,16 @@ export function knownObjectNames() {
     objectNames = [...registry.getObjects()]
       .filter((o) => o.getType() === "CLAS" || o.getType() === "INTF")
       .map((o) => ({ name: o.getName(), type: o.getType() }))
-      .filter((o) => o.name !== USER_CLASS)
       .sort((a, b) => a.name.localeCompare(b.name));
   }
   return objectNames;
 }
 
-// The name of the global class the source declares, if it declares one. Read
-// off the text rather than out of the registry, because the interesting case is
-// exactly the one where the registry refuses to build the object: a class under
-// any other name produces "Class definition name must match filename", which is
-// a true statement about a file the writer never saw.
-export function declaredClassName(source) {
-  return /^\s*CLASS\s+([a-zA-Z_]\w*)\s+DEFINITION/im.exec(source)?.[1]?.toUpperCase();
+// The name of the global object a source declares, if it declares one. Read off
+// the text rather than out of the registry, because the interesting case is
+// exactly the one where the registry refuses to build the object: a class whose
+// name does not match its file produces "Class definition name must match
+// filename", which is a true statement about a file the writer never saw.
+export function declaredObjectName(source) {
+  return /^\s*(?:CLASS|INTERFACE)\s+([a-zA-Z_]\w*)\s+(?:DEFINITION|PUBLIC)/im.exec(source)?.[1]?.toUpperCase();
 }

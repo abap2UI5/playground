@@ -23,7 +23,8 @@ import "monaco-editor/editor/contrib/contextmenu/browser/contextmenu.js";
 import "monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching.js";
 import { registerABAP, updateMarkers } from "@abaplint/monaco";
 
-import { USER_FILE, diagnostics, getRegistry, knownObjectNames, updateSource } from "./registry.mjs";
+import { uriFor } from "./files.mjs";
+import { diagnostics, getRegistry, knownObjectNames, updateFiles } from "./registry.mjs";
 
 // @abaplint/monaco reaches for a global `monaco`, the way a script tag would
 // have provided it. It is a library written for a page that loads Monaco from a
@@ -50,17 +51,24 @@ const THEME_LIGHT = "abap-light";
 
 let editor;
 let onChange;
+// Until the corpus has been parsed there is nothing to check against, so the
+// editor edits and highlights but says nothing about the code.
+let connected = false;
 
-export function createEditor(container, source, options = {}) {
+const prefersDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
+
+const modelFor = (name) => monaco.editor.getModel(monaco.Uri.parse(uriFor(name)));
+
+export function createEditor(container, files, options = {}) {
   onChange = options.onChange;
 
   monaco.editor.defineTheme(THEME_LIGHT, { base: "vs", inherit: true, rules: [], colors: {} });
   monaco.editor.defineTheme(THEME_DARK, { base: "vs-dark", inherit: true, rules: [], colors: {} });
 
-  const model = monaco.editor.createModel(source, "abap", monaco.Uri.parse(USER_FILE));
+  for (const file of files) createModel(file);
 
   editor = monaco.editor.create(container, {
-    model,
+    model: modelFor(files[0].name),
     automaticLayout: true,
     minimap: { enabled: false },
     scrollBeyondLastLine: false,
@@ -77,47 +85,89 @@ export function createEditor(container, source, options = {}) {
   return editor;
 }
 
-const prefersDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
-
-// Called once the registry has finished its first parse. Until then the editor
-// highlights and edits but says nothing about the code, which is the honest
-// state - there is nothing to say it from.
-export function connectRegistry() {
-  const reg = getRegistry();
-  registerABAP(reg);
-  monaco.languages.registerCompletionItemProvider("abap", abapNameCompletion());
-
-  const model = editor.getModel();
+function createModel(file) {
+  const model = monaco.editor.createModel(file.source, "abap", monaco.Uri.parse(uriFor(file.name)));
   let pending;
   model.onDidChangeContent(() => {
     // A keystroke is cheap to react to (a few milliseconds), but reacting to
     // every one of them while somebody types a word is still noise.
     clearTimeout(pending);
     pending = setTimeout(() => {
-      refresh();
-      onChange?.(model.getValue());
+      if (connected) refresh();
+      onChange?.(getFiles());
     }, 150);
   });
+  return model;
+}
 
+export function connectRegistry() {
+  registerABAP(getRegistry());
+  monaco.languages.registerCompletionItemProvider("abap", abapNameCompletion());
+  connected = true;
   refresh();
 }
 
+// Everything currently open, in the order it was opened.
+export function getFiles() {
+  return monaco.editor
+    .getModels()
+    .filter((m) => m.uri.scheme === "file")
+    .map((m) => ({ name: m.uri.path.replace(/^\//, ""), source: m.getValue() }));
+}
+
+export const getSource = (name) => modelFor(name)?.getValue();
+
+export function openFile(name) {
+  const model = modelFor(name);
+  if (model) editor.setModel(model);
+}
+
+export const currentFile = () => editor.getModel().uri.path.replace(/^\//, "");
+
+export function addFile(file) {
+  createModel(file);
+  openFile(file.name);
+  if (connected) refresh();
+  onChange?.(getFiles());
+}
+
+export function closeFile(name) {
+  const model = modelFor(name);
+  if (!model) return;
+  const remaining = getFiles().filter((f) => f.name !== name);
+  if (remaining.length === 0) return;
+  if (currentFile() === name) openFile(remaining[0].name);
+  model.dispose();
+  if (connected) refresh();
+  onChange?.(getFiles());
+}
+
+// Replaces everything - what loading a sample or a shared link does.
+export function setFiles(files) {
+  for (const model of monaco.editor.getModels()) model.dispose();
+  for (const file of files) createModel(file);
+  editor.setModel(modelFor(files[0].name));
+  if (connected) refresh();
+  onChange?.(getFiles());
+}
+
+// Pushes the editor's state into the registry and the registry's opinion back
+// into the gutters. Returns everything wrong with everything open, so the caller
+// can decide whether a run is worth attempting.
 export function refresh() {
-  const model = editor.getModel();
-  updateSource(model.getValue());
-  updateMarkers(getRegistry(), model);
-  return diagnostics();
+  const files = getFiles();
+  updateFiles(files);
+
+  const problems = [];
+  for (const file of files) {
+    updateMarkers(getRegistry(), modelFor(file.name));
+    for (const issue of diagnostics(file.name)) problems.push({ file: file.name, ...issue });
+  }
+  return problems;
 }
 
-export function getSource() {
-  return editor.getModel().getValue();
-}
-
-export function setSource(source) {
-  editor.getModel().setValue(source);
-}
-
-export function focusLine(line, column = 1) {
+export function focusProblem(file, line, column = 1) {
+  openFile(file);
   editor.revealLineInCenter(line);
   editor.setPosition({ lineNumber: line, column });
   editor.focus();
@@ -130,7 +180,8 @@ export async function format() {
   editor.focus();
 }
 
-// Completion over the names of the classes and interfaces the corpus defines.
+// Completion over the names of the classes and interfaces the registry knows -
+// the framework's and the user's own.
 //
 // abaplint has no completion API at all - @abaplint/monaco's completion provider
 // offers a handful of fixed snippets and nothing else - so this is the
@@ -163,7 +214,10 @@ function abapNameCompletion() {
         .slice(0, 200)
         .map((o) => ({
           label: o.name.toLowerCase(),
-          kind: o.type === "INTF" ? monaco.languages.CompletionItemKind.Interface : monaco.languages.CompletionItemKind.Class,
+          kind:
+            o.type === "INTF"
+              ? monaco.languages.CompletionItemKind.Interface
+              : monaco.languages.CompletionItemKind.Class,
           detail: o.type === "INTF" ? "interface" : "class",
           insertText: o.name.toLowerCase(),
           range,
