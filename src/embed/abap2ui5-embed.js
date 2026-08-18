@@ -5,7 +5,7 @@
 //   <div class="abap2ui5-demo"
 //        data-src="https://raw.githubusercontent.com/.../z2ui5_cl_demo.clas.abap"
 //        data-height="520"></div>
-//   <script src="https://abap2ui5.github.io/test-live/embed/abap2ui5-embed.js"></script>
+//   <script src="https://abap2ui5.github.io/playground/embed/abap2ui5-embed.js"></script>
 //
 // Nothing loads until the reader asks for it. That is the whole point of this
 // file: a playground instance is a complete ABAP runtime plus an abaplint parse

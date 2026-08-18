@@ -127,7 +127,7 @@ compiles and runs, it is simply not on screen.
 ```html
 <div class="abap2ui5-demo"
      data-src="https://raw.githubusercontent.com/.../z2ui5_cl_demo.clas.abap"></div>
-<script src="https://abap2ui5.github.io/test-live/embed/abap2ui5-embed.js"></script>
+<script src="https://abap2ui5.github.io/playground/embed/abap2ui5-embed.js"></script>
 ```
 
 `data-src` takes one URL or several (the first is the app), `data-code` carries
