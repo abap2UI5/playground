@@ -356,9 +356,14 @@ Ziel: Aus dem Technik-Demo wird ein Playground, den man verlinken kann.
 
 ## Erkenntnisse
 
-Je Phase beim Abschluss ergänzen: Was war anders als geplant, welche
-Messwerte (Bundle-Größe, Transpile-Dauer, Init-Dauer), welche Upstream-Issues
-wurden aufgemacht.
+**Der wichtigste Teil dieses Dokuments.** Hier steht, was anders war als
+geplant, was es gekostet hat, und vor allem: jede Falle, die aus keiner
+Dokumentation hervorgeht und als unverständlicher Laufzeitfehler auftritt.
+Wer den Build oder die Runtime anfasst, liest das vorher — mehrere dieser
+Punkte haben jeweils Stunden gekostet und sind in einer Zeile zu vermeiden.
+
+Regel für neue Phasen: beim Abschluss ergänzen — was war anders, welche
+Messwerte, welche Upstream-Issues wurden aufgemacht.
 
 ### Erkenntnisse Phase 1
 
