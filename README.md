@@ -80,6 +80,10 @@ Where it stops:
 - **State lives in the tab.** Reloading the page starts over, and so does
   pressing Run. Your code is kept in local storage; the app's data is not.
 
+Both halves follow your system's light or dark setting — the editor through
+Monaco, the app through UI5's Horizon themes. Changing it while an app is
+running recolours it in place rather than restarting it.
+
 ## Which problems it reports
 
 abaplint runs with a deliberately small rule set: the ones that answer *would

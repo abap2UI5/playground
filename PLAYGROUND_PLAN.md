@@ -703,3 +703,17 @@ Ein Review über den gesamten Branch fand sechs echte Fehler, die alle Tests
 Gemeinsamer Nenner: Vier der sechs sind **Zustand, der an einer Stelle
 gepflegt und an einer anderen gelesen wird**. Und einer zeigt, dass ein grüner
 Test nichts wert ist, wenn er die falsche Eigenschaft prüft.
+
+### Nachträge
+
+**Der App-Bereich folgt jetzt dem Systemtheme.** Im Dunkelmodus war die rechte
+Hälfte gleißend weiß, weil Shell und Editor `prefers-color-scheme` folgten und
+UI5 nicht. Beide Horizon-Themes sind ohnehin im Build; der iframe bekommt das
+passende über den Query-Parameter `sap-ui-theme`, den UI5 aus der URL liest
+und der das Bootstrap-Attribut übersteuert.
+
+Ein Themewechsel bei *laufender* App tauscht das Theme zur Laufzeit
+(`sap/ui/core/Theming.setTheme`, mit Rückfall auf
+`sap.ui.getCore().applyTheme`), statt den Frame neu zu laden. Ein Reload würde
+die App neu starten — und ein halb ausgefülltes Formular wegzuwerfen, weil die
+Sonne untergegangen ist, wäre die falsche Reaktion auf einen Sonnenuntergang.
