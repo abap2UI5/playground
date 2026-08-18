@@ -139,6 +139,9 @@ seconds.
 | `tools/build-site.mjs` | the page bundle and the ABAP corpus the editor uses |
 | `tools/check-size.mjs` | the budget for what a visitor downloads |
 
+`PG_DEBUG=1` builds the page and framework bundles unminified and with source
+maps; without it neither ships one.
+
 `src/runtime` is the ABAP side of the page, `src/editor` is Monaco and abaplint,
 `src/shell` is the page around them, `src/abap` is the handful of ABAP the
 playground adds to the framework, and `src/examples` is ABAP served as static

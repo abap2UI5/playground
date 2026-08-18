@@ -19,6 +19,13 @@ const ASSETS = path.join(DIST, "assets");
 
 const log = (m) => console.log(`build-site: ${m}`);
 
+// Cleared, not merged into: a file this step stops producing has to disappear
+// from the published site, and a stale asset that nothing references any more
+// is indistinguishable from one that does. dist/runtime and dist/app belong to
+// the other two build steps and are left alone here.
+for (const owned of [ASSETS, path.join(DIST, "editor"), path.join(DIST, "examples")]) {
+  fs.rmSync(owned, { recursive: true, force: true });
+}
 fs.mkdirSync(ASSETS, { recursive: true });
 writeCorpus();
 
@@ -73,7 +80,11 @@ const result = await esbuild.build({
   // that renames classes changes what it resolves - the same trap the framework
   // bundle hits through open-abap's RTTI.
   keepNames: true,
-  sourcemap: true,
+  // 20 MB of source map, a sixth of the published site, that only a browser
+  // with devtools open ever fetches - and anyone debugging the playground has
+  // the sources anyway. PG_DEBUG=1 builds it, the same switch the framework
+  // bundle uses.
+  sourcemap: process.env.PG_DEBUG === "1",
   logLevel: "warning",
   metafile: true,
   // Monaco pulls in its stylesheet and its icon font through the module graph;

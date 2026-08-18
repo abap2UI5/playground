@@ -725,3 +725,15 @@ ein Test an der Wurzel so oder so grün ist. `tools/serve.mjs` mountet den Baum
 deshalb zusätzlich unter einem Präfix, und `tests/subpath.spec.js` fährt den
 kompletten Weg dort: Framework laden, Korpus laden, App rendern, Roundtrip
 auslösen, kein 404.
+
+**Zwei Funde beim Aufräumen am Ende.** Die Sourcemap des Seiten-Bundles war
+20 MB — ein Sechstel der veröffentlichten Seite, abgerufen nur von einem
+Browser mit offenen Devtools, und wer den Playground debuggt, hat die Quellen
+ohnehin. Sie wird jetzt wie beim Framework-Bundle nur mit `PG_DEBUG=1` gebaut.
+
+Beim Nachmessen fiel dann auf, dass `dist/` **nie aufgeräumt** wurde: die alte
+Sourcemap lag nach dem Umbau noch da, und die Zahl bewegte sich nicht.
+`build-site.mjs` löscht jetzt die Verzeichnisse, die ihm gehören
+(`assets/`, `editor/`, `examples/`), bevor es schreibt — eine veraltete Datei,
+die niemand mehr referenziert, ist von einer aktuellen nicht zu unterscheiden.
+Veröffentlichte Seite danach: **106 MB statt 127 MB**.
