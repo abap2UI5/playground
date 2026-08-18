@@ -1,0 +1,35 @@
+name: check
+
+# Builds the playground and runs the tests on every branch and pull request.
+# The Pages deployment refuses to publish anything this workflow has not seen
+# green, so this is the gate, not a formality.
+
+on:
+  push:
+    # main is covered by pages.yml, which runs the same build and tests
+    branches-ignore: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/build
+      - run: npm test
+
+      - uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

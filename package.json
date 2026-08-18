@@ -1,0 +1,33 @@
+{
+  "name": "abap2ui5-playground",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Browser playground for abap2UI5 - ABAP in the editor, the running app next to it, nothing but a static page.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "deps": "node tools/fetch-deps.mjs",
+    "build:framework": "node tools/build-framework.mjs",
+    "build:ui5": "node tools/build-ui5.mjs",
+    "build:site": "node tools/build-site.mjs",
+    "build": "npm run deps && npm run build:framework && npm run build:ui5 && npm run build:site",
+    "check:size": "node tools/check-size.mjs",
+    "test": "playwright test",
+    "serve": "node tools/serve.mjs"
+  },
+  "devDependencies": {
+    "@abaplint/cli": "2.120.26",
+    "@abaplint/core": "2.120.26",
+    "@abaplint/database-sqlite": "2.13.40",
+    "@abaplint/monaco": "2.120.26",
+    "@abaplint/runtime": "2.13.59",
+    "@abaplint/transpiler": "2.13.59",
+    "@abaplint/transpiler-cli": "2.13.59",
+    "@playwright/test": "1.56.1",
+    "@ui5/cli": "4.0.24",
+    "buffer": "6.0.3",
+    "esbuild": "0.28.2",
+    "monaco-editor": "0.56.0",
+    "sql.js": "1.14.2"
+  }
+}

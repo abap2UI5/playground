@@ -1,0 +1,9 @@
+# Anchored to the repository root on purpose: an unanchored `build/` also
+# matches .github/actions/build, which is source and has to be committed.
+/node_modules/
+/deps/
+/build/
+/dist/
+/test-results/
+/playwright-report/
+*.log

@@ -1,0 +1,84 @@
+name: upstream
+
+# Asks once a week whether the playground would still build and run against
+# what abap2UI5 and open-abap have today, rather than against the commits it is
+# pinned to.
+#
+# It changes nothing: the pins stay where they are, and the answer is a test
+# result. When it fails, somebody has a week's warning before the next bump
+# turns into an afternoon of archaeology; when it passes, the bump is a
+# two-line commit.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: upstream
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository == 'abap2UI5/test-live'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Check out what upstream has today
+        run: node tools/fetch-deps.mjs --latest
+
+      # No cache and a forced downport: the point is to build what upstream is
+      # now, and a restored tree would be built from the pins.
+      - run: npm run build:framework -- --force
+
+      - run: npm run build:ui5 -- --force
+
+      - run: npm run build:site
+
+      - run: npx playwright install --with-deps chromium
+
+      - run: npm test
+
+      - name: Say so, once, if it broke
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = "The playground does not build against upstream HEAD";
+            const { data: open } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              labels: "upstream",
+            });
+            const existing = open.find((i) => i.title === title);
+            const body =
+              `The weekly upstream check failed: the playground builds against its pinned ` +
+              `commits but not against what abap2UI5 / open-abap have today.\n\n` +
+              `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\n` +
+              `Nothing is broken for visitors - the published playground is built from the pins ` +
+              `in \`tools/fetch-deps.mjs\`. What this says is that the next bump needs work.`;
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing.number, body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: ["upstream"],
+              });
+            }
