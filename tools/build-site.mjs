@@ -23,7 +23,7 @@ const log = (m) => console.log(`build-site: ${m}`);
 // from the published site, and a stale asset that nothing references any more
 // is indistinguishable from one that does. dist/runtime and dist/app belong to
 // the other two build steps and are left alone here.
-for (const owned of [ASSETS, path.join(DIST, "editor"), path.join(DIST, "examples")]) {
+for (const owned of [ASSETS, path.join(DIST, "editor"), path.join(DIST, "examples"), path.join(DIST, "embed")]) {
   fs.rmSync(owned, { recursive: true, force: true });
 }
 fs.mkdirSync(ASSETS, { recursive: true });
@@ -106,6 +106,15 @@ fs.copyFileSync(path.join(SHELL, "index.html"), path.join(DIST, "index.html"));
 fs.mkdirSync(path.join(DIST, "examples"), { recursive: true });
 for (const name of fs.readdirSync(path.join(ROOT, "src", "examples"))) {
   fs.copyFileSync(path.join(ROOT, "src", "examples", name), path.join(DIST, "examples", name));
+}
+
+// The embedding kit: the loader a documentation page includes, and the page
+// that demonstrates it. Copied rather than bundled - it is a plain script that
+// somebody else's site includes with a <script src>, so it has to stay one
+// readable file with no build step behind it.
+fs.mkdirSync(path.join(DIST, "embed"), { recursive: true });
+for (const name of fs.readdirSync(path.join(ROOT, "src", "embed"))) {
+  fs.copyFileSync(path.join(ROOT, "src", "embed", name), path.join(DIST, "embed", name));
 }
 
 const kb = (p) => `${Math.round(fs.statSync(p).size / 1024)} KB`;

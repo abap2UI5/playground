@@ -116,7 +116,37 @@ arbitrary URLs.
 **`?embed=1`** drops the brand, the sample menu and the share button, leaving
 the editor, Run and the app — for embedding in a documentation page. An
 embedded playground never touches the stored draft, so it cannot overwrite what
-a reader has open in a normal one.
+a reader has open in a normal one. **`?view=app`** drops the editor too, for a
+paragraph about what an app does rather than how it is written; the ABAP still
+compiles and runs, it is simply not on screen.
+
+## Live demos in a documentation page
+
+`embed/abap2ui5-embed.js` turns an empty element into a running example:
+
+```html
+<div class="abap2ui5-demo"
+     data-src="https://raw.githubusercontent.com/.../z2ui5_cl_demo.clas.abap"></div>
+<script src="https://abap2ui5.github.io/playground/embed/abap2ui5-embed.js"></script>
+```
+
+`data-src` takes one URL or several (the first is the app), `data-code` carries
+ABAP that lives only in that page, `data-view="app"` hides the editor,
+`data-height` sets the starting height and `data-label` the button text. For a
+documentation framework that swaps pages without reloading, call
+`window.abap2ui5Embed.setUp()` after each navigation.
+
+**Nothing loads until the reader clicks.** Each demo is a whole ABAP runtime
+plus an abaplint parse of nine hundred sources — a second or two of processor
+and a few hundred megabytes, per frame. Demos on one page share the browser
+cache, so the bytes are paid once, but the parsing is not; a page with ten
+autoloading examples would be the slowest thing in the manual. `data-auto="1"`
+overrides it where the page is about its one demo.
+
+An embedded playground posts three kinds of message to the page that framed it —
+`ready` once it has something to show, `status` for each line its status bar
+shows, and `height` for what an app-only demo wants to be. `embed/` on the
+published site is a worked example of all of it, and is what the tests drive.
 
 ## Development
 

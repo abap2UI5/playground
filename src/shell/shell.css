@@ -224,6 +224,15 @@ iframe {
 .is-embedded #share,
 .is-embedded .versions { display: none; }
 
+/* ?view=app - the app on its own. The editor is still there, still compiling
+   and still what runs; it simply has nothing on screen. Run and the status
+   line stay, because a demo that cannot be restarted is a screenshot. */
+.is-app-only .pane-left,
+.is-app-only .splitter,
+.is-app-only .tabs,
+.is-app-only #format { display: none; }
+.is-app-only .pane-right { border-left: 0; }
+
 /* ---------------------------------------------------------------- output */
 
 .output {

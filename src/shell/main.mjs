@@ -15,6 +15,7 @@ import { fetchLinkedFiles, linkedSources } from "./deep-link.mjs";
 import { DEFAULT_FILES, SAMPLES, sampleById } from "../editor/samples.mjs";
 import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
 import { setUpSplitter, setUpTabs } from "./layout.mjs";
+import { announceAppHeight, announceReady, announceStatus, startEmbedMessages } from "./embed.mjs";
 import { copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
 import { state } from "./state.mjs";
 import { hideOutput, setStatus, showOutput } from "./ui.mjs";
@@ -40,6 +41,12 @@ const frame = document.getElementById("app");
 // fragment as usual.
 const params = new URLSearchParams(window.location.search);
 const embedded = params.get("embed") === "1";
+
+// `?view=app` drops the editor as well, leaving the running app on its own -
+// for the paragraph in a documentation page that wants to show the result
+// rather than the code that produced it. The code is still what runs; it is
+// just not on screen, so the page stays a playground rather than a screenshot.
+const appOnly = params.get("view") === "app";
 
 // Set when a ?src= link could not be followed, so boot can say so once the page
 // is far enough along to have somewhere to say it.
@@ -81,6 +88,8 @@ async function startingFiles() {
 
 async function boot() {
   if (embedded) document.body.classList.add("is-embedded");
+  if (appOnly) document.body.classList.add("is-app-only");
+  startEmbedMessages();
 
   setUpSplitter();
   const tabs = setUpTabs();
@@ -140,6 +149,9 @@ async function boot() {
   });
 
   await run();
+  // Said once the playground has something to show, not once it has loaded -
+  // an embedding page revealing the frame any earlier would reveal a blank one.
+  announceReady();
 
   // After the first run, not before: run() opens with a clear of the output
   // panel, so a message shown earlier would be wiped by the very next line.
@@ -311,6 +323,8 @@ export async function run() {
       frame.src = src.href;
     });
     setStatus("running");
+    // After the load event, so the app has rendered and has a height to report.
+    if (appOnly) announceAppHeight(frame);
   } catch (e) {
     setStatus("the app could not be started", true);
     showOutput("Run", String(e.message || e));
