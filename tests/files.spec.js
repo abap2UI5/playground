@@ -98,3 +98,37 @@ test("two apps can call each other", async ({ page }) => {
   await control(page, "btnBlue").click();
   await expect(control(page, "txtPicked")).toContainText("BLUE");
 });
+
+test("completion offers a class that was added a moment ago", async ({ page }) => {
+  await open(page);
+
+  page.once("dialog", (d) => d.accept("zcl_freshly_added.clas.abap"));
+  await page.locator(".file-add").click();
+
+  // Back to the app, and ask for a class the corpus never had.
+  await page.locator(".file-tab").first().click();
+  await page.locator(".monaco-editor .view-lines").click();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("zcl_freshly");
+  await page.keyboard.press("Control+Space");
+
+  await expect(page.locator(".suggest-widget")).toContainText("zcl_freshly_added", { timeout: 10000 });
+});
+
+test("two runs at once do not race", async ({ page }) => {
+  await open(page);
+
+  // Ctrl+Enter and the Run button go through the same guard: the second call
+  // returns immediately rather than resetting the database under a frame that
+  // is still booting.
+  await page.evaluate(() => {
+    const key = new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true });
+    document.dispatchEvent(key);
+    document.dispatchEvent(key);
+    document.getElementById("run").click();
+  });
+
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+  await expect(page.frameLocator("#app").getByText("Hello abap2UI5")).toBeVisible();
+});

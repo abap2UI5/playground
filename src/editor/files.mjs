@@ -108,3 +108,28 @@ export function skeletonFor(fileName) {
 // exactly: abaplint's language server looks a document up by its uri, and a
 // mismatch returns no diagnostics at all, which looks like "no problems".
 export const uriFor = (fileName) => `file:///${fileName}`;
+
+// Files arriving from outside the editor - a shared link, a stored draft, a
+// linked URL - reduced to a set the editor can actually hold, or rejected.
+//
+// This exists because the failure it prevents is invisible: a duplicate or
+// malformed name makes Monaco throw while the page is still starting, and the
+// page then sits at "starting…" with every control disabled and nothing said.
+export function checkFileSet(files) {
+  if (!Array.isArray(files) || files.length === 0) {
+    throw new Error("There are no files in this.");
+  }
+  const seen = new Set();
+  for (const file of files) {
+    if (typeof file?.name !== "string" || typeof file?.source !== "string") {
+      throw new Error("A file is missing its name or its contents.");
+    }
+    const problem = nameProblem(file.name, [...seen]);
+    if (problem) throw new Error(problem);
+    seen.add(file.name);
+  }
+  if (parseName(files[0].name)?.kind !== "clas") {
+    throw new Error(`The first file is the app, so it has to be a class - ${files[0].name} is not.`);
+  }
+  return files.map(({ name, source }) => ({ name, source }));
+}

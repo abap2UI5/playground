@@ -9,7 +9,7 @@ import "./shell.css";
 
 import { connectRegistry, createEditor, focusProblem, format, getFiles, refresh, setFiles } from "../editor/editor.mjs";
 import { declaredObjectName, entryClass, MAIN_FILE } from "../editor/registry.mjs";
-import { parseName } from "../editor/files.mjs";
+import { checkFileSet, parseName } from "../editor/files.mjs";
 import { fetchLinkedFiles, linkedSources } from "./deep-link.mjs";
 import { DEFAULT_FILES, SAMPLES, sampleById } from "../editor/samples.mjs";
 import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
@@ -49,7 +49,7 @@ let linkFailure;
 async function startingFiles() {
   try {
     const shared = await filesFromLocation(MAIN_FILE);
-    if (shared) return { files: shared, from: "a shared link" };
+    if (shared) return { files: checkFileSet(shared), from: "a shared link" };
   } catch {
     // A fragment that will not decode is somebody else's link or a truncated
     // paste. Opening on the sample beats an error page nobody can act on.
@@ -60,7 +60,7 @@ async function startingFiles() {
   // followed a link expecting particular code and did not get it.
   if (linkedSources(params).length > 0) {
     try {
-      return { files: await fetchLinkedFiles(params), from: "a link" };
+      return { files: checkFileSet(await fetchLinkedFiles(params)), from: "a link" };
     } catch (e) {
       linkFailure = e;
     }
@@ -68,7 +68,7 @@ async function startingFiles() {
   if (!embedded) {
     try {
       const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
-      if (Array.isArray(stored) && stored.length > 0) return { files: stored, from: "your last session" };
+      if (stored) return { files: checkFileSet(stored), from: "your last session" };
     } catch {
       // A draft that will not parse is a draft that is gone.
     }
@@ -119,10 +119,6 @@ async function boot() {
 
   for (const control of [runButton, formatButton, shareButton, sampleSelect]) control.disabled = false;
 
-  if (linkFailure) {
-    showOutput("Link", String(linkFailure.message || linkFailure));
-  }
-
   runButton.addEventListener("click", () => run());
   formatButton.addEventListener("click", () => format());
   shareButton.addEventListener("click", () => share());
@@ -136,6 +132,13 @@ async function boot() {
   });
 
   await run();
+
+  // After the first run, not before: run() opens with a clear of the output
+  // panel, so a message shown earlier would be wiped by the very next line.
+  if (linkFailure) {
+    setStatus("the link could not be followed - showing the sample instead", true);
+    showOutput("Link", String(linkFailure.message || linkFailure));
+  }
 }
 
 function remember(files) {
@@ -209,7 +212,15 @@ function structuralProblem(files) {
 // slots, routing state, the UI5 component itself. The counter in the URL makes
 // each run a different document, so the browser cannot serve a cached one and
 // the load event is unambiguous.
+let running = false;
+
 export async function run() {
+  // Ctrl+Enter and the sample menu call this too, so the guard cannot be the
+  // Run button being disabled: two runs would race on the frame's src and on
+  // the one-shot load listener, and the second reset would land under a frame
+  // that is still booting the first.
+  if (running) return;
+  running = true;
   runButton.disabled = true;
   // Whatever the last run had to say about itself is no longer true.
   hideOutput();
@@ -258,6 +269,7 @@ export async function run() {
     setStatus("the app could not be started", true);
     showOutput("Run", String(e.message || e));
   } finally {
+    running = false;
     runButton.disabled = false;
   }
 }

@@ -655,3 +655,40 @@ eingebettete Playground liest und schreibt `localStorage` nicht — sonst würde
 eine Doku-Seite die Arbeit überschreiben, die jemand im normalen Playground
 liegen hat. Dafür gibt es einen eigenen Test, weil der Fehler sonst erst
 auffällt, wenn er passiert ist.
+
+### Erkenntnisse aus dem Review
+
+Ein Review über den gesamten Branch fand sechs echte Fehler, die alle Tests
+überlebt hatten. Sie stehen hier, weil sie eine Art haben:
+
+1. **Wächter auf einen Namen statt auf eine Position.** Die „erste Datei kann
+   nicht geschlossen werden"-Regel prüfte den Literalnamen
+   `zcl_playground.clas.abap`. Bei einem Deep-Link heißt die erste Datei
+   anders — sie bekam ein Schließkreuz, und Schließen hätte stillschweigend
+   geändert, welche Klasse Run startet.
+2. **Eine Meldung, die sofort wieder gelöscht wird.** Der Fehler eines
+   kaputten `?src=`-Links wurde angezeigt und zwei Zeilen später vom
+   `hideOutput( )` am Anfang von `run( )` wieder versteckt. **Der Test war
+   trotzdem grün**, weil `toContainText` auch versteckte Elemente liest — die
+   Tests prüfen jetzt `toBeVisible`.
+3. **Prüfung nur auf einem von drei Wegen.** Der `?src=`-Pfad validierte
+   Dateinamen, der Share-Link- und der localStorage-Pfad nicht. Ein
+   Fragment mit doppeltem Namen ließ Monaco werfen, *bevor* `boot( )` seinen
+   try/catch erreicht — die Seite blieb bei „starting…" stehen, alle Knöpfe
+   aus. Jetzt prüft eine Funktion alle drei Eingänge.
+4. **Ein nicht-idempotenter Build-Schritt.** Das Injizieren des Bridge-Skripts
+   lief auch bei einem Cache-Treffer, sodass jeder inkrementelle Build ein
+   weiteres `<script>` anhängte — die zweite Fassung hätte den `fetch`
+   umwickelt, den die erste installiert hat. Verifiziert: 1 → 2 → 1 nach der
+   Korrektur.
+5. **Ein Cache, der zu lange lebt.** Die Completion merkte sich die
+   Objektnamen für immer, also fehlte jede Klasse, die der Nutzer später
+   anlegte — obwohl der Kommentar „die eigenen" versprach.
+6. **Ein Wiedereintrittsschutz am falschen Ort.** `runButton.disabled` schützt
+   nur den Knopf; Ctrl+Enter und das Sample-Menü riefen `run( )` daran vorbei.
+   Zwei Läufe hätten sich um `frame.src` und den einmaligen `load`-Listener
+   gestritten.
+
+Gemeinsamer Nenner: Vier der sechs sind **Zustand, der an einer Stelle
+gepflegt und an einer anderen gelesen wird**. Und einer zeigt, dass ein grüner
+Test nichts wert ist, wenn er die falsche Eigenschaft prüft.

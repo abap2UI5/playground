@@ -160,17 +160,21 @@ export function hasEntryClass(files) {
   return name !== undefined && userObjects().some((o) => o.getName() === name && o.getType() === "CLAS");
 }
 
-// Every global object the corpus defines, for name completion. Read once and
-// cached: the corpus does not change while the page is open.
-let objectNames;
+// Every class and interface completion can offer. The corpus half is fixed for
+// the life of the page and is read once; the user's own objects are read every
+// time, because a class added a minute ago has to be offerable a minute ago.
+let corpusNames;
 export function knownObjectNames() {
-  if (objectNames === undefined) {
-    objectNames = [...registry.getObjects()]
-      .filter((o) => o.getType() === "CLAS" || o.getType() === "INTF")
-      .map((o) => ({ name: o.getName(), type: o.getType() }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+  if (corpusNames === undefined) {
+    const mine = new Set(userObjects().map((o) => o.getName()));
+    corpusNames = [...registry.getObjects()]
+      .filter((o) => (o.getType() === "CLAS" || o.getType() === "INTF") && !mine.has(o.getName()))
+      .map((o) => ({ name: o.getName(), type: o.getType() }));
   }
-  return objectNames;
+  const own = userObjects()
+    .filter((o) => o.getType() === "CLAS" || o.getType() === "INTF")
+    .map((o) => ({ name: o.getName(), type: o.getType() }));
+  return [...own, ...corpusNames].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 // The name of the global object a source declares, if it declares one. Read off

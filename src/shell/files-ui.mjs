@@ -4,7 +4,7 @@
 // pressed "+". A playground that opens with a tab bar over a single class is
 // claiming a complexity it does not have.
 import { addFile, closeFile, currentFile, getFiles, openFile } from "../editor/editor.mjs";
-import { MAIN_FILE, nameProblem, skeletonFor } from "../editor/files.mjs";
+import { nameProblem, skeletonFor } from "../editor/files.mjs";
 
 let strip;
 let onChanged;
@@ -43,15 +43,17 @@ export function render() {
 
   strip.hidden = false;
   strip.replaceChildren(
-    ...files.map((file) => {
+    ...files.map((file, index) => {
       const tab = document.createElement("button");
       tab.className = `file-tab${file.name === open ? " is-active" : ""}`;
       tab.dataset.file = file.name;
       tab.type = "button";
       tab.append(file.name);
-      // The entry class is what the playground starts, so it is not closable -
-      // there would be nothing left to run.
-      if (file.name !== MAIN_FILE) {
+      // The first file is what the playground starts, so it is not closable -
+      // closing it would silently change which class Run begins with. Keyed on
+      // the position rather than on a name, because a linked or shared file set
+      // can begin with anything.
+      if (index > 0) {
         const close = document.createElement("span");
         close.className = "file-close";
         close.dataset.close = file.name;

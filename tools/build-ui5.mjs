@@ -161,7 +161,12 @@ function injectBridge() {
   if (!html.includes(anchor)) {
     throw new Error("build-ui5: could not find the UI5 bootstrap tag in the frontend index.html");
   }
-  html = html.replace(anchor, tag + anchor);
+  // The UI5 tree survives an incremental build, so this runs against a page
+  // that may already carry the tag. Injecting again would load the bridge
+  // twice, and the second load would wrap the fetch the first one installed.
+  if (!html.includes(tag)) {
+    html = html.replace(anchor, tag + anchor);
+  }
   fs.writeFileSync(indexPath, html);
   fs.copyFileSync(path.join(ROOT, "src", "shell", "frontend-bridge.js"), path.join(UI5_DIST, "frontend-bridge.js"));
 }

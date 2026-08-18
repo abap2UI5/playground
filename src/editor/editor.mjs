@@ -134,7 +134,11 @@ export function addFile(file) {
 export function closeFile(name) {
   const model = modelFor(name);
   if (!model) return;
-  const remaining = getFiles().filter((f) => f.name !== name);
+  const files = getFiles();
+  // The first file is the app. Removing it would change what Run starts
+  // without saying so, which is worse than refusing.
+  if (files[0]?.name === name) return;
+  const remaining = files.filter((f) => f.name !== name);
   if (remaining.length === 0) return;
   if (currentFile() === name) openFile(remaining[0].name);
   model.dispose();
