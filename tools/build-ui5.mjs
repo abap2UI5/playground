@@ -58,7 +58,10 @@ function inputHash() {
     for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
       const p = path.join(dir, e.name);
       if (e.isDirectory()) addTree(p);
-      else h.update(e.name).update(fs.readFileSync(p));
+      // The path relative to the tree, not the base name: a restructure that
+      // moves files without renaming them changes what gets built and has to
+      // change the hash with it.
+      else h.update(path.relative(APP_SRC, p)).update(fs.readFileSync(p));
     }
   };
   addTree(APP_SRC);

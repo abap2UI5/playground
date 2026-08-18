@@ -742,3 +742,49 @@ Sourcemap lag nach dem Umbau noch da, und die Zahl bewegte sich nicht.
 (`assets/`, `editor/`, `examples/`), bevor es schreibt — eine veraltete Datei,
 die niemand mehr referenziert, ist von einer aktuellen nicht zu unterscheiden.
 Veröffentlichte Seite danach: **106 MB statt 127 MB**.
+
+### Erkenntnisse aus dem zweiten Review (nach dem Merge)
+
+Ein zweiter Durchgang auf höherer Stufe fand einen schweren und eine Reihe
+kleinerer Fehler. Der schwere verdient den Eintrag:
+
+**Vererbung war komplett kaputt — und keine Zeile Test wusste davon.** Jeder
+transpilierte Chunk läuft in einem eigenen Function-Scope, und fast jede
+Referenz, die er macht, geht zur *Laufzeit* über `abap.Classes['...']` — mit
+genau einer Ausnahme: die Superklasse. `class zcl_child extends zcl_base`
+nennt sie als nackten Bezeichner, zur *Definitionszeit*, und in einem
+isolierten Scope ist der ungebunden. Jedes `INHERITING FROM` — auch von einer
+Framework-Klasse wie `cx_static_check` — endete als `ReferenceError`. Der
+Transpiler sagt es einem sogar: `output.objects[].requires` listet exakt
+diese Namen. `compile( )` hat die Liste weggeworfen.
+
+Der Fix hat zwei Hälften, und beide sind nötig: ein **Prolog** pro Chunk, der
+jeden `requires`-Namen aus `abap.Classes` bindet (mit einer lesbaren Meldung,
+falls er fehlt — „Class extends value undefined" nennt keine der beiden
+Klassen), und eine **topologische Reihenfolge** innerhalb des Batches, denn
+der Prolog bindet, was *in diesem Moment* in `abap.Classes` steht — die
+Superklasse aus dem Editor muss also vorher gelaufen sein. Der alte
+„Interfaces zuerst"-Sort war ein Spezialfall davon und bleibt als Startordnung
+erhalten.
+
+Warum kein Test es fand: **kein Sample und kein Test benutzte `INHERITING
+FROM`.** Die Lücke war nicht im Prüfen, sondern im Prüfplan — die
+Sprachfeatures, die die Chunks *strukturell* fordern (Definitionszeit- statt
+Laufzeitauflösung), waren nie kartiert worden. Jetzt decken zwei Tests beide
+Fälle: Superklasse im Editor (und zwar in der *zweiten* Datei, damit die
+Reihenfolge mitgeprüft wird) und Superklasse im Framework.
+
+Die kleineren Funde desselben Durchgangs, in einer Zeile je: ein Share-Link
+im Fragment überstimmte nach dem Weiterarbeiten den neueren Entwurf (das
+Fragment wird jetzt beim ersten Edit entfernt); der Share-Test öffnete den
+Link im selben Browser-Context und hätte auch bei kaputtem Decoder grün
+bestanden (eigener Context); `run( )` wartete unbegrenzt auf das
+iframe-`load` und ließ Run bei einem hängenden Frame für immer gesperrt
+(30-s-Schranke); die Completion schnitt alphabetisch auf 200, *bevor* sie
+Präfix-Treffer nach vorn sortierte (erst ranken, dann schneiden); der
+UI5-Build-Hash hashte nur Basenamen statt Pfade und hätte eine
+Upstream-Umstrukturierung als Cache-Treffer gewertet; `tools/serve.mjs`
+stürzte prozessweit über ein fehlgeformtes Prozent-Escape in der URL ab;
+zwei dynamische `import( )` in `main.mjs` versprachen ein Code-Splitting, das
+ein Single-File-Bundle nicht hat (jetzt statisch); die `?src=`-Fetches liefen
+nacheinander statt parallel.

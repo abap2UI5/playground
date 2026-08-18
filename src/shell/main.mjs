@@ -8,7 +8,8 @@
 import "./shell.css";
 
 import { connectRegistry, createEditor, focusProblem, format, getFiles, refresh, setFiles } from "../editor/editor.mjs";
-import { declaredObjectName, entryClass } from "../editor/registry.mjs";
+import { buildRegistry, declaredObjectName, entryClass } from "../editor/registry.mjs";
+import { compile } from "../editor/transpile.mjs";
 import { checkFileSet, MAIN_FILE, parseName } from "../editor/files.mjs";
 import { fetchLinkedFiles, linkedSources } from "./deep-link.mjs";
 import { DEFAULT_FILES, SAMPLES, sampleById } from "../editor/samples.mjs";
@@ -108,7 +109,6 @@ async function boot() {
     setStatus("reading the abap2UI5 sources…");
     const corpus = await corpusReady;
 
-    const { buildRegistry } = await import("../editor/registry.mjs");
     await buildRegistry(corpus, files, (done, total) => {
       setStatus(`checking the sources… ${Math.round((done / total) * 100)}%`);
     });
@@ -169,6 +169,13 @@ function remember(files) {
   renderFiles();
   if (embedded) return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(files ?? getFiles()));
+  // A fragment in the address bar is a claim about what the editor holds, and
+  // it just stopped being true. Left there, it would also win over this draft
+  // on the next reload (a link outranks stored code in startingFiles), quietly
+  // rolling the editor back to whatever was shared before the edits.
+  if (window.location.hash) {
+    history.replaceState(null, "", window.location.pathname + window.location.search);
+  }
 }
 
 // The sample menu. When the editor did not start on a sample, the menu opens on
@@ -272,7 +279,6 @@ export async function run() {
     }
 
     setStatus("compiling…");
-    const { compile } = await import("../editor/transpile.mjs");
     const chunks = await compile(files);
     state.runtime.defineClasses(chunks.map((c) => c.js));
 
@@ -288,8 +294,20 @@ export async function run() {
     // themes are built into dist/app; a third would have to be added there.
     src.searchParams.set("sap-ui-theme", uiTheme());
 
-    await new Promise((resolve) => {
-      frame.addEventListener("load", resolve, { once: true });
+    // Bounded, because everything in run() hangs off this one event: if the
+    // frame never fires it, `running` would stay true and Run would be dead
+    // until a full reload. Thirty seconds is an eternity for a same-origin
+    // document - reaching it means the load is not coming.
+    await new Promise((resolve, reject) => {
+      const gaveUp = setTimeout(() => reject(new Error("The app frame did not load.")), 30000);
+      frame.addEventListener(
+        "load",
+        () => {
+          clearTimeout(gaveUp);
+          resolve();
+        },
+        { once: true },
+      );
       frame.src = src.href;
     });
     setStatus("running");

@@ -135,3 +135,94 @@ test("the output panel does not outlive the error it reported", async ({ page })
   await expect(page.locator("#output")).toBeHidden();
   await expect(control(page, "txtOut")).toContainText("fixed");
 });
+
+// Inheritance is the one thing the chunks cannot resolve at call time: `class
+// zcl_child extends zcl_base` names its superclass at definition time, in a
+// scope of its own. These two would have been ReferenceErrors before the
+// prologue in transpile.mjs - and the first one also proves the definition
+// order, because the file that has to be defined first is not the first file.
+test("a class can inherit from another file in the editor", async ({ page }) => {
+  await open(page);
+
+  page.once("dialog", (d) => d.accept("zcl_pg_base.clas.abap"));
+  await page.locator(".file-add").click();
+  await setSource(
+    page,
+    `CLASS zcl_pg_base DEFINITION PUBLIC CREATE PUBLIC.
+  PUBLIC SECTION.
+    METHODS made_by RETURNING VALUE(rv) TYPE string.
+ENDCLASS.
+CLASS zcl_pg_base IMPLEMENTATION.
+  METHOD made_by. rv = |the base class|. ENDMETHOD.
+ENDCLASS.`,
+    "zcl_pg_base.clas.abap",
+  );
+
+  await setSource(
+    page,
+    `CLASS zcl_playground DEFINITION PUBLIC INHERITING FROM zcl_pg_base CREATE PUBLIC.
+  PUBLIC SECTION.
+    INTERFACES z2ui5_if_app.
+    DATA out TYPE string.
+  PROTECTED SECTION.
+    DATA client TYPE REF TO z2ui5_if_client.
+    METHODS view_display.
+ENDCLASS.
+CLASS zcl_playground IMPLEMENTATION.
+  METHOD z2ui5_if_app~main.
+    me->client = client.
+    IF client->check_on_init( ) IS NOT INITIAL.
+      out = |written by { made_by( ) }|.
+      view_display( ).
+    ENDIF.
+  ENDMETHOD.
+  METHOD view_display.
+    DATA(view) = z2ui5_cl_ui5_view_builder=>factory(
+        )->ele( n = \`View\` ns = \`mvc\`
+            )->a( n = \`xmlns\`     v = \`sap.m\`
+            )->a( n = \`xmlns:mvc\` v = \`sap.ui.core.mvc\` ).
+    view->ele( \`Page\`
+        )->a( n = \`title\` v = \`Inheritance\`
+        )->tag( \`Text\`
+            )->a( n = \`id\`   v = \`txtOut\`
+            )->a( n = \`text\` v = client->_bind( out ) ).
+    client->view_display( view->stringify( ) ).
+  ENDMETHOD.
+ENDCLASS.`,
+  );
+
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+  await expect(control(page, "txtOut")).toContainText("written by the base class");
+});
+
+test("a class can inherit from the framework - a custom exception works", async ({ page }) => {
+  await open(page);
+
+  page.once("dialog", (d) => d.accept("zcx_pg_oops.clas.abap"));
+  await page.locator(".file-add").click();
+  await setSource(
+    page,
+    `CLASS zcx_pg_oops DEFINITION PUBLIC INHERITING FROM cx_static_check CREATE PUBLIC.
+ENDCLASS.
+CLASS zcx_pg_oops IMPLEMENTATION.
+ENDCLASS.`,
+    "zcx_pg_oops.clas.abap",
+  );
+
+  await setSource(
+    page,
+    app(
+      "Exceptions",
+      `TRY.
+          RAISE EXCEPTION TYPE zcx_pg_oops.
+        CATCH zcx_pg_oops.
+          out = |caught the subclass|.
+      ENDTRY.`,
+    ),
+  );
+
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+  await expect(control(page, "txtOut")).toContainText("caught the subclass");
+});

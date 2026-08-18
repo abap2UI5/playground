@@ -36,7 +36,16 @@ const TYPES = {
 const SUBPATH = "/under-a-subpath";
 
 const server = http.createServer((req, res) => {
-  let url = decodeURIComponent((req.url || "/").split("?")[0]);
+  let url;
+  try {
+    url = decodeURIComponent((req.url || "/").split("?")[0]);
+  } catch {
+    // A malformed percent-sequence would otherwise throw out of the request
+    // listener and take the whole server down - mid-test-run, with every
+    // failure after it pointing at a connection instead of at this line.
+    res.writeHead(400).end("bad request");
+    return;
+  }
   if (url === SUBPATH) {
     res.writeHead(301, { location: `${SUBPATH}/` }).end();
     return;

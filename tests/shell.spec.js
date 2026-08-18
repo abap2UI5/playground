@@ -6,7 +6,7 @@ import { getSource, open, runSample, setSource } from "./helpers.mjs";
 
 const MARKER = "written for the share test";
 
-test("Share puts the code in the address bar and the link brings it back", async ({ page, context }) => {
+test("Share puts the code in the address bar and the link brings it back", async ({ page, context, browser }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await open(page);
 
@@ -21,13 +21,37 @@ test("Share puts the code in the address bar and the link brings it back", async
   // encoded, and ABAP compresses well.
   expect(shared.length).toBeLessThan(source.length);
 
-  // Open it as somebody receiving the link would - in a context that has never
-  // seen this playground, so nothing can come out of local storage.
-  const fresh = await context.newPage();
+  // Open it as somebody receiving the link would - in a browser context that
+  // has never seen this playground. A page in the same context would share its
+  // localStorage, and the draft saved above already contains the marker - the
+  // link could be completely broken and the assertion would still hold.
+  const elsewhere = await browser.newContext();
+  const fresh = await elsewhere.newPage();
   await fresh.goto(shared);
   await expect(fresh.locator("#status")).toHaveText("running", { timeout: 120000 });
   expect(await getSource(fresh)).toContain(MARKER);
-  await fresh.close();
+  await elsewhere.close();
+});
+
+test("editing after a share retires the link, and the reload keeps the edits", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await open(page);
+
+  await setSource(page, (await getSource(page)).replace("Hello abap2UI5", "the shared version"));
+  await page.locator("#share").click();
+  await expect(page.locator("#status")).toContainText("link", { timeout: 15000 });
+  expect(page.url()).toContain("#");
+
+  // The next edit makes the fragment a lie, so it goes. Were it kept, this
+  // reload would decode it - a link outranks the stored draft - and the editor
+  // would quietly travel back to the shared version, which the first keystroke
+  // would then write over the newer draft.
+  await setSource(page, (await getSource(page)).replace("the shared version", "edited after sharing"));
+  expect(page.url()).not.toContain("#");
+
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  expect(await getSource(page)).toContain("edited after sharing");
 });
 
 test("a link nobody wrote opens on the sample instead of failing", async ({ page }) => {
