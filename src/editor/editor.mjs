@@ -22,6 +22,7 @@ import "monaco-editor/editor/contrib/comment/browser/comment.js";
 import "monaco-editor/editor/contrib/contextmenu/browser/contextmenu.js";
 import "monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching.js";
 import { registerABAP, updateMarkers } from "@abaplint/monaco";
+import { findingsFor } from "./abap2ui5-lint.mjs";
 
 import { uriFor } from "./files.mjs";
 import { diagnostics, getRegistry, knownObjectNames, updateFiles } from "./registry.mjs";
@@ -158,17 +159,58 @@ export function setFiles(files) {
 // Pushes the editor's state into the registry and the registry's opinion back
 // into the gutters. Returns everything wrong with everything open, so the caller
 // can decide whether a run is worth attempting.
+// Everything wrong with what is open, from both checkers, and the markers to
+// match. The two sources are kept apart by their marker owner: Monaco replaces
+// all markers of one owner at a time, so a shared owner would have whichever
+// checker ran second erase the other's underlines.
 export function refresh() {
   const files = getFiles();
   updateFiles(files);
 
   const problems = [];
   for (const file of files) {
-    updateMarkers(getRegistry(), modelFor(file.name));
-    for (const issue of diagnostics(file.name)) problems.push({ file: file.name, ...issue });
+    const model = modelFor(file.name);
+    updateMarkers(getRegistry(), model);
+    for (const issue of diagnostics(file.name)) {
+      problems.push({ file: file.name, source: "abaplint", ...issue });
+    }
+
+    const found = findingsFor(file.source);
+    monaco.editor.setModelMarkers(
+      model,
+      LINT_OWNER,
+      found.map((f) => ({
+        severity: MONACO_SEVERITY[f.severity] ?? monaco.MarkerSeverity.Warning,
+        message: `${f.message}  (abap2UI5: ${f.type})`,
+        startLineNumber: f.line,
+        startColumn: f.column,
+        endLineNumber: f.line,
+        // The linter points at where a finding starts; without an end the
+        // marker would be a caret nobody can hit with the mouse.
+        endColumn: f.column + 1,
+      })),
+    );
+    for (const f of found) {
+      problems.push({
+        file: file.name,
+        source: "abap2UI5",
+        severity: f.severity === "error" ? 1 : f.severity === "warning" ? 2 : 3,
+        message: f.message,
+        rule: f.type,
+        range: { start: { line: f.line - 1, character: f.column - 1 } },
+      });
+    }
   }
   return problems;
 }
+
+const LINT_OWNER = "abap2ui5";
+
+const MONACO_SEVERITY = {
+  error: monaco.MarkerSeverity.Error,
+  warning: monaco.MarkerSeverity.Warning,
+  hint: monaco.MarkerSeverity.Hint,
+};
 
 export function focusProblem(file, line, column = 1) {
   openFile(file);

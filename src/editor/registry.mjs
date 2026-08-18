@@ -138,6 +138,17 @@ export function diagnostics(fileName) {
   return new abaplint.LanguageServer(registry).diagnostics({ uri: uriFor(fileName) });
 }
 
+// What one file declares, as a tree: the class, its methods, its attributes.
+// Answered by the same registry that answers diagnostics, so the outline can
+// never disagree with the underlines beside it.
+export function documentSymbols(fileName) {
+  // Note the shape: diagnostics( ) takes { uri }, documentSymbol( ) takes
+  // { textDocument: { uri } }. Passing the first shape to the second throws
+  // inside abaplint rather than returning nothing, which is easy to mistake
+  // for "this file has no symbols".
+  return new abaplint.LanguageServer(registry).documentSymbol({ textDocument: { uri: uriFor(fileName) } });
+}
+
 // The objects the user's own files produced. Derived from the file names rather
 // than from a namespace, so a class the user called z2ui5_something is still
 // theirs and a framework object never is.

@@ -9,7 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
-import { nodeStubPlugin } from "./esbuild-plugins.mjs";
+import { abap2ui5LinterPlugin, nodeStubPlugin } from "./esbuild-plugins.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "src", "shell");
@@ -92,7 +92,9 @@ const result = await esbuild.build({
   // stylesheet is imported by main.mjs so both end up in that one file), and
   // the font is copied out with a hashed name.
   loader: { ".ttf": "file" },
-  plugins: [nodeStubPlugin(ROOT)],
+  // The linter plugin goes first: it claims `fs` and `path` for the abap2UI5
+  // linter alone, and leaves every other importer to the ordinary stubs.
+  plugins: [abap2ui5LinterPlugin(ROOT), nodeStubPlugin(ROOT)],
   // abaplint reaches for Buffer when it builds its DDIC built-ins, the same way
   // the transpiled standard library does.
   inject: [path.join(ROOT, "src", "runtime", "buffer-shim.mjs")],

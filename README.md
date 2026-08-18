@@ -41,7 +41,14 @@ pipeline and moves the last step into the browser.
   the editor can check your classes against them.
 - **Editing.** Monaco — the editor from VS Code — with abaplint behind it:
   diagnostics against the actual framework, hover, go to definition, rename,
-  references, quick fixes and the pretty printer.
+  references, quick fixes and the pretty printer. Under the editor, a panel
+  listing every problem and an outline of the class.
+- **A second opinion.** The [abap2UI5 linter](https://www.npmjs.com/package/@abap2ui5/linter)
+  runs beside abaplint and answers a different question: abaplint says whether
+  the ABAP compiles, the linter reconstructs the view your builder chain
+  produces and says whether *that* works on UI5 1.71 — a control or property
+  that release does not have, an icon that is in no icon font. Those compile,
+  and at run time they render nothing and log nothing.
 - **Run.** Only the classes in the editor are compiled, in about 20 ms, and
   registered with the running runtime.
 - **Rendering.** The abap2UI5 frontend runs in an iframe and talks to its backend
@@ -94,6 +101,15 @@ that underlines a missing pragma teaches nothing.
 `definitions_top`, `global_class`, `begin_end_names`, `superclass_final`,
 `unknown_types` — checked against release v750, the one abap2UI5 lints itself
 against. The list lives in `src/editor/registry.mjs`.
+
+The abap2UI5 linter runs its own rules on top, against UI5 **1.71** — the floor
+abap2UI5 holds its own shipped apps to, and therefore the floor an example
+copied out of the playground has to clear.
+
+The two are kept apart on purpose, in the list and in what they block: an
+abaplint error means the ABAP does not compile, so Run stops and says so. An
+abap2UI5 finding means the app runs and is wrong somewhere — and the fastest
+way to understand one is to look at the app it produced, so Run goes ahead.
 
 ## Linking a playground
 
