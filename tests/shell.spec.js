@@ -105,3 +105,25 @@ test("both panes stay visible when a wide window gets narrow and wide again", as
   await expect(page.locator("#pane-left")).toBeVisible();
   await expect(page.locator("#pane-right")).toBeVisible();
 });
+
+test("the app follows the system theme, and a change does not restart it", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await open(page);
+
+  // The frame is started in UI5's dark theme, matching the rest of the page.
+  await expect(page.locator("#app")).toHaveAttribute("src", /sap-ui-theme=sap_horizon_dark/);
+  const dark = await page.frameLocator("#app").locator("body").evaluate((b) => getComputedStyle(b).backgroundColor);
+
+  // Type something, then switch the system theme: the app changes colour but
+  // keeps what was typed - somebody with a half-filled form is not punished
+  // for the sun going down.
+  await page.frameLocator("#app").locator('[id$="--inpName-inner"]').fill("still here");
+  await page.emulateMedia({ colorScheme: "light" });
+
+  await expect
+    .poll(async () =>
+      page.frameLocator("#app").locator("body").evaluate((b) => getComputedStyle(b).backgroundColor),
+    )
+    .not.toBe(dark);
+  await expect(page.frameLocator("#app").locator('[id$="--inpName-inner"]')).toHaveValue("still here");
+});

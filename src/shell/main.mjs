@@ -24,6 +24,8 @@ import { hideOutput, setStatus, showOutput } from "./ui.mjs";
 // resolves under a GitHub Pages project path as well as at a site root.
 const asset = (p) => new URL(p, document.baseURI).href;
 
+const prefersDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
+
 const STORAGE_KEY = "abap2ui5-playground:files";
 
 const runButton = document.getElementById("run");
@@ -124,6 +126,12 @@ async function boot() {
   shareButton.addEventListener("click", () => share());
   sampleSelect.addEventListener("change", () => loadSample(sampleSelect.value, tabs));
 
+  // A theme change must not restart the app - somebody has a half-filled form
+  // open and the sun went down. UI5 can swap its theme at runtime, so the
+  // running frame is told rather than reloaded; a frame that cannot be told
+  // keeps the theme it started with until the next Run.
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => applyFrameTheme());
+
   document.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
@@ -138,6 +146,22 @@ async function boot() {
   if (linkFailure) {
     setStatus("the link could not be followed - showing the sample instead", true);
     showOutput("Link", String(linkFailure.message || linkFailure));
+  }
+}
+
+const uiTheme = () => (prefersDark() ? "sap_horizon_dark" : "sap_horizon");
+
+function applyFrameTheme() {
+  try {
+    const ui5 = frame.contentWindow?.sap?.ui;
+    // UI5 1.x and 2.x name this differently, and neither exists until the
+    // component has booted.
+    const theming = ui5?.require?.("sap/ui/core/Theming");
+    if (theming?.setTheme) theming.setTheme(uiTheme());
+    else ui5?.getCore?.()?.applyTheme?.(uiTheme());
+  } catch {
+    // A frame that is mid-load, or a UI5 that does not expose this, keeps the
+    // theme it started with. The next Run picks the current one up.
   }
 }
 
@@ -259,6 +283,10 @@ export async function run() {
     const src = new URL("app/index.html", document.baseURI);
     src.searchParams.set("app_start", entryClass(files));
     src.searchParams.set("run", String(state.runCounter));
+    // UI5 reads sap-ui-* from the query and it wins over the bootstrap tag, so
+    // the app follows the same light or dark the rest of the page does. Both
+    // themes are built into dist/app; a third would have to be added there.
+    src.searchParams.set("sap-ui-theme", uiTheme());
 
     await new Promise((resolve) => {
       frame.addEventListener("load", resolve, { once: true });

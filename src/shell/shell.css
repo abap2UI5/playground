@@ -201,7 +201,9 @@ select:disabled { opacity: .5; }
 }
 
 .editor { flex: 1; min-height: 0; }
-.app-frame { flex: 1; min-height: 0; background: #fff; }
+/* Matches the UI5 theme the frame is started with, so the moment before it
+   paints is not a flash of the opposite colour. */
+.app-frame { flex: 1; min-height: 0; background: var(--bg); }
 
 iframe {
   width: 100%;
