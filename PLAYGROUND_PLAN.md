@@ -253,24 +253,28 @@ Ziel: Der Code aus dem Editor läuft nach "Run" rechts als App.
 
 Ziel: Aus dem Technik-Demo wird ein Playground, den man verlinken kann.
 
-- [ ] **P6.1 Shell-Layout.** Splitter (verschiebbar), Toolbar mit Run
-  (Ctrl+Enter), Format, Share, Sample-Auswahl; Statuszeile mit
-  abap2UI5-Version + Transpiler-Version; responsive (mobil: Tabs statt
-  Splitter). Design schlicht halten, UI5-Look dem iframe überlassen.
-- [ ] **P6.2 Sample-Galerie.** `samples/`-Ordner mit 5–10 Beispielklassen
-  aufsteigender Komplexität (Hello World, Eingabe+Event, Tabelle, Popup,
-  Wizard — geeignete Vorlagen aus den abap2UI5-Demos übernehmen und auf
-  Playground-Tauglichkeit prüfen, d. h. keine Systemabhängigkeiten).
-  Dropdown lädt Sample in den Editor.
-  *Abnahme:* Jedes Sample läuft grün durch einen parametrisierten
-  Playwright-Test (Sample laden → Run → rendert).
-- [ ] **P6.3 Share-Links.** Editor-Inhalt komprimiert im URL-Fragment
-  (z. B. base64+deflate, wie es TypeScript-Playground macht); Laden einer
-  Share-URL stellt den Code wieder her und startet Run automatisch.
-  *Abnahme:* Test — Share-URL erzeugen, in neuem Kontext öffnen, gleiche App
-  rendert.
-- [ ] **P6.4 Persistenz.** Editor-Inhalt in localStorage (Wiederherstellen
-  nach Reload, mit "Reset auf Sample"-Knopf).
+- [x] **P6.1 Shell-Layout.** Verschiebbarer Splitter (Position bleibt
+  gespeichert, auch per Pfeiltasten bedienbar), Toolbar mit Run (Ctrl+Enter),
+  Format, Sample-Auswahl und Share, Statuszeile mit Framework-Version.
+  Unter 820 px Breite werden aus den beiden Panes Tabs.
+  *Abnahme:* Tests — Splitter verschiebt und überlebt einen Reload; schmales
+  Fenster zeigt Tabs; zurück auf breit sind wieder beide Panes sichtbar.
+- [x] **P6.2 Sample-Galerie.** Sechs Beispiele in `src/editor/samples.mjs`:
+  Hello World, Counter, Tabelle mit Mehrfachauswahl, Formular mit
+  Validierung, Tabs mit Liste, Bestätigungs-Popup über `nav_app_call`.
+  *Abnahme:* `tests/samples.spec.js` fährt **jedes** Sample: laden, laufen,
+  bedienen und das in ABAP berechnete Ergebnis prüfen. Die Liste wird aus
+  dem Katalog importiert — ein Sample ohne Test ist nicht möglich.
+- [x] **P6.3 Share-Links.** `src/shell/share.mjs`: Quelltext deflated und
+  base64url-kodiert im URL-Fragment (mit Versionspräfix). Share kopiert den
+  Link in die Zwischenablage und schreibt ihn in die Adresszeile.
+  *Abnahme:* Test — Link erzeugen, in einem frischen Browser-Kontext öffnen,
+  derselbe Code steht im Editor; ein kaputtes Fragment öffnet das Sample
+  statt einer Fehlerseite.
+- [x] **P6.4 Persistenz.** Editor-Inhalt in `localStorage`; beim Start
+  gewinnt ein Share-Link vor dem gespeicherten Entwurf vor dem Sample. Das
+  Sample-Menü sagt, woher der Code kommt, statt einen Namen zu behaupten.
+  *Abnahme:* Test — Inhalt überlebt Reload, Sample-Auswahl ersetzt ihn.
 
 ## Phase 7 — Qualität, CI, Doku
 
@@ -532,3 +536,32 @@ erklären kann.
 **Eine transpilierte Klasse wird mit `new Function` geladen, nicht als
 Blob-Modul**: Blob-URLs cacht der Browser für die Lebensdauer der Seite, ein
 zweiter Run würde die erste Fassung erneut registrieren.
+
+### Erkenntnisse Phase 6
+
+**Ein Aggregation-Element braucht den Namensraum seines Containers.** Das
+Formular-Sample scheiterte zunächst mit
+`failed to load 'sap/m/content.js'` — UI5 suchte ein Control namens
+`content` in `sap.m`, weil `ele( \`content\` )` unter einem
+`form:SimpleForm` ohne Präfix landete. Richtig ist
+`ele( n = \`content\` ns = \`form\` )`. Der Fehler ist kein Renderfehler,
+sondern ein **Ladefehler** — die App terminiert, statt schief auszusehen.
+
+**Tests gegen UI5 brauchen die Control-Wurzel, nicht das Input-Element.** Eine
+Checkbox in einer Tabelle rendert ein verstecktes `<input>` hinter einem
+gestylten Kasten; anklickbar ist `[id$='-selectMulti']`, nicht `…-CB`.
+
+**Die Statuszeile allein ist kein Synchronisationspunkt.** Nach einem
+Sample-Wechsel steht dort noch „running" von der vorigen App, während die
+neue kompiliert — eine Prüfung kann dann gegen die App laufen, die gerade
+ersetzt wird. `tests/helpers.mjs` wartet deshalb darauf, dass sich das `src`
+des iframes ändert (der Run-Zähler steckt darin).
+
+**Ein Tab-Wechsel darf im Breitbild nichts verstecken.** Die erste Fassung
+von `show( )` setzte `hidden` bedingungslos, sodass die Auswahl eines Samples
+auf einem großen Bildschirm den Editor ausblendete. `show( )` prüft jetzt die
+Media Query und ordnet im Breitbild nur die Tab-Markierung.
+
+**Share-Links sind klein genug.** Ein Sample von ~2500 Zeichen wird als
+`deflate-raw` + base64url zu unter 700 Zeichen — ABAP komprimiert
+hervorragend. Der Code steht im **Fragment**, verlässt den Browser also nie.

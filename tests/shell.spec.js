@@ -1,0 +1,107 @@
+import { test, expect } from "@playwright/test";
+import { getSource, open, runSample, setSource } from "./helpers.mjs";
+
+// The playground around the editor: sharing a link, keeping a draft, and the
+// two shapes the page takes.
+
+const MARKER = "written for the share test";
+
+test("Share puts the code in the address bar and the link brings it back", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await open(page);
+
+  const source = (await getSource(page)).replace("Hello abap2UI5", MARKER);
+  await setSource(page, source);
+  await page.locator("#share").click();
+  await expect(page.locator("#status")).toContainText("link", { timeout: 15000 });
+
+  const shared = page.url();
+  expect(shared, "the code travels in the fragment, not the query").toContain("#");
+  // Short enough to paste into a chat: the source is deflated before it is
+  // encoded, and ABAP compresses well.
+  expect(shared.length).toBeLessThan(source.length);
+
+  // Open it as somebody receiving the link would - in a context that has never
+  // seen this playground, so nothing can come out of local storage.
+  const fresh = await context.newPage();
+  await fresh.goto(shared);
+  await expect(fresh.locator("#status")).toHaveText("running", { timeout: 120000 });
+  expect(await getSource(fresh)).toContain(MARKER);
+  await fresh.close();
+});
+
+test("a link nobody wrote opens on the sample instead of failing", async ({ page }) => {
+  await page.goto("/#thisisnotavalidfragment");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  expect(await getSource(page)).toContain("CLASS zcl_playground DEFINITION");
+});
+
+test("the editor content survives a reload", async ({ page }) => {
+  await open(page);
+  await setSource(page, (await getSource(page)).replace("Hello abap2UI5", "kept across a reload"));
+
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  expect(await getSource(page)).toContain("kept across a reload");
+
+  // And the menu says where the code came from rather than naming a sample it
+  // is not.
+  await expect(page.locator("#samples")).toHaveValue("");
+});
+
+test("picking a sample replaces the draft", async ({ page }) => {
+  await open(page);
+  await setSource(page, (await getSource(page)).replace("Hello abap2UI5", "about to be replaced"));
+
+  await runSample(page, "counter");
+  expect(await getSource(page)).not.toContain("about to be replaced");
+  expect(await getSource(page)).toContain("Counter");
+});
+
+test("the splitter moves the divide and remembers it", async ({ page }) => {
+  await open(page);
+
+  const width = async () => (await page.locator("#pane-left").boundingBox()).width;
+  const before = await width();
+
+  const splitter = page.locator("#splitter");
+  const box = await splitter.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x - 200, box.y + box.height / 2, { steps: 10 });
+  await page.mouse.up();
+
+  const after = await width();
+  expect(after).toBeLessThan(before - 100);
+
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  expect(Math.abs((await width()) - after)).toBeLessThan(20);
+});
+
+test("a narrow window shows tabs instead of a split", async ({ page }) => {
+  await page.setViewportSize({ width: 480, height: 800 });
+  await open(page);
+
+  await expect(page.locator(".tabs")).toBeVisible();
+  await expect(page.locator("#splitter")).toBeHidden();
+
+  // One pane at a time, and the tabs switch between them.
+  await expect(page.locator("#pane-left")).toBeVisible();
+  await expect(page.locator("#pane-right")).toBeHidden();
+
+  await page.locator(".tab", { hasText: "App" }).click();
+  await expect(page.locator("#pane-right")).toBeVisible();
+  await expect(page.locator("#pane-left")).toBeHidden();
+});
+
+test("both panes stay visible when a wide window gets narrow and wide again", async ({ page }) => {
+  await open(page);
+  await page.setViewportSize({ width: 480, height: 800 });
+  await page.locator(".tab", { hasText: "App" }).click();
+  await expect(page.locator("#pane-left")).toBeHidden();
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(page.locator("#pane-left")).toBeVisible();
+  await expect(page.locator("#pane-right")).toBeVisible();
+});

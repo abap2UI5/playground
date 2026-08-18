@@ -123,6 +123,13 @@ export function focusLine(line, column = 1) {
   editor.focus();
 }
 
+// abaplint's pretty printer, through the editor's own format action so the
+// change lands in the undo stack like any other edit.
+export async function format() {
+  await editor.getAction("editor.action.formatDocument")?.run();
+  editor.focus();
+}
+
 // Completion over the names of the classes and interfaces the corpus defines.
 //
 // abaplint has no completion API at all - @abaplint/monaco's completion provider

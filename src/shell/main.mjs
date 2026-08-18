@@ -7,9 +7,11 @@
 // frame is only a screen.
 import "./shell.css";
 
-import { connectRegistry, createEditor, getSource, refresh } from "../editor/editor.mjs";
+import { connectRegistry, createEditor, format, getSource, refresh, setSource } from "../editor/editor.mjs";
 import { buildRegistry, declaredClassName, USER_CLASS } from "../editor/registry.mjs";
-import { DEFAULT_SOURCE } from "../editor/sample.mjs";
+import { DEFAULT_SOURCE, SAMPLES, sampleById } from "../editor/samples.mjs";
+import { setUpSplitter, setUpTabs } from "./layout.mjs";
+import { copyToClipboard, shareUrl, sourceFromLocation } from "./share.mjs";
 import { state } from "./state.mjs";
 import { setStatus, showOutput } from "./ui.mjs";
 
@@ -19,11 +21,40 @@ import { setStatus, showOutput } from "./ui.mjs";
 // resolves under a GitHub Pages project path as well as at a site root.
 const asset = (p) => new URL(p, document.baseURI).href;
 
+const SOURCE_KEY = "abap2ui5-playground:source";
+
 const runButton = document.getElementById("run");
+const formatButton = document.getElementById("format");
+const shareButton = document.getElementById("share");
+const sampleSelect = document.getElementById("samples");
 const frame = document.getElementById("app");
 
+// Where the editor starts, in order of how deliberate the choice was: a shared
+// link is what somebody was sent, the stored draft is what they were last
+// working on, and the sample is the fallback.
+async function startingSource() {
+  try {
+    const shared = await sourceFromLocation();
+    if (shared) return { source: shared, from: "a shared link" };
+  } catch {
+    // A fragment that will not decode is somebody else's link or a truncated
+    // paste. Opening on the sample beats an error page nobody can act on.
+  }
+  const stored = localStorage.getItem(SOURCE_KEY);
+  if (stored) return { source: stored, from: "your last session" };
+  return { source: DEFAULT_SOURCE, from: "sample" };
+}
+
 async function boot() {
-  createEditor(document.getElementById("editor"), DEFAULT_SOURCE);
+  setUpSplitter();
+  const tabs = setUpTabs();
+
+  const { source, from } = await startingSource();
+  createEditor(document.getElementById("editor"), source, {
+    onChange: (value) => localStorage.setItem(SOURCE_KEY, value),
+  });
+
+  fillSampleMenu(from);
 
   // Two independent slow starts: the transpiled framework (a download and a
   // parse) and the ABAP corpus the editor checks against. Neither needs the
@@ -43,7 +74,7 @@ async function boot() {
     setStatus("reading the abap2UI5 sources…");
     const corpus = await corpusReady;
 
-    await buildRegistry(corpus, DEFAULT_SOURCE, (done, total) => {
+    await buildRegistry(corpus, source, (done, total) => {
       setStatus(`checking the sources… ${Math.round((done / total) * 100)}%`);
     });
     connectRegistry();
@@ -53,8 +84,13 @@ async function boot() {
     return;
   }
 
-  runButton.disabled = false;
+  for (const control of [runButton, formatButton, shareButton, sampleSelect]) control.disabled = false;
+
   runButton.addEventListener("click", () => run());
+  formatButton.addEventListener("click", () => format());
+  shareButton.addEventListener("click", () => share());
+  sampleSelect.addEventListener("change", () => loadSample(sampleSelect.value, tabs));
+
   document.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
@@ -63,6 +99,42 @@ async function boot() {
   });
 
   await run();
+}
+
+// The sample menu. When the editor did not start on a sample, the menu opens on
+// a disabled entry saying where the code did come from - picking a sample then
+// replaces it, and the menu never claims that edited code is still the sample.
+function fillSampleMenu(from) {
+  if (from !== "sample") {
+    const placeholder = new Option(`from ${from}`, "");
+    placeholder.disabled = true;
+    sampleSelect.add(placeholder);
+  }
+  for (const sample of SAMPLES) {
+    sampleSelect.add(new Option(`${sample.title} — ${sample.note}`, sample.id));
+  }
+  sampleSelect.value = from === "sample" ? SAMPLES[0].id : "";
+}
+
+function loadSample(id, tabs) {
+  const sample = sampleById(id);
+  if (!sample) return;
+  setSource(sample.source);
+  localStorage.setItem(SOURCE_KEY, sample.source);
+  // Picking a sample is a request to see it, so it runs without a second click.
+  run().then(() => tabs.show("right"));
+}
+
+async function share() {
+  try {
+    const url = await shareUrl(getSource());
+    history.replaceState(null, "", url);
+    const copied = await copyToClipboard(url);
+    setStatus(copied ? "link copied to the clipboard" : "link is in the address bar");
+  } catch (e) {
+    setStatus("the link could not be built", true);
+    showOutput("Share", String(e.message || e));
+  }
 }
 
 // Starts the class in the editor: compile it, register it with the runtime,

@@ -4,24 +4,42 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>abap2UI5 Playground</title>
+<meta name="description" content="Write abap2UI5 apps in the browser: ABAP on the left, the running app on the right, no server involved.">
 <link rel="stylesheet" href="assets/shell.css">
 </head>
 <body>
 <header class="bar">
   <span class="brand">abap2UI5 <span class="brand-dim">Playground</span></span>
-  <button id="run" class="primary" disabled>Run</button>
-  <span id="status" class="status">starting the ABAP runtime…</span>
+
+  <button id="run" class="primary" disabled title="Run (Ctrl+Enter)">Run</button>
+  <button id="format" disabled title="Pretty print (Shift+Alt+F)">Format</button>
+
+  <label class="field">
+    <span class="field-label">Sample</span>
+    <select id="samples" disabled></select>
+  </label>
+
+  <button id="share" disabled title="Copy a link that carries this code">Share</button>
+
+  <span id="status" class="status">starting…</span>
   <span class="spacer"></span>
   <span id="versions" class="versions"></span>
 </header>
 
-<main class="panes">
-  <section class="pane pane-left">
-    <div class="pane-head">ABAP</div>
+<main class="panes" id="panes">
+  <nav class="tabs" role="tablist">
+    <button class="tab is-active" data-pane="left" role="tab">ABAP</button>
+    <button class="tab" data-pane="right" role="tab">App</button>
+  </nav>
+
+  <section class="pane pane-left" id="pane-left">
     <div id="editor" class="editor"></div>
   </section>
-  <section class="pane pane-right">
-    <div class="pane-head">App</div>
+
+  <div class="splitter" id="splitter" role="separator" aria-orientation="vertical" tabindex="0"
+       aria-label="Resize the editor"></div>
+
+  <section class="pane pane-right" id="pane-right">
     <div class="app-frame">
       <iframe id="app" title="the running app" src="about:blank"></iframe>
     </div>
@@ -31,7 +49,7 @@
 <div id="output" class="output" hidden>
   <div class="output-head">
     <span id="output-title">Output</span>
-    <button id="output-close" class="ghost" aria-label="close">✕</button>
+    <button id="output-close" class="ghost" aria-label="Close the output panel">✕</button>
   </div>
   <pre id="output-body"></pre>
 </div>
