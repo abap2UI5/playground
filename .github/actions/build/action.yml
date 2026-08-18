@@ -1,0 +1,49 @@
+name: build
+description: Install, restore what is expensive to rebuild, build dist/ and check its size.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v5
+      with:
+        node-version: 22
+        cache: npm
+
+    - run: npm ci
+      shell: bash
+
+    # The pinned git dependencies, keyed by the file that pins them: a bump
+    # changes the file, which changes the key, which forces a fresh clone.
+    - uses: actions/cache@v4
+      with:
+        path: deps
+        key: deps-${{ hashFiles('tools/fetch-deps.mjs') }}
+
+    # Where the UI5 tooling puts the OpenUI5 libraries it downloads from npm.
+    # The download is the slow half of the frontend build; the build itself is
+    # a minute and is not worth caching a hundred megabytes for.
+    - uses: actions/cache@v4
+      with:
+        path: ~/.ui5
+        key: ui5-${{ hashFiles('tools/build-ui5.mjs') }}
+
+    # The downport is three minutes of abaplint rewriting the framework, and it
+    # is deterministic. build-framework.mjs stamps the tree with a hash of its
+    # inputs and skips the work when the stamp still matches, so a restored
+    # cache goes straight to the transpile.
+    - uses: actions/cache@v4
+      with:
+        path: |
+          build/downport
+          build/downport.stamp
+        key: downport-${{ hashFiles('tools/fetch-deps.mjs', 'tools/build-framework.mjs', 'src/abap/**', 'package-lock.json') }}
+
+    - run: npm run build
+      shell: bash
+
+    - run: node tools/check-size.mjs
+      shell: bash
+
+    - name: Install the browser the tests run in
+      run: npx playwright install --with-deps chromium
+      shell: bash
