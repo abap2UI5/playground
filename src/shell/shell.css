@@ -394,4 +394,9 @@ iframe {
   .pane-right { border-left: none; }
   .pane[hidden] { display: none; }
   .splitter { display: none; }
+
+  /* ?view=app has one pane and no tab strip, so it needs no room for one -
+     2.1rem out of a 320px demo in somebody's documentation page. */
+  .is-app-only .panes { padding-top: 0; }
+  .is-app-only .pane { inset: 0; }
 }

@@ -93,7 +93,7 @@ async function boot() {
   startEmbedMessages();
 
   setUpSplitter();
-  const tabs = setUpTabs();
+  const tabs = setUpTabs(appOnly);
 
   const { files, from } = await startingFiles();
   createEditor(document.getElementById("editor"), files, { onChange: remember });

@@ -57,7 +57,17 @@ export function setUpSplitter() {
 // On a narrow screen the two panes share the space instead of splitting it.
 // The tab strip is invisible at desk width, so this is wired unconditionally
 // and simply never used there.
-export function setUpTabs() {
+//
+// `appOnly` is not an optimisation. ?view=app has ONE pane, and the narrow
+// layout's job is to bring one of two to the front - it brought the editor,
+// which app-only mode has hidden in CSS, and hid the app behind it. The result
+// was an empty box: no editor because the mode says so, no app because a tab
+// nobody can see says so. And 820px is not an edge case here, it is the normal
+// case - the reading column of a documentation page is narrower than that, so
+// every embedded demo on every page was blank.
+export function setUpTabs(appOnly = false) {
+  if (appOnly) return { show: () => {} };
+
   const tabs = [...document.querySelectorAll(".tab")];
   const wide = window.matchMedia("(min-width: 821px)");
 

@@ -24,6 +24,16 @@
 //                which then grows to fit what the app rendered).
 //   data-label   the text on the button (default "Run this example").
 //   data-origin  where the playground is served from, if not this script's own.
+//
+// Two functions on `window.abap2ui5Embed`:
+//
+//   setUp(root)  pick up the demos in `root` (or the whole document). Call it
+//                after each navigation in a framework that swaps pages without
+//                reloading - Docusaurus, VitePress and friends.
+//   url(opts)    the playground URL for `{ src, code, view, origin }`, for a
+//                page that wants its own "open this in the playground" link
+//                rather than a frame. It is what mounting uses, so a link built
+//                with it cannot disagree with what the frame shows.
 (function () {
   "use strict";
 
@@ -34,18 +44,44 @@
   // publishes its own copy gets its own playground without editing anything.
   const defaultOrigin = script ? new URL("../", script.src).href : "/";
 
-  async function playgroundUrl(el) {
-    const base = el.dataset.origin || defaultOrigin;
-    const url = new URL(base, window.location.href);
+  // The URL of a playground showing this. Everything the loader does is in a
+  // URL, so this is also the whole of it: `window.abap2ui5Embed.url({ code })`
+  // is what a page links when it wants "open this in the playground" next to
+  // its own Run button, and it cannot get the fragment format wrong by writing
+  // it itself.
+  async function playgroundUrl({ src, code, view, origin }) {
+    const url = new URL(origin || defaultOrigin, window.location.href);
     url.searchParams.set("embed", "1");
-    if (el.dataset.view === "app") url.searchParams.set("view", "app");
-    for (const src of (el.dataset.src || "").split(/\s+/).filter(Boolean)) {
-      url.searchParams.append("src", new URL(src, window.location.href).href);
+    if (view === "app") url.searchParams.set("view", "app");
+    for (const one of (src || "").split(/\s+/).filter(Boolean)) {
+      url.searchParams.append("src", new URL(one, window.location.href).href);
     }
     // Inline code travels in the fragment, in exactly the format the
     // playground's own Share button writes, so nothing has to be hosted for it.
-    if (el.dataset.code) url.hash = await encodeCode(el.dataset.code);
+    if (code) url.hash = await encodeCode(code);
     return url.href;
+  }
+
+  const urlFor = (el) => playgroundUrl({
+    src: el.dataset.src,
+    code: el.dataset.code,
+    view: el.dataset.view,
+    origin: el.dataset.origin,
+  });
+
+  // What the ABAP has to be called. abapGit names a file after the object in
+  // it, abaplint reads the object's name back out of that file name, and the
+  // playground refuses the pair when they disagree - "zcl_playground.clas.abap
+  // has to declare ZCL_PLAYGROUND, not Z2UI5_CL_SAMPLE_TAB". So the name is
+  // read from the source rather than fixed here: `data-code` is for the ABAP a
+  // page already prints, and a documentation page prints a class under the name
+  // its reader is meant to create, not under ours. The fallback only ever
+  // applies to a fence that declares nothing, which the playground reports for
+  // itself.
+  function fileNameFor(code) {
+    const declared = /^\s*(?:CLASS|INTERFACE)\s+([a-zA-Z_]\w*)\s+(?:DEFINITION|PUBLIC)/im.exec(code);
+    const kind = /^\s*INTERFACE\s/im.test(code) && !/^\s*CLASS\s/im.test(code) ? "intf" : "clas";
+    return `${(declared?.[1] || "zcl_playground").toLowerCase()}.${kind}.abap`;
   }
 
   // The fragment format, which the playground defines: one version character,
@@ -54,7 +90,7 @@
   // it cannot read as somebody else's link and quietly opens its own sample,
   // so a documentation page would silently show the wrong code.
   async function encodeCode(code) {
-    const files = [{ name: "zcl_playground.clas.abap", source: code }];
+    const files = [{ name: fileNameFor(code), source: code }];
     const payload = new TextEncoder().encode(JSON.stringify(files));
     const deflated = new Uint8Array(
       await new Response(
@@ -74,7 +110,7 @@
     const height = Number(el.dataset.height) || (appOnly ? 320 : 520);
 
     const frame = document.createElement("iframe");
-    frame.src = await playgroundUrl(el);
+    frame.src = await urlFor(el);
     frame.title = el.dataset.label || "abap2UI5 example";
     frame.style.cssText = `width:100%;height:${height}px;border:0;display:block;transition:height .2s`;
     frame.setAttribute("allow", "clipboard-write");
@@ -120,5 +156,5 @@
 
   // Documentation frameworks that swap pages without reloading (Docusaurus,
   // VitePress and friends) need the new page's demos picked up.
-  window.abap2ui5Embed = { setUp };
+  window.abap2ui5Embed = { setUp, url: playgroundUrl };
 })();

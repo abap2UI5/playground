@@ -847,3 +847,58 @@ but it can no longer hide a wiring mistake.
 **Two marker sources need two marker owners.** Monaco replaces all markers of
 one owner at a time, so abaplint and the linter sharing an owner would have
 whichever ran second erase the other's underlines.
+
+### Findings from putting it in a documentation site
+
+The embedding feature had tests, a worked example and a README section, and it
+had never been used by another site. abap2UI5/docs putting a Run button under
+its ABAP examples was the first time, and it found **four defects, three of them
+invisible** — the app was in the DOM, correct, and not on the screen, under a
+status bar that said `running`.
+
+**A demo is narrower than a desk.** Below 820px the two panes stop sitting side
+by side and become tabs, and the tab machinery brings one of them to the front —
+it brought the editor, which `?view=app` has hidden in CSS, and hid the app
+behind it. So an app-only demo was an empty box. And 820px is not an edge case
+for this feature, it is the normal case: the reading column of a documentation
+page is narrower than that, so **every embedded demo on every page** would have
+been blank. The whole of `?view=app` had only ever been tested at desk width.
+
+**UI5 refuses to be framed by a stranger.** `frameOptions="trusted"` means "only
+in a frame whose TOP window is the same origin". abap2UI5 ships it and is right
+to — an app on a real system holds a session — but the app here is always in a
+frame, and one whose top window is somebody else's manual. UI5 asks that window
+for permission over postMessage, waits ten seconds for an answer no
+documentation site knows to give, and then hides what it rendered. The
+playground's own copy of the frontend now sets `allow`; the build rewrites the
+attribute and fails if it is no longer there to rewrite. Note that this cannot
+be done from the URL — UI5 ignores `sap-ui-frameOptions` as a query parameter,
+which is the whole point of the option.
+
+**`data-code` only ever worked for a class called `zcl_playground`.** The file
+the code is put into was named that literally, and the playground refuses a file
+whose name and class disagree — correctly, that is abapGit's rule. But a manual
+prints its example under the name its reader is meant to create, so every
+documentation page but one would have been refused before it ran. The name is
+read from the source now. This one at least failed loudly.
+
+**`definitions_top` was answering the wrong question.** The rule list is
+explicitly "the ones that answer *would this work*", and this one does not: it
+is a downport rule, on in abap2UI5's own configuration because the framework is
+downported to 702 before it is transpiled. Nothing in the playground downports
+what is in the editor. It was rejecting a `FIELD-SYMBOLS` after a `CREATE DATA` —
+ABAP that compiles on every system this playground is about — and an abaplint
+error stops Run, so the reader was told to fix code that had nothing wrong with
+it. The rule list had been copied from a configuration written for a different
+job, which is how one rule out of nine came to be about style.
+
+**What the exercise measured.** All 61 complete app classes in the documentation
+were run in a real playground, which is the only thing that can answer whether
+an example runs. 38 started. Of the 23 that did not, 20 were the documentation
+depending on a system — a business table, a CDS entity, an add-on, an
+on-premise class — and **three were defects in the documentation that every
+other check had missed**: two class names longer than the 30 characters ABAP
+allows (invisible to its `check-examples`, which renames every example before
+compiling it), and a UI5 binding string quoted with ABAP backticks, which UI5
+answers with a syntax error and a blank page. A documentation example is not
+checked until something has run it.
