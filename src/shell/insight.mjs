@@ -5,7 +5,14 @@
 // "where is the method I want". Both are derived, never stored: they are
 // rebuilt from the editor on every change, so there is no second copy of the
 // truth to go stale.
-import { currentFile, focusProblem, getFiles, refresh } from "../editor/editor.mjs";
+import {
+  applyFixes,
+  currentFile,
+  fixableNow,
+  focusProblem,
+  getFiles,
+  refresh,
+} from "../editor/editor.mjs";
 import {
   abaplintDefaults,
   abaplintSettings,
@@ -14,6 +21,7 @@ import {
   documentSymbols,
 } from "../editor/registry.mjs";
 import { applyLinterSettings, linterDefaults, linterSettings } from "../editor/abap2ui5-lint.mjs";
+import { setStatus } from "./ui.mjs";
 
 let panel;
 let body;
@@ -140,11 +148,19 @@ function render() {
 const SEVERITY_LABEL = { 1: "error", 2: "warning", 3: "info", 4: "hint" };
 
 function problemList() {
+  const wrap = document.createElement("div");
+  wrap.className = "insight-problems";
+
+  const fixable = fixableNow();
+  if (fixable > 0) wrap.append(fixBar(fixable));
+
   const list = document.createElement("ul");
   list.className = "insight-list";
+  wrap.append(list);
 
   if (lastProblems.length === 0) {
-    return empty("Nothing to report.");
+    if (fixable === 0) return empty("Nothing to report.");
+    return wrap;
   }
 
   // Errors first, then by file and line: the order somebody would work through
@@ -184,7 +200,42 @@ function problemList() {
     item.append(where, what, who);
     list.append(item);
   }
-  return list;
+  return wrap;
+}
+
+// The autofix offer. Shown only when something is actually repairable, and it
+// says how many - a button that turns out to do nothing is worse than no
+// button, and "Fix" alone does not tell anybody whether it is worth pressing.
+function fixBar(count) {
+  const bar = document.createElement("div");
+  bar.className = "insight-fixbar";
+
+  const said = document.createElement("span");
+  said.textContent = `${count} of these can be fixed automatically`;
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "primary";
+  button.textContent = "Fix them";
+  button.addEventListener("click", () => {
+    button.disabled = true;
+    // Both checkers rewrite the source, so this is somebody's code being
+    // changed under them. It goes in as one edit per file, which is what makes
+    // Ctrl+Z take the whole thing back rather than unpicking it fix by fix.
+    const fixed = applyFixes();
+    updateInsight(refresh());
+    // The outcome goes to the status line, not into this bar: the line above
+    // was written by a render that the updateInsight( ) on the line before just
+    // replaced, so anything set here would be wiped by its own success.
+    setStatus(
+      fixed === 0
+        ? "nothing could be fixed after all"
+        : `fixed ${fixed} problem${fixed === 1 ? "" : "s"} - Ctrl+Z takes it back`,
+    );
+  });
+
+  bar.append(said, button);
+  return bar;
 }
 
 // The classes, interfaces, methods and attributes of the file on screen, read

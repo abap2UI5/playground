@@ -883,6 +883,7 @@ try/catch. A playground whose startup failed is exactly when somebody wants the
 link to the issue tracker, and a credits dialog that only works when everything
 else already works is a credits dialog that is missing when it matters.
 
+
 ### Findings from putting it in a documentation site
 
 The embedding feature had tests, a worked example and a README section, and it
@@ -937,3 +938,49 @@ allows (invisible to its `check-examples`, which renames every example before
 compiling it), and a UI5 binding string quoted with ABAP backticks, which UI5
 answers with a syntax error and a blank page. A documentation example is not
 checked until something has run it.
+### Findings from autofix and the link back to GitHub
+
+**Two fix APIs, two shapes.** abaplint has no single "fix everything" call: each
+`Issue` answers `getDefaultFix( )` with an edit, `Edits.applyEditList(reg, edits)`
+applies them to the registry, and it has to be run in a loop with a `parse( )`
+between passes because one fix uncovers the next. The abap2UI5 linter is the
+other way round - `applyFixes(source, findings)` is pure, takes a string and
+returns one, and reports `deferred` for fixes that overlapped one already
+applied. Both are bounded here: a rule whose fix does not settle would
+otherwise spin.
+
+**After applying, `held` has to be told.** The registry map that remembers what
+the editor last had is what makes `updateFiles( )` cheap - but after a fix the
+registry holds text the editor does not. Left alone, the next `updateFiles( )`
+would see the editor's old text as a change and write it straight back over the
+fix.
+
+**An automatic rewrite has to be one Ctrl+Z.** The fixes are written back
+through `pushEditOperations` with a full-range replace - one edit per file -
+rather than `setValue`. A half-undone autofix is a state nobody asked for.
+
+**The panel is built before the registry exists.** Adding a fixable-count to the
+Problems view broke the whole page: `setUpInsight( )` renders at boot, and the
+count asked abaplint something while the corpus was still parsing. The symptom
+was the page sitting at "starting…" with every control disabled - the same
+symptom as the duplicate-file-name bug in phase 8, and for the same underlying
+reason: a throw on the boot path before anything catches it. Anything the panel
+asks of the registry has to answer harmlessly before `connectRegistry( )`.
+
+**And the same trap as the `?src=` message, caught this time before it
+shipped.** The first version of the fix bar wrote its outcome into its own
+label, then called `updateInsight( )` - which rerenders the bar and throws the
+label away. The outcome goes to the status line instead, which survives the
+render that its own success triggers.
+
+**Switching file tabs was changing nothing.** The tab strip called `openFile( )`
+and rerendered itself, and that was all - so the outline below the editor and
+the link to where the file came from both went on describing the previous file.
+Opening a file is not a change to the file set, which is why it never reached
+`onChanged`; it now has a hook of its own.
+
+**A test that was too strict about a fix it did not read.** The autofix test
+asserted that `sequential_blank` removes the blank lines. It trims the run to
+three rather than removing it, so the assertion failed on a fix that had worked
+perfectly. What the test can honestly claim is that the source changed in the
+direction the rule asks for.

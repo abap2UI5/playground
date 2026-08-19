@@ -179,6 +179,54 @@ export function diagnostics(fileName) {
   return new abaplint.LanguageServer(registry).diagnostics({ uri: uriFor(fileName) });
 }
 
+// Autofix, the way `abaplint --fix` does it: ask every issue for its fix, apply
+// them together, and go round again, because one fix can uncover the next. The
+// registry is the thing edited, so the caller reads the new sources back out of
+// it - which is also why this cannot skip the parse between passes.
+//
+// Bounded: a rule whose fix does not settle would otherwise spin here. Ten
+// passes is far past what a single class needs (the framework downport, over
+// nine hundred files, takes 106) and stops a bug from becoming a hang.
+export function applyAbaplintFixes(files) {
+  updateFiles(files);
+  let touched = 0;
+  for (let pass = 0; pass < 10; pass++) {
+    const edits = registry
+      .findIssues()
+      .filter((i) => held.has(nameOf(i.getFilename())))
+      .map((i) => i.getDefaultFix())
+      .filter(Boolean);
+    if (edits.length === 0) break;
+    abaplint.Edits.applyEditList(registry, edits);
+    registry.parse();
+    touched += edits.length;
+  }
+  if (touched === 0) return { fixed: 0, files: [] };
+
+  const out = [];
+  for (const file of files) {
+    const source = registry.getFileByName(uriFor(file.name))?.getRaw();
+    if (source !== undefined && source !== file.source) out.push({ name: file.name, source });
+    // The registry now holds the fixed text; `held` has to agree, or the next
+    // updateFiles( ) would see the editor's old text as a change and write it
+    // straight back over the fix.
+    if (source !== undefined) held.set(file.name, source);
+  }
+  return { fixed: touched, files: out };
+}
+
+// How many of the issues in the user's files carry a fix. Asked before the
+// button is offered: a Fix button that does nothing when pressed is worse than
+// no button at all.
+export function abaplintFixable() {
+  return registry
+    .findIssues()
+    .filter((i) => held.has(nameOf(i.getFilename())) && i.getDefaultFix() !== undefined).length;
+}
+
+// abaplint reports a file by its uri; the playground knows it by its name.
+const nameOf = (uri) => String(uri).replace(/^file:\/\/\//, "");
+
 // What one file declares, as a tree: the class, its methods, its attributes.
 // Answered by the same registry that answers diagnostics, so the outline can
 // never disagree with the underlines beside it.

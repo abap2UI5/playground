@@ -36,6 +36,37 @@ function nameFrom(url) {
   return last.toLowerCase();
 }
 
+// Where each linked file came from, so the page can offer the way back to it.
+// Filled by fetchLinkedFiles and read by the bar; empty for code that arrived
+// any other way, which is what keeps the button from appearing over a draft
+// nobody linked.
+const origins = new Map();
+
+export const originOf = (fileName) => origins.get(fileName);
+
+// The page a human would want, from the URL a machine was given. GitHub serves
+// raw content from a different host than the one that shows it in context, and
+// context is the whole point of the button: the repository, the neighbouring
+// files, the history.
+export function humanUrl(raw) {
+  try {
+    const url = new URL(raw);
+    if (url.hostname === "raw.githubusercontent.com") {
+      const [owner, repo, ref, ...path] = url.pathname.replace(/^\//, "").split("/");
+      if (owner && repo && ref && path.length > 0) {
+        return `https://github.com/${owner}/${repo}/blob/${ref}/${path.join("/")}`;
+      }
+    }
+    if (url.hostname === "gist.githubusercontent.com") {
+      const [owner, id] = url.pathname.replace(/^\//, "").split("/");
+      if (owner && id) return `https://gist.github.com/${owner}/${id}`;
+    }
+    return raw;
+  } catch {
+    return raw;
+  }
+}
+
 export async function fetchLinkedFiles(params) {
   // Checked before anything is fetched: a link that is going to be refused for
   // its second file should not have cost a request for its first. The checks
@@ -69,6 +100,7 @@ export async function fetchLinkedFiles(params) {
       if (!response.ok) {
         throw new Error(`${url.href} answered ${response.status}.`);
       }
+      origins.set(name, url.href);
       return { name, source: await response.text() };
     }),
   );

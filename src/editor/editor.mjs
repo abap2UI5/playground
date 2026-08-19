@@ -22,10 +22,17 @@ import "monaco-editor/editor/contrib/comment/browser/comment.js";
 import "monaco-editor/editor/contrib/contextmenu/browser/contextmenu.js";
 import "monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching.js";
 import { registerABAP, updateMarkers } from "@abaplint/monaco";
-import { findingsFor } from "./abap2ui5-lint.mjs";
+import { applyLinterFixes, findingsFor, linterFixable } from "./abap2ui5-lint.mjs";
 
 import { uriFor } from "./files.mjs";
-import { diagnostics, getRegistry, knownObjectNames, updateFiles } from "./registry.mjs";
+import {
+  abaplintFixable,
+  applyAbaplintFixes,
+  diagnostics,
+  getRegistry,
+  knownObjectNames,
+  updateFiles,
+} from "./registry.mjs";
 
 // @abaplint/monaco reaches for a global `monaco`, the way a script tag would
 // have provided it. It is a library written for a page that loads Monaco from a
@@ -281,4 +288,64 @@ function abapNameCompletion() {
       return { suggestions };
     },
   };
+}
+
+// ---------------------------------------------------------------- autofix
+
+// How many problems either checker could repair on its own, so the button can
+// say what it will do - and stay away when it would do nothing.
+//
+// Answers zero before the registry exists. The panel is built while the corpus
+// is still parsing, and asking abaplint anything at that point reaches a
+// registry that is not there yet.
+export function fixableNow() {
+  if (!connected) return 0;
+  refresh();
+  return abaplintFixable() + getFiles().reduce((n, f) => n + linterFixable(f.source), 0);
+}
+
+// Applies both checkers' fixes to everything open.
+//
+// Written back through pushEditOperations rather than setValue, because an
+// automatic rewrite of somebody's source has to be one Ctrl+Z away. One edit
+// per file, so undo takes the whole thing back rather than unpicking it fix by
+// fix - a half-undone autofix is a state nobody asked for.
+//
+// abaplint first: its fixes are structural (a missing ENDMETHOD, a statement in
+// the wrong place) and the abap2UI5 linter reads the builder chain, which is
+// easier to read correctly once the ABAP around it parses.
+export function applyFixes() {
+  if (!connected) return 0;
+  let fixed = 0;
+
+  const afterAbaplint = applyAbaplintFixes(getFiles());
+  fixed += afterAbaplint.fixed;
+  for (const file of afterAbaplint.files) writeSource(file.name, file.source);
+
+  // Repeated, because one fix can uncover the next - the same reason abaplint
+  // loops - and bounded for the same reason.
+  for (let pass = 0; pass < 5; pass++) {
+    let changed = 0;
+    for (const file of getFiles()) {
+      const result = applyLinterFixes(file.source);
+      if (result.fixed === 0) continue;
+      writeSource(file.name, result.source);
+      changed += result.fixed;
+    }
+    if (changed === 0) break;
+    fixed += changed;
+  }
+
+  refresh();
+  return fixed;
+}
+
+function writeSource(name, source) {
+  const model = modelFor(name);
+  if (!model || model.getValue() === source) return;
+  model.pushEditOperations(
+    null,
+    [{ range: model.getFullModelRange(), text: source }],
+    () => null,
+  );
 }

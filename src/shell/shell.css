@@ -393,6 +393,25 @@ iframe {
    them - it is usually a few hundred pixels tall and the editor needs them. */
 .is-embedded .insight { display: none; }
 
+.insight-problems { display: flex; flex-direction: column; height: 100%; }
+
+.insight-fixbar {
+  display: flex; align-items: center; gap: .6rem;
+  padding: .35rem .6rem; font-size: 12px;
+  border-bottom: 1px solid var(--line); background: var(--bg-sunken);
+}
+.insight-fixbar span { color: var(--fg-dim); }
+.insight-fixbar button { font-size: 12px; padding: .15rem .6rem; }
+
+/* The way back to where linked code lives. A link, not a button: it opens a
+   page, and middle-click and "copy link" should work the way they do. */
+.source-link {
+  color: var(--accent); font-size: 12px; text-decoration: none;
+  border: 1px solid var(--line); border-radius: 6px; padding: .2rem .55rem;
+}
+.source-link:hover { border-color: var(--accent); }
+.source-link[hidden] { display: none; }
+
 /* ---------------------------------------------------------------- output */
 
 .output {
