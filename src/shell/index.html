@@ -132,22 +132,6 @@
   <section class="pane pane-left" id="pane-left">
     <div class="files" id="files" hidden></div>
     <div id="editor" class="editor"></div>
-    <div class="insight" id="insight">
-      <div class="insight-grip" id="insight-grip" role="separator" aria-orientation="horizontal"
-           tabindex="0" aria-label="Resize the panel"></div>
-      <div class="insight-tabs" role="tablist">
-        <button type="button" data-insight="problems" class="insight-tab is-active" role="tab">
-          Problems <span id="problem-count" class="insight-badge"></span>
-        </button>
-        <button type="button" data-insight="outline" class="insight-tab" role="tab">Outline</button>
-        <span class="insight-gap"></span>
-        <button type="button" data-insight="abaplint" class="insight-tab" role="tab">abaplint</button>
-        <button type="button" data-insight="abap2ui5" class="insight-tab" role="tab">abap2UI5 lint</button>
-        <button type="button" id="insight-toggle" class="insight-tab insight-toggle"
-                title="Collapse the panel" aria-label="Collapse the panel">–</button>
-      </div>
-      <div class="insight-body" id="insight-body"></div>
-    </div>
   </section>
 
   <div class="splitter" id="splitter" role="separator" aria-orientation="vertical" tabindex="0"
@@ -160,12 +144,24 @@
   </section>
 </main>
 
-<div id="output" class="output" hidden>
-  <div class="output-head">
-    <span id="output-title">Output</span>
-    <button id="output-close" class="ghost" aria-label="Close the output panel">✕</button>
+<div class="insight" id="insight">
+  <div class="insight-grip" id="insight-grip" role="separator" aria-orientation="horizontal"
+       tabindex="0" aria-label="Resize the panel"></div>
+  <div class="insight-tabs" role="tablist">
+    <button type="button" data-insight="problems" class="insight-tab is-active" role="tab">
+      Problems <span id="problem-count" class="insight-badge"></span>
+    </button>
+    <button type="button" data-insight="outline" class="insight-tab" role="tab">Outline</button>
+    <button type="button" data-insight="log" class="insight-tab" role="tab">
+      Log <span id="log-dot" class="insight-badge"></span>
+    </button>
+    <span class="insight-gap"></span>
+    <button type="button" data-insight="abaplint" class="insight-tab" role="tab">abaplint</button>
+    <button type="button" data-insight="abap2ui5" class="insight-tab" role="tab">abap2UI5 lint</button>
+    <button type="button" id="insight-toggle" class="insight-tab insight-toggle"
+            title="Collapse the panel" aria-label="Collapse the panel">–</button>
   </div>
-  <pre id="output-body"></pre>
+  <div class="insight-body" id="insight-body"></div>
 </div>
 
 <script type="module" src="assets/shell.mjs"></script>

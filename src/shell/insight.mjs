@@ -21,7 +21,7 @@ import {
   documentSymbols,
 } from "../editor/registry.mjs";
 import { applyLinterSettings, linterDefaults, linterSettings } from "../editor/abap2ui5-lint.mjs";
-import { setStatus } from "./ui.mjs";
+import { currentLog, hideOutput, onLogChange, setStatus } from "./ui.mjs";
 
 let panel;
 let body;
@@ -54,6 +54,20 @@ export function setUpInsight() {
       render();
     });
   }
+
+  // Anything written to the log opens the panel on it. This is the one thing
+  // that may take the screen without being asked: it is written when a run
+  // failed or the page could not start, and a message nobody is shown is the
+  // same as no message. That includes an embedded playground, where the panel
+  // is otherwise out of the way - an error is not tooling.
+  onLogChange((entry) => {
+    paintLogDot(entry);
+    if (entry.body !== "") {
+      panel.classList.remove("is-collapsed", "is-tucked");
+      view = "log";
+    }
+    render();
+  });
 
   // A click in either list goes to the line it names.
   body.addEventListener("click", (e) => {
@@ -100,10 +114,10 @@ function setUpResize() {
   if (Number.isFinite(stored) && stored >= MIN_HEIGHT) panel.style.height = `${stored}px`;
 
   const apply = (px) => {
-    // Bounded against the pane rather than the window: the editor above has to
-    // keep enough room to be an editor, or the drag hands the user a panel
-    // with nothing left to look at.
-    const room = panel.parentElement.getBoundingClientRect().height;
+    // Bounded against the page: the editor and the app above have to keep
+    // enough room to be themselves, or the drag hands the user a panel with
+    // nothing left to look at.
+    const room = document.body.getBoundingClientRect().height;
     const height = Math.round(Math.min(Math.max(px, MIN_HEIGHT), room - 120));
     panel.style.height = `${height}px`;
     return height;
@@ -140,6 +154,15 @@ function setUpResize() {
   });
 }
 
+// Brings one tab to the front. Used where the page has something specific for
+// the reader to look at and knows which view holds it.
+export function showInsight(which) {
+  if (!panel || !VIEWS[which]) return;
+  panel.classList.remove("is-collapsed", "is-tucked");
+  view = which;
+  render();
+}
+
 // Called whenever the editor changed. `problems` is what refresh() returned, so
 // the panel never runs a checker itself - one analysis, two readers.
 export function updateInsight(problems) {
@@ -148,6 +171,16 @@ export function updateInsight(problems) {
   // The config views hold half-typed text somebody is in the middle of - a
   // rerender under their hands would throw it away on every keystroke.
   if (view === "problems" || view === "outline") render();
+}
+
+// A dot on the Log tab while there is something unread in it, so switching
+// away does not hide that something went wrong.
+function paintLogDot(entry = currentLog()) {
+  const dot = document.getElementById("log-dot");
+  if (!dot) return;
+  const has = entry.body !== "";
+  dot.textContent = has ? "!" : "";
+  dot.className = `insight-badge${has ? " is-error" : ""}`;
 }
 
 function paintCount() {
@@ -162,6 +195,7 @@ function paintCount() {
 const VIEWS = {
   problems: problemList,
   outline: outlineList,
+  log: logView,
   abaplint: abaplintConfig,
   abap2ui5: linterConfig,
 };
@@ -473,4 +507,38 @@ function appended(...nodes) {
   const box = document.createElement("div");
   box.append(...nodes);
   return box;
+}
+
+// ------------------------------------------------------------------- log
+
+function logView() {
+  const entry = currentLog();
+  if (entry.body === "") {
+    return empty("Nothing has gone wrong yet. Startup notes, ABAP errors and dumps land here.");
+  }
+
+  const wrap = document.createElement("div");
+  wrap.className = "log";
+
+  const head = document.createElement("div");
+  head.className = "log-head";
+
+  const title = document.createElement("span");
+  title.className = "log-title";
+  title.textContent = entry.title;
+
+  const clear = document.createElement("button");
+  clear.type = "button";
+  clear.className = "ghost";
+  clear.textContent = "Clear";
+  clear.addEventListener("click", () => hideOutput());
+
+  head.append(title, clear);
+
+  const body = document.createElement("pre");
+  body.className = "log-body";
+  body.textContent = entry.body;
+
+  wrap.append(head, body);
+  return wrap;
 }

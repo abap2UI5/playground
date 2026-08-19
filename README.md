@@ -42,7 +42,7 @@ pipeline and moves the last step into the browser.
 - **Editing.** Monaco — the editor from VS Code — with abaplint behind it:
   diagnostics against the actual framework, hover, go to definition, rename,
   references, quick fixes and the pretty printer. Under the editor, a resizable
-  panel with four tabs: every problem, an outline of the class, and the
+  panel with five tabs: every problem, an outline of the class, the log, and the
   configuration of each checker — editable, so "why is it not warning here?"
   has an answer you can try rather than only read.
 - **A second opinion.** The [abap2UI5 linter](https://www.npmjs.com/package/@abap2ui5/linter)

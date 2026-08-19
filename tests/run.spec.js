@@ -104,8 +104,11 @@ test("a run is refused while the ABAP has an error, and the line is named", asyn
   await page.locator("#run").click();
 
   await expect(page.locator("#status")).toContainText("error", { timeout: 30000 });
-  await expect(page.locator("#output")).toBeVisible();
-  expect(await outputText(page)).toMatch(/line \d+:/);
+  // The errors live in the panel's problems list, one row each - not copied
+  // into the log, which would be the same list twice in one panel.
+  await expect(page.locator('[data-insight="problems"]')).toHaveClass(/is-active/);
+  await expect(page.locator(".insight-row.is-error").first()).toBeVisible();
+  await expect(page.locator(".insight-row.is-error").first()).toContainText("line");
 
   // The previous app is still standing - a failed compile does not blank the
   // screen you were looking at.
@@ -118,7 +121,7 @@ test("a class under the wrong name is explained rather than silently ignored", a
   await setSource(page, app("Renamed", "out = `x`.").replace(/zcl_playground/g, "zcl_something_else"));
   await page.locator("#run").click();
 
-  await expect(page.locator("#output")).toBeVisible({ timeout: 30000 });
+  await expect(page.locator(".log-body")).toBeVisible({ timeout: 30000 });
   expect(await outputText(page)).toContain("zcl_playground.clas.abap");
   expect(await outputText(page)).toContain("ZCL_SOMETHING_ELSE");
 });
@@ -148,17 +151,17 @@ test("a second run replaces the class rather than keeping the first version", as
   await expect(page.frameLocator("#app").getByText("Second")).toBeVisible();
 });
 
-test("the output panel does not outlive the error it reported", async ({ page }) => {
+test("the reported errors do not outlive the run that reported them", async ({ page }) => {
   await open(page);
 
   await setSource(page, app("Broken", "out = = `no`."));
   await page.locator("#run").click();
-  await expect(page.locator("#output")).toBeVisible();
+  await expect(page.locator(".insight-row.is-error").first()).toBeVisible();
 
   await setSource(page, app("Fixed", "out = `fixed`."));
   await page.locator("#run").click();
   await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
-  await expect(page.locator("#output")).toBeHidden();
+  await expect(page.locator(".insight-row.is-error")).toHaveCount(0);
   await expect(control(page, "txtOut")).toContainText("fixed");
 });
 

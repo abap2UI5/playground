@@ -1,5 +1,5 @@
 // The two bits of chrome every other module needs: the status line in the bar,
-// and the output panel that carries anything longer than a line.
+// and the longer text that goes under it.
 import { announceStatus } from "./embed.mjs";
 
 const statusEl = () => document.getElementById("status");
@@ -14,16 +14,28 @@ export function setStatus(text, isError = false) {
   announceStatus(text, isError);
 }
 
+// What the page has to say at length - a startup failure, a dump, the errors
+// that stopped a Run. It lands in the panel's Log tab rather than in a window
+// of its own: one place at the bottom of the page, not two.
+//
+// Kept here rather than in insight.mjs because everything that reports already
+// calls these two, and the panel is a detail of where the text ends up.
+let log = { title: "", body: "" };
+const listeners = new Set();
+
+export const currentLog = () => ({ ...log });
+export const onLogChange = (fn) => listeners.add(fn);
+const announce = () => {
+  for (const fn of listeners) fn(currentLog());
+};
+
 export function showOutput(title, body) {
-  document.getElementById("output-title").textContent = title;
-  document.getElementById("output-body").textContent = body;
-  document.getElementById("output").hidden = false;
+  log = { title, body };
+  announce();
 }
 
 export function hideOutput() {
-  document.getElementById("output").hidden = true;
+  if (log.title === "" && log.body === "") return;
+  log = { title: "", body: "" };
+  announce();
 }
-
-document.addEventListener("click", (e) => {
-  if (e.target.id === "output-close") hideOutput();
-});

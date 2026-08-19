@@ -27,8 +27,8 @@ test("several ?src= parameters open several files, the first one being the app",
 
 test("two linked files under the same name are refused rather than silently merged", async ({ page }) => {
   await page.goto("/?src=examples/zcl_linked_example.clas.abap&src=examples/zcl_linked_example.clas.abap");
-  await expect(page.locator("#output")).toBeVisible({ timeout: 120000 });
-  await expect(page.locator("#output-body")).toContainText("both called");
+  await expect(page.locator(".log-body")).toBeVisible({ timeout: 120000 });
+  await expect(page.locator(".log-body")).toContainText("both called");
 });
 
 test("a first file that is a class but not an app fails where a real system would", async ({ page }) => {
@@ -96,9 +96,9 @@ test("a link to somewhere the playground will not fetch from says so", async ({ 
   // Visible, not merely present: the panel is cleared at the start of every
   // run, so a message written before the first run would be gone by the time
   // anybody could read it.
-  await expect(page.locator("#output")).toBeVisible();
-  await expect(page.locator("#output-body")).toContainText("example.invalid");
-  await expect(page.locator("#output-body")).toContainText("raw.githubusercontent.com");
+  await expect(page.locator(".log-body")).toBeVisible();
+  await expect(page.locator(".log-body")).toContainText("example.invalid");
+  await expect(page.locator(".log-body")).toContainText("raw.githubusercontent.com");
 
   // And it falls back to the sample rather than showing nothing.
   expect(await getSource(page)).toContain("CLASS zcl_playground DEFINITION");
@@ -106,8 +106,8 @@ test("a link to somewhere the playground will not fetch from says so", async ({ 
 
 test("a link to a file that is not an ABAP object says so", async ({ page }) => {
   await page.goto("/?src=index.html");
-  await expect(page.locator("#output")).toBeVisible({ timeout: 120000 });
-  await expect(page.locator("#output-body")).toContainText("not an ABAP object file");
+  await expect(page.locator(".log-body")).toBeVisible({ timeout: 120000 });
+  await expect(page.locator(".log-body")).toContainText("not an ABAP object file");
 });
 
 test("the embedded playground drops the chrome and keeps the code", async ({ page }) => {

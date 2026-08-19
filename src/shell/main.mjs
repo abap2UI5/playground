@@ -29,7 +29,7 @@ import {
 } from "./deep-link.mjs";
 import { DEFAULT_FILES, SAMPLES, sampleById } from "../editor/samples.mjs";
 import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
-import { setUpInsight, updateInsight } from "./insight.mjs";
+import { setUpInsight, showInsight, updateInsight } from "./insight.mjs";
 import { setUpSplitter, setUpTabs } from "./layout.mjs";
 import { announceAppHeight, announceReady, announceStatus, startEmbedMessages } from "./embed.mjs";
 import { copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
@@ -110,6 +110,10 @@ async function startingFiles() {
 async function boot() {
   if (embedded) document.body.classList.add("is-embedded");
   if (appOnly) document.body.classList.add("is-app-only");
+  // Where the playground is furniture in somebody else's page, the panel stays
+  // out of the way - until something is written to the log, which is the one
+  // thing that may take the screen unasked.
+  if (embedded || appOnly) document.getElementById("insight").classList.add("is-tucked");
   startEmbedMessages();
 
   setUpSplitter();
@@ -351,12 +355,11 @@ export async function run() {
     const errors = problems.filter((i) => i.severity === 1 && i.source === "abaplint");
     if (errors.length > 0) {
       setStatus(`${errors.length} error${errors.length > 1 ? "s" : ""} in the ABAP - fix them and run again`, true);
-      showOutput(
-        "ABAP",
-        errors
-          .map((i) => `${files.length > 1 ? `${i.file} ` : ""}line ${i.range.start.line + 1}: ${i.message}`)
-          .join("\n"),
-      );
+      // The errors are already in the panel, one clickable row each, saying
+      // which checker spoke. Writing them into the Log as well would put the
+      // same list twice into one panel and show the poorer copy - so this
+      // brings the reader to the list instead of retyping it.
+      showInsight("problems");
       focusProblem(errors[0].file, errors[0].range.start.line + 1, errors[0].range.start.character + 1);
       return;
     }
