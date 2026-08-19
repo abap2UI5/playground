@@ -100,9 +100,16 @@ this work*, not the ones that answer *is this the house style*. A playground
 that underlines a missing pragma teaches nothing.
 
 `check_syntax`, `parser_error`, `implement_methods`, `method_implemented_twice`,
-`definitions_top`, `global_class`, `begin_end_names`, `superclass_final`,
-`unknown_types` — checked against release v750, the one abap2UI5 lints itself
-against. The list lives in `src/editor/registry.mjs`.
+`global_class`, `begin_end_names`, `superclass_final`, `unknown_types` —
+checked against release v750, the one abap2UI5 lints itself against. The list
+lives in `src/editor/registry.mjs`.
+
+`definitions_top` is the rule that had to come **off** that list, and it is
+worth naming: abap2UI5 enables it because the framework is downported to 702
+before it is transpiled, and nothing here downports what is in the editor. It
+was rejecting `FIELD-SYMBOLS` after a `CREATE DATA` — ABAP that compiles on
+every system this playground is about — and an abaplint error stops Run, so the
+reader was told to fix code that had nothing wrong with it.
 
 The abap2UI5 linter runs its own rules on top, against UI5 **1.71** — the floor
 abap2UI5 holds its own shipped apps to, and therefore the floor an example
@@ -160,12 +167,38 @@ ABAP that lives only in that page, `data-view="app"` hides the editor,
 documentation framework that swaps pages without reloading, call
 `window.abap2ui5Embed.setUp()` after each navigation.
 
+Inline code keeps **the name the page gave it**: the file it is put into is
+named after the class in it, the way abapGit names one, so `data-code` carries
+the example a manual prints under the name its reader is meant to create.
+
+A page that draws its own button — because it wants one under a code block it
+already styles — asks the loader for the URL instead of writing the fragment
+itself:
+
+```js
+const href = await window.abap2ui5Embed.url({ code, view: "app" });
+```
+
+That matters more than it looks: a fragment the playground cannot read is
+treated as somebody else's link and quietly replaced by the built-in sample, so
+an encoder written by hand fails by showing the wrong code rather than by
+failing.
+
 **Nothing loads until the reader clicks.** Each demo is a whole ABAP runtime
 plus an abaplint parse of nine hundred sources — a second or two of processor
 and a few hundred megabytes, per frame. Demos on one page share the browser
 cache, so the bytes are paid once, but the parsing is not; a page with ten
 autoloading examples would be the slowest thing in the manual. `data-auto="1"`
 overrides it where the page is about its one demo.
+
+The app frame is served with UI5's `frameOptions` set to `allow` rather than the
+`trusted` abap2UI5 ships. `trusted` means "only in a frame whose top window is
+the same origin", and an embedded demo's top window is somebody else's manual:
+UI5 asks it for permission over postMessage, waits ten seconds for an answer no
+documentation site knows to give, and then hides everything it rendered — an
+app that is in the DOM, correct and invisible, under a status bar saying
+"running". What is unprotected is a demo compiled from code the embedding page
+supplied, with no session and nobody's credentials.
 
 An embedded playground posts three kinds of message to the page that framed it —
 `ready` once it has something to show, `status` for each line its status bar

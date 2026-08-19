@@ -22,12 +22,22 @@ const RELEASE = "v750";
 // Which rules run. Deliberately only the ones that answer "would this work",
 // not the ones that answer "is this the house style" - a playground that
 // underlines a missing pragma teaches nothing.
+//
+// `definitions_top` used to be on this list and is the one that had to come
+// off it, because it does not answer that question. It is a DOWNPORT rule:
+// abap2UI5 enables it in its own abaplint.json because the framework is
+// downported to 702 before it is transpiled, and 702 wants its declarations at
+// the top of a routine. Nothing in the playground downports what is in the
+// editor - the transpiler takes v750 as it is - so the rule was rejecting ABAP
+// that compiles on every system this documentation targets. A `FIELD-SYMBOLS`
+// after a `CREATE DATA` (the S-RTTI example in the documentation) is the shape
+// that found it: an abaplint error stops Run, so the reader was told to fix
+// code that had nothing wrong with it.
 const RULES = {
   check_syntax: true,
   parser_error: true,
   implement_methods: true,
   method_implemented_twice: true,
-  definitions_top: true,
   global_class: true,
   begin_end_names: true,
   superclass_final: true,

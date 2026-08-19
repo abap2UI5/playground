@@ -71,6 +71,32 @@ test("modern ABAP is compiled without a downport step", async ({ page }) => {
   await expect(control(page, "txtOut")).toContainText("row 2 of 4");
 });
 
+test("a declaration below the first statement is not an error", async ({ page }) => {
+  await open(page);
+
+  // `definitions_top` used to be on the abaplint rule list, inherited from the
+  // configuration abap2UI5 lints ITSELF with - where it is there because the
+  // framework is downported to 702 before it is transpiled. Nothing here
+  // downports, so it was rejecting ABAP that compiles on every system: a
+  // FIELD-SYMBOLS after a CREATE DATA, which is how the documentation's S-RTTI
+  // example is written. An abaplint error stops Run, so the reader was told to
+  // fix code that had nothing wrong with it.
+  await setSource(
+    page,
+    app(
+      "Declared late",
+      `out = \`declared\`.
+      DATA suffix TYPE string.
+      suffix = \` below the first statement\`.
+      out = |{ out }{ suffix }|.`,
+    ),
+  );
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+
+  await expect(control(page, "txtOut")).toContainText("declared below the first statement");
+});
+
 test("a run is refused while the ABAP has an error, and the line is named", async ({ page }) => {
   await open(page);
 

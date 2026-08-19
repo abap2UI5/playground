@@ -154,9 +154,28 @@ function writeVersionInfo() {
   );
 }
 
-// A script tag ahead of the UI5 bootstrap, so the roundtrip is already
-// redirected by the time the component starts. See src/shell/frontend-bridge.js.
-function injectBridge() {
+// UI5's clickjacking guard, which the playground has to switch off in its own
+// copy of the frontend.
+//
+// abap2UI5 ships `frameOptions="trusted"`, and it is right to: an app on a real
+// system holds a session. "trusted" means "only in a frame whose TOP window is
+// the same origin", and the app here is always in a frame - inside the
+// playground, which a documentation page on another origin then frames again.
+// UI5 then asks that top window for permission over postMessage, waits ten
+// seconds for an answer no documentation site knows to give, and HIDES
+// everything it rendered. The app is in the DOM, correct and invisible, and the
+// status bar says "running" - which is the worst shape a failure can take.
+//
+// What is being unprotected is a demo compiled from code the embedding page
+// supplied, with no session and no credentials of anybody's. Being framed is
+// the point of it.
+const FRAME_OPTIONS = ['data-sap-ui-frameOptions="trusted"', 'data-sap-ui-frameOptions="allow"'];
+
+// The two changes the playground makes to the frontend it built: a script tag
+// ahead of the UI5 bootstrap, so the roundtrip is already redirected by the
+// time the component starts (see src/shell/frontend-bridge.js), and the
+// frameOptions above.
+function patchFrontend() {
   const indexPath = path.join(UI5_DIST, "index.html");
   let html = fs.readFileSync(indexPath, "utf8");
   const tag = `    <script src="frontend-bridge.js"></script>\n`;
@@ -170,6 +189,10 @@ function injectBridge() {
   if (!html.includes(tag)) {
     html = html.replace(anchor, tag + anchor);
   }
+  if (!html.includes(FRAME_OPTIONS[1]) && !html.includes(FRAME_OPTIONS[0])) {
+    throw new Error("build-ui5: the frontend index.html no longer sets frameOptions - check what it does now");
+  }
+  html = html.replace(FRAME_OPTIONS[0], FRAME_OPTIONS[1]);
   fs.writeFileSync(indexPath, html);
   fs.copyFileSync(path.join(ROOT, "src", "shell", "frontend-bridge.js"), path.join(UI5_DIST, "frontend-bridge.js"));
 }
@@ -187,9 +210,10 @@ if (!force && fs.existsSync(stampPath) && fs.readFileSync(stampPath, "utf8").tri
   fs.writeFileSync(stampPath, hash);
 }
 
-// The bridge is playground code and changes far more often than UI5 does, so it
-// is (re-)injected on every build rather than being part of the cached tree.
-injectBridge();
+// Both are playground changes to somebody else's build output and cost
+// nothing, so they are re-applied on every run rather than being part of the
+// cached tree.
+patchFrontend();
 
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(path.dirname(OUT), { recursive: true });

@@ -98,15 +98,17 @@
 <p class="when">
   <strong>When there is no file to point at.</strong> <code>data-code</code>
   carries the ABAP itself, deflated into the playground's URL fragment. Nothing
-  has to be hosted, and the demo travels with the page.
+  has to be hosted, and the demo travels with the page. The class keeps the name
+  your page gave it — the file it is put into is named after it, the way abapGit
+  names one.
 </p>
 
-<div class="abap2ui5-demo" data-label="Run the inline example" data-code="CLASS zcl_playground DEFINITION PUBLIC CREATE PUBLIC.
+<div class="abap2ui5-demo" data-label="Run the inline example" data-code="CLASS z2ui5_cl_demo_inline DEFINITION PUBLIC CREATE PUBLIC.
   PUBLIC SECTION.
     INTERFACES z2ui5_if_app.
   PROTECTED SECTION.
 ENDCLASS.
-CLASS zcl_playground IMPLEMENTATION.
+CLASS z2ui5_cl_demo_inline IMPLEMENTATION.
   METHOD z2ui5_if_app~main.
     IF client->check_on_init( ) IS INITIAL.
       RETURN.
@@ -124,7 +126,7 @@ CLASS zcl_playground IMPLEMENTATION.
   ENDMETHOD.
 ENDCLASS."></div>
 
-<pre>&lt;div class="abap2ui5-demo" data-code="CLASS zcl_playground DEFINITION PUBLIC…"&gt;&lt;/div&gt;</pre>
+<pre>&lt;div class="abap2ui5-demo" data-code="CLASS z2ui5_cl_demo_inline DEFINITION PUBLIC…"&gt;&lt;/div&gt;</pre>
 
 <h2><span class="num">4</span> Printed code beside the running app</h2>
 <p class="when">

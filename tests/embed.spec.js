@@ -122,3 +122,89 @@ test("the side-by-side shape renders the app next to the printed code", async ({
   await expect(demo.locator("#pane-left")).toBeHidden();
   await expect(demo.frameLocator("#app").locator('[id$="--btnSide"]')).toContainText("Press me");
 });
+
+test("inline code keeps the class name the page gave it", async ({ page }) => {
+  await page.goto("/embed/");
+
+  // The file an inline demo is put into is named after the class in it. It used
+  // to be called zcl_playground whatever the code said, so `data-code` only
+  // ever worked for a class of that one name - and a documentation page prints
+  // its example under the name its reader is meant to create. Everything else
+  // was refused before it ran: "zcl_playground.clas.abap has to declare
+  // ZCL_PLAYGROUND, not Z2UI5_CL_DEMO_INLINE".
+  await page.locator(".abap2ui5-demo-start", { hasText: "Run the inline example" }).click();
+  const demo = page.frameLocator(".abap2ui5-demo iframe").first();
+  await expect(demo.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await expect(demo.locator("#files")).toContainText("z2ui5_cl_demo_inline.clas.abap");
+  await expect(
+    demo.frameLocator("#app").locator('[id$="--txtInline"]'),
+    "a class the page named itself actually ran",
+  ).toContainText("This ABAP travelled in the URL.");
+});
+
+test("the loader hands out the URL it would open", async ({ page }) => {
+  await page.goto("/embed/");
+
+  // For the page that draws its own Run button and wants "open this in the
+  // playground" beside it. It has to come from the loader: a page writing the
+  // fragment itself gets one character of version and a deflate-raw wrong, and
+  // the playground reads an unreadable fragment as somebody else's link and
+  // opens its own sample instead - a broken link that looks like a working one.
+  const url = await page.evaluate(() =>
+    window.abap2ui5Embed.url({
+      code: [
+        "CLASS z2ui5_cl_demo_linked DEFINITION PUBLIC CREATE PUBLIC.",
+        "  PUBLIC SECTION.",
+        "    INTERFACES z2ui5_if_app.",
+        "ENDCLASS.",
+        "CLASS z2ui5_cl_demo_linked IMPLEMENTATION.",
+        "  METHOD z2ui5_if_app~main.",
+        "    client->message_box_display( `From a link` ).",
+        "  ENDMETHOD.",
+        "ENDCLASS.",
+      ].join("\n"),
+    }));
+
+  await page.goto(url);
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await expect(page.locator("#files")).toContainText("z2ui5_cl_demo_linked.clas.abap");
+  await expect(page.locator("#editor")).toContainText("From a link");
+});
+
+test("an app-only playground renders in a column narrower than a desk", async ({ page }) => {
+  // 820px is where the two panes stop sitting side by side and become tabs -
+  // and the reading column of a documentation page is narrower than that, so
+  // this is the NORMAL width for an embedded demo rather than an edge of one.
+  // The tab machinery brought the editor to the front, which ?view=app has
+  // hidden in CSS, and hid the app behind it: an empty box, with the status bar
+  // still saying "running".
+  await page.setViewportSize({ width: 700, height: 520 });
+  await page.goto("/?embed=1&view=app");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+
+  await expect(page.locator("#pane-right")).toBeVisible();
+  await expect(page.locator("#app")).toBeVisible();
+  const box = await page.locator("#app").boundingBox();
+  expect(box.width, "the app frame has a width").toBeGreaterThan(300);
+  expect(box.height, "the app frame has a height").toBeGreaterThan(100);
+  await expect(page.frameLocator("#app").getByText("Hello abap2UI5")).toBeVisible();
+});
+
+test("the app frame lets itself be framed from another origin", async ({ page }) => {
+  // UI5 protects an app from clickjacking with frameOptions "trusted", which
+  // abap2UI5 ships and which is right for an app on a real system. Here the app
+  // is always in a frame, and the page framing the playground is on somebody
+  // else's origin - which is what embedding IS. UI5 then asks that top window
+  // for permission over postMessage, waits ten seconds for an answer no
+  // documentation site knows to give, and HIDES everything it rendered: the app
+  // is in the DOM, correct and invisible, and the status bar says "running".
+  //
+  // Checked as text rather than by framing from a second origin, because there
+  // is one server here and the failure is silent either way. `tools/build-ui5.mjs`
+  // rewrites the attribute and fails the build if it is no longer there to
+  // rewrite.
+  // The frontend page on its own - it says so and stops, so nothing boots.
+  await page.goto("/app/index.html");
+  const html = await page.evaluate(async () => (await fetch("index.html")).text());
+  expect(html).toContain('data-sap-ui-frameOptions="allow"');
+});
