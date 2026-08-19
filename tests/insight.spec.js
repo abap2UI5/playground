@@ -191,7 +191,22 @@ test("the info button opens the credits", async ({ page }) => {
     await expect(dialog).toContainText(project);
   }
   await expect(dialog.locator('a[href*="open-abap"]')).toHaveAttribute("target", "_blank");
+
+  // Our own projects are named as ours. Thanking ourselves for abap2UI5 under
+  // "other people's work" would be the one line in here that is not true.
+  await expect(dialog).toContainText("The abap2UI5 family");
+  const ours = dialog.locator("h3", { hasText: "abap2UI5 family" }).locator("xpath=following-sibling::ul[1]");
+  await expect(ours).toContainText("abap2UI5 linter");
+  await expect(ours).not.toContainText("Monaco");
+
   await expect(dialog).toContainText("Thank you");
+  // Somewhere in the thanks - not pinned to which paragraph - there is
+  // something to actually do with it. A thank-you that asks for nothing is a
+  // decoration.
+  await expect(
+    dialog.locator(".about-thanks", { hasText: /star them|open the issue|pull request/ }),
+    "the thanks says what to do with it",
+  ).toHaveCount(1);
   // And it says which framework version is actually running.
   await expect(page.locator("#about-versions")).toContainText("abap2UI5 ");
 
