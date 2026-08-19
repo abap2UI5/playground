@@ -70,13 +70,15 @@ test("a playground that is not embedded stays silent", async ({ page }) => {
 test("the loader waits for a click, then runs the example", async ({ page }) => {
   await page.goto("/embed/");
 
-  // Nothing has loaded: three demos, three buttons, no frames.
-  await expect(page.locator(".abap2ui5-demo-start")).toHaveCount(3);
+  // Nothing has loaded: every demo on the page is a button, and no frame
+  // exists. Counted rather than fixed at a number, so the showcase can grow a
+  // seventh shape without this test having an opinion about it.
+  const demos = await page.locator(".abap2ui5-demo").count();
+  expect(demos, "the page shows some demos").toBeGreaterThan(2);
+  await expect(page.locator(".abap2ui5-demo-start")).toHaveCount(demos);
   expect(await page.locator(".abap2ui5-demo iframe").count()).toBe(0);
 
   await page.locator(".abap2ui5-demo-start").first().click();
-  const frame = page.locator(".abap2ui5-demo iframe").first();
-  await expect(frame).toHaveCount(1);
   // Only the clicked one.
   await expect(page.locator(".abap2ui5-demo iframe")).toHaveCount(1);
 
@@ -88,11 +90,13 @@ test("the loader waits for a click, then runs the example", async ({ page }) => 
 test("inline data-code reaches the playground through the fragment", async ({ page }) => {
   await page.goto("/embed/");
 
-  // The third demo carries its ABAP in the attribute rather than in a file. It
+  // The inline demo carries its ABAP in the attribute rather than in a file. It
   // has to arrive in the format the playground's own Share button writes -
   // anything else is read as somebody else's link and silently replaced by the
-  // sample, which would show a reader the wrong code.
-  await page.locator(".abap2ui5-demo").nth(2).locator("button").click();
+  // sample, which would show a reader the wrong code. Found by its label
+  // rather than its position, so reordering the showcase cannot silently point
+  // this test at a different demo.
+  await page.locator(".abap2ui5-demo-start", { hasText: "Run the inline example" }).click();
   const demo = page.frameLocator(".abap2ui5-demo iframe").first();
   await expect(demo.locator("#status")).toHaveText("running", { timeout: 120000 });
   await expect(demo.locator("#editor")).toContainText("Written in the documentation");
@@ -100,4 +104,21 @@ test("inline data-code reaches the playground through the fragment", async ({ pa
     demo.frameLocator("#app").locator('[id$="--txtInline"]'),
     "the inline example actually rendered",
   ).toContainText("This ABAP travelled in the URL.");
+});
+
+test("the side-by-side shape renders the app next to the printed code", async ({ page }) => {
+  await page.goto("/embed/");
+
+  // The shape a documentation page most often wants: the manual's own code
+  // block on one side, the running result on the other. The two halves carry
+  // the same ABAP, so this checks that what is printed is what runs.
+  const pair = page.locator(".side-by-side");
+  await expect(pair.locator("pre")).toContainText("Side by side");
+
+  await pair.locator(".abap2ui5-demo-start").click();
+  const demo = pair.frameLocator("iframe");
+  await expect(demo.locator("#status")).toHaveText("running", { timeout: 120000 });
+  // App-only, so no editor beside it - and the button the code block promises.
+  await expect(demo.locator("#pane-left")).toBeHidden();
+  await expect(demo.frameLocator("#app").locator('[id$="--btnSide"]')).toContainText("Press me");
 });

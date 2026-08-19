@@ -5,71 +5,100 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Embedding the abap2UI5 playground</title>
 <style>
-  :root { color-scheme: light dark; }
+  :root {
+    color-scheme: light dark;
+    --line: color-mix(in srgb, canvas 80%, canvastext);
+    --sunken: color-mix(in srgb, canvas 94%, canvastext);
+    --dim: color-mix(in srgb, canvastext 60%, canvas);
+  }
   body {
     font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    max-width: 52rem; margin: 0 auto; padding: 2rem 1.25rem 6rem;
+    max-width: 56rem; margin: 0 auto; padding: 2rem 1.25rem 6rem;
   }
-  h1 { font-size: 1.7rem; letter-spacing: -.02em; }
-  h2 { font-size: 1.15rem; margin-top: 2.5rem; }
+  h1 { font-size: 1.8rem; letter-spacing: -.02em; margin-bottom: .3rem; }
+  h2 {
+    font-size: 1.2rem; margin-top: 3rem; padding-top: 1.2rem;
+    border-top: 1px solid var(--line);
+  }
+  h2 .num { color: var(--dim); font-weight: 400; margin-right: .4rem; }
+  .lede { color: var(--dim); margin-top: 0; }
   code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
   pre {
-    background: color-mix(in srgb, canvas 92%, canvastext); padding: .9rem 1rem;
-    border-radius: 8px; overflow-x: auto;
+    background: var(--sunken); padding: .9rem 1rem; border-radius: 8px;
+    overflow-x: auto; margin: 1rem 0 0;
   }
+  .when { font-size: .95rem; }
+  .when strong { font-weight: 600; }
+
   .abap2ui5-demo {
-    border: 1px solid color-mix(in srgb, canvas 80%, canvastext);
-    border-radius: 10px; overflow: hidden; margin: 1.25rem 0; background: canvas;
+    border: 1px solid var(--line); border-radius: 10px;
+    overflow: hidden; margin: 1.1rem 0 0; background: canvas;
   }
   .abap2ui5-demo-start {
-    display: block; width: 100%; padding: 2.5rem 1rem; border: 0; cursor: pointer;
+    display: block; width: 100%; padding: 2.2rem 1rem; border: 0; cursor: pointer;
     background: transparent; color: inherit; font: inherit; font-weight: 600;
   }
-  .abap2ui5-demo-start:hover { background: color-mix(in srgb, canvas 92%, canvastext); }
-  .note { color: color-mix(in srgb, canvastext 60%, canvas); font-size: 14px; }
+  .abap2ui5-demo-start::after {
+    content: " — nothing loads until you press this";
+    font-weight: 400; color: var(--dim);
+  }
+  .abap2ui5-demo-start:hover { background: var(--sunken); }
+
+  .side-by-side { display: grid; gap: 1rem; grid-template-columns: 1fr; }
+  @media (min-width: 60rem) { .side-by-side { grid-template-columns: 1fr 1fr; align-items: start; } }
+  .side-by-side pre { margin: 0; }
+  .side-by-side .abap2ui5-demo { margin: 0; }
+
+  table { border-collapse: collapse; width: 100%; margin-top: 1rem; font-size: .93rem; }
+  th, td { text-align: left; padding: .4rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; }
+  td:first-child { white-space: nowrap; }
+  .note { color: var(--dim); font-size: .95rem; }
 </style>
 </head>
 <body>
 
 <h1>Embedding the playground</h1>
-
-<p>
-  A documentation page can put a running abap2UI5 app next to the code that
-  produces it. This page is that documentation, and every demo on it is real —
-  the same playground, in an iframe.
+<p class="lede">
+  Six shapes a documentation page can take, from the whole playground down to a
+  single rendered app. Every demo below is real — the same playground, in an
+  iframe, running the ABAP it shows.
 </p>
 
-<h2>A demo with the editor</h2>
-
-<p>
-  The reader can change the ABAP and press Run. <code>data-src</code> points at
-  the same file the documentation prints, so the printed code and the running
-  code cannot drift apart.
+<h2><span class="num">1</span> Editor and app</h2>
+<p class="when">
+  <strong>The default.</strong> The reader can change the ABAP and press Run.
+  <code>data-src</code> points at the same file your page prints, so the printed
+  code and the running code cannot drift apart. Give it height: an editor in
+  300 pixels is a keyhole.
 </p>
 
-<div class="abap2ui5-demo" data-src="../examples/zcl_linked_example.clas.abap"></div>
+<div class="abap2ui5-demo" data-src="../examples/zcl_linked_example.clas.abap"
+     data-height="520" data-label="Run this example"></div>
 
 <pre>&lt;div class="abap2ui5-demo"
-     data-src="https://raw.githubusercontent.com/.../z2ui5_cl_demo.clas.abap"&gt;&lt;/div&gt;
+     data-src="https://raw.githubusercontent.com/abap2UI5/samples/main/src/01/z2ui5_cl_smp_app_493.clas.abap"
+     data-height="520"&gt;&lt;/div&gt;
 &lt;script src="https://abap2ui5.github.io/playground/embed/abap2ui5-embed.js"&gt;&lt;/script&gt;</pre>
 
-<h2>A demo without the editor</h2>
-
-<p>
-  <code>data-view="app"</code> shows the result on its own, for a paragraph that
-  is about what the app does rather than how it is written. It still compiles
-  and runs the ABAP, and it reports its height so the frame fits what was
-  rendered instead of guessing.
+<h2><span class="num">2</span> The app on its own</h2>
+<p class="when">
+  <strong>For a paragraph about what an app does</strong>, not about how it is
+  written. The ABAP still compiles and still runs — it is simply not on screen.
+  This one reports its own height, so the frame fits what was rendered instead
+  of guessing.
 </p>
 
 <div class="abap2ui5-demo" data-view="app" data-src="../examples/zcl_linked_example.clas.abap"
      data-label="Show the app"></div>
 
-<h2>Code that lives only in this page</h2>
+<pre>&lt;div class="abap2ui5-demo" data-view="app" data-src="…"&gt;&lt;/div&gt;</pre>
 
-<p>
-  <code>data-code</code> carries the ABAP itself, deflated into the playground's
-  URL fragment. Nothing has to be hosted.
+<h2><span class="num">3</span> Code that lives only in your page</h2>
+<p class="when">
+  <strong>When there is no file to point at.</strong> <code>data-code</code>
+  carries the ABAP itself, deflated into the playground's URL fragment. Nothing
+  has to be hosted, and the demo travels with the page.
 </p>
 
 <div class="abap2ui5-demo" data-label="Run the inline example" data-code="CLASS zcl_playground DEFINITION PUBLIC CREATE PUBLIC.
@@ -95,16 +124,105 @@ CLASS zcl_playground IMPLEMENTATION.
   ENDMETHOD.
 ENDCLASS."></div>
 
-<h2>Why nothing loads until it is clicked</h2>
+<pre>&lt;div class="abap2ui5-demo" data-code="CLASS zcl_playground DEFINITION PUBLIC…"&gt;&lt;/div&gt;</pre>
+
+<h2><span class="num">4</span> Printed code beside the running app</h2>
+<p class="when">
+  <strong>The classic documentation shape:</strong> your own code block, styled
+  and highlighted the way the rest of your manual is, with the result running
+  next to it. The app half is a <code>data-view="app"</code> demo — the reader
+  reads on the left and sees on the right.
+</p>
+
+<div class="side-by-side">
+<pre>METHOD z2ui5_if_app~main.
+  DATA(view) = z2ui5_cl_ui5_view_builder=&gt;factory( ).
+  view-&gt;ele( `Page`
+      )-&gt;a( n = `title` v = `Side by side`
+      )-&gt;tag( `Button`
+          )-&gt;a( n = `text` v = `Press me` ).
+  client-&gt;view_display( view-&gt;stringify( ) ).
+ENDMETHOD.</pre>
+<div class="abap2ui5-demo" data-view="app" data-label="Show the result" data-code="CLASS zcl_playground DEFINITION PUBLIC CREATE PUBLIC.
+  PUBLIC SECTION.
+    INTERFACES z2ui5_if_app.
+  PROTECTED SECTION.
+ENDCLASS.
+CLASS zcl_playground IMPLEMENTATION.
+  METHOD z2ui5_if_app~main.
+    IF client->check_on_init( ) IS INITIAL.
+      RETURN.
+    ENDIF.
+    DATA(view) = z2ui5_cl_ui5_view_builder=>factory(
+        )->ele( n = `View` ns = `mvc`
+            )->a( n = `xmlns`     v = `sap.m`
+            )->a( n = `xmlns:mvc` v = `sap.ui.core.mvc` ).
+    view->ele( `Page`
+        )->a( n = `title` v = `Side by side`
+        )->tag( `Button`
+            )->a( n = `id`   v = `btnSide`
+            )->a( n = `text` v = `Press me` ).
+    client->view_display( view->stringify( ) ).
+  ENDMETHOD.
+ENDCLASS."></div>
+</div>
+
+<h2><span class="num">5</span> Loading straight away</h2>
+<p class="when">
+  <strong>Only where the page is about its one demo</strong> — a tutorial step,
+  a landing page. <code>data-auto="1"</code> skips the button. Put more than one
+  of these on a page and you will feel it; see the last section.
+</p>
+
+<pre>&lt;div class="abap2ui5-demo" data-auto="1" data-src="…"&gt;&lt;/div&gt;</pre>
+
+<h2><span class="num">6</span> A plain iframe, no script at all</h2>
+<p class="when">
+  <strong>When your documentation framework will not run custom JavaScript</strong>,
+  or you want no dependency. Everything the loader does is in the URL anyway;
+  what you give up is click-to-load and the automatic height.
+</p>
+
+<pre>&lt;iframe
+  src="https://abap2ui5.github.io/playground/?embed=1&amp;src=https://raw.githubusercontent.com/abap2UI5/samples/main/src/01/z2ui5_cl_smp_app_493.clas.abap"
+  style="width:100%;height:520px;border:1px solid #ddd;border-radius:8px"
+  loading="lazy" title="abap2UI5 example"&gt;&lt;/iframe&gt;</pre>
 
 <p class="note">
+  <code>loading="lazy"</code> is not a substitute for the button: it only waits
+  until the frame is scrolled near, and then several start at once.
+</p>
+
+<h2>Every attribute</h2>
+
+<table>
+  <tr><th>Attribute</th><th>What it does</th></tr>
+  <tr><td><code>data-src</code></td><td>URL of an ABAP file, or several separated by whitespace; the first is the app. This site and GitHub's raw hosts only.</td></tr>
+  <tr><td><code>data-code</code></td><td>ABAP inline, for a demo that lives only in this page.</td></tr>
+  <tr><td><code>data-view</code></td><td><code>app</code> for the running app without the editor.</td></tr>
+  <tr><td><code>data-height</code></td><td>Starting height in pixels. Default 520, or 320 for <code>view=app</code>, which then grows to fit.</td></tr>
+  <tr><td><code>data-label</code></td><td>The text on the button.</td></tr>
+  <tr><td><code>data-auto</code></td><td><code>1</code> to load without a click.</td></tr>
+  <tr><td><code>data-origin</code></td><td>Where the playground is served from, if not this script's own.</td></tr>
+</table>
+
+<p class="note">
+  For a documentation framework that swaps pages without reloading — Docusaurus,
+  VitePress and friends — call <code>window.abap2ui5Embed.setUp()</code> after
+  each navigation to pick up the new page's demos.
+</p>
+
+<h2>Why nothing loads until it is clicked</h2>
+<p class="when">
   Each demo is a complete ABAP runtime plus an abaplint parse of nine hundred
   sources — a second or two of processor and a few hundred megabytes, per frame.
-  Demos on the same page share the browser's cache, so the bytes are paid once,
-  but the parsing is not. A page with ten examples that all booted on scroll
-  would be the slowest thing in the manual, so each one stays a button until
-  somebody wants it. <code>data-auto="1"</code> overrides that for a page that
-  is only about its one demo.
+  Demos on the same page share the browser's cache, so the roughly 3 MB is paid
+  once; <strong>the parsing is not</strong>. A page with ten examples that all
+  booted on scroll would be the slowest thing in the manual.
+</p>
+<p class="when">
+  That is the whole reason the loader renders a button. Reach for
+  <code>data-auto</code> when the page has one demo and that demo is the point.
 </p>
 
 <script src="abap2ui5-embed.js"></script>
