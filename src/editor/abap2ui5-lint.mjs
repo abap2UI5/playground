@@ -16,6 +16,7 @@
 // The findings carry the same `severity` names as the config file, and the
 // same rule names, so a message here is the message CI would print.
 import { checkAbapSource } from "@abap2ui5/linter";
+import { applyFixes, isFixable } from "@abap2ui5/linter/fix";
 
 // The floor abap2UI5 holds its own shipped apps to (abap2ui5lint.jsonc), and
 // therefore the one an example copied out of the playground has to clear. A
@@ -55,3 +56,21 @@ export function findingsFor(source) {
   }
 }
 
+
+// The findings this linter can repair itself. Not all of them: an icon that
+// does not exist has no correct replacement to guess at, while a missing
+// namespace declaration or a chain that has drifted out of the house layout
+// has exactly one right answer.
+export function linterFixable(source) {
+  return findingsFor(source).filter(isFixable).length;
+}
+
+// Repairs what can be repaired, and says how much. `deferred` counts fixes that
+// overlapped one already applied - they are not lost, they are simply for the
+// next press, which is why the caller runs this until it stops changing things.
+export function applyLinterFixes(source) {
+  const fixable = findingsFor(source).filter(isFixable);
+  if (fixable.length === 0) return { source, fixed: 0 };
+  const { output, applied } = applyFixes(source, fixable);
+  return { source: output, fixed: applied };
+}

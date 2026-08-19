@@ -7,11 +7,20 @@
 // frame is only a screen.
 import "./shell.css";
 
-import { connectRegistry, createEditor, focusProblem, format, getFiles, refresh, setFiles } from "../editor/editor.mjs";
+import {
+  connectRegistry,
+  createEditor,
+  currentFile,
+  focusProblem,
+  format,
+  getFiles,
+  refresh,
+  setFiles,
+} from "../editor/editor.mjs";
 import { buildRegistry, declaredObjectName, entryClass } from "../editor/registry.mjs";
 import { compile } from "../editor/transpile.mjs";
 import { checkFileSet, MAIN_FILE, parseName } from "../editor/files.mjs";
-import { fetchLinkedFiles, linkedSources } from "./deep-link.mjs";
+import { fetchLinkedFiles, humanUrl, linkedSources, originOf } from "./deep-link.mjs";
 import { DEFAULT_FILES, SAMPLES, sampleById } from "../editor/samples.mjs";
 import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
 import { setUpInsight, updateInsight } from "./insight.mjs";
@@ -98,7 +107,7 @@ async function boot() {
 
   const { files, from } = await startingFiles();
   createEditor(document.getElementById("editor"), files, { onChange: remember });
-  setUpFiles({ onChanged: remember });
+  setUpFiles({ onChanged: remember, onOpened: fileOpened });
   setUpInsight();
 
   fillSampleMenu(from);
@@ -134,6 +143,7 @@ async function boot() {
   }
 
   for (const control of [runButton, formatButton, shareButton, sampleSelect]) control.disabled = false;
+  showSourceLink();
 
   runButton.addEventListener("click", () => run());
   formatButton.addEventListener("click", () => format());
@@ -194,8 +204,30 @@ function applyFrameTheme() {
   }
 }
 
+// A different file is now on screen: the outline is about that file, and so is
+// the link to where it came from.
+function fileOpened() {
+  showSourceLink();
+  updateInsight(refresh());
+}
+
+// The way back to where linked code lives, following whichever file is open.
+// Only for files that actually came from a link: over a draft or a sample it
+// would be a link to somebody else's page with no relation to what is on
+// screen.
+export function showSourceLink() {
+  const link = document.getElementById("source-link");
+  const origin = originOf(currentFile());
+  link.hidden = origin === undefined;
+  if (origin === undefined) return;
+  link.href = humanUrl(origin);
+  link.textContent = "on GitHub";
+  link.title = `Open ${currentFile()} where it lives`;
+}
+
 function remember(files) {
   renderFiles();
+  showSourceLink();
   // The editor has already re-checked by the time this runs (both hang off the
   // same debounce), so this reads the result rather than triggering a second
   // analysis of the same text.

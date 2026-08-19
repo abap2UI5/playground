@@ -120,6 +120,12 @@ abaplint error means the ABAP does not compile, so Run stops and says so. An
 abap2UI5 finding means the app runs and is wrong somewhere — and the fastest
 way to understand one is to look at the app it produced, so Run goes ahead.
 
+**Fix them** appears over the list when something is repairable and says how
+many — abaplint's own fixes and the linter's, applied together. It goes in as
+one edit per file, so Ctrl+Z takes the whole rewrite back rather than unpicking
+it fix by fix. Nothing that has no correct answer is guessed at: an icon that
+does not exist stays reported rather than invented.
+
 Both lists are only a default. The **abaplint** and **abap2UI5 lint** tabs hold
 the live configuration: add any of abaplint's 188 rules, change the ABAP release
 the syntax check holds you to, or lower the UI5 floor the view is checked
@@ -139,7 +145,10 @@ page links when it wants to show its example running rather than only printed:
 ?src=https://raw.githubusercontent.com/abap2UI5/samples/main/src/z2ui5_cl_demo.clas.abap
 ```
 
-Several `src` parameters open several files; the first is the app. Sources are
+Several `src` parameters open several files; the first is the app. Code opened
+this way carries an **on GitHub** link in the bar, following whichever file is
+open — the raw URL the playground was given translated back into the page a
+human would want, with the repository and the history around it. Sources are
 limited to this site and GitHub's raw hosts — the playground fetches on behalf
 of whoever opened the link, and should not be a general-purpose reader for
 arbitrary URLs.

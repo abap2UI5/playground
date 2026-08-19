@@ -8,10 +8,15 @@ import { nameProblem, skeletonFor } from "../editor/files.mjs";
 
 let strip;
 let onChanged;
+// Opening a different file changes nothing about the file set, so it is not a
+// change - but it does change what several things on the page are about: the
+// outline below the editor, and the link to where this file came from.
+let onOpened;
 
 export function setUpFiles(options = {}) {
   strip = document.getElementById("files");
   onChanged = options.onChanged;
+  onOpened = options.onOpened;
 
   strip.addEventListener("click", (e) => {
     const close = e.target.closest("[data-close]");
@@ -31,6 +36,7 @@ export function setUpFiles(options = {}) {
     if (tab) {
       openFile(tab.dataset.file);
       render();
+      onOpened?.();
     }
   });
 
