@@ -1053,3 +1053,21 @@ job; it now triggers through a structural refusal, which is what the log is for.
 **And one test lost its subject.** "The output panel does not outlive the error
 it reported" was named after a window that no longer exists. What it was always
 checking is that the report does not outlive the run, which is what it says now.
+
+### Findings from putting the panel back under the editor
+
+**The panel belongs under the source, not under the page.** Spanning both halves
+made it too heavy for what it is; it lives in the left pane again.
+
+**And the minimise button did not work - the test said it did.** `is-collapsed`
+sets `height: auto` as a class, while the resize drag writes the height into the
+element's **style attribute**, and an inline style beats any class. So for
+anybody who had ever dragged the panel, collapsing did nothing at all. The test
+passed because it never dragged first: it exercised the one path where no inline
+height exists.
+
+The button is gone, but the same trap sat in the click on the open tab, so the
+cause is fixed rather than the symptom - collapsing puts the dragged height
+aside and expanding gives it back. The new test drags **first**, and it was
+checked against the old code to make sure it goes red there. A test whose
+failure has never been seen is a test nobody has any reason to believe.

@@ -29,6 +29,23 @@ let tabs;
 let view = "problems";
 let lastProblems = [];
 
+// Collapsing has to put the dragged height aside, not fight it: a height set
+// by the drag lives in the element's style attribute, and an inline style beats
+// any class - so `is-collapsed` alone did nothing at all once somebody had
+// resized the panel once.
+let heightBeforeCollapse = "";
+
+function collapse() {
+  heightBeforeCollapse = panel.style.height;
+  panel.style.height = "";
+  panel.classList.add("is-collapsed");
+}
+
+function expand() {
+  panel.classList.remove("is-collapsed", "is-tucked");
+  if (heightBeforeCollapse !== "") panel.style.height = heightBeforeCollapse;
+}
+
 const HEIGHT_KEY = "abap2ui5-playground:insight-height";
 const MIN_HEIGHT = 80;
 
@@ -36,7 +53,6 @@ export function setUpInsight() {
   panel = document.getElementById("insight");
   body = document.getElementById("insight-body");
   tabs = [...panel.querySelectorAll("[data-insight]")];
-  setUpToggle();
 
   setUpResize();
 
@@ -46,10 +62,10 @@ export function setUpInsight() {
       // screen the editor is what matters, and this is the only control that
       // gives the space back.
       if (tab.dataset.insight === view && !panel.classList.contains("is-collapsed")) {
-        panel.classList.add("is-collapsed");
+        collapse();
         return;
       }
-      panel.classList.remove("is-collapsed");
+      expand();
       view = tab.dataset.insight;
       render();
     });
@@ -63,7 +79,7 @@ export function setUpInsight() {
   onLogChange((entry) => {
     paintLogDot(entry);
     if (entry.body !== "") {
-      panel.classList.remove("is-collapsed", "is-tucked");
+      expand();
       view = "log";
     }
     render();
@@ -78,32 +94,6 @@ export function setUpInsight() {
 
   render();
 }
-
-// A panel that cannot be got out of the way is a panel that costs the editor a
-// third of its height whether or not anybody is reading it. Clicking the open
-// tab collapses it too, but that is not discoverable - this says what it does.
-function setUpToggle() {
-  const toggle = document.getElementById("insight-toggle");
-  const paint = () => {
-    const collapsed = panel.classList.contains("is-collapsed");
-    toggle.textContent = collapsed ? "+" : "–";
-    toggle.title = collapsed ? "Show the panel" : "Collapse the panel";
-    toggle.setAttribute("aria-label", toggle.title);
-    toggle.setAttribute("aria-expanded", String(!collapsed));
-  };
-  toggle.addEventListener("click", () => {
-    panel.classList.toggle("is-collapsed");
-    paint();
-    // Collapsing is a decision about the editor, so it outlives the tab.
-    localStorage.setItem(COLLAPSED_KEY, panel.classList.contains("is-collapsed") ? "1" : "");
-  });
-  if (localStorage.getItem(COLLAPSED_KEY) === "1") panel.classList.add("is-collapsed");
-  paint();
-  // Every other route into collapsing has to keep the button honest.
-  new MutationObserver(paint).observe(panel, { attributes: true, attributeFilter: ["class"] });
-}
-
-const COLLAPSED_KEY = "abap2ui5-playground:insight-collapsed";
 
 // The panel's own height, dragged from its top edge. A config screen or a long
 // list of problems wants more room than a glance at the outline does, and the
@@ -125,7 +115,7 @@ function setUpResize() {
 
   grip.addEventListener("pointerdown", (e) => {
     grip.setPointerCapture(e.pointerId);
-    panel.classList.remove("is-collapsed");
+    expand();
     grip.classList.add("is-dragging");
     e.preventDefault();
   });
@@ -149,7 +139,7 @@ function setUpResize() {
     const step = e.key === "ArrowUp" ? 24 : e.key === "ArrowDown" ? -24 : 0;
     if (step === 0) return;
     e.preventDefault();
-    panel.classList.remove("is-collapsed");
+    expand();
     localStorage.setItem(HEIGHT_KEY, String(apply(panel.getBoundingClientRect().height + step)));
   });
 }
@@ -158,7 +148,7 @@ function setUpResize() {
 // the reader to look at and knows which view holds it.
 export function showInsight(which) {
   if (!panel || !VIEWS[which]) return;
-  panel.classList.remove("is-collapsed", "is-tucked");
+  expand();
   view = which;
   render();
 }
