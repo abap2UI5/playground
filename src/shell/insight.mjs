@@ -36,6 +36,7 @@ export function setUpInsight() {
   panel = document.getElementById("insight");
   body = document.getElementById("insight-body");
   tabs = [...panel.querySelectorAll("[data-insight]")];
+  setUpToggle();
 
   setUpResize();
 
@@ -63,6 +64,32 @@ export function setUpInsight() {
 
   render();
 }
+
+// A panel that cannot be got out of the way is a panel that costs the editor a
+// third of its height whether or not anybody is reading it. Clicking the open
+// tab collapses it too, but that is not discoverable - this says what it does.
+function setUpToggle() {
+  const toggle = document.getElementById("insight-toggle");
+  const paint = () => {
+    const collapsed = panel.classList.contains("is-collapsed");
+    toggle.textContent = collapsed ? "+" : "–";
+    toggle.title = collapsed ? "Show the panel" : "Collapse the panel";
+    toggle.setAttribute("aria-label", toggle.title);
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+  };
+  toggle.addEventListener("click", () => {
+    panel.classList.toggle("is-collapsed");
+    paint();
+    // Collapsing is a decision about the editor, so it outlives the tab.
+    localStorage.setItem(COLLAPSED_KEY, panel.classList.contains("is-collapsed") ? "1" : "");
+  });
+  if (localStorage.getItem(COLLAPSED_KEY) === "1") panel.classList.add("is-collapsed");
+  paint();
+  // Every other route into collapsing has to keep the button honest.
+  new MutationObserver(paint).observe(panel, { attributes: true, attributeFilter: ["class"] });
+}
+
+const COLLAPSED_KEY = "abap2ui5-playground:insight-collapsed";
 
 // The panel's own height, dragged from its top edge. A config screen or a long
 // list of problems wants more room than a glance at the outline does, and the
@@ -381,6 +408,20 @@ function configEditor({ title, blurb, value, onApply, onReset, extra }) {
   return wrap;
 }
 
+// Where the rules come from, for a reader who wants the whole list rather than
+// the nine the playground runs.
+function docsLink(href, text) {
+  const p = document.createElement("p");
+  p.className = "config-link";
+  const a = document.createElement("a");
+  a.href = href;
+  a.target = "_blank";
+  a.rel = "noopener";
+  a.textContent = text;
+  p.append(a);
+  return p;
+}
+
 function abaplintConfig() {
   const note = document.createElement("details");
   note.className = "config-more";
@@ -392,6 +433,12 @@ function abaplintConfig() {
   list.textContent = allRuleNames().join(", ");
   note.append(list);
 
+  const links = document.createElement("div");
+  links.append(
+    docsLink("https://rules.abaplint.org", "Every rule, with what it does and why — rules.abaplint.org"),
+    docsLink("https://github.com/abaplint/abaplint", "abaplint on GitHub"),
+  );
+
   return configEditor({
     blurb:
       "What the editor checks. The playground runs the rules that answer " +
@@ -401,7 +448,7 @@ function abaplintConfig() {
     value: abaplintSettings(),
     onApply: applyAbaplintSettings,
     onReset: abaplintDefaults,
-    extra: note,
+    extra: appended(links, note),
   });
 }
 
@@ -414,5 +461,16 @@ function linterConfig() {
     value: linterSettings(),
     onApply: applyLinterSettings,
     onReset: linterDefaults,
+    extra: appended(
+      docsLink("https://github.com/abap2UI5/linter", "The abap2UI5 linter, its rules and its config file"),
+      docsLink("https://www.npmjs.com/package/@abap2ui5/linter", "@abap2ui5/linter on npm"),
+    ),
   });
+}
+
+// Several bits of trailing matter as one node, because configEditor takes one.
+function appended(...nodes) {
+  const box = document.createElement("div");
+  box.append(...nodes);
+  return box;
 }

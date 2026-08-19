@@ -297,6 +297,18 @@ iframe {
 
 .insight-gap { flex: 1; }
 
+/* Pushed to the far end and set apart: it is not a fifth view, it is what
+   makes the other four go away. */
+.insight-toggle {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  min-width: 1.8rem;
+  border-bottom-color: transparent !important;
+}
+
+.config-link { margin: .35rem 0 0; font-size: 12px; }
+.config-link a { color: var(--accent); }
+
 .insight-body { flex: 1; overflow: auto; min-height: 0; }
 
 /* ------------------------------------------------------------ config tabs */
@@ -342,6 +354,16 @@ iframe {
 .about-body ol, .about-body ul { margin: .4rem 0; padding-left: 1.2rem; }
 .about-body li { margin: .3rem 0; }
 .about-credits li { margin: .45rem 0; }
+
+/* The thanks carries the weight here, so it is allowed to look like it means
+   it rather than reading as another paragraph of documentation. */
+.about-thanks {
+  font-size: 1rem;
+  line-height: 1.65;
+  border-left: 3px solid var(--accent);
+  padding-left: .9rem;
+  margin: .8rem 0;
+}
 .about-body a { color: var(--accent); }
 .about-body code { font-family: var(--font-mono); font-size: .85em; }
 .about-foot { color: var(--fg-dim); font-size: .85rem; margin-top: 1.4rem; }

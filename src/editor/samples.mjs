@@ -733,6 +733,101 @@ CLASS zcl_detail IMPLEMENTATION.
 ENDCLASS.
 `;
 
+// Two samples that are deliberately WRONG, one per checker, so the Fix button
+// has something to do the moment somebody wants to see what it does. Both are
+// small: the point is the repair, not the app.
+//
+// This one is abaplint's. A method is declared and never implemented, which is
+// an error, so Run is blocked - there is nothing to start. The fix writes the
+// empty implementation and the app starts. `on_event` is the method on purpose:
+// the first render never calls it, so the empty body the fix leaves behind is
+// the right body, and the app that comes up is a working one rather than a
+// blank page.
+const FIX_ABAPLINT = `CLASS zcl_playground DEFINITION PUBLIC CREATE PUBLIC.
+
+  PUBLIC SECTION.
+    INTERFACES z2ui5_if_app.
+
+    DATA name TYPE string.
+
+  PROTECTED SECTION.
+    " declared, never implemented - abaplint stops Run over it, and the fix
+    " under Problems writes the implementation
+    METHODS on_event.
+
+ENDCLASS.
+
+CLASS zcl_playground IMPLEMENTATION.
+
+  METHOD z2ui5_if_app~main.
+
+    IF client->check_on_event( ) IS NOT INITIAL.
+      on_event( ).
+      RETURN.
+    ENDIF.
+
+    IF client->check_on_init( ) IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    DATA(view) = z2ui5_cl_ui5_view_builder=>factory(
+        )->ele( n = \`View\` ns = \`mvc\`
+            )->a( n = \`xmlns\`     v = \`sap.m\`
+            )->a( n = \`xmlns:mvc\` v = \`sap.ui.core.mvc\` ).
+
+    view->ele( \`Page\`
+        )->a( n = \`title\` v = \`abaplint: a method with no implementation\`
+        )->tag( \`Input\`
+            )->a( n = \`id\`    v = \`inpName\`
+            )->a( n = \`value\` v = client->_bind( name ) ).
+
+    client->view_display( view->stringify( ) ).
+
+  ENDMETHOD.
+
+ENDCLASS.`;
+
+// And this one is the abap2UI5 linter's. The view uses two namespace prefixes
+// it never declares, which is valid ABAP - abaplint has nothing to say - so Run
+// goes ahead and UI5 then looks for a control called SimpleForm in sap.m, does
+// not find it, and terminates the app. A loading failure, not a rendering one.
+const FIX_ABAP2UI5 = `CLASS zcl_playground DEFINITION PUBLIC CREATE PUBLIC.
+
+  PUBLIC SECTION.
+    INTERFACES z2ui5_if_app.
+
+    DATA name TYPE string.
+
+ENDCLASS.
+
+CLASS zcl_playground IMPLEMENTATION.
+
+  METHOD z2ui5_if_app~main.
+
+    IF client->check_on_init( ) IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    " xmlns:mvc and xmlns:form are missing - the Fix button adds them
+    DATA(view) = z2ui5_cl_ui5_view_builder=>factory(
+        )->ele( n = \`View\` ns = \`mvc\`
+            )->a( n = \`xmlns\` v = \`sap.m\` ).
+
+    DATA(page) = view->ele( \`Page\`
+        )->a( n = \`title\` v = \`abap2UI5 lint: a namespace nobody declared\` ).
+
+    page->ele( n = \`SimpleForm\` ns = \`form\`
+        )->ele( n = \`content\` ns = \`form\`
+            )->tag( \`Input\`
+                )->a( n = \`id\`    v = \`inpName\`
+                )->a( n = \`value\` v = client->_bind( name ) ).
+
+    client->view_display( view->stringify( ) ).
+
+  ENDMETHOD.
+
+ENDCLASS.`;
+
 // One file each, unless the sample is about more than one object.
 const one = (source) => [{ name: MAIN_FILE, source }];
 
@@ -751,6 +846,24 @@ export const SAMPLES = [
       { name: MAIN_FILE, source: NAV_HUB },
       { name: "zcl_detail.clas.abap", source: NAV_DETAIL },
     ],
+  },
+  // `startsBroken` says this sample does not come up running, which is its
+  // point. The tests read it and drive the repair instead of the app - so the
+  // promise that every sample in the menu works still holds, it just means
+  // something different for these two.
+  {
+    id: "fix-abaplint",
+    title: "Quick fix: abaplint",
+    note: "a method with no implementation - Run is blocked until it is fixed",
+    files: one(FIX_ABAPLINT),
+    startsBroken: "blocked",
+  },
+  {
+    id: "fix-abap2ui5",
+    title: "Quick fix: abap2UI5 lint",
+    note: "an undeclared namespace - it runs, and the control never loads",
+    files: one(FIX_ABAP2UI5),
+    startsBroken: "runs",
   },
 ];
 

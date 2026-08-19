@@ -67,6 +67,96 @@ export function humanUrl(raw) {
   }
 }
 
+// The classes this source needs from beside it. For an abap2UI5 app that is
+// very nearly the list of apps it navigates to - nav_app_call( NEW zcl_detail( ) )
+// is the shape - but a static helper (zcl_util=>do( )) is the same problem: the
+// file does not compile without it either, so both are followed.
+//
+// Read off the text because there is no registry yet: this runs before the
+// corpus has even been fetched.
+//
+// Framework prefixes are dropped: those objects are in the corpus already, and
+// asking a sample repository for cl_abap_typedescr.clas.abap would be one
+// pointless 404 per name.
+const FRAMEWORK = /^(z2ui5_|cl_|cx_|if_|cf_)/i;
+
+export function instantiatedClasses(source) {
+  const names = new Set();
+  const add = (name) => {
+    if (name && !FRAMEWORK.test(name)) names.add(name.toLowerCase());
+  };
+  // Comments are stripped first, or the sentence "this app calls zcl_helper"
+  // in a header comment would be followed as if it were code.
+  const code = source.replace(/^\s*".*$/gm, "").replace(/\s".*$/gm, "");
+  for (const [, name] of code.matchAll(/\bNEW\s+([a-z_]\w*)\s*\(/gi)) add(name);
+  for (const [, name] of code.matchAll(/\bCREATE\s+OBJECT\s+\w+\s+TYPE\s+([a-z_]\w*)/gi)) add(name);
+  for (const [, name] of code.matchAll(/\b([a-z_]\w*)\s*=>/gi)) add(name);
+  for (const [, name] of code.matchAll(/\bTYPE\s+REF\s+TO\s+([a-z_]\w*)/gi)) add(name);
+  return [...names];
+}
+
+// Follows those names to the files next to the one that was linked, so a link
+// to an app that calls another app opens both. Deliberately narrow:
+//
+//   - only siblings, in the directory the linked file came from. Guessing at
+//     other paths would be guessing.
+//   - only what the allow list already permits, checked the same way as a
+//     linked URL, because that is what it is.
+//   - bounded in depth and count. A repository where every app calls two others
+//     would otherwise pull itself into the editor.
+//   - silent when a name is not there. Most are not: a class can be in the same
+//     package under another path, or in the corpus, or dynamic - none of that
+//     is an error worth stopping a link over.
+const MAX_FOLLOWED = 6;
+const MAX_DEPTH = 2;
+
+export async function followNavigation(files) {
+  const found = [];
+  const seen = new Set(files.map((f) => f.name));
+  let frontier = files;
+
+  for (let depth = 0; depth < MAX_DEPTH && found.length < MAX_FOLLOWED; depth++) {
+    const wanted = new Map();
+    for (const file of frontier) {
+      const from = origins.get(file.name);
+      if (from === undefined) continue;
+      for (const name of instantiatedClasses(file.source)) {
+        const fileName = `${name}.clas.abap`;
+        if (seen.has(fileName) || wanted.has(fileName)) continue;
+        wanted.set(fileName, new URL(fileName, from).href);
+      }
+    }
+    if (wanted.size === 0) break;
+
+    const fetched = (
+      await Promise.all(
+        [...wanted].slice(0, MAX_FOLLOWED - found.length).map(async ([name, href]) => {
+          try {
+            checkAllowed(new URL(href));
+            const response = await fetch(href);
+            if (!response.ok) return undefined;
+            const source = await response.text();
+            // A 404 page served with 200 is a real thing on some hosts, and an
+            // HTML file in the editor helps nobody.
+            if (!/^\s*(?:"|\*|CLASS|INTERFACE)/im.test(source)) return undefined;
+            origins.set(name, href);
+            return { name, source };
+          } catch {
+            return undefined;
+          }
+        }),
+      )
+    ).filter(Boolean);
+
+    if (fetched.length === 0) break;
+    for (const file of fetched) seen.add(file.name);
+    found.push(...fetched);
+    frontier = fetched;
+  }
+
+  return found;
+}
+
 export async function fetchLinkedFiles(params) {
   // Checked before anything is fetched: a link that is going to be refused for
   // its second file should not have cost a request for its first. The checks

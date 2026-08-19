@@ -191,10 +191,63 @@ test("the info button opens the credits", async ({ page }) => {
     await expect(dialog).toContainText(project);
   }
   await expect(dialog.locator('a[href*="open-abap"]')).toHaveAttribute("target", "_blank");
+
+  // Our own projects are named as ours. Thanking ourselves for abap2UI5 under
+  // "other people's work" would be the one line in here that is not true.
+  await expect(dialog).toContainText("The abap2UI5 family");
+  const ours = dialog.locator("h3", { hasText: "abap2UI5 family" }).locator("xpath=following-sibling::ul[1]");
+  await expect(ours).toContainText("abap2UI5 linter");
+  await expect(ours).not.toContainText("Monaco");
+
   await expect(dialog).toContainText("Thank you");
+  // Somewhere in the thanks - not pinned to which paragraph - there is
+  // something to actually do with it. A thank-you that asks for nothing is a
+  // decoration.
+  await expect(
+    dialog.locator(".about-thanks", { hasText: /star them|open the issue|pull request/ }),
+    "the thanks says what to do with it",
+  ).toHaveCount(1);
   // And it says which framework version is actually running.
   await expect(page.locator("#about-versions")).toContainText("abap2UI5 ");
 
   await dialog.locator('button[aria-label="Close"]').click();
   await expect(dialog).toBeHidden();
+});
+
+test("the panel can be minimised out of the way, and stays minimised", async ({ page }) => {
+  await open(page);
+  const body = page.locator("#insight-body");
+  const toggle = page.locator("#insight-toggle");
+  await expect(body).toBeVisible();
+
+  const editorBefore = (await page.locator("#editor").boundingBox()).height;
+  await toggle.click();
+  await expect(body).toBeHidden();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+  // The point of minimising is the height it gives back to the editor.
+  const editorAfter = (await page.locator("#editor").boundingBox()).height;
+  expect(editorAfter, "the editor got the space").toBeGreaterThan(editorBefore + 60);
+
+  // It is a decision about the editor, so it outlives a reload.
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await expect(page.locator("#insight-body")).toBeHidden();
+
+  await page.locator("#insight-toggle").click();
+  await expect(page.locator("#insight-body")).toBeVisible();
+});
+
+test("each config tab links to where its rules are documented", async ({ page }) => {
+  await open(page);
+
+  await page.locator('[data-insight="abaplint"]').click();
+  await expect(page.locator('#insight-body a[href*="rules.abaplint.org"]')).toBeVisible();
+  await expect(page.locator('#insight-body a[href*="github.com/abaplint/abaplint"]')).toBeVisible();
+
+  await page.locator('[data-insight="abap2ui5"]').click();
+  await expect(page.locator('#insight-body a[href*="github.com/abap2UI5/linter"]')).toBeVisible();
+  await expect(page.locator('#insight-body a[href*="npmjs.com"]')).toBeVisible();
+  // They leave the playground, so they open where a link should.
+  await expect(page.locator("#insight-body a").first()).toHaveAttribute("target", "_blank");
 });

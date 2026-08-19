@@ -20,7 +20,13 @@ import {
 import { buildRegistry, declaredObjectName, entryClass } from "../editor/registry.mjs";
 import { compile } from "../editor/transpile.mjs";
 import { checkFileSet, MAIN_FILE, parseName } from "../editor/files.mjs";
-import { fetchLinkedFiles, humanUrl, linkedSources, originOf } from "./deep-link.mjs";
+import {
+  fetchLinkedFiles,
+  followNavigation,
+  humanUrl,
+  linkedSources,
+  originOf,
+} from "./deep-link.mjs";
 import { DEFAULT_FILES, SAMPLES, sampleById } from "../editor/samples.mjs";
 import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
 import { setUpInsight, updateInsight } from "./insight.mjs";
@@ -80,7 +86,12 @@ async function startingFiles() {
   // followed a link expecting particular code and did not get it.
   if (linkedSources(params).length > 0) {
     try {
-      return { files: checkFileSet(await fetchLinkedFiles(params)), from: "a link" };
+      const linked = checkFileSet(await fetchLinkedFiles(params));
+      // An app that calls another app is only half an app on its own. The
+      // classes it instantiates are looked for next to it and opened too, so a
+      // link to a sample that navigates somewhere actually navigates.
+      const alongside = await followNavigation(linked);
+      return { files: checkFileSet([...linked, ...alongside]), from: "a link" };
     } catch (e) {
       linkFailure = e;
     }
