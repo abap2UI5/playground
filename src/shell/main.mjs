@@ -93,6 +93,7 @@ async function boot() {
   startEmbedMessages();
 
   setUpSplitter();
+  setUpAbout();
   const tabs = setUpTabs();
 
   const { files, from } = await startingFiles();
@@ -115,7 +116,9 @@ async function boot() {
     setStatus("loading the ABAP runtime…");
     state.runtime = await runtimeReady;
     window.__z2ui5Playground = { roundtrip: (body) => state.runtime.roundtrip(body) };
-    document.getElementById("versions").textContent = `abap2UI5 ${state.runtime.abapVersion()}`;
+    const version = `abap2UI5 ${state.runtime.abapVersion()}`;
+    document.getElementById("versions").textContent = version;
+    document.getElementById("about-versions").textContent = version;
 
     setStatus("reading the abap2UI5 sources…");
     const corpus = await corpusReady;
@@ -161,6 +164,18 @@ async function boot() {
     setStatus("the link could not be followed - showing the sample instead", true);
     showOutput("Link", String(linkFailure.message || linkFailure));
   }
+}
+
+// The credits, and what this is. Wired outside boot()'s try/catch and before
+// the runtime is awaited, so it still opens on a page whose startup failed -
+// that is exactly when somebody wants the link to the issue tracker.
+function setUpAbout() {
+  const dialog = document.getElementById("about-dialog");
+  document.getElementById("about").addEventListener("click", () => dialog.showModal());
+  // A click on the backdrop closes it, the way a modal is expected to.
+  dialog.addEventListener("click", (e) => {
+    if (e.target === dialog) dialog.close();
+  });
 }
 
 const uiTheme = () => (prefersDark() ? "sap_horizon_dark" : "sap_horizon");

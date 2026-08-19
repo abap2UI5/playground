@@ -847,3 +847,38 @@ but it can no longer hide a wiring mistake.
 **Two marker sources need two marker owners.** Monaco replaces all markers of
 one owner at a time, so abaplint and the linter sharing an owner would have
 whichever ran second erase the other's underlines.
+
+### Findings from the config tabs and the about dialog
+
+**The rule configuration got built after all, and the earlier reasoning still
+holds — it just pointed at the wrong shape.** Phase 8 refused "188 switches for
+the wrong rules", and that refusal was about a *wall of checkboxes*, not about
+configurability. The tab is a text field holding the small object that actually
+decides anything (the release, and the nine rules that are on). Any of
+abaplint's rules can be added by name, and the full list is one disclosure away
+rather than filling the screen. What a reader asks is "why is it not warning
+here"; typing the rule name and pressing Apply answers it in a way no
+documentation can.
+
+**Applying a configuration is behind a button on purpose.** Changing the rules
+dirties every object in the registry, so it costs a full reparse - a few
+seconds. Reacting to typing would have made every keystroke pay it.
+
+**The config views are excluded from the automatic rerender.** Everything else
+in the panel is derived from the editor and rebuilt on every change; a text
+field somebody is halfway through typing into is not, and rebuilding it under
+their hands would throw the edit away.
+
+**A test that asserted the absence of a message picked the wrong message.** The
+first version enabled abaplint's line-length rule and checked that nothing
+mentioned 255 characters beforehand - but the abap2UI5 linter reports that on
+its own, because over 255 the object does not import at all. The test was
+right and the premise was wrong. The second version picked a rule that is
+genuinely style-only (`sequential_blank`), and then failed again because the
+sample already had two blank lines where the test assumed one. Both failures
+were the test telling the truth about what it had actually done.
+
+**The about dialog is wired before the runtime is awaited**, outside boot()'s
+try/catch. A playground whose startup failed is exactly when somebody wants the
+link to the issue tracker, and a credits dialog that only works when everything
+else already works is a credits dialog that is missing when it matters.

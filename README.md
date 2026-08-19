@@ -41,8 +41,10 @@ pipeline and moves the last step into the browser.
   the editor can check your classes against them.
 - **Editing.** Monaco — the editor from VS Code — with abaplint behind it:
   diagnostics against the actual framework, hover, go to definition, rename,
-  references, quick fixes and the pretty printer. Under the editor, a panel
-  listing every problem and an outline of the class.
+  references, quick fixes and the pretty printer. Under the editor, a resizable
+  panel with four tabs: every problem, an outline of the class, and the
+  configuration of each checker — editable, so "why is it not warning here?"
+  has an answer you can try rather than only read.
 - **A second opinion.** The [abap2UI5 linter](https://www.npmjs.com/package/@abap2ui5/linter)
   runs beside abaplint and answers a different question: abaplint says whether
   the ABAP compiles, the linter reconstructs the view your builder chain
@@ -110,6 +112,12 @@ The two are kept apart on purpose, in the list and in what they block: an
 abaplint error means the ABAP does not compile, so Run stops and says so. An
 abap2UI5 finding means the app runs and is wrong somewhere — and the fastest
 way to understand one is to look at the app it produced, so Run goes ahead.
+
+Both lists are only a default. The **abaplint** and **abap2UI5 lint** tabs hold
+the live configuration: add any of abaplint's 188 rules, change the ABAP release
+the syntax check holds you to, or lower the UI5 floor the view is checked
+against to find a control an older system would not render. Apply reports how
+many problems there are now, so a rule can be tried rather than argued about.
 
 ## Linking a playground
 

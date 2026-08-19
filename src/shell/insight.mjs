@@ -5,8 +5,15 @@
 // "where is the method I want". Both are derived, never stored: they are
 // rebuilt from the editor on every change, so there is no second copy of the
 // truth to go stale.
-import { currentFile, focusProblem, getFiles } from "../editor/editor.mjs";
-import { documentSymbols } from "../editor/registry.mjs";
+import { currentFile, focusProblem, getFiles, refresh } from "../editor/editor.mjs";
+import {
+  abaplintDefaults,
+  abaplintSettings,
+  allRuleNames,
+  applyAbaplintSettings,
+  documentSymbols,
+} from "../editor/registry.mjs";
+import { applyLinterSettings, linterDefaults, linterSettings } from "../editor/abap2ui5-lint.mjs";
 
 let panel;
 let body;
@@ -14,10 +21,15 @@ let tabs;
 let view = "problems";
 let lastProblems = [];
 
+const HEIGHT_KEY = "abap2ui5-playground:insight-height";
+const MIN_HEIGHT = 80;
+
 export function setUpInsight() {
   panel = document.getElementById("insight");
   body = document.getElementById("insight-body");
   tabs = [...panel.querySelectorAll("[data-insight]")];
+
+  setUpResize();
 
   for (const tab of tabs) {
     tab.addEventListener("click", () => {
@@ -44,11 +56,62 @@ export function setUpInsight() {
   render();
 }
 
+// The panel's own height, dragged from its top edge. A config screen or a long
+// list of problems wants more room than a glance at the outline does, and the
+// only person who knows which is happening is the one looking at it.
+function setUpResize() {
+  const grip = document.getElementById("insight-grip");
+  const stored = Number(localStorage.getItem(HEIGHT_KEY));
+  if (Number.isFinite(stored) && stored >= MIN_HEIGHT) panel.style.height = `${stored}px`;
+
+  const apply = (px) => {
+    // Bounded against the pane rather than the window: the editor above has to
+    // keep enough room to be an editor, or the drag hands the user a panel
+    // with nothing left to look at.
+    const room = panel.parentElement.getBoundingClientRect().height;
+    const height = Math.round(Math.min(Math.max(px, MIN_HEIGHT), room - 120));
+    panel.style.height = `${height}px`;
+    return height;
+  };
+
+  grip.addEventListener("pointerdown", (e) => {
+    grip.setPointerCapture(e.pointerId);
+    panel.classList.remove("is-collapsed");
+    grip.classList.add("is-dragging");
+    e.preventDefault();
+  });
+
+  grip.addEventListener("pointermove", (e) => {
+    if (!grip.hasPointerCapture(e.pointerId)) return;
+    apply(panel.getBoundingClientRect().bottom - e.clientY);
+  });
+
+  const stop = (e) => {
+    if (!grip.hasPointerCapture?.(e.pointerId)) return;
+    grip.releasePointerCapture(e.pointerId);
+    grip.classList.remove("is-dragging");
+    localStorage.setItem(HEIGHT_KEY, String(apply(panel.getBoundingClientRect().bottom - e.clientY)));
+  };
+  grip.addEventListener("pointerup", stop);
+  grip.addEventListener("pointercancel", stop);
+
+  // A drag handle is a control, so it answers the keyboard as one.
+  grip.addEventListener("keydown", (e) => {
+    const step = e.key === "ArrowUp" ? 24 : e.key === "ArrowDown" ? -24 : 0;
+    if (step === 0) return;
+    e.preventDefault();
+    panel.classList.remove("is-collapsed");
+    localStorage.setItem(HEIGHT_KEY, String(apply(panel.getBoundingClientRect().height + step)));
+  });
+}
+
 // Called whenever the editor changed. `problems` is what refresh() returned, so
 // the panel never runs a checker itself - one analysis, two readers.
 export function updateInsight(problems) {
   lastProblems = problems ?? [];
   paintCount();
+  // The config views hold half-typed text somebody is in the middle of - a
+  // rerender under their hands would throw it away on every keystroke.
   if (view === "problems" || view === "outline") render();
 }
 
@@ -61,10 +124,17 @@ function paintCount() {
   badge.className = `insight-badge${errors > 0 ? " is-error" : lastProblems.length > 0 ? " is-warning" : ""}`;
 }
 
+const VIEWS = {
+  problems: problemList,
+  outline: outlineList,
+  abaplint: abaplintConfig,
+  abap2ui5: linterConfig,
+};
+
 function render() {
   if (!panel) return;
   for (const tab of tabs) tab.classList.toggle("is-active", tab.dataset.insight === view);
-  body.replaceChildren(view === "problems" ? problemList() : outlineList());
+  body.replaceChildren((VIEWS[view] ?? problemList)());
 }
 
 const SEVERITY_LABEL = { 1: "error", 2: "warning", 3: "info", 4: "hint" };
@@ -191,4 +261,107 @@ function empty(text) {
   p.className = "insight-empty";
   p.textContent = text;
   return p;
+}
+
+// ------------------------------------------------------------------ config
+
+// The two checkers' settings, as text you can edit. JSON rather than a wall of
+// switches: abaplint has 188 rules and the playground runs nine of them, so a
+// checkbox per rule would be a screen nobody reads to reach a setting nobody
+// wanted. What a reader actually asks is "why is it not warning here" - and
+// the answer is to add the rule name and press Apply.
+function configEditor({ title, blurb, value, onApply, onReset, extra }) {
+  const wrap = document.createElement("div");
+  wrap.className = "config";
+
+  const head = document.createElement("p");
+  head.className = "config-blurb";
+  head.append(blurb);
+  wrap.append(head);
+
+  const area = document.createElement("textarea");
+  area.className = "config-text";
+  area.spellcheck = false;
+  area.value = JSON.stringify(value, null, 2);
+  wrap.append(area);
+
+  const row = document.createElement("div");
+  row.className = "config-row";
+
+  const apply = document.createElement("button");
+  apply.type = "button";
+  apply.className = "primary";
+  apply.textContent = "Apply";
+
+  const reset = document.createElement("button");
+  reset.type = "button";
+  reset.textContent = "Reset";
+
+  const said = document.createElement("span");
+  said.className = "config-said";
+
+  row.append(apply, reset, said);
+  wrap.append(row);
+
+  if (extra) wrap.append(extra);
+
+  apply.addEventListener("click", () => {
+    said.className = "config-said";
+    try {
+      const parsed = JSON.parse(area.value);
+      onApply(parsed);
+      // The panel says what changed rather than only that something did: the
+      // whole point of the tab is understanding why a message is or is not
+      // there, so the count is the answer.
+      const problems = refresh();
+      updateInsight(problems);
+      said.textContent = `applied - ${problems.length} problem${problems.length === 1 ? "" : "s"} now`;
+    } catch (e) {
+      said.className = "config-said is-error";
+      said.textContent = String(e.message || e);
+    }
+  });
+
+  reset.addEventListener("click", () => {
+    area.value = JSON.stringify(onReset(), null, 2);
+    apply.click();
+  });
+
+  return wrap;
+}
+
+function abaplintConfig() {
+  const note = document.createElement("details");
+  note.className = "config-more";
+  const summary = document.createElement("summary");
+  summary.textContent = "Every rule abaplint has";
+  note.append(summary);
+  const list = document.createElement("p");
+  list.className = "config-rules";
+  list.textContent = allRuleNames().join(", ");
+  note.append(list);
+
+  return configEditor({
+    blurb:
+      "What the editor checks. The playground runs the rules that answer " +
+      "“would this work”, not the ones that answer “is this the house style” - " +
+      "but any of abaplint's rules can be added here. version is the ABAP release the " +
+      "syntax check holds you to.",
+    value: abaplintSettings(),
+    onApply: applyAbaplintSettings,
+    onReset: abaplintDefaults,
+    extra: note,
+  });
+}
+
+function linterConfig() {
+  return configEditor({
+    blurb:
+      "What the abap2UI5 linter checks the view against. ui5 is the oldest release " +
+      "your app has to work on - lowering it finds controls and properties that a " +
+      "newer system would render and an older one would not.",
+    value: linterSettings(),
+    onApply: applyLinterSettings,
+    onReset: linterDefaults,
+  });
 }
