@@ -192,12 +192,11 @@ test("the info button opens the credits", async ({ page }) => {
   }
   await expect(dialog.locator('a[href*="open-abap"]')).toHaveAttribute("target", "_blank");
 
-  // Our own projects are named as ours. Thanking ourselves for abap2UI5 under
-  // "other people's work" would be the one line in here that is not true.
-  await expect(dialog).toContainText("The abap2UI5 family");
-  const ours = dialog.locator("h3", { hasText: "abap2UI5 family" }).locator("xpath=following-sibling::ul[1]");
-  await expect(ours).toContainText("abap2UI5 linter");
-  await expect(ours).not.toContainText("Monaco");
+  // The credits are about other people's work, so our own projects are not in
+  // the list - thanking ourselves there would be the one untrue line in it.
+  const credits = dialog.locator(".about-credits");
+  await expect(credits).not.toContainText("abap2UI5 linter");
+  await expect(credits).toContainText("Monaco");
 
   await expect(dialog).toContainText("Thank you");
   // Somewhere in the thanks - not pinned to which paragraph - there is
@@ -214,30 +213,34 @@ test("the info button opens the credits", async ({ page }) => {
   await expect(dialog).toBeHidden();
 });
 
-test("the panel can be minimised out of the way, and stays minimised", async ({ page }) => {
+test("collapsing works after the panel has been dragged", async ({ page }) => {
   await open(page);
   const body = page.locator("#insight-body");
-  const toggle = page.locator("#insight-toggle");
-  await expect(body).toBeVisible();
+  const tab = page.locator('[data-insight="problems"]');
+
+  // Dragging writes the height into the element's style attribute, and an
+  // inline style beats a class - so collapsing did nothing at all once the
+  // panel had been resized. The drag comes first here on purpose.
+  const grip = page.locator("#insight-grip");
+  const box = await grip.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, box.y - 90, { steps: 6 });
+  await page.mouse.up();
 
   const editorBefore = (await page.locator("#editor").boundingBox()).height;
-  await toggle.click();
+  await tab.click();
   await expect(body).toBeHidden();
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
 
-  // The point of minimising is the height it gives back to the editor.
+  // The point of collapsing is the height the editor gets back.
   const editorAfter = (await page.locator("#editor").boundingBox()).height;
   expect(editorAfter, "the editor got the space").toBeGreaterThan(editorBefore + 60);
 
-  // It is a decision about the editor, so it outlives a reload.
-  await page.reload();
-  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
-  await expect(page.locator("#insight-body")).toBeHidden();
-
-  await page.locator("#insight-toggle").click();
-  await expect(page.locator("#insight-body")).toBeVisible();
+  // And expanding gives back the height that was dragged, not a default.
+  await tab.click();
+  await expect(body).toBeVisible();
+  expect(Math.abs((await page.locator("#editor").boundingBox()).height - editorBefore)).toBeLessThan(8);
 });
-
 test("each config tab links to where its rules are documented", async ({ page }) => {
   await open(page);
 
