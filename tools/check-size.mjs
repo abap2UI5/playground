@@ -24,7 +24,7 @@ const MB = 1024 * 1024;
 // Everything a visitor downloads before the playground is usable. These are the
 // ones measured compressed, because that is what travels.
 const TRANSFERRED = [
-  { file: "assets/shell.mjs", limit: 3.5 * MB, note: "Monaco, abaplint and the transpiler" },
+  { file: "assets/shell.mjs", limit: 3.5 * MB, note: "Monaco, abaplint, the transpiler and the abap2UI5 linter" },
   { file: "runtime/framework.mjs", limit: 1.5 * MB, note: "abap2UI5 and open-abap, transpiled" },
   { file: "editor/corpus.json", limit: 1.5 * MB, note: "the ABAP sources the editor checks against" },
   { file: "runtime/sql-wasm.wasm", limit: 0.5 * MB, note: "SQLite" },

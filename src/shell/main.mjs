@@ -14,6 +14,7 @@ import { checkFileSet, MAIN_FILE, parseName } from "../editor/files.mjs";
 import { fetchLinkedFiles, linkedSources } from "./deep-link.mjs";
 import { DEFAULT_FILES, SAMPLES, sampleById } from "../editor/samples.mjs";
 import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
+import { setUpInsight, updateInsight } from "./insight.mjs";
 import { setUpSplitter, setUpTabs } from "./layout.mjs";
 import { announceAppHeight, announceReady, announceStatus, startEmbedMessages } from "./embed.mjs";
 import { copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
@@ -97,6 +98,7 @@ async function boot() {
   const { files, from } = await startingFiles();
   createEditor(document.getElementById("editor"), files, { onChange: remember });
   setUpFiles({ onChanged: remember });
+  setUpInsight();
 
   fillSampleMenu(from);
 
@@ -179,6 +181,10 @@ function applyFrameTheme() {
 
 function remember(files) {
   renderFiles();
+  // The editor has already re-checked by the time this runs (both hang off the
+  // same debounce), so this reads the result rather than triggering a second
+  // analysis of the same text.
+  updateInsight(refresh());
   if (embedded) return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(files ?? getFiles()));
   // A fragment in the address bar is a claim about what the editor holds, and
@@ -277,7 +283,14 @@ export async function run() {
       return;
     }
 
-    const errors = refresh().filter((i) => i.severity === 1);
+    // abaplint only: its errors mean the ABAP does not compile, so there is
+    // nothing to start. An abap2UI5 finding means the opposite - the app runs
+    // and is wrong somewhere - and the fastest way to understand one of those
+    // is to look at the app it produced. Blocking Run on it would hide the
+    // evidence. They are underlined in the editor and listed under Problems.
+    const problems = refresh();
+    updateInsight(problems);
+    const errors = problems.filter((i) => i.severity === 1 && i.source === "abaplint");
     if (errors.length > 0) {
       setStatus(`${errors.length} error${errors.length > 1 ? "s" : ""} in the ABAP - fix them and run again`, true);
       showOutput(

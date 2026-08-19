@@ -795,3 +795,55 @@ button and mounts the frame on click, rather than autoloading.
 **`ready` has to mean "there is something to see".** Announcing it when the
 page has loaded would have an embedding page reveal a blank frame; it is sent
 after the first run instead.
+
+### Findings from the editor panel and the second linter
+
+**The abap2UI5 linter answers a question abaplint cannot.** abaplint says
+whether the ABAP compiles. `@abap2ui5/linter` reconstructs the XML the
+`z2ui5_cl_ui5_view_builder` chain produces — without running a line of ABAP —
+and checks it against a UI5 release. That covers the class of mistake the
+playground could otherwise not show at all: a control or property that the
+target release does not have, an icon that is in no icon font. They compile,
+and at run time they render nothing and log nothing, so the reader sees a gap
+where a button should be and goes looking in the wrong file.
+
+**The two are kept apart in what they block.** An abaplint error stops Run,
+because there is nothing to start. An abap2UI5 finding does not, because the
+app runs and is wrong — and looking at the wrong app is the fastest way to
+understand the finding. Blocking there would hide the evidence.
+
+**Getting the linter into a browser is three pieces of plumbing, all of which
+fail at *import* time rather than when called** — which is what makes them
+worth writing down, because the symptom is a blank page, not a stack trace
+pointing at the feature:
+
+1. `lib/render.mjs` (the screenshot renderer) calls `createRequire( )` and
+   `os.tmpdir( )` at module top level. Nothing in `checkAbapSource( )` reaches
+   it — `openRenderer( )` is used only by `checkFiles( )` and
+   `screenshotFiles( )`, which need a filesystem anyway — so the whole module
+   is replaced at bundle time.
+2. `lib/icons.mjs` and `lib/properties.mjs` build their default data paths with
+   `path.join(path.dirname(fileURLToPath(import.meta.url)), …)` at top level.
+   Both `fileURLToPath` and `path.join` are pure string work, so they are
+   answered for real rather than stubbed. The throwing `path` stub was the
+   second blank page.
+3. Those two then `fs.readFileSync` their metadata. It is two JSON files that
+   do not change between builds, so they are baked into the bundle and handed
+   back by a `readFileSync` that knows those two names and nothing else.
+
+All three are scoped to the linter by the importing module's path, so the rest
+of the page keeps the ordinary stubs and a stray `readFileSync` anywhere else
+still fails loudly. Cost: **+0.11 MB gzip** on the page bundle.
+
+**`documentSymbol( )` does not take the same parameter shape as
+`diagnostics( )`.** `diagnostics({ uri })` against
+`documentSymbol({ textDocument: { uri } })`. Passing the first shape to the
+second throws *inside* abaplint — and the outline panel had a try/catch around
+it, so the exception became an empty list and read as "this file has no
+symbols". The test that now covers the happy path is what found it; the catch
+is still there, because a file being typed into is legitimately unparseable,
+but it can no longer hide a wiring mistake.
+
+**Two marker sources need two marker owners.** Monaco replaces all markers of
+one owner at a time, so abaplint and the linter sharing an owner would have
+whichever ran second erase the other's underlines.

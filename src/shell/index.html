@@ -35,6 +35,15 @@
   <section class="pane pane-left" id="pane-left">
     <div class="files" id="files" hidden></div>
     <div id="editor" class="editor"></div>
+    <div class="insight" id="insight">
+      <div class="insight-tabs" role="tablist">
+        <button type="button" data-insight="problems" class="insight-tab is-active" role="tab">
+          Problems <span id="problem-count" class="insight-badge"></span>
+        </button>
+        <button type="button" data-insight="outline" class="insight-tab" role="tab">Outline</button>
+      </div>
+      <div class="insight-body" id="insight-body"></div>
+    </div>
   </section>
 
   <div class="splitter" id="splitter" role="separator" aria-orientation="vertical" tabindex="0"
