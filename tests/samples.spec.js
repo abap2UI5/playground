@@ -84,7 +84,54 @@ const CHECKS = {
   },
 };
 
+// The two samples that are wrong on purpose. What has to hold for them is not
+// "it runs" but "it is reported, the fix repairs it, and then it runs" - the
+// whole reason they are in the menu.
+const BROKEN_CHECKS = {
+  "fix-abaplint": {
+    // abaplint says the ABAP does not compile, so Run refuses.
+    before: async (page) => {
+      await expect(page.locator("#status")).toContainText("error");
+      await expect(page.locator(".insight-row", { hasText: /implement/i }).first()).toBeVisible();
+    },
+    rendered: "abaplint: a method with no implementation",
+  },
+  "fix-abap2ui5": {
+    // Valid ABAP: it starts, and the finding is about the view it built.
+    before: async (page) => {
+      await expect(page.locator("#status")).toHaveText("running");
+      await expect(page.locator(".insight-row", { hasText: /namespace/i }).first()).toBeVisible();
+    },
+    rendered: "abap2UI5 lint: a namespace nobody declared",
+  },
+};
+
 for (const sample of SAMPLES) {
+  if (sample.startsBroken) {
+    test(`the "${sample.title}" sample is reported, fixed and then runs`, async ({ page }) => {
+      await open(page);
+      await page.locator("#samples").selectOption(sample.id);
+
+      const check = BROKEN_CHECKS[sample.id];
+      expect(check, `${sample.id} has no check - add one when adding a sample`).toBeDefined();
+      await check.before(page);
+
+      const bar = page.locator(".insight-fixbar");
+      await expect(bar, "the sample exists to have something to fix").toBeVisible({ timeout: 30000 });
+      await bar.locator("button").click();
+      await expect(page.locator("#status")).toContainText("fixed", { timeout: 30000 });
+      await expect(page.locator(".insight-fixbar")).toHaveCount(0);
+
+      // And the repaired code is an app. Checked by its page title rather than
+      // by a control id: once the namespace fix lands, SimpleForm renders its
+      // grid wrapper around the input, and the wrapper's id ends the same way.
+      await page.locator("#run").click();
+      await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+      await expect(page.frameLocator("#app").getByText(check.rendered)).toBeVisible();
+    });
+    continue;
+  }
+
   test(`the "${sample.title}" sample compiles and runs`, async ({ page }) => {
     await open(page);
 

@@ -141,3 +141,17 @@ test("an embedded playground does not write over the draft of a normal one", asy
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
   expect(await getSource(page)).toContain("my own work");
 });
+
+test("a linked app brings the classes it needs with it", async ({ page }) => {
+  // One ?src=, and zcl_linked_pair calls zcl_linked_helper. Linking an app that
+  // does not compile on its own would be a link to an error message.
+  await page.goto("/?src=examples/zcl_linked_pair.clas.abap");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+
+  expect(await openFiles(page), "the helper came along").toEqual([
+    "zcl_linked_pair.clas.abap",
+    "zcl_linked_helper.clas.abap",
+  ]);
+  // The first file is still the app - what was linked is what starts.
+  await expect(page.frameLocator("#app").getByText("Two files, one link")).toBeVisible();
+});

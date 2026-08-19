@@ -297,6 +297,18 @@ iframe {
 
 .insight-gap { flex: 1; }
 
+/* Pushed to the far end and set apart: it is not a fifth view, it is what
+   makes the other four go away. */
+.insight-toggle {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  min-width: 1.8rem;
+  border-bottom-color: transparent !important;
+}
+
+.config-link { margin: .35rem 0 0; font-size: 12px; }
+.config-link a { color: var(--accent); }
+
 .insight-body { flex: 1; overflow: auto; min-height: 0; }
 
 /* ------------------------------------------------------------ config tabs */

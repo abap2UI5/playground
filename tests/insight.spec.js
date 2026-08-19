@@ -213,3 +213,41 @@ test("the info button opens the credits", async ({ page }) => {
   await dialog.locator('button[aria-label="Close"]').click();
   await expect(dialog).toBeHidden();
 });
+
+test("the panel can be minimised out of the way, and stays minimised", async ({ page }) => {
+  await open(page);
+  const body = page.locator("#insight-body");
+  const toggle = page.locator("#insight-toggle");
+  await expect(body).toBeVisible();
+
+  const editorBefore = (await page.locator("#editor").boundingBox()).height;
+  await toggle.click();
+  await expect(body).toBeHidden();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+  // The point of minimising is the height it gives back to the editor.
+  const editorAfter = (await page.locator("#editor").boundingBox()).height;
+  expect(editorAfter, "the editor got the space").toBeGreaterThan(editorBefore + 60);
+
+  // It is a decision about the editor, so it outlives a reload.
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await expect(page.locator("#insight-body")).toBeHidden();
+
+  await page.locator("#insight-toggle").click();
+  await expect(page.locator("#insight-body")).toBeVisible();
+});
+
+test("each config tab links to where its rules are documented", async ({ page }) => {
+  await open(page);
+
+  await page.locator('[data-insight="abaplint"]').click();
+  await expect(page.locator('#insight-body a[href*="rules.abaplint.org"]')).toBeVisible();
+  await expect(page.locator('#insight-body a[href*="github.com/abaplint/abaplint"]')).toBeVisible();
+
+  await page.locator('[data-insight="abap2ui5"]').click();
+  await expect(page.locator('#insight-body a[href*="github.com/abap2UI5/linter"]')).toBeVisible();
+  await expect(page.locator('#insight-body a[href*="npmjs.com"]')).toBeVisible();
+  // They leave the playground, so they open where a link should.
+  await expect(page.locator("#insight-body a").first()).toHaveAttribute("target", "_blank");
+});

@@ -984,3 +984,41 @@ asserted that `sequential_blank` removes the blank lines. It trims the run to
 three rather than removing it, so the assertion failed on a fix that had worked
 perfectly. What the test can honestly claim is that the source changed in the
 direction the rule asks for.
+### Findings from the fix samples, the panel controls and following a link
+
+**A sample that is wrong on purpose breaks the promise the sample tests make.**
+Every sample in the menu is checked by `tests/samples.spec.js`, and what it
+checks is "it compiles and runs" - which the two quick-fix samples deliberately
+do not. Rather than exempting them, the catalogue marks them `startsBroken` and
+the test drives the repair: the finding is reported, the Fix button is pressed,
+and the result runs. The promise still holds; for those two it means something
+else, and the entry in the catalogue is what says so.
+
+**Which method is left unimplemented decides whether the sample is any good.**
+abaplint's fix writes an *empty* implementation. If the unimplemented method
+were the one that builds the view, the fixed app would come up blank - a
+demonstration ending in a white rectangle. It is `on_event`, which the first
+render never calls, so the empty body the fix leaves behind is the right body.
+
+**A fix that works can break a test that was right.** The namespace sample's
+check looked for the input by control id. Once the fix lands, `SimpleForm`
+renders its grid wrapper around that input, and the wrapper's id ends in the
+same suffix - two matches, strict-mode violation. The test now checks the page
+title, which is unique and is what proves the view rendered at all.
+
+**Following a link's dependencies needs more than `NEW`.** The first version
+matched `NEW zcl_x( )` and `CREATE OBJECT ... TYPE zcl_x`, which is how an app
+navigates to another app - and missed the example already in the repository,
+which calls its helper statically (`zcl_linked_helper=>shout( )`). Statically or
+not, the file does not compile without it, so `=>` and `TYPE REF TO` are
+followed as well.
+
+**And comments had to be stripped first.** `zcl_linked_pair` opens with the
+sentence "this app calls zcl_linked_helper" in a header comment. Without
+removing comments, the file finds itself through its own prose.
+
+**The follow is deliberately narrow**: siblings only, the same allow list a
+linked URL passes, two levels, six files, and silence when a name is not there.
+Most names are not there - they are in the framework corpus - and a link that
+failed because a helper could not be guessed at would be worse than one that
+opens what it can.

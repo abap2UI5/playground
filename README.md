@@ -145,8 +145,13 @@ page links when it wants to show its example running rather than only printed:
 ?src=https://raw.githubusercontent.com/abap2UI5/samples/main/src/z2ui5_cl_demo.clas.abap
 ```
 
-Several `src` parameters open several files; the first is the app. Code opened
-this way carries an **on GitHub** link in the bar, following whichever file is
+Several `src` parameters open several files; the first is the app — and the
+classes that app needs are looked for beside it and opened too, so a link to an
+app that calls another app opens both. Only siblings in the same directory, only
+from the hosts above, at most six files two levels deep; a name that is not
+there is skipped in silence, because most of them are in the framework corpus
+rather than in the repository. Code opened this way carries an **on GitHub**
+link in the bar, following whichever file is
 open — the raw URL the playground was given translated back into the page a
 human would want, with the repository and the history around it. Sources are
 limited to this site and GitHub's raw hosts — the playground fetches on behalf
