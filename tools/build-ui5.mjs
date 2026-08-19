@@ -47,6 +47,14 @@ const UI5_LIBRARIES = [
   "sap.ui.unified",
   "sap.tnt",
   "sap.uxap",
+  // Added for the samples-controls catalogue, which links each of its ports
+  // here and greys out the ones this build cannot serve: sap.ui.integration
+  // carries the integration cards (5 ports) and sap.ui.codeeditor the ABAP/JS
+  // editor control (2 ports). Everything still greyed out there is
+  // SAPUI5-only - sap.suite.*, sap.ui.comp, sap.viz, sap.gantt - and cannot
+  // be added to an OpenUI5 build at all.
+  "sap.ui.integration",
+  "sap.ui.codeeditor",
   "themelib_sap_horizon",
 ];
 
