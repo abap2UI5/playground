@@ -21,15 +21,31 @@ import { checkAbapSource } from "@abap2ui5/linter";
 // therefore the one an example copied out of the playground has to clear. A
 // higher floor here would quietly bless a control that breaks on exactly the
 // systems that floor exists for.
-const UI5 = "1.71";
-const DISTRIBUTION = "openui5";
+const DEFAULTS = { ui5: "1.71", distribution: "openui5" };
+
+let settings = { ...DEFAULTS };
+
+export const linterSettings = () => ({ ...settings });
+export const linterDefaults = () => ({ ...DEFAULTS });
+
+// Applies an edited configuration. Cheap, unlike abaplint's: the linter holds
+// no parsed corpus, so the next keystroke simply asks it again.
+export function applyLinterSettings(next) {
+  if (!/^\d+\.\d+$/.test(next.ui5 ?? "")) {
+    throw new Error(`${next.ui5} is not a UI5 release, which looks like 1.71 or 1.120.`);
+  }
+  if (!["openui5", "sapui5"].includes(next.distribution)) {
+    throw new Error(`distribution is openui5 or sapui5, not ${next.distribution}.`);
+  }
+  settings = { ui5: next.ui5, distribution: next.distribution };
+}
 
 // Everything the linter has to say about one source. Never throws: a rule that
 // falls over on unusual input must not take the editor's diagnostics with it,
 // and the file being typed into is unusual input by definition.
 export function findingsFor(source) {
   try {
-    const result = checkAbapSource(source, { ui5: UI5, distribution: DISTRIBUTION });
+    const result = checkAbapSource(source, settings);
     // A class that builds no view has nothing for this linter to say. Reporting
     // that as a finding would put a message on every helper class.
     if (!result.usesBuilder) return [];

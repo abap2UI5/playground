@@ -24,7 +24,85 @@
   <span id="status" class="status">starting…</span>
   <span class="spacer"></span>
   <span id="versions" class="versions"></span>
+  <button id="about" class="ghost about-button" type="button"
+          title="What this is built from" aria-label="About this playground">i</button>
 </header>
+
+<dialog id="about-dialog" class="about">
+  <form method="dialog" class="about-head">
+    <h2>abap2UI5 Playground</h2>
+    <button class="ghost" aria-label="Close">✕</button>
+  </form>
+  <div class="about-body">
+    <p>
+      ABAP on the left, the app it produces on the right, and nothing in between
+      but the browser. No server, no SAP system, no backend of any kind — the
+      page you are looking at is a static file, and everything below happens in
+      this tab.
+    </p>
+
+    <h3>How it works</h3>
+    <ol>
+      <li>The abap2UI5 sources are downported and translated to JavaScript at
+        build time, and bundled with the ABAP standard library into one module
+        this page loads.</li>
+      <li>An in-memory SQLite, compiled to WebAssembly, takes the place of the
+        database abap2UI5 keeps its drafts in.</li>
+      <li>abaplint parses the real framework sources so the editor can check
+        your class against them, and compiles only your classes when you press
+        Run — about twenty milliseconds.</li>
+      <li>The abap2UI5 frontend runs in an iframe and talks to its backend over
+        a plain <code>fetch</code>. The playground answers that one request from
+        the framework running in this page, so from the framework's point of
+        view nothing changed.</li>
+    </ol>
+
+    <h3>Built on other people's work</h3>
+    <p>
+      None of this would exist without these projects, and the playground is
+      little more than the wiring between them. Thank you.
+    </p>
+    <ul class="about-credits">
+      <li><a href="https://github.com/abap2UI5/abap2UI5" target="_blank" rel="noopener">abap2UI5</a>
+        — the framework itself. Not a subset and not a simulation: the code in
+        this page is the code from the repository, at a pinned commit.</li>
+      <li><a href="https://github.com/abaplint/transpiler" target="_blank" rel="noopener">abaplint transpiler</a>
+        — ABAP to JavaScript. The playground exists because this does.</li>
+      <li><a href="https://github.com/abaplint/abaplint" target="_blank" rel="noopener">abaplint</a>
+        — the parser, the syntax check and the language server behind the
+        editor's diagnostics, hover, rename and pretty printer.</li>
+      <li><a href="https://github.com/open-abap/open-abap-core" target="_blank" rel="noopener">open-abap-core</a>
+        — the ABAP standard library, written in ABAP and transpiled with
+        everything else. Every <code>CL_ABAP_*</code> and <code>CX_*</code> you
+        use comes from here.</li>
+      <li><a href="https://github.com/abap2UI5/linter" target="_blank" rel="noopener">abap2UI5 linter</a>
+        — reconstructs the view your builder chain produces and checks it
+        against a UI5 release, which is how the playground can warn about an
+        icon that does not exist.</li>
+      <li><a href="https://github.com/SAP/openui5" target="_blank" rel="noopener">OpenUI5</a>
+        — the frontend, built into this site rather than linked from a CDN, so
+        the playground carries its own and works when nothing else does.</li>
+      <li><a href="https://github.com/microsoft/monaco-editor" target="_blank" rel="noopener">Monaco</a>
+        — the editor from VS Code.</li>
+      <li><a href="https://github.com/sql-js/sql.js" target="_blank" rel="noopener">sql.js</a>
+        — SQLite as WebAssembly, standing in for the database.</li>
+    </ul>
+
+    <h3>Where it stops</h3>
+    <p>
+      A few classes, not a package: no tables of your own, no message classes,
+      no CDS. Nothing reaches outside the browser — no RFC, no files. Only what
+      the transpiler implements, and only the UI5 libraries built in. Your code
+      is kept in this browser; the app's data is not.
+    </p>
+
+    <p class="about-foot">
+      <span id="about-versions"></span> ·
+      <a href="https://github.com/abap2UI5/playground" target="_blank" rel="noopener">source and issues</a> ·
+      MIT
+    </p>
+  </div>
+</dialog>
 
 <main class="panes" id="panes">
   <nav class="tabs" role="tablist">
@@ -36,11 +114,16 @@
     <div class="files" id="files" hidden></div>
     <div id="editor" class="editor"></div>
     <div class="insight" id="insight">
+      <div class="insight-grip" id="insight-grip" role="separator" aria-orientation="horizontal"
+           tabindex="0" aria-label="Resize the panel"></div>
       <div class="insight-tabs" role="tablist">
         <button type="button" data-insight="problems" class="insight-tab is-active" role="tab">
           Problems <span id="problem-count" class="insight-badge"></span>
         </button>
         <button type="button" data-insight="outline" class="insight-tab" role="tab">Outline</button>
+        <span class="insight-gap"></span>
+        <button type="button" data-insight="abaplint" class="insight-tab" role="tab">abaplint</button>
+        <button type="button" data-insight="abap2ui5" class="insight-tab" role="tab">abap2UI5 lint</button>
       </div>
       <div class="insight-body" id="insight-body"></div>
     </div>

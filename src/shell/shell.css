@@ -246,6 +246,22 @@ iframe {
 .insight.is-collapsed { height: auto; }
 .insight.is-collapsed .insight-body { display: none; }
 
+/* The top edge is the handle. Two pixels of border plus a wider invisible
+   target, so it can be grabbed without hunting for it. */
+.insight-grip {
+  height: 5px;
+  margin-bottom: -3px;
+  cursor: row-resize;
+  position: relative;
+  z-index: 1;
+  background: transparent;
+}
+.insight-grip:hover, .insight-grip.is-dragging, .insight-grip:focus-visible {
+  background: var(--accent);
+  outline: none;
+}
+.insight.is-dragging iframe, .insight-grip.is-dragging ~ * { user-select: none; }
+
 .insight-tabs {
   display: flex;
   gap: .25rem;
@@ -279,7 +295,60 @@ iframe {
 .insight-badge.is-error { background: var(--danger); color: #fff; }
 .insight-badge.is-warning { background: var(--line); color: var(--fg); }
 
+.insight-gap { flex: 1; }
+
 .insight-body { flex: 1; overflow: auto; min-height: 0; }
+
+/* ------------------------------------------------------------ config tabs */
+
+.config { padding: .6rem; display: flex; flex-direction: column; gap: .5rem; height: 100%; }
+.config-blurb { margin: 0; font-size: 12px; color: var(--fg-dim); }
+.config-text {
+  flex: 1; min-height: 4rem; resize: none;
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.5;
+  padding: .5rem; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); color: var(--fg);
+}
+.config-text:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+.config-row { display: flex; align-items: center; gap: .5rem; }
+.config-said { font-size: 12px; color: var(--fg-dim); }
+.config-said.is-error { color: var(--danger); }
+.config-more { font-size: 12px; color: var(--fg-dim); }
+.config-more summary { cursor: pointer; }
+.config-rules { font-family: var(--font-mono); font-size: 11px; line-height: 1.7; margin: .4rem 0 0; }
+
+/* ---------------------------------------------------------------- about */
+
+.about-button {
+  border-radius: 999px; width: 1.6rem; height: 1.6rem; padding: 0;
+  font-family: var(--font-mono); font-style: italic; line-height: 1;
+}
+
+.about {
+  border: 1px solid var(--line); border-radius: 12px; padding: 0;
+  max-width: 44rem; width: calc(100vw - 2rem); max-height: 84vh;
+  background: var(--bg); color: var(--fg);
+}
+.about::backdrop { background: rgb(0 0 0 / .45); }
+.about-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .8rem 1rem; border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; background: var(--bg); margin: 0;
+}
+.about-head h2 { margin: 0; font-size: 1.05rem; }
+.about-body { padding: 1rem 1.2rem 1.4rem; overflow: auto; max-height: calc(84vh - 3.5rem); }
+.about-body h3 { font-size: .95rem; margin: 1.4rem 0 .4rem; }
+.about-body p, .about-body li { font-size: .92rem; line-height: 1.6; }
+.about-body ol, .about-body ul { margin: .4rem 0; padding-left: 1.2rem; }
+.about-body li { margin: .3rem 0; }
+.about-credits li { margin: .45rem 0; }
+.about-body a { color: var(--accent); }
+.about-body code { font-family: var(--font-mono); font-size: .85em; }
+.about-foot { color: var(--fg-dim); font-size: .85rem; margin-top: 1.4rem; }
+
+/* Embedded, the frame belongs to whoever framed it - a modal of ours over
+   their page would be ours taking their screen. */
+.is-embedded .about-button { display: none; }
 
 .insight-list { list-style: none; margin: 0; padding: .2rem 0; }
 

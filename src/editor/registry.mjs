@@ -44,15 +44,46 @@ const RULES = {
   unknown_types: true,
 };
 
+// What the Config tab shows and edits: the two things that decide what the
+// editor complains about. Kept as a small object rather than abaplint's full
+// configuration (a thousand lines of defaults, almost all of it irrelevant)
+// because a settings screen nobody can read is a settings screen nobody uses.
+let settings = { version: RELEASE, rules: { ...RULES } };
+
+export const abaplintSettings = () => JSON.parse(JSON.stringify(settings));
+export const abaplintDefaults = () => ({ version: RELEASE, rules: { ...RULES } });
+
 function config() {
   const conf = JSON.parse(JSON.stringify(abaplint.Config.getDefault().get()));
-  conf.syntax.version = RELEASE;
+  conf.syntax.version = settings.version;
   // "." matches everything, so an unresolvable name is an error rather than
   // being quietly treated as an object that exists somewhere else.
   conf.syntax.errorNamespace = ".";
   for (const rule of Object.keys(conf.rules)) conf.rules[rule] = false;
-  Object.assign(conf.rules, RULES);
+  Object.assign(conf.rules, settings.rules);
   return new abaplint.Config(JSON.stringify(conf));
+}
+
+// Every rule abaplint has, so the Config tab can say what is available instead
+// of leaving the reader to guess at names.
+export function allRuleNames() {
+  return Object.keys(abaplint.Config.getDefault().get().rules).sort();
+}
+
+// Applies an edited configuration. Reparsing is the cost here - the rules run
+// per object and changing them dirties all of them - so this is deliberately
+// behind an explicit Apply rather than reacting to typing.
+export function applyAbaplintSettings(next) {
+  const unknown = Object.keys(next.rules ?? {}).filter((r) => !allRuleNames().includes(r));
+  if (unknown.length > 0) {
+    throw new Error(`abaplint has no rule called ${unknown.join(", ")}.`);
+  }
+  if (!/^v\d{3}$|^open-abap$|^cloud$/.test(next.version ?? "")) {
+    throw new Error(`${next.version} is not an ABAP release abaplint knows.`);
+  }
+  settings = { version: next.version, rules: { ...next.rules } };
+  registry.setConfig(config());
+  registry.parse();
 }
 
 let registry;

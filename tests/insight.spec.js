@@ -100,3 +100,101 @@ test("an embedded playground does not show the panel", async ({ page }) => {
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
   await expect(page.locator("#insight")).toBeHidden();
 });
+
+test("the panel can be dragged taller, and the height survives a reload", async ({ page }) => {
+  await open(page);
+  const panel = page.locator("#insight");
+  const before = (await panel.boundingBox()).height;
+
+  const grip = page.locator("#insight-grip");
+  const box = await grip.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, box.y - 120, { steps: 8 });
+  await page.mouse.up();
+
+  const after = (await panel.boundingBox()).height;
+  expect(after, "dragging the top edge upwards makes it taller").toBeGreaterThan(before + 60);
+
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  const restored = (await page.locator("#insight").boundingBox()).height;
+  expect(Math.abs(restored - after), "the height came back").toBeLessThan(8);
+});
+
+test("the abaplint config decides what the editor reports", async ({ page }) => {
+  await open(page);
+
+  // A style rule the playground deliberately does not run - it answers "is this
+  // the house style", not "would this work". Nothing says a word about the
+  // blank lines until it is switched on, which is the question this tab exists
+  // to answer: why is it not warning here?
+  await setSource(page, (await page.evaluate(() => window.monaco.editor.getModels()[0].getValue()))
+    .replace(/ENDCLASS\.\n+CLASS/, "ENDCLASS.\n\n\n\n\n\n\nCLASS"));
+  await expect(page.locator(".insight-row", { hasText: "sequential blank" })).toHaveCount(0);
+
+  await page.locator('[data-insight="abaplint"]').click();
+  const box = page.locator(".config-text");
+  const config = JSON.parse(await box.inputValue());
+  config.rules.sequential_blank = true;
+  await box.fill(JSON.stringify(config));
+  await page.locator(".config-row .primary").click();
+
+  await expect(page.locator(".config-said")).toContainText("applied", { timeout: 30000 });
+  await page.locator('[data-insight="problems"]').click();
+  await expect(
+    page.locator(".insight-row", { hasText: /sequential blank/i }).first(),
+  ).toBeVisible({ timeout: 30000 });
+});
+
+test("a config that names a rule abaplint does not have says so", async ({ page }) => {
+  await open(page);
+  await page.locator('[data-insight="abaplint"]').click();
+
+  const box = page.locator(".config-text");
+  const config = JSON.parse(await box.inputValue());
+  config.rules.no_such_rule_at_all = true;
+  await box.fill(JSON.stringify(config));
+  await page.locator(".config-row .primary").click();
+
+  await expect(page.locator(".config-said.is-error")).toContainText("no rule called");
+  // And having refused it, the editor still works.
+  await expect(page.locator(".config-text")).toBeVisible();
+});
+
+test("the abap2UI5 lint config decides which UI5 release the view is held to", async ({ page }) => {
+  await open(page);
+  await page.locator('[data-insight="abap2ui5"]').click();
+
+  const box = page.locator(".config-text");
+  expect(JSON.parse(await box.inputValue())).toEqual({ ui5: "1.71", distribution: "openui5" });
+
+  await box.fill(JSON.stringify({ ui5: "not-a-release", distribution: "openui5" }));
+  await page.locator(".config-row .primary").click();
+  await expect(page.locator(".config-said.is-error")).toContainText("not a UI5 release");
+
+  await page.locator(".config-row button", { hasText: "Reset" }).click();
+  await expect(page.locator(".config-said")).toContainText("applied");
+  expect(JSON.parse(await page.locator(".config-text").inputValue()).ui5).toBe("1.71");
+});
+
+test("the info button opens the credits", async ({ page }) => {
+  await open(page);
+  await expect(page.locator("#about-dialog")).toBeHidden();
+
+  await page.locator("#about").click();
+  const dialog = page.locator("#about-dialog");
+  await expect(dialog).toBeVisible();
+
+  // The projects the playground is built on, named and linked.
+  for (const project of ["abap2UI5", "abaplint", "open-abap-core", "OpenUI5", "Monaco", "sql.js"]) {
+    await expect(dialog).toContainText(project);
+  }
+  await expect(dialog.locator('a[href*="open-abap"]')).toHaveAttribute("target", "_blank");
+  await expect(dialog).toContainText("Thank you");
+  // And it says which framework version is actually running.
+  await expect(page.locator("#about-versions")).toContainText("abap2UI5 ");
+
+  await dialog.locator('button[aria-label="Close"]').click();
+  await expect(dialog).toBeHidden();
+});
