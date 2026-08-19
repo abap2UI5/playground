@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { open, setSource } from "./helpers.mjs";
+import { getSource, open, setSource } from "./helpers.mjs";
 
 // The panel under the editor: the problems list, the outline, and the second
 // checker that feeds the first.
@@ -250,4 +250,42 @@ test("each config tab links to where its rules are documented", async ({ page })
   await expect(page.locator('#insight-body a[href*="npmjs.com"]')).toBeVisible();
   // They leave the playground, so they open where a link should.
   await expect(page.locator("#insight-body a").first()).toHaveAttribute("target", "_blank");
+});
+
+test("the log is a tab of the one panel, and an error opens it", async ({ page }) => {
+  await open(page);
+  // There is one panel at the bottom of the page, not two.
+  await expect(page.locator("#insight")).toBeVisible();
+  await expect(page.locator("#output"), "the separate output window is gone").toHaveCount(0);
+
+  await page.locator('[data-insight="log"]').click();
+  await expect(page.locator("#insight-body")).toContainText("Nothing has gone wrong yet");
+
+  // Something the problems list cannot hold - here a class whose name does not
+  // match its file, which abaplint would only report as a filename complaint -
+  // has to bring the panel to itself rather than wait to be found.
+  await page.locator('[data-insight="outline"]').click();
+  await setSource(page, (await getSource(page)).replace(/zcl_playground/g, "zcl_renamed"));
+  await page.locator("#run").click();
+
+  await expect(page.locator(".log-body")).toBeVisible({ timeout: 30000 });
+  await expect(page.locator('[data-insight="log"]')).toHaveClass(/is-active/);
+  await expect(page.locator("#log-dot")).toHaveText("!");
+
+  // And it can be put away again.
+  await page.locator(".log-head button").click();
+  await expect(page.locator(".log-body")).toHaveCount(0);
+  await expect(page.locator("#log-dot")).toHaveText("");
+});
+
+test("an embedded playground keeps the panel away until something goes wrong", async ({ page }) => {
+  await page.goto("/?embed=1");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await expect(page.locator("#insight"), "tooling stays out of somebody else's page").toBeHidden();
+
+  // A failure is not tooling: it has to reach the reader even here.
+  await setSource(page, (await getSource(page)).replace(/zcl_playground/g, "zcl_renamed"));
+  await page.locator("#run").click();
+  await expect(page.locator("#insight")).toBeVisible({ timeout: 30000 });
+  await expect(page.locator(".log-body")).toBeVisible();
 });

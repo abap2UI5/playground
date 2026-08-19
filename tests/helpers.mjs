@@ -56,7 +56,7 @@ export async function run(page) {
   await page.locator("#run").click();
 }
 
-export const outputText = (page) => page.locator("#output-body").textContent();
+export const outputText = (page) => page.locator(".log-body").textContent();
 
 // Picks a sample and waits for the app that came out of it.
 //

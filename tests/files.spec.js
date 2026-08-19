@@ -74,9 +74,9 @@ test("a class whose name does not match its file is explained", async ({ page })
   await setSource(page, "CLASS zcl_wrong DEFINITION PUBLIC CREATE PUBLIC.\nENDCLASS.\nCLASS zcl_wrong IMPLEMENTATION.\nENDCLASS.", "zcl_helper.clas.abap");
 
   await page.locator("#run").click();
-  await expect(page.locator("#output")).toBeVisible({ timeout: 30000 });
-  await expect(page.locator("#output-body")).toContainText("ZCL_HELPER");
-  await expect(page.locator("#output-body")).toContainText("ZCL_WRONG");
+  await expect(page.locator(".log-body")).toBeVisible({ timeout: 30000 });
+  await expect(page.locator(".log-body")).toContainText("ZCL_HELPER");
+  await expect(page.locator(".log-body")).toContainText("ZCL_WRONG");
 });
 
 test("an error in the second file names the file it is in", async ({ page }) => {
@@ -86,7 +86,11 @@ test("an error in the second file names the file it is in", async ({ page }) => 
   await setSource(page, (await getSource(page, "zcl_detail.clas.abap")).replace("me->client = client.", "me->client = = client."), "zcl_detail.clas.abap");
   await page.locator("#run").click();
 
-  await expect(page.locator("#output-body")).toContainText("zcl_detail.clas.abap", { timeout: 30000 });
+  // With more than one file open, each problem row says which file it is in -
+  // that is where the name lives now, and it is clickable.
+  await expect(
+    page.locator(".insight-row.is-error", { hasText: "zcl_detail.clas.abap" }).first(),
+  ).toBeVisible({ timeout: 30000 });
 });
 
 test("two apps can call each other", async ({ page }) => {

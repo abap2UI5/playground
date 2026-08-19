@@ -1022,3 +1022,34 @@ linked URL passes, two levels, six files, and silence when a name is not there.
 Most names are not there - they are in the framework corpus - and a link that
 failed because a helper could not be guessed at would be worse than one that
 opens what it can.
+
+### Findings from merging the output window into the panel
+
+**One panel at the bottom, five tabs.** The output window and the insight panel
+were two things competing for the same edge of the screen. The panel moved out
+of the left pane to the foot of the page - where the output window already was -
+and the log became a tab of it.
+
+**Moving it there would have hidden the one message that matters.** The panel is
+hidden when embedded, and the left pane it lived in is hidden by `?view=app`. A
+startup failure written into it would have been invisible in exactly the two
+modes where the reader has no other channel. So the panel is *tucked* rather
+than removed in those modes, and anything written to the log un-tucks it: an
+error is not tooling, and it may take the screen without being asked.
+
+**Then the merge made `run( )` say the same thing twice.** With two windows,
+writing the abaplint errors into the output panel sat beside the problems list.
+With one, it covers it - and the copy that wins is the poorer one: the log is
+flat text, while each problem is a row that says which checker spoke and jumps
+to the line. `run( )` now brings the reader to the problems list instead of
+retyping it into the log. The log keeps what the list cannot hold: a structural
+refusal, a startup failure, a dump, a link that would not load.
+
+**Two of the tests that caught it were the ones written an hour earlier.** They
+reached the log through an ABAP error - the path that had just stopped writing
+it. A test that goes red because the thing it tests moved is the test doing its
+job; it now triggers through a structural refusal, which is what the log is for.
+
+**And one test lost its subject.** "The output panel does not outlive the error
+it reported" was named after a window that no longer exists. What it was always
+checking is that the report does not outlive the run, which is what it says now.
