@@ -58,14 +58,14 @@ export async function shareUrl(files) {
   return url.href;
 }
 
-// The same code in a page that shows only the app, which is what the full
-// screen button opens in a new tab. The query is rebuilt rather than carried
-// over: a tab of its own is not an embedded playground, and a ?src= kept from
-// this page would send the new tab fetching files the fragment already holds -
-// the ones in the editor now, edits and all.
+// The same code in a page that is only the app - no editor and no bar - which
+// is what the full screen button opens in a new tab. The query is rebuilt
+// rather than carried over: a tab of its own is not an embedded playground, and
+// a ?src= kept from this page would send the new tab fetching files the
+// fragment already holds - the ones in the editor now, edits and all.
 export async function appUrl(files) {
   const url = new URL(window.location.href);
-  url.search = "?view=app";
+  url.search = "?view=full";
   url.hash = await encodeFiles(files);
   return url.href;
 }

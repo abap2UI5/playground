@@ -139,11 +139,11 @@ class becomes a link of about 700 characters. Being a fragment, it never leaves
 the browser — it is not sent to the server and does not appear in any log.
 
 **Full screen** opens the app on its own in a new tab — the whole window for the
-app, none of the editor around it. It is the same URL Share writes plus
-`?view=app`, so the new tab is a second playground rather than a window onto
-this one: it compiles the code it was handed and runs it against a runtime of
-its own. What happens back in the first tab — another Run, an edit, closing it —
-leaves it alone.
+app, nothing around it: no editor, and no bar over it either. It is the same URL
+Share writes plus `?view=full`, so the new tab is a second playground rather
+than a window onto this one: it compiles the code it was handed and runs it
+against a runtime of its own. What happens back in the first tab — another Run,
+an edit, closing it — leaves it alone.
 
 **`?src=`** opens ABAP that lives somewhere else, which is what a documentation
 page links when it wants to show its example running rather than only printed:
@@ -170,7 +170,10 @@ the editor, Run and the app — for embedding in a documentation page. An
 embedded playground never touches the stored draft, so it cannot overwrite what
 a reader has open in a normal one. **`?view=app`** drops the editor too, for a
 paragraph about what an app does rather than how it is written; the ABAP still
-compiles and runs, it is simply not on screen.
+compiles and runs, it is simply not on screen. **`?view=full`** is that view
+with the bar gone as well — the app and nothing else, which is what Full screen
+opens. The bar comes back if something goes wrong, because the status line it
+carries is the only channel either view has left.
 
 ## Live demos in a documentation page
 

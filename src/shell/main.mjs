@@ -59,11 +59,19 @@ const frame = document.getElementById("app");
 const params = new URLSearchParams(window.location.search);
 const embedded = params.get("embed") === "1";
 
+// `?view=full` is the app and nothing else - no editor, and no bar either, so
+// the tab is the app rather than a playground showing one. That is what the
+// Full screen button opens. `?view=app` below keeps its bar on purpose: it is
+// furniture in a documentation page, and a demo that cannot be restarted is a
+// screenshot - a tab has the browser's own reload and the editor it came from
+// one click away.
+const bare = params.get("view") === "full";
+
 // `?view=app` drops the editor as well, leaving the running app on its own -
 // for the paragraph in a documentation page that wants to show the result
 // rather than the code that produced it. The code is still what runs; it is
 // just not on screen, so the page stays a playground rather than a screenshot.
-const appOnly = params.get("view") === "app";
+const appOnly = bare || params.get("view") === "app";
 
 // Set when a ?src= link could not be followed, so boot can say so once the page
 // is far enough along to have somewhere to say it.
@@ -111,6 +119,7 @@ async function startingFiles() {
 async function boot() {
   if (embedded) document.body.classList.add("is-embedded");
   if (appOnly) document.body.classList.add("is-app-only");
+  if (bare) document.body.classList.add("is-bare");
   // Where the playground is furniture in somebody else's page, the panel stays
   // out of the way - until something is written to the log, which is the one
   // thing that may take the screen unasked.

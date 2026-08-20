@@ -69,12 +69,22 @@ test("Full screen opens the app on its own in a new tab, carrying the code", asy
     page.waitForEvent("popup"),
     page.locator("#fullscreen").click(),
   ]);
-  await tab.waitForURL(/view=app/, { timeout: 15000 });
+  await tab.waitForURL(/view=full/, { timeout: 15000 });
   expect(tab.url(), "the code travels in the fragment, as it does with Share").toContain("#");
 
   await expect(tab.locator("#status")).toHaveText("running", { timeout: 120000 });
   await expect(tab.locator("#pane-left")).toBeHidden();
   await expect(tab.frameLocator("#app").getByText("the full screen version")).toBeVisible();
+
+  // The app and nothing else: no editor, and no bar over it either. Measured
+  // rather than asserted on the class, because what was asked for is a window
+  // filled by the app - a bar that is merely transparent would pass a class
+  // check and still take the top of the screen.
+  await expect(tab.locator(".bar")).toBeHidden();
+  const viewport = tab.viewportSize();
+  const app = await tab.locator("#app").boundingBox();
+  expect(Math.round(app.y), "the app starts at the top of the window").toBe(0);
+  expect(Math.round(app.height), "and reaches the bottom of it").toBe(viewport.height);
 
   // A tab of its own, not a window onto this one: what happens here afterwards
   // is none of its business. Run resets the database and reloads the frame,
@@ -84,6 +94,23 @@ test("Full screen opens the app on its own in a new tab, carrying the code", asy
   await expect(tab.frameLocator("#app").getByText("the full screen version")).toBeVisible();
 
   await tab.close();
+});
+
+test("the bar comes back in the full screen view when something goes wrong", async ({ page }) => {
+  // A ?src= nobody can follow: the page opens on its sample and says so. In
+  // this view the status line is the only channel there is - the log panel
+  // lives in the pane the view hides - so the bar that carries it has to
+  // return, or the reader is left with an app that is not the one the link
+  // named and nothing anywhere saying why.
+  await page.goto("/?view=full&src=https://example.invalid/zcl_thing.clas.abap");
+  await expect(page.locator("#status")).toContainText("could not be followed", { timeout: 120000 });
+  await expect(page.locator(".bar")).toBeVisible();
+
+  // And it goes again once the trouble does. Run clears the report, so what is
+  // on screen afterwards is a running app with nothing over it.
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+  await expect(page.locator(".bar")).toBeHidden();
 });
 
 test("a link nobody wrote opens on the sample instead of failing", async ({ page }) => {
