@@ -6,15 +6,19 @@ running abap2UI5 app on the right. The ABAP is translated to JavaScript in the
 browser by the abaplint transpiler and executed entirely client-side — no
 server, no SAP system. The model was https://playground.abaplint.org/
 
-**Status: phases 0–8 are all built.** The playground runs, 91 tests cover it,
+**Status: phases 0–8 are all built.** The playground runs, 98 tests cover it,
 CI is green.
 
 > **This document is the plan that was followed, not a description of what
-> exists.** It has been corrected where it had gone plainly wrong (the test
-> count, the CDN, the configurable rules) but it is not maintained against the
-> code. For what the playground *is*, read [README.md](README.md); the part of
-> this file worth reading is the **Findings** sections, which record what each
-> phase learned and still hold.
+> exists.** (98 is what `npm test` reports; the source has 91 literal `test()`
+> calls and `samples.spec.js` generates the rest from its sample list — count
+> from the run, not from a grep.)
+>
+> It has been corrected where it had gone plainly wrong (the test count, the
+> CDN, the configurable rules) but it is not maintained against the code. For
+> what the playground *is*, read [README.md](README.md); the part of this file
+> worth reading is the **Findings** sections, which record what each phase
+> learned and still hold.
 
 That makes this document two things: the work plan it was built from, **and**
 the record of what it actually cost. The part that matters for the next
