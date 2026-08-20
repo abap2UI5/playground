@@ -54,6 +54,38 @@ test("editing after a share retires the link, and the reload keeps the edits", a
   expect(await getSource(page)).toContain("edited after sharing");
 });
 
+test("Full screen opens the app on its own in a new tab, carrying the code", async ({ page }) => {
+  await open(page);
+
+  await setSource(page, (await getSource(page)).replace("Hello abap2UI5", "the full screen version"));
+
+  // The new tab shares this browser context, so it also shares the stored
+  // draft - which now contains the marker too. Dropping the draft first leaves
+  // the URL as the only way the marker can reach the new tab; without this the
+  // fragment could be empty and every assertion below would still hold.
+  await page.evaluate(() => localStorage.removeItem("abap2ui5-playground:files"));
+
+  const [tab] = await Promise.all([
+    page.waitForEvent("popup"),
+    page.locator("#fullscreen").click(),
+  ]);
+  await tab.waitForURL(/view=app/, { timeout: 15000 });
+  expect(tab.url(), "the code travels in the fragment, as it does with Share").toContain("#");
+
+  await expect(tab.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await expect(tab.locator("#pane-left")).toBeHidden();
+  await expect(tab.frameLocator("#app").getByText("the full screen version")).toBeVisible();
+
+  // A tab of its own, not a window onto this one: what happens here afterwards
+  // is none of its business. Run resets the database and reloads the frame,
+  // which is the loudest thing this page can do to a shared runtime.
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+  await expect(tab.frameLocator("#app").getByText("the full screen version")).toBeVisible();
+
+  await tab.close();
+});
+
 test("a link nobody wrote opens on the sample instead of failing", async ({ page }) => {
   await page.goto("/#thisisnotavalidfragment");
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });

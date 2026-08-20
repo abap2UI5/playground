@@ -25,6 +25,10 @@ test("?view=app shows the app without the editor, and Run still works", async ({
   await expect(page.locator("#pane-right")).toBeVisible();
   await expect(page.frameLocator("#app").getByText("Hello abap2UI5")).toBeVisible();
 
+  // Full screen is what opens a view like this one. Offering it here would be
+  // offering a tab that already is what the reader is looking at.
+  await expect(page.locator("#fullscreen")).toBeHidden();
+
   // The editor is gone from the screen, not from the playground - what runs is
   // still compiled from it, so Run has to still do something.
   await expect(page.locator("#run")).toBeEnabled();

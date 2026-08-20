@@ -138,6 +138,13 @@ many problems there are now, so a rule can be tried rather than argued about.
 class becomes a link of about 700 characters. Being a fragment, it never leaves
 the browser — it is not sent to the server and does not appear in any log.
 
+**Full screen** opens the app on its own in a new tab — the whole window for the
+app, none of the editor around it. It is the same URL Share writes plus
+`?view=app`, so the new tab is a second playground rather than a window onto
+this one: it compiles the code it was handed and runs it against a runtime of
+its own. What happens back in the first tab — another Run, an edit, closing it —
+leaves it alone.
+
 **`?src=`** opens ABAP that lives somewhere else, which is what a documentation
 page links when it wants to show its example running rather than only printed:
 

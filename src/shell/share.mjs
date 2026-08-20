@@ -58,6 +58,18 @@ export async function shareUrl(files) {
   return url.href;
 }
 
+// The same code in a page that shows only the app, which is what the full
+// screen button opens in a new tab. The query is rebuilt rather than carried
+// over: a tab of its own is not an embedded playground, and a ?src= kept from
+// this page would send the new tab fetching files the fragment already holds -
+// the ones in the editor now, edits and all.
+export async function appUrl(files) {
+  const url = new URL(window.location.href);
+  url.search = "?view=app";
+  url.hash = await encodeFiles(files);
+  return url.href;
+}
+
 // The files a link carries, or undefined when the page was opened plainly.
 // A fragment that will not decode is not an error worth stopping for - the
 // playground opens on its sample and says so.
