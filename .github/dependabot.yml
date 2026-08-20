@@ -1,0 +1,37 @@
+# The playground pins every npm dependency EXACTLY - no carets anywhere in
+# package.json - because what it ships is a build of those exact versions: the
+# transpiler, the abaplint that runs in the editor and the linter all end up
+# inside the bundle a visitor downloads, so "whatever resolves today" would
+# mean the site quietly changing under its own tests.
+#
+# That is the right policy and it left the pins with no way to move. upstream.yml
+# probes the two GIT pins weekly (abap2UI5 and open-abap-core, by SHA) and files
+# an issue; nothing did the same for the npm side, so those versions only moved
+# when somebody happened to look.
+#
+# Monthly rather than weekly, and grouped, because every bump here means
+# rebuilding and re-running 91 browser tests. Majors are separated: a major of
+# @abaplint/* or monaco-editor is a change to what the site DOES, not an update.
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+      time: "06:00"
+    open-pull-requests-limit: 3
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+      major:
+        update-types: [major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+      time: "06:00"
+    groups:
+      actions:
+        patterns: ["*"]

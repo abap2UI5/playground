@@ -6,9 +6,19 @@ running abap2UI5 app on the right. The ABAP is translated to JavaScript in the
 browser by the abaplint transpiler and executed entirely client-side — no
 server, no SAP system. The model was https://playground.abaplint.org/
 
-**Status: phases 0–8 are all built.** The playground runs, 71 tests cover it,
-CI is green. Two items from phase 8 were deliberately *not* built, with the
-reasoning written where they stand.
+**Status: phases 0–8 are all built.** The playground runs, 98 tests cover it,
+CI is green.
+
+> **This document is the plan that was followed, not a description of what
+> exists.** (98 is what `npm test` reports; the source has 91 literal `test()`
+> calls and `samples.spec.js` generates the rest from its sample list — count
+> from the run, not from a grep.)
+>
+> It has been corrected where it had gone plainly wrong (the test count, the
+> CDN, the configurable rules) but it is not maintained against the code. For
+> what the playground *is*, read [README.md](README.md); the part of this file
+> worth reading is the **Findings** sections, which record what each phase
+> learned and still hold.
 
 That makes this document two things: the work plan it was built from, **and**
 the record of what it actually cost. The part that matters for the next
@@ -24,9 +34,9 @@ commit the code and the plan update together.
 
 ## Working rules for AI sessions
 
-- **Branch:** work happens on `claude/abap2ui5-playground-huhjyw`.
-  Push with `git push -u origin claude/abap2ui5-playground-huhjyw`. Do not open
-  a pull request unless a human asks for one.
+- **Branch:** work happens on a branch and reaches `main` through a pull
+  request. (This rule used to name one private branch and to say not to open a
+  pull request; the history since is merged pull requests, #10–#14.)
 - **One task per run of commits.** Finishing a task means: the code, a test or
   other evidence for the acceptance criteria, the checkbox in this document
   ticked, and where relevant the phase's "Findings" section extended.
@@ -45,8 +55,9 @@ commit the code and the plan update together.
   turns out to be Node-only, say), that goes into the "Findings" section and
   the task is reformulated rather than quietly skipped.
 - **Everything static.** The end result of every phase has to work with no
-  server beyond GitHub Pages. No backend, no API keys, no downloads at run
-  time except the UI5 CDN.
+  server beyond GitHub Pages. No backend, no API keys, and — since P3.1 — no
+  downloads at run time at all: the site carries its own OpenUI5 build, it does
+  not link a CDN.
 
 ## The architecture being aimed at
 
@@ -61,7 +72,8 @@ GitHub Pages (static, from dist/)
 │   │                     including the sql.js setup and the roundtrip() bridge
 │   └── sql-wasm.wasm     SQLite as WebAssembly
 ├── app/                  the abap2UI5 UI5 frontend (webapp from build/cloud),
-│                         running in an iframe, UI5 core from the CDN, with
+│                         running in an iframe, UI5 core built into the site
+│                         (P3.1 — not a CDN link), with
 │                         window.fetch for the backend URL redirected to the shim
 └── examples/             ABAP as a static file, so `?src=` has something
                           to point at
@@ -343,13 +355,19 @@ The goal: the technology demo becomes a playground somebody can link to.
   instance of the *old* shape of the class would be revived, exactly the class
   of stale-state bug that caused the `BINDING_ERROR` in phase 5. "Run starts
   fresh" is the more dependable promise.
-- [ ] **Configurable abaplint rules in the UI — deliberately not built.** 188
-  rules as a wall of switches helps nobody, and the rules that really matter
-  for abap2UI5 (chain layout, view-display-on-navigated) are not abaplint's but
-  the abap2UI5 linter's. A "strict" switch carrying generic style rules
-  (keyword case, indentation) would be a button that needs explaining, for a
-  benefit a playground does not have. Instead the active rule list is in the
-  README, so the question "why is it not warning here?" has an answer.
+- [x] **Configurable abaplint rules in the UI — built after all.** This item
+  argued against it: 188 rules as a wall of switches helps nobody, the rules
+  that really matter for abap2UI5 (chain layout, view-display-on-navigated) are
+  the abap2UI5 linter's rather than abaplint's, and a "strict" switch carrying
+  keyword case and indentation would be a button that needs explaining.
+
+  What was built instead answers the objection rather than ignoring it: the
+  Insight panel's **abaplint** and **abap2UI5 lint** tabs hold the live
+  configuration as JSON, not as a wall of switches, so the default stays the
+  short curated list and anyone who wants one of the other rules can add it and
+  see the effect immediately (`src/shell/insight.mjs`). The README documents it.
+  Left here with its original reasoning visible, because the reasoning is why
+  the feature has the shape it has.
 
 ---
 
