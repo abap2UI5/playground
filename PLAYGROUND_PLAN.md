@@ -1114,3 +1114,20 @@ context, so it shares the stored draft - which carries the same marker the
 fragment does. The test removes the draft before it clicks, leaving the URL as
 the only road the code can travel; without that, the fragment could have been
 empty and every assertion would still have passed.
+
+### Findings from making the full screen view actually full
+
+**`?view=app` could not simply lose its bar.** It is what a documentation page
+embeds, and there the bar is the Run button - a demo that cannot be restarted is
+a screenshot. So the tab the button opens got a mode of its own, `?view=full`:
+app-only plus no bar at all. A tab needs no Run button of ours, having the
+browser's reload and the editor it came from one click away.
+
+**And a mode with no bar has nowhere left to report a failure.** The log panel
+lives in the left pane, which app-only mode hides - so in that mode the status
+line in the bar is the *only* channel, which is exactly what taking the bar away
+would have removed. A startup failure would have left a blank tab explaining
+nothing. `setStatus( )` therefore marks the page while a status is an error, and
+the bar returns for as long as that lasts; a status that is no longer an error
+takes it away again. The test drives it through a `?src=` nobody can follow and
+then presses Run to watch the bar go.

@@ -234,6 +234,14 @@ iframe {
 .is-app-only #format { display: none; }
 .is-app-only .pane-right { border-left: 0; }
 
+/* ?view=full - the app and nothing else: the bar goes as well, so the whole
+   window is the app. It comes back the moment something goes wrong, because it
+   carries the only channel this mode has left - the log panel sits in the pane
+   ?view=app hides, and a blank tab that explains nothing is worse than a bar
+   nobody asked for. */
+.is-bare .bar { display: none; }
+.is-bare.has-trouble .bar { display: flex; }
+
 /* --------------------------------------------------------------- insight */
 
 .insight {

@@ -8,6 +8,12 @@ export function setStatus(text, isError = false) {
   const el = statusEl();
   el.textContent = text;
   el.classList.toggle("error", isError);
+  // Under ?view=full there is no bar at all, and the status line is the only
+  // channel that mode has left - the panel the log lands in lives in the pane
+  // it hides. So trouble brings the bar back rather than being written into
+  // something nobody can see, and a status that is no longer an error takes it
+  // away again. Everywhere else the class does nothing.
+  document.body.classList.toggle("has-trouble", isError);
   // An embedded playground hides most of its bar, so the page around it is
   // where a reader would look for this. Sent from here rather than from the
   // callers, so a status that is set anywhere is a status that travels.
