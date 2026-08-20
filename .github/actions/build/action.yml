@@ -4,7 +4,7 @@ description: Install, restore what is expensive to rebuild, build dist/ and chec
 runs:
   using: composite
   steps:
-    - uses: actions/setup-node@v5
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
       with:
         node-version: 22
         cache: npm
@@ -14,7 +14,7 @@ runs:
 
     # The pinned git dependencies, keyed by the file that pins them: a bump
     # changes the file, which changes the key, which forces a fresh clone.
-    - uses: actions/cache@v4
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: deps
         key: deps-${{ hashFiles('tools/fetch-deps.mjs') }}
@@ -22,7 +22,7 @@ runs:
     # Where the UI5 tooling puts the OpenUI5 libraries it downloads from npm.
     # The download is the slow half of the frontend build; the build itself is
     # a minute and is not worth caching a hundred megabytes for.
-    - uses: actions/cache@v4
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.ui5
         key: ui5-${{ hashFiles('tools/build-ui5.mjs') }}
@@ -31,7 +31,7 @@ runs:
     # is deterministic. build-framework.mjs stamps the tree with a hash of its
     # inputs and skips the work when the stamp still matches, so a restored
     # cache goes straight to the transpile.
-    - uses: actions/cache@v4
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           build/downport
