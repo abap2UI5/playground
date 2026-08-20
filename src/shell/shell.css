@@ -230,6 +230,7 @@ iframe {
 .is-app-only .pane-left,
 .is-app-only .splitter,
 .is-app-only .tabs,
+.is-app-only #fullscreen,
 .is-app-only #format { display: none; }
 .is-app-only .pane-right { border-left: 0; }
 

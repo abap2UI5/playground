@@ -32,7 +32,7 @@ import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
 import { setUpInsight, showInsight, updateInsight } from "./insight.mjs";
 import { setUpSplitter, setUpTabs } from "./layout.mjs";
 import { announceAppHeight, announceReady, announceStatus, startEmbedMessages } from "./embed.mjs";
-import { copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
+import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
 import { state } from "./state.mjs";
 import { hideOutput, setStatus, showOutput } from "./ui.mjs";
 
@@ -49,6 +49,7 @@ const STORAGE_KEY = "abap2ui5-playground:files";
 const runButton = document.getElementById("run");
 const formatButton = document.getElementById("format");
 const shareButton = document.getElementById("share");
+const fullscreenButton = document.getElementById("fullscreen");
 const sampleSelect = document.getElementById("samples");
 const frame = document.getElementById("app");
 
@@ -157,12 +158,15 @@ async function boot() {
     return;
   }
 
-  for (const control of [runButton, formatButton, shareButton, sampleSelect]) control.disabled = false;
+  for (const control of [runButton, formatButton, shareButton, fullscreenButton, sampleSelect]) {
+    control.disabled = false;
+  }
   showSourceLink();
 
   runButton.addEventListener("click", () => run());
   formatButton.addEventListener("click", () => format());
   shareButton.addEventListener("click", () => share());
+  fullscreenButton.addEventListener("click", () => openFullScreen());
   sampleSelect.addEventListener("change", () => loadSample(sampleSelect.value, tabs));
 
   // A theme change must not restart the app - somebody has a half-filled form
@@ -280,6 +284,37 @@ function loadSample(id, tabs) {
   renderFiles();
   // Picking a sample is a request to see it, so it runs without a second click.
   run().then(() => tabs.show("right"));
+}
+
+// The app on its own, in a tab of its own - the whole window, none of the
+// editor around it.
+//
+// The new tab is a second playground rather than a window onto this one. The
+// cheaper thing was there for the taking: it is the same origin, so the app
+// could have kept asking this page for its roundtrips through window.opener,
+// the way the iframe asks through window.parent. It would also have tied the
+// app to the tab that opened it - the next Run here resets the database under
+// it, and closing this tab would kill it mid-form. A tab that carries its own
+// code boots on its own and then owes nothing to anybody.
+async function openFullScreen() {
+  // Opened before the code is encoded, not after. Encoding is asynchronous, and
+  // a window.open that lands after an await is a pop-up as far as the browser
+  // is concerned rather than something somebody clicked on.
+  const tab = window.open("", "_blank");
+  try {
+    const url = await appUrl(getFiles());
+    if (!tab) {
+      // Blocked. Nothing is wrong with the link - it just has to be allowed.
+      setStatus("the browser blocked the new tab - allow pop-ups for this page", true);
+      return;
+    }
+    tab.location.replace(url);
+    setStatus("the app is opening in a new tab");
+  } catch (e) {
+    tab?.close();
+    setStatus("the app could not be opened in a new tab", true);
+    showOutput("Full screen", String(e.message || e));
+  }
 }
 
 async function share() {

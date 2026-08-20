@@ -1089,3 +1089,28 @@ cause is fixed rather than the symptom - collapsing puts the dragged height
 aside and expanding gives it back. The new test drags **first**, and it was
 checked against the old code to make sure it goes red there. A test whose
 failure has never been seen is a test nobody has any reason to believe.
+
+### Findings from the full screen button
+
+**The cheap way would have tied the app to the tab that opened it.** The app in
+the iframe gets its roundtrips from this page through `window.parent`, and a tab
+opened from here has `window.opener` pointing back at exactly the same object -
+same origin, a few lines in the bridge, done. It would also have made the new
+tab a passenger: the next Run here calls `resetDatabase( )` and the popped-out
+app loses its drafts mid-form, and closing this tab takes the app with it. So
+the button opens the page again instead, `?view=app` and the code in the
+fragment, and the new tab boots its own runtime out of its own URL. A few
+seconds of boot buys a tab that owes nothing to anybody - and one that can be
+shared, because it is only a link.
+
+**`window.open` has to happen before the `await`, not after.** The fragment is
+deflated asynchronously, and a window opened after an await is a pop-up as far
+as the browser is concerned rather than something somebody clicked on. The tab
+is opened empty in the click handler and its location replaced once the URL is
+ready.
+
+**And the test had to lose the draft first.** The new tab shares the browser
+context, so it shares the stored draft - which carries the same marker the
+fragment does. The test removes the draft before it clicks, leaving the URL as
+the only road the code can travel; without that, the fragment could have been
+empty and every assertion would still have passed.
