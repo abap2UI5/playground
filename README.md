@@ -84,8 +84,10 @@ Where it stops:
   reported in the output panel rather than failing silently.
 - **Only the UI5 libraries that were built in.** `sap.m`, `sap.f`,
   `sap.ui.core`, `sap.ui.layout`, `sap.ui.table`, `sap.ui.unified`, `sap.tnt`,
-  `sap.uxap`. A control from anywhere else will not load — see `UI5_LIBRARIES` in
-  `tools/build-ui5.mjs`.
+  `sap.uxap`, `sap.ui.integration`, `sap.ui.codeeditor`. A control from
+  anywhere else will not load — see `UI5_LIBRARIES` in
+  `src/shell/ui5-libraries.mjs`, the one list both the UI5 build and the
+  examples browser read.
 - **State lives in the tab.** Reloading the page starts over, and so does
   pressing Run. Your code is kept in local storage; the app's data is not.
 
@@ -131,6 +133,25 @@ the live configuration: add any of abaplint's 188 rules, change the ABAP release
 the syntax check holds you to, or lower the UI5 floor the view is checked
 against to find a control an older system would not render. Apply reports how
 many problems there are now, so a rule can be tried rather than argued about.
+
+## The examples browser
+
+The sample repositories — [abap2UI5/samples](https://github.com/abap2UI5/samples)
+and [abap2UI5/samples-controls](https://github.com/abap2UI5/samples-controls) —
+commit a machine-readable `catalogue.json` at their roots. **Examples** in the
+bar fetches those catalogues and lists what they hold next to the built-in
+samples: the learning path by stage, the demo kit ports by library, all of it
+searchable. A chosen entry opens through the same path a `?src=` link takes —
+the raw URL of its class, fetched, checked and run — so it arrives with the
+**on GitHub** link back to where it lives.
+
+Nothing is fetched until the button is clicked, and the answer — including "no
+catalogue there" — is kept in the browser for a day. Where no catalogue can be
+had, the browser quietly lists the built-in samples alone. Entries that could
+never work here are not offered (the SAPUI5-only collection, ports of libraries
+the site does not carry); everything else is offered and judged the way typed
+code is judged — a catalogued sample the transpiler cannot compile says so in
+the Problems list, which is the designed behaviour.
 
 ## Linking a playground
 

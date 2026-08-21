@@ -18,7 +18,7 @@ them before touching `tools/` or `src/runtime`.
 
 | Path | Purpose |
 | --- | --- |
-| `src/shell/` | The page: boot and Run (`main.mjs`), layout and splitter, toolbar, share links (`share.mjs`), `?src=` deep links (`deep-link.mjs`), the bottom panel (`insight.mjs`), embed messaging (`embed.mjs`) — and `frontend-bridge.js`, the fetch interception injected into the app frame |
+| `src/shell/` | The page: boot and Run (`main.mjs`), layout and splitter, toolbar, share links (`share.mjs`), `?src=` deep links (`deep-link.mjs`), the examples browser over the sample repositories' catalogues (`examples.mjs`, filtering by the closed library list in `ui5-libraries.mjs`), the bottom panel (`insight.mjs`), embed messaging (`embed.mjs`) — and `frontend-bridge.js`, the fetch interception injected into the app frame |
 | `src/editor/` | Monaco plus the abaplint registry (`registry.mjs`), the single-object transpile (`transpile.mjs`), the abap2UI5 linter wrapper (`abap2ui5-lint.mjs`), the file set and the sample catalogue (`samples.mjs`) |
 | `src/runtime/` | The ABAP side of the page: the framework entry (`index.mjs`, `roundtrip()` and `defineClass()`), the sql.js database (`db-setup.mjs`), and the browser shims for Node modules |
 | `src/abap/` | The playground's own ABAP (`zcl_pg_bridge`, `zcl_pg_hello`); it travels through the same downport and transpile as the framework |
@@ -48,8 +48,9 @@ first build costs minutes:
    OpenUI5 (`UI5_VERSION`, from npm — no CDN) into `dist/app/`. It rewrites
    `frameOptions="trusted"` to `"allow"` so the app renders inside somebody
    else's documentation page, and fails if the attribute is no longer there to
-   rewrite. `UI5_LIBRARIES` in the same file is the closed set of libraries the
-   site carries.
+   rewrite. `UI5_LIBRARIES` (`src/shell/ui5-libraries.mjs` — shared with the
+   examples browser, which filters catalogue entries by it) is the closed set
+   of libraries the site carries.
 4. **`tools/build-site.mjs`** bundles the page, writes the editor's source
    corpus (`dist/editor/corpus.json`), and copies examples and the embed kit.
    It deletes the directories it owns before writing.
@@ -115,6 +116,23 @@ deploy — readers get the published playground, never your checkout.
   restarted is a screenshot). **`?view=full`**: no bar either — what the Full
   screen button opens; the bar returns while the status line reports an error,
   because it is the only channel that mode has left.
+- **The Examples button** (`src/shell/examples.mjs`): fetches the
+  `catalogue.json` that **abap2UI5/samples** and **abap2UI5/samples-controls**
+  commit at their roots (from `raw.githubusercontent.com` — a host `?src=`
+  already trusts) and lists the entries next to the built-in samples, grouped
+  by learning-path stage and by library, searchable. A chosen entry becomes the
+  raw URL of its class and goes through the `?src=` loading path above — there
+  is one loader, and this is a menu in front of it. The catalogue shapes
+  (`samples[]` with `stage`, `ports[]` with `library`/`category`) are a
+  contract with those repositories. Nothing is fetched before the button is
+  clicked (a missing catalogue answers 404, and the browser logs that on its
+  own — a page nobody asked for examples loads clean); the answer, hit or
+  miss, is kept in localStorage for a day. No catalogue means the built-ins
+  alone, silently. Two kinds of controls entries are never offered: the
+  SAPUI5-only `src/03` collection, and ports whose library is not in
+  `UI5_LIBRARIES` — everything else is offered and judged by the two checkers
+  and Run, exactly like typed code; a catalogued sample the transpiler cannot
+  compile fails visibly there, and that is the designed behaviour, not a bug.
 - **`embed/abap2ui5-embed.js`**: turns an element into a click-to-load demo —
   `data-src` (one URL or several, first is the app), `data-code` (inline ABAP;
   the file is named after the class in it), `data-view`, `data-height`,
@@ -148,9 +166,10 @@ a sample without a test is not possible. CI:
   would force every deep link to rename what it points at.
 - **Only what the transpiler implements.** Anything it cannot compile is
   reported in the panel; there is no fallback and none is wanted.
-- **Only the UI5 libraries in `UI5_LIBRARIES`** (`tools/build-ui5.mjs`).
-  A control from any other library will not load; SAPUI5-only libraries
-  (`sap.ui.comp`, `sap.suite.*`, …) cannot be added to an OpenUI5 build at all.
+- **Only the UI5 libraries in `UI5_LIBRARIES`** (`src/shell/ui5-libraries.mjs`,
+  built by `tools/build-ui5.mjs`). A control from any other library will not
+  load; SAPUI5-only libraries (`sap.ui.comp`, `sap.suite.*`, …) cannot be
+  added to an OpenUI5 build at all.
 - **No IndexedDB persistence for the drafts database** — considered and
   refused (PLAYGROUND_PLAN.md, phase 8): restored rows would be orphaned data,
   or would revive an instance of an old shape of the class. "Run starts fresh"

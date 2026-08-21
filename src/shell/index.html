@@ -19,6 +19,8 @@
     <select id="samples" disabled></select>
   </label>
 
+  <button id="examples" disabled title="Browse the sample repositories">Examples</button>
+
   <button id="share" disabled title="Copy a link that carries this code">Share</button>
   <button id="fullscreen" disabled title="Open the app on its own, in a new tab">Full screen</button>
 
@@ -66,8 +68,10 @@
     <h3>Where the apps come from</h3>
     <p>
       The <b>Sample</b> dropdown above carries a handful to start from. Three
-      sibling repositories carry the rest, and every card on their pages has a
-      button that opens the class right here:
+      sibling repositories carry the rest: <b>Examples</b> browses the
+      catalogues of the first two without leaving this page, every card on
+      their own pages has a button that opens the class right here, and what
+      needs a real system stays where the system is:
     </p>
     <!-- NOT .about-credits: that list is other people's work, and a test holds
          it to naming none of ours. This one names ours on purpose. -->
@@ -126,6 +130,20 @@
       MIT
     </p>
   </div>
+</dialog>
+
+<!-- The examples browser: the built-in samples plus whatever the sample
+     repositories' committed catalogues offer, fetched when this opens - see
+     src/shell/examples.mjs. The search sits outside the method="dialog" form
+     on purpose: inside it, Enter in the input would close the dialog. -->
+<dialog id="examples-dialog" class="about examples">
+  <header class="about-head examples-head">
+    <h2>Examples</h2>
+    <input id="examples-search" type="search" placeholder="Search title, control, class…"
+           autocomplete="off" spellcheck="false" aria-label="Search the examples">
+    <form method="dialog"><button class="ghost" aria-label="Close">✕</button></form>
+  </header>
+  <div class="about-body examples-body" id="examples-body"></div>
 </dialog>
 
 <main class="panes" id="panes">
