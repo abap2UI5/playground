@@ -110,7 +110,7 @@
 ENDCLASS.
 CLASS z2ui5_cl_demo_inline IMPLEMENTATION.
   METHOD z2ui5_if_app~main.
-    IF client->check_on_init( ) IS INITIAL.
+    IF client->check_on_init( ) = abap_false.
       RETURN.
     ENDIF.
     DATA(view) = z2ui5_cl_ui5_view_builder=>factory(
@@ -152,7 +152,7 @@ ENDMETHOD.</pre>
 ENDCLASS.
 CLASS zcl_playground IMPLEMENTATION.
   METHOD z2ui5_if_app~main.
-    IF client->check_on_init( ) IS INITIAL.
+    IF client->check_on_init( ) = abap_false.
       RETURN.
     ENDIF.
     DATA(view) = z2ui5_cl_ui5_view_builder=>factory(
