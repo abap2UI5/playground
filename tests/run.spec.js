@@ -16,12 +16,12 @@ ENDCLASS.
 CLASS zcl_playground IMPLEMENTATION.
   METHOD z2ui5_if_app~main.
     me->client = client.
-    IF client->check_on_init( ) = abap_true.
+    IF client->check_on_init( ).
       ${body}
       view_display( ).
       RETURN.
     ENDIF.
-    IF client->check_on_navigated( ) = abap_true.
+    IF client->check_on_navigated( ).
       view_display( ).
     ENDIF.
   ENDMETHOD.
@@ -200,7 +200,7 @@ ENDCLASS.
 CLASS zcl_playground IMPLEMENTATION.
   METHOD z2ui5_if_app~main.
     me->client = client.
-    IF client->check_on_init( ) = abap_true.
+    IF client->check_on_init( ).
       out = |written by { made_by( ) }|.
       view_display( ).
     ENDIF.
