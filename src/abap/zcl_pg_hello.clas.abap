@@ -19,13 +19,13 @@ CLASS zcl_pg_hello IMPLEMENTATION.
 
     me->client = client.
 
-    IF client->check_on_init( ) IS NOT INITIAL.
+    IF client->check_on_init( ) = abap_true.
       name = `World`.
       view_display( ).
       RETURN.
     ENDIF.
 
-    IF client->check_on_navigated( ) IS NOT INITIAL.
+    IF client->check_on_navigated( ) = abap_true.
       view_display( ).
       RETURN.
     ENDIF.

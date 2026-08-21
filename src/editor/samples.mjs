@@ -29,13 +29,13 @@ CLASS zcl_playground IMPLEMENTATION.
 
     me->client = client.
 
-    IF client->check_on_init( ) IS NOT INITIAL.
+    IF client->check_on_init( ) = abap_true.
       name = \`World\`.
       view_display( ).
       RETURN.
     ENDIF.
 
-    IF client->check_on_navigated( ) IS NOT INITIAL.
+    IF client->check_on_navigated( ) = abap_true.
       view_display( ).
       RETURN.
     ENDIF.
@@ -121,7 +121,7 @@ CLASS zcl_playground IMPLEMENTATION.
 
     me->client = client.
 
-    IF client->check_on_init( ) IS NOT INITIAL.
+    IF client->check_on_init( ) = abap_true.
       t_flight = VALUE #(
           ( carrier = \`LH\` connid = \`0400\` city_to = \`New York\`  seats = 385 )
           ( carrier = \`LH\` connid = \`0402\` city_to = \`San Francisco\` seats = 385 )
@@ -131,7 +131,7 @@ CLASS zcl_playground IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    IF client->check_on_navigated( ) IS NOT INITIAL.
+    IF client->check_on_navigated( ) = abap_true.
       view_display( ).
       RETURN.
     ENDIF.
@@ -222,7 +222,7 @@ CLASS zcl_playground IMPLEMENTATION.
 
     me->client = client.
 
-    IF client->check_on_init( ) IS NOT INITIAL OR client->check_on_navigated( ) IS NOT INITIAL.
+    IF client->check_on_init( ) = abap_true OR client->check_on_navigated( ) = abap_true.
       view_display( ).
       RETURN.
     ENDIF.
@@ -320,7 +320,7 @@ CLASS zcl_playground IMPLEMENTATION.
 
     me->client = client.
 
-    IF client->check_on_init( ) IS NOT INITIAL.
+    IF client->check_on_init( ) = abap_true.
       status = \`nothing deleted yet\`.
       view_display( ).
       RETURN.
@@ -329,7 +329,7 @@ CLASS zcl_playground IMPLEMENTATION.
     " A popup is an app of its own: it is called with nav_app_call and hands
     " control back, which arrives here as a navigated roundtrip - not as an
     " event. That is why check_on_navigated( ) is part of every dispatcher.
-    IF client->check_on_navigated( ) IS NOT INITIAL.
+    IF client->check_on_navigated( ) = abap_true.
       DATA(popup) = CAST z2ui5_cl_pop_to_confirm( client->get_app( client->get( )-s_draft-id_prev_app ) ).
       IF popup IS BOUND.
         status = COND #( WHEN popup->result( ) = abap_true
@@ -408,7 +408,7 @@ CLASS zcl_playground IMPLEMENTATION.
 
     me->client = client.
 
-    IF client->check_on_init( ) IS NOT INITIAL.
+    IF client->check_on_init( ) = abap_true.
       t_note = VALUE #( ( title = \`First note\`  body = \`abap2UI5 keeps the state on the server\` )
                         ( title = \`Second note\` body = \`and the frontend stays thin\` ) ).
       selected = \`list\`.
@@ -416,7 +416,7 @@ CLASS zcl_playground IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    IF client->check_on_navigated( ) IS NOT INITIAL.
+    IF client->check_on_navigated( ) = abap_true.
       view_display( ).
       RETURN.
     ENDIF.
@@ -516,7 +516,7 @@ CLASS zcl_playground IMPLEMENTATION.
 
     me->client = client.
 
-    IF client->check_on_init( ) IS NOT INITIAL OR client->check_on_navigated( ) IS NOT INITIAL.
+    IF client->check_on_init( ) = abap_true OR client->check_on_navigated( ) = abap_true.
       view_display( ).
       RETURN.
     ENDIF.
@@ -603,7 +603,7 @@ CLASS zcl_playground IMPLEMENTATION.
 
     me->client = client.
 
-    IF client->check_on_init( ) IS NOT INITIAL.
+    IF client->check_on_init( ) = abap_true.
       view_display( ).
       RETURN.
     ENDIF.
@@ -611,7 +611,7 @@ CLASS zcl_playground IMPLEMENTATION.
     " The called app hands control back, and that arrives here as a navigated
     " roundtrip - not as an event. Reading its result means reading the app
     " instance the framework kept for us.
-    IF client->check_on_navigated( ) IS NOT INITIAL.
+    IF client->check_on_navigated( ) = abap_true.
       DATA(detail) = CAST zcl_detail( client->get_app( client->get( )-s_draft-id_prev_app ) ).
       IF detail IS BOUND.
         picked = detail->chosen.
@@ -680,7 +680,7 @@ CLASS zcl_detail IMPLEMENTATION.
 
     me->client = client.
 
-    IF client->check_on_init( ) IS NOT INITIAL.
+    IF client->check_on_init( ) = abap_true.
       view_display( ).
       RETURN.
     ENDIF.
@@ -761,12 +761,12 @@ CLASS zcl_playground IMPLEMENTATION.
 
   METHOD z2ui5_if_app~main.
 
-    IF client->check_on_event( ) IS NOT INITIAL.
+    IF client->check_on_event( ) = abap_true.
       on_event( ).
       RETURN.
     ENDIF.
 
-    IF client->check_on_init( ) IS INITIAL.
+    IF client->check_on_init( ) = abap_false.
       RETURN.
     ENDIF.
 
@@ -804,7 +804,7 @@ CLASS zcl_playground IMPLEMENTATION.
 
   METHOD z2ui5_if_app~main.
 
-    IF client->check_on_init( ) IS INITIAL.
+    IF client->check_on_init( ) = abap_false.
       RETURN.
     ENDIF.
 

@@ -19,7 +19,7 @@ CLASS zcl_linked_pair IMPLEMENTATION.
 
     me->client = client.
 
-    IF client->check_on_init( ) IS INITIAL AND client->check_on_navigated( ) IS INITIAL.
+    IF client->check_on_init( ) = abap_false AND client->check_on_navigated( ) = abap_false.
       RETURN.
     ENDIF.
 

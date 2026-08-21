@@ -12,7 +12,7 @@ const withIcon = (icon) => `CLASS zcl_playground DEFINITION PUBLIC CREATE PUBLIC
 ENDCLASS.
 CLASS zcl_playground IMPLEMENTATION.
   METHOD z2ui5_if_app~main.
-    IF client->check_on_init( ) IS NOT INITIAL.
+    IF client->check_on_init( ) = abap_true.
       DATA(view) = z2ui5_cl_ui5_view_builder=>factory(
           )->ele( n = \`View\` ns = \`mvc\`
               )->a( n = \`xmlns\`     v = \`sap.m\`
