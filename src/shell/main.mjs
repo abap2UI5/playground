@@ -28,6 +28,7 @@ import {
   originOf,
 } from "./deep-link.mjs";
 import { DEFAULT_FILES, SAMPLES, sampleById } from "../editor/samples.mjs";
+import { openExamples, setUpExamples } from "./examples.mjs";
 import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
 import { setUpInsight, showInsight, updateInsight } from "./insight.mjs";
 import { setUpSplitter, setUpTabs } from "./layout.mjs";
@@ -50,6 +51,7 @@ const runButton = document.getElementById("run");
 const formatButton = document.getElementById("format");
 const shareButton = document.getElementById("share");
 const fullscreenButton = document.getElementById("fullscreen");
+const examplesButton = document.getElementById("examples");
 const sampleSelect = document.getElementById("samples");
 const frame = document.getElementById("app");
 
@@ -134,6 +136,16 @@ async function boot() {
   createEditor(document.getElementById("editor"), files, { onChange: remember });
   setUpFiles({ onChanged: remember, onOpened: fileOpened });
   setUpInsight();
+  // The examples browser hands back either a built-in sample's id or the raw
+  // URL of a catalogued class; the URL goes through the same code a ?src=
+  // link goes through.
+  setUpExamples({
+    openSample: (id) => {
+      sampleSelect.value = id;
+      loadSample(id, tabs);
+    },
+    openLinked: (url) => loadLinked(url, tabs),
+  });
 
   fillSampleMenu(from);
 
@@ -167,7 +179,7 @@ async function boot() {
     return;
   }
 
-  for (const control of [runButton, formatButton, shareButton, fullscreenButton, sampleSelect]) {
+  for (const control of [runButton, formatButton, shareButton, fullscreenButton, examplesButton, sampleSelect]) {
     control.disabled = false;
   }
   showSourceLink();
@@ -176,6 +188,7 @@ async function boot() {
   formatButton.addEventListener("click", () => format());
   shareButton.addEventListener("click", () => share());
   fullscreenButton.addEventListener("click", () => openFullScreen());
+  examplesButton.addEventListener("click", () => openExamples());
   sampleSelect.addEventListener("change", () => loadSample(sampleSelect.value, tabs));
 
   // A theme change must not restart the app - somebody has a half-filled form
@@ -293,6 +306,39 @@ function loadSample(id, tabs) {
   renderFiles();
   // Picking a sample is a request to see it, so it runs without a second click.
   run().then(() => tabs.show("right"));
+}
+
+// A catalogued example, chosen in the examples browser. The URL goes down the
+// same path a ?src= link goes down - fetched and checked by deep-link.mjs, the
+// classes it needs looked for beside it, the first file the app - just without
+// the page reload a link would cost, because the registry this page has
+// already built serves the new files as well as it served the old.
+async function loadLinked(url, tabs) {
+  try {
+    setStatus("fetching the example…");
+    const linked = checkFileSet(await fetchLinkedFiles(new URLSearchParams([["src", url]])));
+    const alongside = await followNavigation(linked);
+    setFiles(checkFileSet([...linked, ...alongside]).map((f) => ({ ...f })));
+    renderFiles();
+    // The menu stops claiming the editor holds one of its samples - the same
+    // move fillSampleMenu makes when the page opens on somebody's link.
+    let placeholder = [...sampleSelect.options].find((o) => o.value === "");
+    if (!placeholder) {
+      placeholder = new Option("", "");
+      placeholder.disabled = true;
+      sampleSelect.add(placeholder, 0);
+    }
+    placeholder.text = "from the examples browser";
+    sampleSelect.value = "";
+    await run();
+    tabs.show("right");
+  } catch (e) {
+    // The catalogue said the class is there and it was not, or the fetch
+    // failed under way. Somebody clicked expecting particular code, so this
+    // failure is said out loud - unlike a catalogue that never loaded.
+    setStatus("the example could not be opened", true);
+    showOutput("Examples", String(e.message || e));
+  }
 }
 
 // The app on its own, in a tab of its own - the whole window, none of the

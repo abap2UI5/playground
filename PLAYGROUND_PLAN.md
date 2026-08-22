@@ -1,5 +1,8 @@
 # abap2UI5 browser playground — work plan
 
+> **Historical.** This is the plan the playground was built from; for the
+> current state read [README.md](README.md) and [AGENTS.md](AGENTS.md).
+
 The goal: a playground as a static GitHub Page in this repository (abap2UI5/playground).
 A Monaco editor with abaplint on the left (diagnostics, completion), the
 running abap2UI5 app on the right. The ABAP is translated to JavaScript in the

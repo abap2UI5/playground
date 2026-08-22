@@ -21,6 +21,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { UI5_LIBRARIES } from "../src/shell/ui5-libraries.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DEPS = path.join(ROOT, "deps");
@@ -34,29 +35,11 @@ const OUT = path.join(ROOT, "dist", "app");
 // commit: run the build, run the tests, look at the app.
 export const UI5_VERSION = "1.151.0";
 
-// What an abap2UI5 app can reach. A view names its controls at runtime, so
-// there is no way to derive this from the code - a library that is not here is
-// a control that will not render. sap.ui.core and sap.m are what the frontend's
-// manifest declares; the rest are the libraries abap2UI5's own samples use.
-const UI5_LIBRARIES = [
-  "sap.ui.core",
-  "sap.m",
-  "sap.f",
-  "sap.ui.layout",
-  "sap.ui.table",
-  "sap.ui.unified",
-  "sap.tnt",
-  "sap.uxap",
-  // Added for the samples-controls catalogue, which links each of its ports
-  // here and greys out the ones this build cannot serve: sap.ui.integration
-  // carries the integration cards (5 ports) and sap.ui.codeeditor the ABAP/JS
-  // editor control (2 ports). Everything still greyed out there is
-  // SAPUI5-only - sap.suite.*, sap.ui.comp, sap.viz, sap.gantt - and cannot
-  // be added to an OpenUI5 build at all.
-  "sap.ui.integration",
-  "sap.ui.codeeditor",
-  "themelib_sap_horizon",
-];
+// The closed set of libraries this build carries - UI5_LIBRARIES - lives in
+// src/shell/ui5-libraries.mjs, because the examples browser filters the
+// samples-controls catalogue against the same list. What the imported comment
+// says holds here: a library that is not in it is a control that will not
+// render.
 
 const log = (m) => console.log(`build-ui5: ${m}`);
 

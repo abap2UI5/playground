@@ -1,0 +1,187 @@
+# AGENTS.md
+
+The abap2UI5 browser playground: a static page, published to GitHub Pages, with
+Monaco and abaplint on the left and a real abap2UI5 app on the right. The ABAP
+in the editor is transpiled to JavaScript in the browser and run against the
+actual framework — transpiled at build time from a pinned commit — with nothing
+behind it: no server, no SAP system, no backend of any kind.
+
+**What is current and what is not.** [README.md](README.md) and this file
+describe the playground as it is. [PLAYGROUND_PLAN.md](PLAYGROUND_PLAN.md) is
+the plan it was built from and says itself that it is not maintained against
+the code — but its **Findings** sections record every trap in the build and the
+runtime (the transpiler flags without which nothing links, the type caches that
+must be cleared on redefine, the `frameOptions` story) and still hold. Read
+them before touching `tools/` or `src/runtime`.
+
+## Layout
+
+| Path | Purpose |
+| --- | --- |
+| `src/shell/` | The page: boot and Run (`main.mjs`), layout and splitter, toolbar, share links (`share.mjs`), `?src=` deep links (`deep-link.mjs`), the examples browser over the sample repositories' catalogues (`examples.mjs`, filtering by the closed library list in `ui5-libraries.mjs`), the bottom panel (`insight.mjs`), embed messaging (`embed.mjs`) — and `frontend-bridge.js`, the fetch interception injected into the app frame |
+| `src/editor/` | Monaco plus the abaplint registry (`registry.mjs`), the single-object transpile (`transpile.mjs`), the abap2UI5 linter wrapper (`abap2ui5-lint.mjs`), the file set and the sample catalogue (`samples.mjs`) |
+| `src/runtime/` | The ABAP side of the page: the framework entry (`index.mjs`, `roundtrip()` and `defineClass()`), the sql.js database (`db-setup.mjs`), and the browser shims for Node modules |
+| `src/abap/` | The playground's own ABAP (`zcl_pg_bridge`, `zcl_pg_hello`); it travels through the same downport and transpile as the framework |
+| `src/examples/` | ABAP served as static files, so `?src=` has same-origin targets and the link tests depend on no foreign host |
+| `src/embed/` | The embed loader (`abap2ui5-embed.js`) and a worked example page; copied verbatim to `dist/embed/` |
+| `tools/` | The build (`fetch-deps`, `build-framework`, `build-ui5`, `build-site`), the size budget (`check-size`) and the dev server (`serve`) |
+| `tests/` | Playwright specs — the only test layer; everything is tested through a real browser against the built `dist/` |
+
+`deps/`, `build/` and `dist/` are generated and gitignored. Never commit them.
+
+## The build pipeline
+
+`npm run build` is four steps, each cached by a hash of its inputs, so only the
+first build costs minutes:
+
+1. **`tools/fetch-deps.mjs`** pins `abap2UI5/abap2UI5` and `open-abap-core` by
+   commit SHA under `deps/`. Bumping a pin is editing the sha there — nothing
+   else fetches source.
+2. **`tools/build-framework.mjs`** copies the framework plus `src/abap` to
+   `build/downport/`, downports to v702 syntax (`abaplint --fix`, ~3 minutes,
+   deterministic), transpiles, and esbuild-bundles the result with the runtime
+   and the sql.js setup into `dist/runtime/framework.mjs`. The esbuild flags
+   (`keepNames`, the injected `Buffer`, the console and crypto shims in
+   `tools/esbuild-plugins.mjs`) are all load-bearing — the plan's phase 1
+   findings explain each one.
+3. **`tools/build-ui5.mjs`** builds the abap2UI5 UI5 frontend against a pinned
+   OpenUI5 (`UI5_VERSION`, from npm — no CDN) into `dist/app/`. It rewrites
+   `frameOptions="trusted"` to `"allow"` so the app renders inside somebody
+   else's documentation page, and fails if the attribute is no longer there to
+   rewrite. `UI5_LIBRARIES` (`src/shell/ui5-libraries.mjs` — shared with the
+   examples browser, which filters catalogue entries by it) is the closed set
+   of libraries the site carries.
+4. **`tools/build-site.mjs`** bundles the page, writes the editor's source
+   corpus (`dist/editor/corpus.json`), and copies examples and the embed kit.
+   It deletes the directories it owns before writing.
+
+At run time the pieces meet like this: the UI5 frontend runs in an iframe and
+POSTs to its backend with a plain `fetch`; `frontend-bridge.js` replaces
+`window.fetch` for exactly that one request (comparing origin and pathname
+only — the run counter lives in the query) and hands the body to the transpiled
+handler in the parent page. The drafts abap2UI5 keeps in a database live in an
+in-memory SQLite — sql.js, compiled to WebAssembly. Run means: a fresh
+database, then reload the iframe with `?app_start=<CLASS>&run=<n>`.
+
+`PG_DEBUG=1` builds the page and framework bundles unminified with source maps;
+without it neither ships one.
+
+## The two checkers, and the Fix-them contract
+
+- **abaplint** (`src/editor/registry.mjs`) answers *does this compile*, against
+  the real framework sources at release v750, with a deliberately small rule
+  set — only rules that answer "would this work", never house style. An
+  abaplint error blocks Run.
+- **The abap2UI5 linter** (`src/editor/abap2ui5-lint.mjs`,
+  `@abap2ui5/linter`) reconstructs the view the builder chain produces and
+  checks it against UI5 **1.71**, the floor abap2UI5 holds its shipped apps to.
+  A finding does not block Run: the app runs and is wrong somewhere, and
+  looking at it is the fastest way to understand the finding.
+
+Both configurations are live in the panel's **abaplint** and **abap2UI5 lint**
+tabs (`src/shell/insight.mjs`); the defaults stay the curated lists. The two
+use separate Monaco marker owners — sharing one would have each erase the
+other's underlines.
+
+**Fix them** (`applyFixes()` in `src/editor/editor.mjs`) applies both checkers'
+fixes to everything open: abaplint's structural fixes first, then the linter's,
+each in a bounded loop because one fix uncovers the next. The rewrite is
+written back through `pushEditOperations` as **one edit per file**, so a single
+Ctrl+Z takes the whole thing back. Nothing without a correct answer is guessed
+at — an icon that does not exist stays reported. Keep all of that true when
+changing anything near it.
+
+## The public surfaces — the docs site consumes these
+
+These are contracts, not conveniences: **abap2UI5/docs** puts Run buttons and
+embedded demos under its examples using exactly these. A docs change that
+depends on *new* playground behaviour must ship **after** the playground
+deploy — readers get the published playground, never your checkout.
+
+- **Share links**: every open file in the URL fragment, deflate-raw and
+  base64url with a version prefix (`src/shell/share.mjs`). The fragment never
+  leaves the browser. A fragment the playground cannot read is treated as
+  somebody else's link and silently replaced by the sample — which is why an
+  external page must build URLs with `window.abap2ui5Embed.url()`, never by
+  hand.
+- **`?src=<url>`** (`src/shell/deep-link.mjs`): opens ABAP from same-origin or
+  GitHub's raw hosts (`raw.githubusercontent.com`,
+  `gist.githubusercontent.com`) — an allow list on purpose, not an open read
+  proxy. Several `src` parameters open several files; **the first file is the
+  app**. Classes the app needs are looked for beside it: siblings only, at most
+  6 files, 2 levels deep, silent when a name is not found.
+- **`?embed=1`**: drops the chrome, and never reads or writes the stored
+  draft — an embedding must not overwrite a reader's work.
+- **`?view=app`**: hides the editor too, keeps the bar (a demo that cannot be
+  restarted is a screenshot). **`?view=full`**: no bar either — what the Full
+  screen button opens; the bar returns while the status line reports an error,
+  because it is the only channel that mode has left.
+- **The Examples button** (`src/shell/examples.mjs`): fetches the
+  `catalogue.json` that **abap2UI5/samples** and **abap2UI5/samples-controls**
+  commit at their roots (from `raw.githubusercontent.com` — a host `?src=`
+  already trusts) and lists the entries next to the built-in samples, grouped
+  by learning-path stage and by library, searchable. A chosen entry becomes the
+  raw URL of its class and goes through the `?src=` loading path above — there
+  is one loader, and this is a menu in front of it. The catalogue shapes
+  (`samples[]` with `stage`, `ports[]` with `library`/`category`) are a
+  contract with those repositories. Nothing is fetched before the button is
+  clicked (a missing catalogue answers 404, and the browser logs that on its
+  own — a page nobody asked for examples loads clean); the answer, hit or
+  miss, is kept in localStorage for a day. No catalogue means the built-ins
+  alone, silently. Two kinds of controls entries are never offered: the
+  SAPUI5-only `src/03` collection, and ports whose library is not in
+  `UI5_LIBRARIES` — everything else is offered and judged by the two checkers
+  and Run, exactly like typed code; a catalogued sample the transpiler cannot
+  compile fails visibly there, and that is the designed behaviour, not a bug.
+- **`embed/abap2ui5-embed.js`**: turns an element into a click-to-load demo —
+  `data-src` (one URL or several, first is the app), `data-code` (inline ABAP;
+  the file is named after the class in it), `data-view`, `data-height`,
+  `data-label`, `data-auto`. `window.abap2ui5Embed.setUp()` for pages that swap
+  content without reloading. The frame posts `ready`, `status` and `height` to
+  its parent. Click-to-load is deliberate: every demo boots its own runtime and
+  parses the whole corpus.
+
+## Build, run, test
+
+```sh
+npm ci
+npm run build     # deps -> framework -> UI5 -> site; first run takes minutes
+npm run serve     # dist/ on http://localhost:8080, also mounted under a subpath
+npm test          # Playwright, chromium, against the built dist/
+```
+
+The tests are the gate: everything runs through a real browser, and
+`tests/samples.spec.js` imports the sample catalogue and drives every entry —
+a sample without a test is not possible. CI:
+
+| | |
+|---|---|
+| `check.yml` | every non-main branch and pull request: the composite build action (`.github/actions/build`, with caches for `deps/`, `~/.ui5` and the downport), the size budget, `npm test` |
+| `pages.yml` | pushes to `main`: the same build and tests, then deploy `dist/` to GitHub Pages — a red test never publishes |
+| `upstream.yml` | weekly: build and test against upstream `HEAD` without moving the pins, and open or extend an issue when that fails, so a bump stays a two-line commit |
+
+## Deliberate limits — do not "fix" these
+
+- **The first file is the app.** Positional on purpose; a required class name
+  would force every deep link to rename what it points at.
+- **Only what the transpiler implements.** Anything it cannot compile is
+  reported in the panel; there is no fallback and none is wanted.
+- **Only the UI5 libraries in `UI5_LIBRARIES`** (`src/shell/ui5-libraries.mjs`,
+  built by `tools/build-ui5.mjs`). A control from any other library will not
+  load; SAPUI5-only libraries (`sap.ui.comp`, `sap.suite.*`, …) cannot be
+  added to an OpenUI5 build at all.
+- **No IndexedDB persistence for the drafts database** — considered and
+  refused (PLAYGROUND_PLAN.md, phase 8): restored rows would be orphaned data,
+  or would revive an instance of an old shape of the class. "Run starts fresh"
+  is the promise.
+- **The `?src=` host allow list stays short.** The playground fetches on
+  behalf of whoever opened the link and must not become a general-purpose
+  reader for arbitrary URLs.
+
+## Toolchain
+
+Node 22, matching the rest of the organisation. Every npm dependency is pinned
+exactly — the transpiler, abaplint and the linter end up inside the bundle a
+visitor downloads, so "whatever resolves today" would change the site under its
+own tests. Actions are pinned to commits; `.github/dependabot.yml` moves npm
+packages and action pins monthly, majors separated.
