@@ -5,6 +5,7 @@
   "description": "Browser playground for abap2UI5 - ABAP in the editor, the running app next to it, nothing but a static page.",
   "type": "module",
   "license": "MIT",
+  "engines": { "node": ">=22" },
   "scripts": {
     "deps": "node tools/fetch-deps.mjs",
     "build:framework": "node tools/build-framework.mjs",
@@ -12,7 +13,8 @@
     "build:site": "node tools/build-site.mjs",
     "build": "npm run deps && npm run build:framework && npm run build:ui5 && npm run build:site",
     "check:size": "node tools/check-size.mjs",
-    "test": "playwright test",
+    "check": "npm run build && npm run check:size && npm test",
+  "test": "playwright test",
     "serve": "node tools/serve.mjs"
   },
   "devDependencies": {

@@ -148,7 +148,15 @@ npm ci
 npm run build     # deps -> framework -> UI5 -> site; first run takes minutes
 npm run serve     # dist/ on http://localhost:8080, also mounted under a subpath
 npm test          # Playwright, chromium, against the built dist/
+npm run check     # the three above as one command - what check.yml runs
 ```
+
+`npm test` on its own runs against whatever `dist/` already holds, so on a fresh
+clone it fails as a 30-second `webServer` timeout rather than as "nothing is
+built" — `npm run check` is the entry point that cannot be typed in the wrong
+order. It leaves out exactly one thing `check.yml` does: `npx playwright install
+chromium`, a browser download rather than a step, which `npm test` then asks for
+by name (CONVENTIONS section 3 asks for that omission to be named here).
 
 The tests are the gate: everything runs through a real browser, and
 `tests/samples.spec.js` imports the sample catalogue and drives every entry —
@@ -180,7 +188,10 @@ a sample without a test is not possible. CI:
 
 ## Toolchain
 
-Node 22, matching the rest of the organisation. Every npm dependency is pinned
+Node 22, matching the rest of the organisation — `engines.node` is `>=22` and
+`.nvmrc` says `22`, as CONVENTIONS section 4 requires. Both were missing until
+2026-08-28: this paragraph asserted the version and nothing declared it, so
+`nvm use` picked whatever the shell had. Every npm dependency is pinned
 exactly — the transpiler, abaplint and the linter end up inside the bundle a
 visitor downloads, so "whatever resolves today" would change the site under its
 own tests. Actions are pinned to commits; `.github/dependabot.yml` moves npm
