@@ -12,7 +12,8 @@
     "build:site": "node tools/build-site.mjs",
     "build": "npm run deps && npm run build:framework && npm run build:ui5 && npm run build:site",
     "check:size": "node tools/check-size.mjs",
-    "test": "playwright test",
+    "check": "npm run build && npm run check:size && npm test",
+  "test": "playwright test",
     "serve": "node tools/serve.mjs"
   },
   "devDependencies": {

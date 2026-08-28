@@ -148,7 +148,15 @@ npm ci
 npm run build     # deps -> framework -> UI5 -> site; first run takes minutes
 npm run serve     # dist/ on http://localhost:8080, also mounted under a subpath
 npm test          # Playwright, chromium, against the built dist/
+npm run check     # the three above as one command - what check.yml runs
 ```
+
+`npm test` on its own runs against whatever `dist/` already holds, so on a fresh
+clone it fails as a 30-second `webServer` timeout rather than as "nothing is
+built" — `npm run check` is the entry point that cannot be typed in the wrong
+order. It leaves out exactly one thing `check.yml` does: `npx playwright install
+chromium`, a browser download rather than a step, which `npm test` then asks for
+by name (CONVENTIONS section 3 asks for that omission to be named here).
 
 The tests are the gate: everything runs through a real browser, and
 `tests/samples.spec.js` imports the sample catalogue and drives every entry —
