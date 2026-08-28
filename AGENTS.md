@@ -188,7 +188,10 @@ a sample without a test is not possible. CI:
 
 ## Toolchain
 
-Node 22, matching the rest of the organisation. Every npm dependency is pinned
+Node 22, matching the rest of the organisation — `engines.node` is `>=22` and
+`.nvmrc` says `22`, as CONVENTIONS section 4 requires. Both were missing until
+2026-08-28: this paragraph asserted the version and nothing declared it, so
+`nvm use` picked whatever the shell had. Every npm dependency is pinned
 exactly — the transpiler, abaplint and the linter end up inside the bundle a
 visitor downloads, so "whatever resolves today" would change the site under its
 own tests. Actions are pinned to commits; `.github/dependabot.yml` moves npm
