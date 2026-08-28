@@ -14,8 +14,16 @@ on:
 permissions:
   contents: read
 
+# Keyed by BRANCH NAME, not by `github.ref`, because the two triggers above
+# both fire for a branch that has a pull request open — and `github.ref` is
+# `refs/heads/<branch>` for the push and `refs/pull/<n>/merge` for the pull
+# request. Two different groups, so neither cancelled the other and every PR
+# branch built and ran the 106 browser tests twice, concurrently, for the same
+# commit. `github.head_ref` is the source branch on a pull request and empty
+# otherwise, so this collapses both to one name and `cancel-in-progress` keeps
+# the newer run.
 concurrency:
-  group: check-${{ github.ref }}
+  group: check-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
