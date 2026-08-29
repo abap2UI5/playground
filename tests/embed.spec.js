@@ -61,6 +61,22 @@ test("an embedded playground reports ready, status and height to the page around
   const heights = messages.filter((m) => m.type === "height");
   expect(heights.length, "an app-only demo reports how tall it wants to be").toBeGreaterThan(0);
   expect(heights.at(-1).height).toBeGreaterThan(50);
+
+  // And the page around it actually grew. host.html is the copy-and-paste
+  // version of the loader, so the guards in its handler have to let a real
+  // message through - a check that only ever rejects is a broken example.
+  await expect
+    .poll(
+      async () => {
+        const wanted = await page.evaluate(
+          () => window.__messages.filter((m) => m.type === "height").at(-1)?.height,
+        );
+        const shown = await page.locator("#demo").evaluate((el) => el.clientHeight);
+        return Math.abs(shown - Math.max(120, Math.min(1200, wanted))) <= 1;
+      },
+      { timeout: 30000 },
+    )
+    .toBe(true);
 });
 
 test("a playground that is not embedded stays silent", async ({ page }) => {
