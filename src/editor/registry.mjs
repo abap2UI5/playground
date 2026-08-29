@@ -73,7 +73,14 @@ export function allRuleNames() {
 // Applies an edited configuration. Reparsing is the cost here - the rules run
 // per object and changing them dirties all of them - so this is deliberately
 // behind an explicit Apply rather than reacting to typing.
-export function applyAbaplintSettings(next) {
+//
+// And it is the startup parse again, every bit of it: the whole corpus, several
+// seconds. Done synchronously that is several seconds of a page that does not
+// scroll, does not repaint and does not answer - so it goes through the same
+// yielding parse the corpus does, and reports the same progress. The settings
+// are validated before anything is changed, so a rejected edit leaves the
+// registry exactly as it was.
+export async function applyAbaplintSettings(next, onProgress) {
   const unknown = Object.keys(next.rules ?? {}).filter((r) => !allRuleNames().includes(r));
   if (unknown.length > 0) {
     throw new Error(`abaplint has no rule called ${unknown.join(", ")}.`);
@@ -83,7 +90,7 @@ export function applyAbaplintSettings(next) {
   }
   settings = { version: next.version, rules: { ...next.rules } };
   registry.setConfig(config());
-  registry.parse();
+  await parseWithYields(registry, onProgress);
 }
 
 let registry;
@@ -119,8 +126,35 @@ export async function buildRegistry(corpus, files, onProgress) {
     held.set(file.name, file.source);
   }
 
+  await parseWithYields(reg, onProgress);
+
+  registry = reg;
+  return reg;
+}
+
+// A yield that hands the browser a frame and comes back on the next task.
+//
+// setTimeout is the obvious way to write this and the wrong one: a timer set
+// from inside a timer's own callback is clamped to four milliseconds, and at a
+// yield per frame that is a fifth of the parse spent waiting on the clock
+// rather than parsing. scheduler.yield() has no timer behind it.
+const yieldToBrowser = () =>
+  globalThis.scheduler?.yield?.() ?? new Promise((r) => setTimeout(r, 0));
+
+// Parses a registry without taking the page down with it, reporting progress as
+// it goes. Both callers need this: the corpus at startup, and a changed rule
+// set afterwards - which dirties every object and so costs the same again.
+async function parseWithYields(reg, onProgress) {
   let done = 0;
   let total = reg.getObjectCount().total;
+  // Yielded on a clock rather than on a count of objects. Objects are nothing
+  // like equal - a large class costs many times what an interface does - so
+  // every-n-objects yields far too rarely on a slow machine, which is the one
+  // where it matters, and far too often on a fast one, where the yield is the
+  // expensive part. A frame is the unit the answer is wanted in: long enough
+  // that yielding cannot dominate the parse, short enough that the page never
+  // misses one.
+  let lastYield = performance.now();
   await reg.parseAsync({
     progress: {
       set(t) {
@@ -128,12 +162,10 @@ export async function buildRegistry(corpus, files, onProgress) {
       },
       async tick() {
         done += 1;
-        // Yield roughly twenty times a second: often enough that the page stays
-        // alive, rarely enough that the yielding does not dominate the parse.
-        if (done % 25 === 0) {
-          onProgress?.(done, total);
-          await new Promise((r) => setTimeout(r, 0));
-        }
+        if (performance.now() - lastYield < 16) return;
+        onProgress?.(done, total);
+        await yieldToBrowser();
+        lastYield = performance.now();
       },
       // The second half of the parse - resolving global types across the whole
       // corpus - reports through a synchronous hook, so there is nothing to
@@ -142,9 +174,6 @@ export async function buildRegistry(corpus, files, onProgress) {
     },
   });
   onProgress?.(total, total);
-
-  registry = reg;
-  return reg;
 }
 
 export function getRegistry() {

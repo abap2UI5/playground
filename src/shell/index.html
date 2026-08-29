@@ -6,6 +6,31 @@
 <title>abap2UI5 Playground</title>
 <meta name="description" content="Write abap2UI5 apps in the browser: ABAP on the left, the running app on the right, no server involved.">
 <link rel="stylesheet" href="assets/shell.css">
+
+<!-- The three heavy assets the page is going to want, asked for now rather
+     than when the code that needs them gets around to running.
+
+     Left alone they arrive in a chain, because each one is requested by the
+     code in the one before it: nothing asks for the framework or the corpus
+     until assets/shell.mjs has been downloaded and evaluated, and nothing asks
+     for SQLite until the framework has been. Every link in that chain is a
+     round trip that could have been spent transferring something.
+
+     What that is worth depends on which of the two is scarce. Where bandwidth
+     is the whole story there is nothing to win and these change nothing;
+     where round trips cost anything they are worth about a tenth of the wait.
+     AGENTS.md, "What a visitor waits for", has the measurements.
+
+     These are relative to the document, like everything else here, so they
+     resolve under a GitHub Pages project path as well as at a site root. Keep
+     them in step with what src/shell/main.mjs and the framework actually
+     fetch: a preload nothing collects is downloaded twice and warned about in
+     the console. `crossorigin` is on the two fetched ones because fetch()
+     makes a CORS request and a preload only satisfies a request it matches;
+     the framework is an ES module, so it gets modulepreload instead. -->
+<link rel="modulepreload" href="runtime/framework.mjs">
+<link rel="preload" href="editor/corpus.json" as="fetch" crossorigin>
+<link rel="preload" href="runtime/sql-wasm.wasm" as="fetch" crossorigin>
 </head>
 <body>
 <header class="bar">
