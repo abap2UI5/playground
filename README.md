@@ -232,9 +232,11 @@ failing.
 **Nothing loads until the reader clicks.** Each demo is a whole ABAP runtime
 plus an abaplint parse of nine hundred sources — a second or two of processor
 and a few hundred megabytes, per frame. Demos on one page share the browser
-cache, so the bytes are paid once, but the parsing is not; a page with ten
-autoloading examples would be the slowest thing in the manual. `data-auto="1"`
-overrides it where the page is about its one demo.
+cache, and after the first visit they share the playground's service worker
+cache as well, so the bytes are paid once and then not again; the parsing is
+not shared either way, and a page with ten autoloading examples would be the
+slowest thing in the manual. `data-auto="1"` overrides it where the page is
+about its one demo.
 
 The app frame is served with UI5's `frameOptions` set to `allow` rather than the
 `trusted` abap2UI5 ships. `trusted` means "only in a frame whose top window is
@@ -260,15 +262,17 @@ npm test          # Playwright, against a freshly built dist/
 ```
 
 The first build takes a few minutes: the downport is three of them and the UI5
-build one. Both are cached by a hash of their inputs, so the second build is
+build one, and the two run at the same time because neither reads what the
+other writes. Both are cached by a hash of their inputs, so the second build is
 seconds.
 
 | | |
 |---|---|
+| `tools/build.mjs` | what `npm run build` runs: the four below, the middle two together |
 | `tools/fetch-deps.mjs` | pins abap2UI5 and open-abap-core by commit under `deps/` |
 | `tools/build-framework.mjs` | downport → transpile → `dist/runtime/framework.mjs` |
 | `tools/build-ui5.mjs` | the abap2UI5 frontend built against OpenUI5 → `dist/app/` |
-| `tools/build-site.mjs` | the page bundle and the ABAP corpus the editor uses |
+| `tools/build-site.mjs` | the page bundle, the ABAP corpus the editor uses, and the service worker |
 | `tools/check-size.mjs` | the budget for what a visitor downloads |
 
 `PG_DEBUG=1` builds the page and framework bundles unminified and with source

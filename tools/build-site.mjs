@@ -5,6 +5,7 @@
 // tools/build-framework.mjs writes dist/runtime, tools/build-ui5.mjs writes
 // dist/app. This step is the page itself: the shell bundle, its stylesheet, and
 // whatever static assets the shell needs.
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -129,6 +130,56 @@ for (const required of ["runtime/framework.mjs", "runtime/sql-wasm.wasm", "app/i
     console.error(`build-site: ERROR dist/${required} is missing - run the full build (npm run build)`);
     process.exit(1);
   }
+}
+
+writeServiceWorker();
+
+// ------------------------------------------------------------ service worker
+
+// src/shell/sw.js, with an id for this build written into it - see the comment
+// at the top of that file for what the worker does with it. The id names the
+// cache, so it is what keeps one build's assets from ever being served beside
+// another's; and because the worker script is the only place it appears, a
+// build that produced identical output produces an identical worker, which the
+// browser then correctly declines to reinstall.
+//
+// Everything the worker may cache goes into the id. The five core assets go in
+// by content. dist/app - the UI5 build, thousands of files and most of the site
+// by weight - goes in as a listing of paths and sizes: reading it whole to hash
+// it would cost more than the rest of this step put together, and a UI5 build
+// that changed without a single file changing size is not a thing that happens.
+function writeServiceWorker() {
+  const id = crypto.createHash("sha256");
+  for (const rel of [
+    "assets/shell.mjs",
+    "assets/shell.css",
+    "editor/corpus.json",
+    "runtime/framework.mjs",
+    "runtime/sql-wasm.wasm",
+  ]) {
+    id.update(rel);
+    id.update(fs.readFileSync(path.join(DIST, rel)));
+  }
+  for (const entry of listing(path.join(DIST, "app")).sort()) id.update(entry);
+
+  const source = fs.readFileSync(path.join(SHELL, "sw.js"), "utf8");
+  if (!source.includes("__BUILD_ID__")) {
+    console.error("build-site: ERROR src/shell/sw.js no longer has a __BUILD_ID__ to substitute");
+    process.exit(1);
+  }
+  const build = id.digest("hex").slice(0, 16);
+  fs.writeFileSync(path.join(DIST, "sw.js"), source.replaceAll("__BUILD_ID__", build));
+  log(`sw.js (build ${build})`);
+}
+
+function listing(dir, prefix = "") {
+  const out = [];
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const rel = prefix + e.name;
+    if (e.isDirectory()) out.push(...listing(path.join(dir, e.name), `${rel}/`));
+    else out.push(`${rel}:${fs.statSync(path.join(dir, e.name)).size}`);
+  }
+  return out;
 }
 
 fs.writeFileSync(path.join(ROOT, "build", "site.metafile.json"), JSON.stringify(result.metafile));

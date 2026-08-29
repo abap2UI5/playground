@@ -151,27 +151,41 @@ async function boot() {
 
   // Two independent slow starts: the transpiled framework (a download and a
   // parse) and the ABAP corpus the editor checks against. Neither needs the
-  // other, so they run together.
+  // other, so they run together - and the corpus half does not stop at its
+  // download. Parsing what arrives is the expensive part of it, several seconds
+  // of processor against a megabyte and a half of network, and it starts the
+  // moment the JSON lands rather than after the framework has finished
+  // arriving. That is the difference between the two costs adding up and the
+  // longer one covering the shorter.
   const runtimeReady = import(/* @vite-ignore */ asset("runtime/framework.mjs"));
-  const corpusReady = fetch(asset("editor/corpus.json")).then((r) => {
-    if (!r.ok) throw new Error(`corpus.json: ${r.status}`);
-    return r.json();
-  });
+  const registryReady = fetch(asset("editor/corpus.json"))
+    .then((r) => {
+      if (!r.ok) throw new Error(`corpus.json: ${r.status}`);
+      return r.json();
+    })
+    .then(async (corpus) => {
+      setStatus("reading the abap2UI5 sources…");
+      await buildRegistry(corpus, files, (done, total) => {
+        setStatus(`checking the sources… ${Math.round((done / total) * 100)}%`);
+      });
+      // Whatever is left to wait for is the framework still on its way. Saying
+      // so beats leaving the line reading 100% with nothing apparently
+      // happening.
+      setStatus("loading the ABAP runtime…");
+    });
 
   try {
     setStatus("loading the ABAP runtime…");
-    state.runtime = await runtimeReady;
+    // Awaited together rather than one after the other, because both are
+    // already running: awaiting them in sequence would leave whichever failed
+    // second rejecting with nobody listening yet.
+    const [runtime] = await Promise.all([runtimeReady, registryReady]);
+    state.runtime = runtime;
     window.__z2ui5Playground = { roundtrip: (body) => state.runtime.roundtrip(body) };
     const version = `abap2UI5 ${state.runtime.abapVersion()}`;
     document.getElementById("versions").textContent = version;
     document.getElementById("about-versions").textContent = version;
 
-    setStatus("reading the abap2UI5 sources…");
-    const corpus = await corpusReady;
-
-    await buildRegistry(corpus, files, (done, total) => {
-      setStatus(`checking the sources… ${Math.round((done / total) * 100)}%`);
-    });
     connectRegistry();
   } catch (e) {
     setStatus("the playground could not start", true);
@@ -215,6 +229,29 @@ async function boot() {
     setStatus("the link could not be followed - showing the sample instead", true);
     showOutput("Link", String(linkFailure.message || linkFailure));
   }
+
+  keepAssetsForNextTime();
+}
+
+// Registers the service worker that makes a second visit cheap - see
+// src/shell/sw.js for what it keeps and what it deliberately leaves alone.
+//
+// Last, once the page is up and the app is running. The worker fills its cache
+// by fetching the heavy assets itself, and every one of them is in the
+// browser's cache by now because this page has just downloaded them - so doing
+// it here costs almost nothing, where doing it during boot would have put those
+// fetches next to the ones the visitor is actually waiting on. Nothing on the
+// page depends on any of this working.
+function keepAssetsForNextTime() {
+  if (!("serviceWorker" in navigator)) return;
+  // No scope given: a worker's default scope is the directory it was served
+  // from, which is the site's own directory at an origin root and under a
+  // GitHub Pages project path alike.
+  navigator.serviceWorker.register(new URL("sw.js", document.baseURI)).catch(() => {
+    // A browser that will not have one - a private window, a policy, an origin
+    // that is not secure - loses the second visit's head start and nothing
+    // else. There is nothing here to tell anybody about.
+  });
 }
 
 // The credits, and what this is. Wired outside boot()'s try/catch and before

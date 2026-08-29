@@ -407,11 +407,24 @@ function configEditor({ title, blurb, value, onApply, onReset, extra }) {
 
   if (extra) wrap.append(extra);
 
-  apply.addEventListener("click", () => {
+  apply.addEventListener("click", async () => {
+    // Changing abaplint's rules dirties every object in the corpus, so applying
+    // them is the startup parse over again - seconds, during which the button
+    // must not be pressable a second time and the panel should say what is
+    // going on rather than appear to have ignored the click.
+    if (apply.disabled) return;
+    apply.disabled = true;
+    reset.disabled = true;
     said.className = "config-said";
+    said.textContent = "applying…";
     try {
       const parsed = JSON.parse(area.value);
-      onApply(parsed);
+      // Whether this is asynchronous is the checker's business, not this
+      // function's: abaplint's half yields while it reparses, the linter's is
+      // a field assignment. Awaiting covers both.
+      await onApply(parsed, (done, total) => {
+        said.textContent = `applying… ${Math.round((done / total) * 100)}%`;
+      });
       // The panel says what changed rather than only that something did: the
       // whole point of the tab is understanding why a message is or is not
       // there, so the count is the answer.
@@ -421,6 +434,9 @@ function configEditor({ title, blurb, value, onApply, onReset, extra }) {
     } catch (e) {
       said.className = "config-said is-error";
       said.textContent = String(e.message || e);
+    } finally {
+      apply.disabled = false;
+      reset.disabled = false;
     }
   });
 

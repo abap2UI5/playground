@@ -18,21 +18,26 @@ them before touching `tools/` or `src/runtime`.
 
 | Path | Purpose |
 | --- | --- |
-| `src/shell/` | The page: boot and Run (`main.mjs`), layout and splitter, toolbar, share links (`share.mjs`), `?src=` deep links (`deep-link.mjs`), the examples browser over the sample repositories' catalogues (`examples.mjs`, filtering by the closed library list in `ui5-libraries.mjs`), the bottom panel (`insight.mjs`), embed messaging (`embed.mjs`) — and `frontend-bridge.js`, the fetch interception injected into the app frame |
+| `src/shell/` | The page: boot and Run (`main.mjs`), layout and splitter, toolbar, share links (`share.mjs`), `?src=` deep links (`deep-link.mjs`), the examples browser over the sample repositories' catalogues (`examples.mjs`, filtering by the closed library list in `ui5-libraries.mjs`), the bottom panel (`insight.mjs`), embed messaging (`embed.mjs`) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
 | `src/editor/` | Monaco plus the abaplint registry (`registry.mjs`), the single-object transpile (`transpile.mjs`), the abap2UI5 linter wrapper (`abap2ui5-lint.mjs`), the file set and the sample catalogue (`samples.mjs`) |
 | `src/runtime/` | The ABAP side of the page: the framework entry (`index.mjs`, `roundtrip()` and `defineClass()`), the sql.js database (`db-setup.mjs`), and the browser shims for Node modules |
 | `src/abap/` | The playground's own ABAP (`zcl_pg_bridge`, `zcl_pg_hello`); it travels through the same downport and transpile as the framework |
 | `src/examples/` | ABAP served as static files, so `?src=` has same-origin targets and the link tests depend on no foreign host |
 | `src/embed/` | The embed loader (`abap2ui5-embed.js`) and a worked example page; copied verbatim to `dist/embed/` |
-| `tools/` | The build (`fetch-deps`, `build-framework`, `build-ui5`, `build-site`), the size budget (`check-size`) and the dev server (`serve`) |
+| `tools/` | The build (`build.mjs`, which drives `fetch-deps`, `build-framework`, `build-ui5`, `build-site`), the size budget (`check-size`) and the dev server (`serve`) |
 | `tests/` | Playwright specs — the only test layer; everything is tested through a real browser against the built `dist/` |
 
 `deps/`, `build/` and `dist/` are generated and gitignored. Never commit them.
 
 ## The build pipeline
 
-`npm run build` is four steps, each cached by a hash of its inputs, so only the
-first build costs minutes:
+`npm run build` is `tools/build.mjs`, which runs four steps, each cached by a
+hash of its inputs, so only the first build costs minutes. Steps 2 and 3 run
+**together** — they read different sources and write to different places, and
+only step 4 reads what either produced — so a cold build costs the longer of
+them rather than both. Their output is streamed with the step's name in front
+of each line. Each step is still its own script and still runnable by name
+(`npm run build:framework`):
 
 1. **`tools/fetch-deps.mjs`** pins `abap2UI5/abap2UI5` and `open-abap-core` by
    commit SHA under `deps/`. Bumping a pin is editing the sha there — nothing
@@ -52,8 +57,9 @@ first build costs minutes:
    examples browser, which filters catalogue entries by it) is the closed set
    of libraries the site carries.
 4. **`tools/build-site.mjs`** bundles the page, writes the editor's source
-   corpus (`dist/editor/corpus.json`), and copies examples and the embed kit.
-   It deletes the directories it owns before writing.
+   corpus (`dist/editor/corpus.json`), copies examples and the embed kit, and
+   writes `dist/sw.js` from `src/shell/sw.js` with an id for this build
+   substituted into it. It deletes the directories it owns before writing.
 
 At run time the pieces meet like this: the UI5 frontend runs in an iframe and
 POSTs to its backend with a plain `fetch`; `frontend-bridge.js` replaces
@@ -65,6 +71,38 @@ database, then reload the iframe with `?app_start=<CLASS>&run=<n>`.
 
 `PG_DEBUG=1` builds the page and framework bundles unminified with source maps;
 without it neither ships one.
+
+## What a visitor waits for
+
+Four assets stand between opening the page and an app on screen, and
+`tools/check-size.mjs` budgets all four: the shell bundle (~1.4 MB compressed,
+Monaco and abaplint and the transpiler), the transpiled framework (~0.8 MB),
+the ABAP corpus (~0.6 MB) and SQLite (~0.3 MB). About three megabytes, and
+then several seconds of processor to parse them. Two things keep that from
+being worse than it is, and both have to be kept in step with the code:
+
+- **The preloads in `src/shell/index.html`.** Left alone these four arrive in a
+  chain — nothing asks for the framework or the corpus until the shell bundle
+  has downloaded *and evaluated*, and nothing asks for SQLite until the
+  framework has. The `modulepreload` and `preload` tags start all of them with
+  the document instead. Measured against a built `dist/` served with gzip: no
+  difference where bandwidth is the whole story (4 Mbit/s, 100 ms: 11.8 s
+  either way), and about 10% where round trips cost anything (12 Mbit/s,
+  300 ms: 9.0 s → 8.0 s; 50 Mbit/s, 40 ms: 5.8 s → 5.2 s). A preload that
+  nothing collects is downloaded twice and warned about in the console, so if
+  what the page fetches changes, these change with it.
+- **The service worker** (`src/shell/sw.js`, `tests/worker.spec.js`). Cache
+  first, over an allow list, in a cache named after the build. Its own comment
+  is the long form: what it caches, what it deliberately leaves live (the app
+  frame's document, linked ABAP, the catalogues), and why it neither calls
+  `skipWaiting()` nor claims the page that registered it. `main.mjs` registers
+  it last thing in `boot()`, after the first run.
+
+The registry parse is the processor half, and it is
+[yielded on a clock](src/editor/registry.mjs) rather than on a count of objects
+so the page keeps painting through it. Applying an edited abaplint
+configuration goes through the same path, because changing a rule dirties every
+object in the corpus and costs the whole parse again.
 
 ## The two checkers, and the Fix-them contract
 
@@ -182,6 +220,18 @@ a sample without a test is not possible. CI:
   refused (PLAYGROUND_PLAN.md, phase 8): restored rows would be orphaned data,
   or would revive an instance of an old shape of the class. "Run starts fresh"
   is the promise.
+- **The corpus ships whole — method bodies and all.** It is the largest single
+  thing the editor waits on and the obvious place to look for a saving, so
+  here is the measurement, to save the next person from running it again.
+  Replacing every `METHOD … ENDMETHOD` with an empty one takes
+  `corpus.json` from 0.60 MB compressed to 0.21 MB and roughly halves the
+  parse. But of the 3.8 MB of ABAP in it, 2.9 MB is abap2UI5 itself and only
+  0.8 MB is open-abap — so stripping only the standard library, where nobody
+  ever reads an implementation, saves 0.05 MB and is not worth having. The
+  saving is only there if the abap2UI5 sources go too, and those are exactly
+  what somebody control-clicks into to find out how the framework does
+  something. Reading the framework is the playground; a tenth of the download
+  does not buy it.
 - **The `?src=` host allow list stays short.** The playground fetches on
   behalf of whoever opened the link and must not become a general-purpose
   reader for arbitrary URLs.

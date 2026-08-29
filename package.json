@@ -11,10 +11,10 @@
     "build:framework": "node tools/build-framework.mjs",
     "build:ui5": "node tools/build-ui5.mjs",
     "build:site": "node tools/build-site.mjs",
-    "build": "npm run deps && npm run build:framework && npm run build:ui5 && npm run build:site",
+    "build": "node tools/build.mjs",
     "check:size": "node tools/check-size.mjs",
     "check": "npm run build && npm run check:size && npm test",
-  "test": "playwright test",
+    "test": "playwright test",
     "serve": "node tools/serve.mjs"
   },
   "devDependencies": {

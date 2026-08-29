@@ -40,6 +40,17 @@ fix is deployed by merging it.
   their own code in their own browser — but it is the reason the `?src=` allow
   list matters, since that is the one path by which *somebody else's* code
   arrives.
+- **A service worker caches the heavy assets** (`src/shell/sw.js`), which makes
+  it a same-origin request interceptor with storage that outlives the tab — so
+  it is deliberately as small as that job allows. It answers only `GET`, only
+  for its own origin and its own directory, and only for an allow list of the
+  site's own build outputs: the shell bundle, the framework, the corpus,
+  SQLite, the editor font and the UI5 build. Anything carrying a query string
+  is refused outright, and so is everything the playground fetches on somebody
+  else's behalf — linked ABAP, the sample catalogues, the app frame's own
+  document. It never rewrites a response, and it caches only a clean `200`.
+  Each cache is named after the build that filled it and the previous one is
+  deleted when a new worker takes over, so nothing survives a deploy.
 - **Every dependency is pinned exactly**, including the transpiler, abaplint
   and the linter, because all three end up inside the bundle a visitor
   downloads.
