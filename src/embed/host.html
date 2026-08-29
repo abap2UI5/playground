@@ -14,9 +14,27 @@
         src="../?embed=1&view=app&src=../examples/zcl_linked_example.clas.abap"></iframe>
 <script>
   // Grow to what the app said it needs.
+  //
+  // The same three guards the shipped loader uses (src/embed/abap2ui5-embed.js),
+  // because this page is the copy-and-paste version of it and an example
+  // teaches whatever it does:
+  //
+  //   e.source    the message has to come from the frame THIS page embedded.
+  //               A name in the payload is not a check - any window that can
+  //               reach this one can post { source: "abap2ui5-playground" },
+  //               and in somebody else's page the frame is not the only thing
+  //               that can talk to it.
+  //   a number    "height" arrives as whatever was sent; a string or a NaN
+  //               would be written straight into a style.
+  //   a range     so one bad message cannot leave a page scrolling for a
+  //               screen and a half.
+  const demo = document.getElementById("demo");
   window.addEventListener("message", (e) => {
+    if (e.source !== demo.contentWindow) return;
     if (e.data?.source !== "abap2ui5-playground") return;
-    if (e.data.type === "height") document.getElementById("demo").style.height = `${e.data.height}px`;
+    if (e.data.type === "height" && Number.isFinite(e.data.height)) {
+      demo.style.height = `${Math.max(120, Math.min(1200, e.data.height))}px`;
+    }
   });
 </script>
 </body>
