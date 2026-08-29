@@ -101,7 +101,7 @@ function createModel(file) {
     // every one of them while somebody types a word is still noise.
     clearTimeout(pending);
     pending = setTimeout(() => {
-      if (connected) refresh();
+      refresh();
       onChange?.(getFiles());
     }, 150);
   });
@@ -171,6 +171,15 @@ export function setFiles(files) {
 // all markers of one owner at a time, so a shared owner would have whichever
 // checker ran second erase the other's underlines.
 export function refresh() {
+  // Nothing to check against, and nothing to check with. The registry does not
+  // exist until the corpus has been parsed, and the editor is typeable for the
+  // whole of that - a moment on a fast connection, several seconds on a slow
+  // one. Every path that reacts to a change in the editor arrives here, so the
+  // guard belongs here rather than at each caller: it was at one of them and
+  // not at the other, and the one without it reached straight into a registry
+  // that was not there yet.
+  if (!connected) return [];
+
   const files = getFiles();
   updateFiles(files);
 
