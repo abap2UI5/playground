@@ -131,6 +131,42 @@ function downport() {
   const configPath = path.join(BUILD, "abaplint-downport.json");
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 
+  /* abap2UI5's downport shim, run against THIS repository's abaplint because
+   * that is the install the downport below uses.
+   *
+   * Stock abaplint outlines a component-level table expression (`tab[ 1 ]-comp`)
+   * into a work AREA - a copy - so the row reference is gone by the time the
+   * framework sees it, and `client->_bind( tab = … tab_index = … )` refuses the
+   * cell with BINDING_ERROR_TAB_CELL_LEVEL. The shim makes the outline
+   * ASSIGNING, which is what the same abaplint rule's write path already emits.
+   *
+   * It is upstream's script from the clone fetch-deps already makes, never a
+   * copy: it is a temporary shim for an abaplint defect and has to disappear
+   * from every consumer on the same day. The bundle path is passed explicitly
+   * because that clone has no node_modules of its own, so the script's default
+   * would patch nothing and say so cheerfully.
+   *
+   * Why this matters HERE more than elsewhere: abap2UI5/web-abap2UI5 had the
+   * same gap and found it as one red unit test. This pipeline has no such
+   * test - the symptom is a runtime BINDING_ERROR_TAB_CELL_LEVEL in the
+   * browser, in every sample that binds a cell, and nothing upstream of it
+   * goes red.
+   *
+   * Applied only when the PINNED framework carries the script, and that is a
+   * real condition rather than a soft one: the shim and the cell binding it
+   * exists for arrived in the same upstream change (abap2UI5#2684). A pin
+   * without the script is a pin without the feature, so there is nothing to
+   * patch for; the pin that brings one brings the other and this runs. It is
+   * deliberately NOT a silent fallback - the script itself still throws when
+   * its anchors stop matching, which is how it announces that abaplint
+   * shipped the fix and every consumer should drop it. */
+  const shim = path.join(DEPS, "abap2ui5", "node/setup/patch-abaplint-downport.mjs");
+  if (fs.existsSync(shim)) {
+    run("node", [shim, path.join(ROOT, "node_modules/@abaplint/cli/build/cli.js")]);
+  } else {
+    log("downport shim: not in the pinned framework (pre-#2684) - nothing to patch");
+  }
+
   log("downporting to v702 (this takes a few minutes)");
   // abaplint --fix exits non-zero while issues remain, which is the normal
   // state during a downport - the syntax check below is what decides.
