@@ -197,6 +197,11 @@ export function openExamples() {
     });
   }
   render();
+  // Nothing here defends the focus this takes, and that is not an oversight:
+  // the app frame is what takes it away - UI5 focuses a control as a render
+  // settles, in a document showModal() has no reach into. It is stopped at the
+  // source, in src/shell/frontend-bridge.js, because a search box that gets
+  // the focus back after the typing has gone to the app is still empty.
   dialog.showModal();
   search.select();
 }

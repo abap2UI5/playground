@@ -234,7 +234,13 @@ async function boot() {
     // second rejecting with nobody listening yet.
     const [runtime] = await Promise.all([runtimeReady, registryReady]);
     state.runtime = runtime;
-    window.__z2ui5Playground = { roundtrip: (body) => state.runtime.roundtrip(body) };
+    // What the frontend in the app frame reaches for: the roundtrip it would
+    // otherwise POST to a backend, and whether the shell has a dialog open -
+    // see src/shell/frontend-bridge.js for what the frame does with that.
+    window.__z2ui5Playground = {
+      roundtrip: (body) => state.runtime.roundtrip(body),
+      dialogOpen: () => document.querySelector("dialog[open]") !== null,
+    };
     const version = `abap2UI5 ${state.runtime.abapVersion()}`;
     document.getElementById("versions").textContent = version;
     document.getElementById("about-versions").textContent = version;

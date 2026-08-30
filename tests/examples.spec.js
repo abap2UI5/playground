@@ -232,6 +232,55 @@ test("the search narrows the list across every group", async ({ page }) => {
   await expect(page.locator(".example-row", { hasText: "Basics I" })).toBeVisible();
 });
 
+// The regression behind the `toBeHidden` above, staged rather than waited for.
+// UI5 focuses a control as a render settles, and the app is a document of its
+// own, so showModal() cannot stop it: the browser would look focused, take
+// none of the typing, and not close on Escape. src/shell/frontend-bridge.js
+// makes the frame decline the focus while a dialog is open, which is what this
+// asserts - by doing to the frame exactly what UI5 does to it.
+test("the running app cannot take the focus off the examples browser", async ({ page }) => {
+  await serveCatalogues(page);
+  await open(page);
+  await openBrowser(page);
+
+  const app = page.frames().find((f) => f !== page.mainFrame());
+  expect(app).toBeTruthy();
+  // What UI5 does at the end of a render, on an element of its own so the test
+  // does not depend on which control the app happens to have: focus() it and
+  // report whether the focus actually went there.
+  const appTakesFocus = () =>
+    app.evaluate(() => {
+      const probe = document.createElement("input");
+      document.body.append(probe);
+      probe.focus();
+      const took = document.activeElement === probe;
+      probe.remove();
+      return took;
+    });
+
+  expect(await appTakesFocus()).toBe(false);
+
+  // Still in the dialog, so the search box gets what is typed...
+  await expect(page.locator("#examples-dialog")).toBeVisible();
+  await page.keyboard.type("breadcrumbs");
+  await expect(page.locator("#examples-search")).toHaveValue("breadcrumbs");
+  await expect(page.locator(".example-row")).toHaveCount(1);
+
+  // ...and Escape still reaches the dialog rather than the app. Twice, because
+  // the box is <input type="search"> and the browser spends the first one
+  // emptying it - which is the search field behaving as a search field, and is
+  // also proof that this key went to the dialog and not to the frame.
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#examples-search")).toHaveValue("");
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#examples-dialog")).toBeHidden();
+
+  // With the dialog gone the app has its focus back, which is the half of this
+  // that must not be traded away: the frame declines the focus while a dialog
+  // is open over it, not for good.
+  expect(await appTakesFocus()).toBe(true);
+});
+
 test("entries the playground cannot run are not offered", async ({ page }) => {
   await serveCatalogues(page);
   await open(page);
@@ -323,13 +372,15 @@ test("a fetched catalogue is served from the stored copy for a day", async ({ pa
   // Closing and reopening in the same page costs nothing more...
   await page.keyboard.press("Escape");
   /* Waited for, not assumed. This test is about the catalogue being FETCHED
-   * once, and the close is only how it gets there - but without this line a
-   * dialog that has not closed yet is discovered by the next click, which
-   * Playwright then retries for the full 120s against a <dialog> intercepting
-   * pointer events, and reports as "click intercepted" with no hint that the
-   * Escape is what did not land. Seen once in a full run and not reproducible
-   * since (three clean runs, isolated and whole-file). If it comes back, this
-   * fails in one second and names the actual step. */
+   * once, and the close is only how it gets there - but a dialog that has not
+   * closed yet is discovered by the next click, which Playwright then retries
+   * for the full 120s against a <dialog> intercepting pointer events, and
+   * reports as "click intercepted" with no hint that the Escape is what did
+   * not land. That is not hypothetical: the app frame used to take focus away
+   * from the modal as UI5 finished rendering, so the Escape went to the app's
+   * document and the dialog stayed open (see the inert frame in
+   * src/shell/examples.mjs). This line is what names that step when it
+   * happens. */
   await expect(page.locator("#examples-dialog")).toBeHidden();
   await openBrowser(page);
   expect(hits).toEqual({ samples: 1, controls: 1 });
