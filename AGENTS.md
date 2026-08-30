@@ -75,9 +75,13 @@ At run time the pieces meet like this: the UI5 frontend runs in an iframe and
 POSTs to its backend with a plain `fetch`; `frontend-bridge.js` replaces
 `window.fetch` for exactly that one request (comparing origin and pathname
 only — the run counter lives in the query) and hands the body to the transpiled
-handler in the parent page. The drafts abap2UI5 keeps in a database live in an
-in-memory SQLite — sql.js, compiled to WebAssembly. Run means: a fresh
-database, then reload the iframe with `?app_start=<CLASS>&run=<n>`.
+handler in the parent page. It also makes the frame decline the focus while the
+shell has a dialog open: UI5 focuses a control as a render settles, and
+`showModal()` cannot make another document inert, so a frame that takes the
+focus swallows what is typed into the dialog and the Escape that would close it.
+The drafts abap2UI5 keeps in a database live in an in-memory SQLite — sql.js,
+compiled to WebAssembly. Run means: a fresh database, then reload the iframe
+with `?app_start=<CLASS>&run=<n>`.
 
 `PG_DEBUG=1` builds the page and framework bundles unminified with source maps;
 without it neither ships one.
