@@ -322,6 +322,15 @@ test("a fetched catalogue is served from the stored copy for a day", async ({ pa
 
   // Closing and reopening in the same page costs nothing more...
   await page.keyboard.press("Escape");
+  /* Waited for, not assumed. This test is about the catalogue being FETCHED
+   * once, and the close is only how it gets there - but without this line a
+   * dialog that has not closed yet is discovered by the next click, which
+   * Playwright then retries for the full 120s against a <dialog> intercepting
+   * pointer events, and reports as "click intercepted" with no hint that the
+   * Escape is what did not land. Seen once in a full run and not reproducible
+   * since (three clean runs, isolated and whole-file). If it comes back, this
+   * fails in one second and names the actual step. */
+  await expect(page.locator("#examples-dialog")).toBeHidden();
   await openBrowser(page);
   expect(hits).toEqual({ samples: 1, controls: 1 });
 

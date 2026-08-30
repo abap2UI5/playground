@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Builds the abap2UI5 UI5 frontend, with the OpenUI5 runtime alongside it.
 //
-// The frontend is taken as-is from abap2UI5 (build/cloud/app/webapp, the tree
-// that repository publishes for installation) and built with the UI5 tooling,
+// The frontend is taken as-is from abap2UI5/frontend (result/cloud/app/webapp,
+// the tree that repository publishes for installation) and built with the UI5
+// tooling,
 // which fetches the OpenUI5 libraries from npm and writes them next to the app
 // under resources/. The result is a directory that needs nothing but a static
 // file server.
@@ -26,7 +27,12 @@ import { UI5_LIBRARIES } from "../src/shell/ui5-libraries.mjs";
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DEPS = path.join(ROOT, "deps");
 const BUILD = path.join(ROOT, "build");
-const APP_SRC = path.join(DEPS, "abap2ui5", "build", "cloud", "app", "webapp");
+/* It used to be deps/abap2ui5/build/cloud/app/webapp, a tree checked into the
+ * framework repository. abap2UI5#2676 removed it: the frontend is built there
+ * from app/webapp and published to abap2UI5/frontend, one result/<variant>
+ * per delivery branch. `cloud` is the variant this playground serves, and
+ * fetch-deps holds its VERSION to the framework pin so the two cannot drift. */
+const APP_SRC = path.join(DEPS, "abap2ui5-frontend", "result", "cloud", "app", "webapp");
 const WORK = path.join(BUILD, "ui5app");
 const UI5_DIST = path.join(BUILD, "ui5dist");
 const OUT = path.join(ROOT, "dist", "app");

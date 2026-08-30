@@ -21,8 +21,26 @@ export const PINS = [
   {
     name: "abap2ui5",
     url: "https://github.com/abap2UI5/abap2UI5",
-    sha: "67f214d65bd9700a67db1761196e7208c99f67fb",
-    note: "the framework itself - src/ is downported and transpiled, build/cloud/app/webapp is the UI5 frontend",
+    sha: "997e73d50d33fce4a5610befb35722cd15a5d2de",
+    note: "the framework itself - src/ is downported and transpiled",
+  },
+  {
+    /* The UI5 frontend, which used to come out of the same clone as
+     * `build/cloud/app/webapp`. abap2UI5#2676 removed that checked-in tree:
+     * the frontend is BUILT there from app/webapp and PUBLISHED here, one
+     * result/<variant> tree per delivery branch. `cloud` is the variant this
+     * playground serves.
+     *
+     * Two pins for one upstream is a cost, and the pair is held together
+     * rather than trusted: result/cloud/VERSION names the abap2UI5 commit its
+     * webapp was mirrored from, and checkFrontendProvenance( ) below fails the
+     * fetch when that is not the framework pin above. Without it the two could
+     * drift a release apart and the only symptom would be a playground whose
+     * frontend and backend disagree at runtime. */
+    name: "abap2ui5-frontend",
+    url: "https://github.com/abap2UI5/frontend",
+    sha: "f58d245a4386d9134ee1a0bebce4c6b17decb517",
+    note: "the published UI5 frontend - result/cloud/app/webapp, mirrored from the framework pin above",
   },
   {
     name: "open-abap-core",
@@ -80,4 +98,39 @@ if (failures) {
   console.error(`fetch-deps: ${failures} dependency/dependencies could not be pinned`);
   process.exit(1);
 }
+
+/* The frontend is a MIRROR of the framework's app/webapp, published by
+ * abap2UI5's frontend_deploy. Two pins can drift, and the drift is invisible:
+ * both trees fetch, both build, and the playground only disagrees with itself
+ * at runtime - a frontend calling a backend that answers a different protocol.
+ *
+ * result/<variant>/VERSION records which abap2UI5 commit the webapp was
+ * mirrored from, so the pair is checkable rather than a convention. A bump is
+ * therefore two lines that have to move together, and this says so when they
+ * do not.
+ *
+ * Deliberately a hard failure and not a warning: a warning here is read once
+ * and then not, and the thing it guards against does not announce itself. */
+function checkFrontendProvenance() {
+  const file = path.join(DEPS_DIR, "abap2ui5-frontend", "result", "cloud", "VERSION");
+  const framework = PINS.find((p) => p.name === "abap2ui5");
+  if (useLatest || !fs.existsSync(file)) return;
+  const text = fs.readFileSync(file, "utf8");
+  const m = text.match(/abap2UI5\/abap2UI5@([0-9a-f]{40})/);
+  if (!m) {
+    console.error("fetch-deps: result/cloud/VERSION carries no `abap2UI5/abap2UI5@<sha>` line -");
+    console.error("  the provenance format changed; update checkFrontendProvenance in this file.");
+    process.exit(1);
+  }
+  if (m[1] !== framework.sha) {
+    console.error("fetch-deps: the two abap2UI5 pins disagree.");
+    console.error(`  framework pin          ${framework.sha}`);
+    console.error(`  frontend was built from ${m[1]}`);
+    console.error("  Both move together: pick a frontend commit whose result/cloud/VERSION");
+    console.error("  names the framework commit you want, or the reverse.");
+    process.exit(1);
+  }
+  console.log(`fetch-deps: frontend mirrors the pinned framework (${m[1].slice(0, 12)})`);
+}
+checkFrontendProvenance();
 console.log(useLatest ? "fetch-deps: all dependencies at upstream HEAD" : "fetch-deps: all dependencies at pinned SHAs");
