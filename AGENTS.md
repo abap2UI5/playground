@@ -334,4 +334,10 @@ Node 22, matching the rest of the organisation — `engines.node` is `>=22` and
 exactly — the transpiler, abaplint and the linter end up inside the bundle a
 visitor downloads, so "whatever resolves today" would change the site under its
 own tests. Actions are pinned to commits; `.github/dependabot.yml` moves npm
-packages and action pins monthly, majors separated.
+packages and action pins monthly, majors separated. The abap2UI5 linter does
+not wait for that pass: `bump-linter.yaml` pins it to the latest release
+weekly behind the full build-and-test gate, because a 0.x minor is a "major"
+to Dependabot and the pin once sat four minors behind that way — an editor
+blessing sources every other repository's CI would reject. The build itself
+refuses a linter whose UI5 metadata snapshot disagrees with `UI5_VERSION`
+(`tools/build-ui5.mjs`), so that drift surfaces in the bump PR, not on main.
