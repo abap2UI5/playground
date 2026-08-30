@@ -51,7 +51,11 @@
 
   <a id="source-link" class="source-link" target="_blank" rel="noopener" hidden>on GitHub</a>
 
-  <span id="status" class="status">starting…</span>
+  <!-- The one channel the page reports through, and under ?view=full the only
+       one it has left - so it is announced rather than only shown. Polite: it
+       changes several times during a run and none of it is worth interrupting
+       what a screen reader is already saying. -->
+  <span id="status" class="status" role="status" aria-live="polite">starting…</span>
   <span class="spacer"></span>
   <span id="versions" class="versions"></span>
   <button id="about" class="ghost about-button" type="button"
@@ -173,29 +177,36 @@
 
 <main class="panes" id="panes">
   <nav class="tabs" role="tablist">
-    <button class="tab is-active" data-pane="left" role="tab">ABAP</button>
-    <button class="tab" data-pane="right" role="tab">App</button>
+    <button class="tab is-active" data-pane="left" role="tab" aria-selected="true"
+            aria-controls="pane-left">ABAP</button>
+    <button class="tab" data-pane="right" role="tab" aria-selected="false"
+            aria-controls="pane-right">App</button>
   </nav>
 
   <section class="pane pane-left" id="pane-left">
-    <div class="files" id="files" hidden></div>
+    <div class="files" id="files" role="tablist" aria-label="Open files" hidden></div>
     <div id="editor" class="editor"></div>
     <div class="insight" id="insight">
       <div class="insight-grip" id="insight-grip" role="separator" aria-orientation="horizontal"
            tabindex="0" aria-label="Resize the panel"></div>
       <div class="insight-tabs" role="tablist">
-        <button type="button" data-insight="problems" class="insight-tab is-active" role="tab">
+        <button type="button" data-insight="problems" class="insight-tab is-active" role="tab"
+                aria-selected="true" aria-controls="insight-body">
           Problems <span id="problem-count" class="insight-badge"></span>
         </button>
-        <button type="button" data-insight="outline" class="insight-tab" role="tab">Outline</button>
-        <button type="button" data-insight="log" class="insight-tab" role="tab">
+        <button type="button" data-insight="outline" class="insight-tab" role="tab"
+                aria-selected="false" aria-controls="insight-body">Outline</button>
+        <button type="button" data-insight="log" class="insight-tab" role="tab"
+                aria-selected="false" aria-controls="insight-body">
           Log <span id="log-dot" class="insight-badge"></span>
         </button>
         <span class="insight-gap"></span>
-        <button type="button" data-insight="abaplint" class="insight-tab" role="tab">abaplint</button>
-        <button type="button" data-insight="abap2ui5" class="insight-tab" role="tab">abap2UI5 lint</button>
+        <button type="button" data-insight="abaplint" class="insight-tab" role="tab"
+                aria-selected="false" aria-controls="insight-body">abaplint</button>
+        <button type="button" data-insight="abap2ui5" class="insight-tab" role="tab"
+                aria-selected="false" aria-controls="insight-body">abap2UI5 lint</button>
       </div>
-      <div class="insight-body" id="insight-body"></div>
+      <div class="insight-body" id="insight-body" role="tabpanel"></div>
     </div>
   </section>
 

@@ -18,7 +18,7 @@ them before touching `tools/` or `src/runtime`.
 
 | Path | Purpose |
 | --- | --- |
-| `src/shell/` | The page: boot and Run (`main.mjs`), layout and splitter, toolbar, share links (`share.mjs`), `?src=` deep links (`deep-link.mjs`), the examples browser over the sample repositories' catalogues (`examples.mjs`, filtering by the closed library list in `ui5-libraries.mjs`), the bottom panel (`insight.mjs`), embed messaging (`embed.mjs`) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
+| `src/shell/` | The page: boot and Run (`main.mjs`), layout and splitter, toolbar, share links (`share.mjs`), `?src=` deep links (`deep-link.mjs`), the examples browser over the sample repositories' catalogues (`examples.mjs`, filtering by the closed library list in `ui5-libraries.mjs`), the bottom panel (`insight.mjs`), embed messaging (`embed.mjs`), every `localStorage` touch (`storage.mjs`) and what is kept in it between visits (`checker-settings.mjs`) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
 | `src/editor/` | Monaco plus the abaplint registry (`registry.mjs`), the single-object transpile (`transpile.mjs`), the abap2UI5 linter wrapper (`abap2ui5-lint.mjs`), the file set and the sample catalogue (`samples.mjs`) |
 | `src/runtime/` | The ABAP side of the page: the framework entry (`index.mjs`, `roundtrip()` and `defineClass()`), the sql.js database (`db-setup.mjs`), and the browser shims for Node modules |
 | `src/abap/` | The playground's own ABAP (`zcl_pg_bridge`, `zcl_pg_hello`); it travels through the same downport and transpile as the framework |
@@ -48,9 +48,19 @@ of each line. Each step is still its own script and still runnable by name
    and the sql.js setup into `dist/runtime/framework.mjs`. The esbuild flags
    (`keepNames`, the injected `Buffer`, the console and crypto shims in
    `tools/esbuild-plugins.mjs`) are all load-bearing — the plan's phase 1
-   findings explain each one.
+   findings explain each one. It keeps **two** stamps, not one:
+   `downport.stamp` over the sources, and `output.stamp` over what the downport
+   *produced* plus the transpiler, `src/runtime` and the esbuild plugins — so
+   the transpile and the bundle (about a minute together) are skipped as well
+   when nothing that feeds them moved. Both stamps also check that what they
+   would have produced is still on disk, so a deleted `dist/` rebuilds rather
+   than being cached into a missing site.
 3. **`tools/build-ui5.mjs`** builds the abap2UI5 UI5 frontend against a pinned
-   OpenUI5 (`UI5_VERSION`, from npm — no CDN) into `dist/app/`. It rewrites
+   OpenUI5 (`UI5_VERSION`, from npm — no CDN) into `dist/app/`. The copy into
+   `dist/app` is its own stamp (`app.stamp`, over the build's input hash and the
+   two files `patchFrontend()` rewrites afterwards): it is 155 MB and tens of
+   thousands of files, and it used to run on every build including the ones that
+   had just reported the tree up to date. It rewrites
    `frameOptions="trusted"` to `"allow"` so the app renders inside somebody
    else's documentation page, and fails if the attribute is no longer there to
    rewrite. `UI5_LIBRARIES` (`src/shell/ui5-libraries.mjs` — shared with the
@@ -104,6 +114,36 @@ so the page keeps painting through it. Applying an edited abaplint
 configuration goes through the same path, because changing a rule dirties every
 object in the corpus and costs the whole parse again.
 
+Two orderings in `boot()` keep those costs overlapping rather than stacking,
+and both are easy to undo by accident:
+
+- **The framework import and the corpus fetch start before anything is
+  awaited.** They used to be started after `startingFiles()`, which is instant
+  for a draft or a sample and is two round trips to GitHub for a `?src=` link —
+  the linked class, then the classes beside it — which is the path every Run
+  button in the documentation takes. The preloads had the *bytes* moving with
+  the document already; what still waited on the link was every bit of processor
+  work behind them.
+- **`buildRegistry()` takes the files as a promise, not a list.** The corpus is
+  nine hundred objects and several seconds, and none of it depends on what the
+  user is about to edit — so it parses against itself, and the handful of files
+  the editor holds are added and parsed incrementally afterwards, which is the
+  same move `updateFiles()` makes on every keystroke.
+
+Anything started before its awaiter goes through `heard()`, which attaches a
+no-op catch so a failure in that window is reported by the code that knows how
+to report it rather than reaching the console as an unhandled rejection.
+
+**One analysis, three readers** (`analyse()` in `src/editor/editor.mjs`). What
+is wrong with the code, how much of it can be repaired, and what the panel
+should show are the same walk over the same text, and they used to be three:
+the editor's change handler, the page's `remember()`, and the panel asking
+`fixableNow()` as it rendered. The walk is now kept under a key made of the
+open models' version ids and a generation counter — so anything that changes
+the text recomputes and a second reader of unchanged text does not. A checker
+whose *configuration* changed under unchanged text is invisible to that key,
+which is why the Config tabs call `invalidateAnalysis()` before asking again.
+
 ## The two checkers, and the Fix-them contract
 
 - **abaplint** (`src/editor/registry.mjs`) answers *does this compile*, against
@@ -120,6 +160,18 @@ Both configurations are live in the panel's **abaplint** and **abap2UI5 lint**
 tabs (`src/shell/insight.mjs`); the defaults stay the curated lists. The two
 use separate Monaco marker owners — sharing one would have each erase the
 other's underlines.
+
+A changed configuration is kept in `localStorage` (`src/shell/checker-settings.mjs`
+— the checkers hold and validate a configuration, the *page* decides to remember
+one) and restored in `boot()` *before* the corpus is fetched, because abaplint's
+half decides how the corpus is parsed and restoring it afterwards would parse
+nine hundred objects twice. Three rules go with that: a stored setting is validated exactly like a typed
+one and silently dropped when it stops making sense (a rule abaplint has since
+retired); a setting that equals the default is **forgotten rather than stored**,
+so the curated lists can move between deploys and reach somebody who pressed
+Reset; and an embedded playground never restores either — a demo in somebody's
+documentation has to read the same to every reader, the same reason it never
+restores a draft.
 
 **Fix them** (`applyFixes()` in `src/editor/editor.mjs`) applies both checkers'
 fixes to everything open: abaplint's structural fixes first, then the linter's,
@@ -205,6 +257,43 @@ a sample without a test is not possible. CI:
 | `check.yml` | every non-main branch and pull request: the composite build action (`.github/actions/build`, with caches for `deps/`, `~/.ui5` and the downport), the size budget, `npm test` |
 | `pages.yml` | pushes to `main`: the same build and tests, then deploy `dist/` to GitHub Pages — a red test never publishes |
 | `upstream.yml` | weekly: build and test against upstream `HEAD` without moving the pins, and open or extend an issue when that fails, so a bump stays a two-line commit |
+
+## Two traps the browser sets, and what they cost
+
+Both were found the hard way and both look like working code until they are on
+somebody else's page.
+
+- **`window.prompt()` and `window.alert()` are not shown at all in a
+  cross-origin iframe.** Chrome has ignored them there for years. Naming a new
+  file was a `prompt()`, so the `+` button worked everywhere except in an
+  embedded playground — where it did nothing and said nothing, and an embedded
+  playground is most of what this is. The name is now typed into the strip
+  itself (`askForNewFile()` in `src/shell/files-ui.mjs`), and a rejected name
+  goes to the status line, which is a channel an embedding page can see.
+- **The app in the frame takes focus away from this page.** `sap.m` calls
+  `_applyAutoFocusTo` when a page renders, and it lands on the parent
+  document's focused element. So an input in the shell must never treat `blur`
+  as "never mind": a roundtrip finishing while somebody was halfway through a
+  file name deleted what they had typed. Escape is the way out of the naming
+  input, deliberately and only.
+
+A third of the same family, in a library rather than the browser: **the
+abap2UI5 linter's release option is `minUi5`, not `ui5`**, and an option it does
+not know is ignored rather than refused. The playground passed `ui5` — so the
+release in the **abap2UI5 lint** tab reported "applied", moved the problem count
+by nothing, and left the linter on its own default floor. It had never once
+changed what was checked. `settingsFor()` in `src/editor/abap2ui5-lint.mjs` is
+the one place the tab's name and the linter's name are mapped, and
+`tests/insight.spec.js` now holds the release to an actual finding
+(`sap.m.Button ariaHasPopup`, which exists from 1.84) rather than to the tab
+echoing back what was typed into it.
+
+Anything reading or writing `localStorage` goes through `src/shell/storage.mjs`
+for a third reason of the same kind: in Safari and Firefox with third-party
+storage blocked — again, the embedded playground's normal case — the *access
+itself* throws. `setUpSplitter()` reads the stored split in `boot()` before the
+try/catch that reports a startup failure, so that throw left the page on
+"starting…" with every control disabled and nothing said.
 
 ## Deliberate limits — do not "fix" these
 

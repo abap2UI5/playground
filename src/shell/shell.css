@@ -169,26 +169,59 @@ select:disabled { opacity: .5; }
 }
 .files[hidden] { display: none; }
 
+/* The tab is the container; the name and the close control are the buttons in
+   it. It used to be one button with a span for the ✕, which no keyboard could
+   reach - and the span could not simply become a button where it was, because
+   a button inside a button is not something HTML allows. */
 .file-tab {
-  border: none;
-  border-radius: 0;
-  background: none;
-  color: var(--fg-dim);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  padding: .35rem .6rem;
-  white-space: nowrap;
-  border-bottom: 2px solid transparent;
   display: flex;
   align-items: center;
   gap: .4rem;
+  padding: 0 .6rem;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-dim);
 }
 .file-tab.is-active { color: var(--fg); border-bottom-color: var(--accent); background: var(--bg); }
-.file-tab:hover:not(:disabled) { border-color: transparent; border-bottom-color: var(--line); }
+.file-tab:hover { border-bottom-color: var(--line); }
 .file-tab.is-active:hover { border-bottom-color: var(--accent); }
 
-.file-close { opacity: .5; }
+.file-name {
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: .35rem 0;
+}
+.file-name:hover:not(:disabled) { border-color: transparent; }
+
+.file-close {
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font-size: 12px;
+  line-height: 1;
+  padding: .2rem;
+  opacity: .5;
+}
 .file-close:hover { opacity: 1; color: var(--danger); }
+
+/* Naming a new file, in the strip rather than in a window.prompt( ) - which a
+   cross-origin iframe never shows at all. */
+.file-new {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: .3rem .5rem;
+  margin: .15rem .3rem;
+  min-width: 20ch;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+}
 
 .file-add {
   border: none;
@@ -423,6 +456,21 @@ iframe {
   font-size: 12px;
   cursor: pointer;
   border-left: 2px solid transparent;
+}
+/* The rows are buttons - that is what makes them reachable by keyboard - so
+   they have to give up everything a button brings with it and keep only the
+   row. width and text-align are the two that show if they are forgotten: a
+   button shrinks to its content and centres it. */
+button.insight-row {
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
 }
 .insight-row:hover { background: var(--bg-sunken); }
 .insight-row.is-error { border-left-color: var(--danger); }

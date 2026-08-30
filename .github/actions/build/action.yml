@@ -44,12 +44,25 @@ runs:
     - run: node tools/check-size.mjs
       shell: bash
 
+    # The browser binary, keyed by the Playwright version that has to match it -
+    # which is pinned in package-lock.json, so that file is the key. A hit turns
+    # the download below into a no-op; a Playwright bump misses the key and
+    # fetches the browser that version expects.
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ hashFiles('package-lock.json') }}
+
     # Only the browser, not --with-deps. The runner image already carries the
     # shared libraries Chromium needs, and the apt-get run that --with-deps adds
     # has twice now hung for half an hour on an unreachable Ubuntu mirror and
     # taken the job's whole 30-minute budget with it. A library that really is
     # missing fails loudly when the browser launches, half a minute in, which is
     # a better failure than a silent stall.
+    #
+    # Still run on a cache hit rather than skipped: it is a few seconds when the
+    # binary is already there, and it is what notices a cache that restored
+    # something incomplete.
     - name: Install the browser the tests run in
       run: npx playwright install chromium
       shell: bash

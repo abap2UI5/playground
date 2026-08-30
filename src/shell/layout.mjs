@@ -1,5 +1,6 @@
 // The two things the page does with its own shape: a draggable split at desk
 // width, and tabs when there is not enough of it.
+import { readStored, writeStored } from "./storage.mjs";
 
 const STORAGE_KEY = "abap2ui5-playground:split";
 const MIN = 20;
@@ -15,7 +16,7 @@ export function setUpSplitter() {
     return clamped;
   };
 
-  const stored = Number(localStorage.getItem(STORAGE_KEY));
+  const stored = Number(readStored(STORAGE_KEY));
   if (Number.isFinite(stored) && stored > 0) apply(stored);
 
   const percentFromEvent = (e) => {
@@ -39,7 +40,7 @@ export function setUpSplitter() {
     splitter.releasePointerCapture(e.pointerId);
     splitter.classList.remove("is-dragging");
     panes.classList.remove("is-dragging");
-    localStorage.setItem(STORAGE_KEY, String(apply(percentFromEvent(e))));
+    writeStored(STORAGE_KEY, String(apply(percentFromEvent(e))));
   };
   splitter.addEventListener("pointerup", stop);
   splitter.addEventListener("pointercancel", stop);
@@ -50,7 +51,7 @@ export function setUpSplitter() {
     if (step === 0) return;
     e.preventDefault();
     const current = parseFloat(getComputedStyle(panes).getPropertyValue("--left")) || 50;
-    localStorage.setItem(STORAGE_KEY, String(apply(current + step)));
+    writeStored(STORAGE_KEY, String(apply(current + step)));
   });
 }
 
@@ -76,7 +77,13 @@ export function setUpTabs(appOnly = false) {
   // alone - hiding the editor because somebody picked a sample would be a
   // strange thing for a wide window to do.
   const show = (which) => {
-    for (const tab of tabs) tab.classList.toggle("is-active", tab.dataset.pane === which);
+    for (const tab of tabs) {
+      const active = tab.dataset.pane === which;
+      tab.classList.toggle("is-active", active);
+      // The class is what it looks like; this is what it is. Without it a
+      // screen reader reads two tabs and cannot say which one is open.
+      tab.setAttribute("aria-selected", String(active));
+    }
     if (wide.matches) return;
     document.getElementById("pane-left").hidden = which !== "left";
     document.getElementById("pane-right").hidden = which !== "right";

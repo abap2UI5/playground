@@ -22,6 +22,10 @@ import { applyFixes, isFixable } from "@abap2ui5/linter/fix";
 // therefore the one an example copied out of the playground has to clear. A
 // higher floor here would quietly bless a control that breaks on exactly the
 // systems that floor exists for.
+//
+// `ui5` is the name the Config tab shows, because that is what a reader is
+// choosing - the UI5 release their app has to work on. The linter's own option
+// for it is `minUi5`, and settingsFor( ) below is where the two meet.
 const DEFAULTS = { ui5: "1.71", distribution: "openui5" };
 
 let settings = { ...DEFAULTS };
@@ -29,24 +33,41 @@ let settings = { ...DEFAULTS };
 export const linterSettings = () => ({ ...settings });
 export const linterDefaults = () => ({ ...DEFAULTS });
 
-// Applies an edited configuration. Cheap, unlike abaplint's: the linter holds
-// no parsed corpus, so the next keystroke simply asks it again.
-export function applyLinterSettings(next) {
-  if (!/^\d+\.\d+$/.test(next.ui5 ?? "")) {
-    throw new Error(`${next.ui5} is not a UI5 release, which looks like 1.71 or 1.120.`);
+// What a settings object has to be. Shared by Apply and by the restore below,
+// so a stored setting gets the same scrutiny a typed one does.
+function validated(next) {
+  if (!/^\d+\.\d+$/.test(next?.ui5 ?? "")) {
+    throw new Error(`${next?.ui5} is not a UI5 release, which looks like 1.71 or 1.120.`);
   }
-  if (!["openui5", "sapui5"].includes(next.distribution)) {
-    throw new Error(`distribution is openui5 or sapui5, not ${next.distribution}.`);
+  if (!["openui5", "sapui5"].includes(next?.distribution)) {
+    throw new Error(`distribution is openui5 or sapui5, not ${next?.distribution}.`);
   }
-  settings = { ui5: next.ui5, distribution: next.distribution };
+  return { ui5: next.ui5, distribution: next.distribution };
 }
+
+// Applies an edited configuration. Cheap, unlike abaplint's: the linter holds
+// no parsed corpus, so the next keystroke simply asks it again. Throws what
+// validated( ) throws, which is the sentence the Config tab shows.
+export function applyLinterSettings(next) {
+  settings = validated(next);
+}
+
+// The settings in the shape the linter takes them.
+//
+// The release option is called `minUi5` there and `ui5` here, and getting that
+// wrong is silent in the worst way: an unknown key is simply ignored, so the
+// linter kept its own default floor while the Config tab reported "applied"
+// and the number of problems next to it did not move. It was passed as `ui5`
+// until this was noticed, which means the release in that tab had never once
+// changed what was checked.
+const settingsFor = (s) => ({ minUi5: s.ui5, distribution: s.distribution });
 
 // Everything the linter has to say about one source. Never throws: a rule that
 // falls over on unusual input must not take the editor's diagnostics with it,
 // and the file being typed into is unusual input by definition.
 export function findingsFor(source) {
   try {
-    const result = checkAbapSource(source, settings);
+    const result = checkAbapSource(source, settingsFor(settings));
     // A class that builds no view has nothing for this linter to say. Reporting
     // that as a finding would put a message on every helper class.
     if (!result.usesBuilder) return [];
@@ -57,19 +78,23 @@ export function findingsFor(source) {
 }
 
 
-// The findings this linter can repair itself. Not all of them: an icon that
-// does not exist has no correct replacement to guess at, while a missing
-// namespace declaration or a chain that has drifted out of the house layout
-// has exactly one right answer.
-export function linterFixable(source) {
-  return findingsFor(source).filter(isFixable).length;
+// Which of a set of findings this linter can repair itself. Not all of them:
+// an icon that does not exist has no correct replacement to guess at, while a
+// missing namespace declaration or a chain that has drifted out of the house
+// layout has exactly one right answer.
+//
+// Takes findings rather than a source, because both callers already have them:
+// the editor's one analysis pass has just asked findingsFor( ), and asking it
+// again from here was a second reconstruction of the same builder chain.
+export function fixableAmong(findings) {
+  return findings.filter(isFixable);
 }
 
 // Repairs what can be repaired, and says how much. `deferred` counts fixes that
 // overlapped one already applied - they are not lost, they are simply for the
 // next press, which is why the caller runs this until it stops changing things.
 export function applyLinterFixes(source) {
-  const fixable = findingsFor(source).filter(isFixable);
+  const fixable = fixableAmong(findingsFor(source));
   if (fixable.length === 0) return { source, fixed: 0 };
   const { output, applied } = applyFixes(source, fixable);
   return { source: output, fixed: applied };

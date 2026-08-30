@@ -206,9 +206,41 @@ if (!force && fs.existsSync(stampPath) && fs.readFileSync(stampPath, "utf8").tri
 // cached tree.
 patchFrontend();
 
-fs.rmSync(OUT, { recursive: true, force: true });
-fs.mkdirSync(path.dirname(OUT), { recursive: true });
-fs.cpSync(UI5_DIST, OUT, { recursive: true });
+// The copy into dist/ is a hundred and fifty megabytes and tens of thousands of
+// files, and it ran on every build - including the ones where the UI5 tree above had just
+// been reported as up to date and nothing whatever had changed. So it gets a
+// stamp of its own, over everything that decides what the copy should contain:
+// the tree's own input hash, and the two files patchFrontend( ) rewrites
+// afterwards, which are not part of that hash because they are applied after
+// the cached build.
+//
+// The check that dist/app is actually there is index.html, the same file
+// build-site.mjs refuses to publish without. A tree that somebody has emptied
+// out from underneath while leaving that one file behind would be believed -
+// which is the same bargain the downport stamp above makes, and `--force`
+// is the answer to it.
+const copyStampPath = path.join(BUILD, "app.stamp");
+const copyHash = crypto
+  .createHash("sha256")
+  .update(hash)
+  .update(fs.readFileSync(path.join(UI5_DIST, "index.html")))
+  .update(fs.readFileSync(path.join(UI5_DIST, "frontend-bridge.js")))
+  .digest("hex");
+
+const copyIsCurrent =
+  !force &&
+  fs.existsSync(copyStampPath) &&
+  fs.readFileSync(copyStampPath, "utf8").trim() === copyHash &&
+  fs.existsSync(path.join(OUT, "index.html"));
+
+if (copyIsCurrent) {
+  log("dist/app up to date, leaving it in place");
+} else {
+  fs.rmSync(OUT, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(OUT), { recursive: true });
+  fs.cpSync(UI5_DIST, OUT, { recursive: true });
+  fs.writeFileSync(copyStampPath, copyHash);
+}
 
 const size = execFileSync("du", ["-sh", OUT]).toString().split("\t")[0];
 log(`dist/app ready (${size})`);

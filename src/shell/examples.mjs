@@ -24,6 +24,7 @@
 // whose library the site does not carry (see ui5-libraries.mjs), and its
 // src/03 collection, which is SAPUI5-only by definition.
 import { SAMPLES } from "../editor/samples.mjs";
+import { readStoredJson, writeStoredJson } from "./storage.mjs";
 import { UI5_LIBRARIES } from "./ui5-libraries.mjs";
 
 // A day: long enough that browsing costs one request per repository and short
@@ -119,12 +120,9 @@ function readControls(repo, data) {
 // normal answer, so without this every open would re-ask a question whose
 // answer is not changing before tomorrow.
 async function loadCatalogue(repo) {
-  try {
-    const stored = JSON.parse(localStorage.getItem(cacheKey(repo)) ?? "null");
-    if (stored && typeof stored.at === "number" && Date.now() - stored.at < TTL) return stored.data;
-  } catch {
-    // An unreadable cache is no cache.
-  }
+  const stored = readStoredJson(cacheKey(repo));
+  if (stored && typeof stored.at === "number" && Date.now() - stored.at < TTL) return stored.data;
+
   let data;
   try {
     const response = await fetch(`https://raw.githubusercontent.com/${repo}/main/catalogue.json`);
@@ -133,11 +131,8 @@ async function loadCatalogue(repo) {
     // Offline, refused, or an answer that is not JSON - all the same: no
     // catalogue today, and no error either. The built-ins carry the menu.
   }
-  try {
-    localStorage.setItem(cacheKey(repo), JSON.stringify({ at: Date.now(), data }));
-  } catch {
-    // A cache that cannot be written only makes tomorrow's open slower.
-  }
+  // A cache that cannot be written only makes tomorrow's open slower.
+  writeStoredJson(cacheKey(repo), { at: Date.now(), data });
   return data;
 }
 
@@ -249,9 +244,16 @@ function render() {
   body.replaceChildren(frag);
 }
 
+// One entry. The row is a button inside its list item rather than a list item
+// with a click handler on it: this is the only way into the examples for
+// somebody who is not using a mouse, and a <li> is not focusable, not in the
+// tab order and does not answer Enter or Space.
 function row(entry) {
   const item = document.createElement("li");
-  item.className = "insight-row example-row";
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "insight-row example-row";
 
   const title = document.createElement("span");
   title.className = "example-title";
@@ -265,11 +267,12 @@ function row(entry) {
   who.className = "insight-who";
   who.textContent = entry.who;
 
-  item.append(title, note, who);
-  item.addEventListener("click", () => {
+  button.append(title, note, who);
+  button.addEventListener("click", () => {
     dialog.close();
     if (entry.sampleId !== undefined) callbacks.openSample(entry.sampleId);
     else callbacks.openLinked(entry.url);
   });
+  item.append(button);
   return item;
 }
