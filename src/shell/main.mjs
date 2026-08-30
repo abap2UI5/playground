@@ -31,10 +31,12 @@ import { DEFAULT_FILES, SAMPLES, sampleById } from "../editor/samples.mjs";
 import { openExamples, setUpExamples } from "./examples.mjs";
 import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
 import { setUpInsight, showInsight, updateInsight } from "./insight.mjs";
+import { restoreCheckerSettings } from "./checker-settings.mjs";
 import { setUpSplitter, setUpTabs } from "./layout.mjs";
 import { announceAppHeight, announceReady, announceStatus, startEmbedMessages } from "./embed.mjs";
 import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
 import { state } from "./state.mjs";
+import { readStoredJson, writeStoredJson } from "./storage.mjs";
 import { hideOutput, setStatus, showOutput } from "./ui.mjs";
 
 // The framework bundle is 8 MB and built by a separate step, so it is not part
@@ -109,14 +111,31 @@ async function startingFiles() {
   }
   if (!embedded) {
     try {
-      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
+      // A draft that will not parse, or a storage that will not answer, is a
+      // draft that is gone - readStoredJson says so with undefined. What is
+      // still worth catching here is checkFileSet( ) refusing what it read.
+      const stored = readStoredJson(STORAGE_KEY);
       if (stored) return { files: checkFileSet(stored), from: "your last session" };
     } catch {
-      // A draft that will not parse is a draft that is gone.
+      // A stored draft the editor cannot hold - a name that stopped being
+      // valid, a first file that is not a class. Opening on the sample beats
+      // refusing to start.
     }
   }
   return { files: DEFAULT_FILES, from: "sample" };
 }
+
+// Keeps a promise from being an unhandled rejection while nothing is awaiting
+// it yet. The ones in boot( ) below are started at the top of it and awaited
+// several statements later, and a failure in that window - a corpus that 404s,
+// a framework bundle that will not parse - would otherwise reach the console as
+// an unhandled rejection before the code that reports it properly ever runs.
+// The original promise still rejects for the real awaiter; this only says that
+// somebody is listening.
+const heard = (promise) => {
+  promise.catch(() => {});
+  return promise;
+};
 
 async function boot() {
   if (embedded) document.body.classList.add("is-embedded");
@@ -128,11 +147,70 @@ async function boot() {
   if (embedded || appOnly) document.getElementById("insight").classList.add("is-tucked");
   startEmbedMessages();
 
+  // What the two Config tabs were last set to. Before the corpus is fetched,
+  // because abaplint's half decides how the corpus is parsed - restoring it
+  // afterwards would mean parsing nine hundred objects twice, which is the one
+  // cost the Config tab exists to warn about.
+  //
+  // Never in an embedded playground, for the same reason it never restores a
+  // draft: what somebody's documentation page shows has to be the same for
+  // every reader, and a rule switched on last week is not something to
+  // discover through an example that suddenly disagrees with its own text.
+  if (!embedded) restoreCheckerSettings();
+
+  // Started before anything at all is awaited, because nothing about them
+  // depends on the rest of this function.
+  //
+  // Two independent slow starts: the transpiled framework (a download and a
+  // parse) and the ABAP corpus the editor checks against. Neither needs the
+  // other, so they run together - and the corpus half does not stop at its
+  // download. Parsing what arrives is the expensive part of it, several seconds
+  // of processor against a megabyte and a half of network, and it starts the
+  // moment the JSON lands rather than after the framework has finished
+  // arriving. That is the difference between the two costs adding up and the
+  // longer one covering the shorter.
+  //
+  // And they are started here rather than after startingFiles( ), which is
+  // where they used to be. That await is instant for a draft or a sample and
+  // is two network round trips to GitHub for a ?src= link - the fetch of the
+  // linked class, then the fetch of the classes beside it - which is the path
+  // every Run button in the documentation takes. The preload tags in
+  // index.html had these bytes moving with the document already; what was
+  // still waiting on the link was every bit of processor work behind them.
+  const runtimeReady = heard(import(/* @vite-ignore */ asset("runtime/framework.mjs")));
+  const corpusReady = heard(
+    fetch(asset("editor/corpus.json")).then((r) => {
+      if (!r.ok) throw new Error(`corpus.json: ${r.status}`);
+      return r.json();
+    }),
+  );
+
   setUpSplitter();
   setUpAbout();
   const tabs = setUpTabs(appOnly);
 
-  const { files, from } = await startingFiles();
+  // The files, as a promise the registry build can hold: the corpus parse does
+  // not need them until it has finished parsing the corpus itself.
+  const startingReady = heard(startingFiles());
+
+  const registryReady = heard(
+    corpusReady.then(async (corpus) => {
+      setStatus("reading the abap2UI5 sources…");
+      await buildRegistry(
+        corpus,
+        startingReady.then((s) => s.files),
+        (done, total) => {
+          setStatus(`checking the sources… ${Math.round((done / total) * 100)}%`);
+        },
+      );
+      // Whatever is left to wait for is the framework still on its way. Saying
+      // so beats leaving the line reading 100% with nothing apparently
+      // happening.
+      setStatus("loading the ABAP runtime…");
+    }),
+  );
+
+  const { files, from } = await startingReady;
   createEditor(document.getElementById("editor"), files, { onChange: remember });
   setUpFiles({ onChanged: remember, onOpened: fileOpened });
   setUpInsight();
@@ -148,31 +226,6 @@ async function boot() {
   });
 
   fillSampleMenu(from);
-
-  // Two independent slow starts: the transpiled framework (a download and a
-  // parse) and the ABAP corpus the editor checks against. Neither needs the
-  // other, so they run together - and the corpus half does not stop at its
-  // download. Parsing what arrives is the expensive part of it, several seconds
-  // of processor against a megabyte and a half of network, and it starts the
-  // moment the JSON lands rather than after the framework has finished
-  // arriving. That is the difference between the two costs adding up and the
-  // longer one covering the shorter.
-  const runtimeReady = import(/* @vite-ignore */ asset("runtime/framework.mjs"));
-  const registryReady = fetch(asset("editor/corpus.json"))
-    .then((r) => {
-      if (!r.ok) throw new Error(`corpus.json: ${r.status}`);
-      return r.json();
-    })
-    .then(async (corpus) => {
-      setStatus("reading the abap2UI5 sources…");
-      await buildRegistry(corpus, files, (done, total) => {
-        setStatus(`checking the sources… ${Math.round((done / total) * 100)}%`);
-      });
-      // Whatever is left to wait for is the framework still on its way. Saying
-      // so beats leaving the line reading 100% with nothing apparently
-      // happening.
-      setStatus("loading the ABAP runtime…");
-    });
 
   try {
     setStatus("loading the ABAP runtime…");
@@ -307,11 +360,12 @@ function remember(files) {
   renderFiles();
   showSourceLink();
   // The editor has already re-checked by the time this runs (both hang off the
-  // same debounce), so this reads the result rather than triggering a second
-  // analysis of the same text.
+  // same debounce), and the analysis is kept under a key made of the models'
+  // version ids - so this reads that result back rather than running a second
+  // analysis of text that has not changed since the first.
   updateInsight(refresh());
   if (embedded) return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(files ?? getFiles()));
+  writeStoredJson(STORAGE_KEY, files ?? getFiles());
   // A fragment in the address bar is a claim about what the editor holds, and
   // it just stopped being true. Left there, it would also win over this draft
   // on the next reload (a link outranks stored code in startingFiles), quietly

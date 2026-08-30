@@ -50,14 +50,88 @@ export function announceStatus(message, isError) {
 // are trying to correct. Only answerable in app-only mode: with an editor
 // beside it, the height is whatever the embedding page decided the editor
 // deserves, and no measurement here improves on that.
+//
+// Measured once when the frame loads and then whenever what it rendered
+// changes size. The load event alone was not enough: an abap2UI5 app grows
+// after it starts - a table fills, a panel opens, a dialog pushes the page
+// down - and every one of those left the demo in the box it was given at
+// boot, scrolling inside somebody's documentation page. The observer is what
+// makes the height message a live figure rather than a first impression.
 export function announceAppHeight(frame) {
   if (!enabled) return;
+  watchAppHeight(frame);
+  measureAndSend(frame);
+}
+
+// The last height sent, so a resize that settles on the same pixel does not
+// spend a message. UI5 lays a view out more than once before it is done.
+let lastHeight = 0;
+let observer;
+let observed;
+let pending = 0;
+let sent = 0;
+
+// How many times one app document may change this page's mind about its height.
+//
+// The loop this bounds is real rather than theoretical: the page around us sets
+// the frame's height from what we send, that resizes the document we are
+// measuring, and that is a resize event. It settles - the parent applies what we
+// send, so the next measurement matches and nothing more goes out - unless the
+// app's layout is responsive in a way that reflows to a different height at the
+// height we just asked for, which is the one shape that can oscillate. Twenty is
+// far past what settling takes and turns an oscillation into a stationary demo
+// rather than a message every frame forever.
+const MAX_HEIGHT_MESSAGES = 20;
+
+function measureAndSend(frame) {
   const doc = sameOriginDocument(frame);
   if (!doc) return;
   const height = Math.ceil(
     Math.max(doc.documentElement?.scrollHeight ?? 0, doc.body?.scrollHeight ?? 0),
   );
-  if (height > 0) send({ type: "height", height });
+  if (height <= 0 || height === lastHeight) return;
+  if (sent >= MAX_HEIGHT_MESSAGES) {
+    observer?.disconnect();
+    return;
+  }
+  lastHeight = height;
+  sent += 1;
+  send({ type: "height", height });
+}
+
+// Coalesced to one measurement a frame. A UI5 view settling fires the observer
+// several times in a row, and each one would otherwise be a postMessage and a
+// height the parent applies and immediately replaces.
+function measureSoon(frame) {
+  if (pending) return;
+  pending = requestAnimationFrame(() => {
+    pending = 0;
+    measureAndSend(frame);
+  });
+}
+
+// One observer, re-pointed at whatever document the frame currently holds.
+// Run replaces that document on every press, and an observer left watching the
+// old one would report the height of a page that is gone.
+//
+// Both the root element and the body are watched: which of the two actually
+// changes size depends on how the app's own view is laid out, and an app whose
+// body is a fixed 100% grows only at the root.
+function watchAppHeight(frame) {
+  if (typeof ResizeObserver !== "function") return;
+  const doc = sameOriginDocument(frame);
+  const root = doc?.documentElement;
+  if (!root || root === observed) return;
+
+  observer?.disconnect();
+  // Reset with the document: the new app is not the old one, may legitimately
+  // want the height the old one had, and gets its own allowance of messages.
+  lastHeight = 0;
+  sent = 0;
+  observed = root;
+  observer = new ResizeObserver(() => measureSoon(frame));
+  observer.observe(root);
+  if (doc.body) observer.observe(doc.body);
 }
 
 function sameOriginDocument(frame) {

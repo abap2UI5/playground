@@ -70,6 +70,31 @@ export function allRuleNames() {
   return Object.keys(abaplint.Config.getDefault().get().rules).sort();
 }
 
+// What a settings object has to be to be usable. Throws the sentence the
+// Config tab shows, because the reader typed this and is the one who can fix
+// it. Shared by Apply and by the restore below - a stored setting is an edit
+// somebody made earlier and gets exactly the same scrutiny, not less.
+function validated(next) {
+  const unknown = Object.keys(next?.rules ?? {}).filter((r) => !allRuleNames().includes(r));
+  if (unknown.length > 0) {
+    throw new Error(`abaplint has no rule called ${unknown.join(", ")}.`);
+  }
+  if (!/^v\d{3}$|^open-abap$|^cloud$/.test(next?.version ?? "")) {
+    throw new Error(`${next?.version} is not an ABAP release abaplint knows.`);
+  }
+  return { version: next.version, rules: { ...next.rules } };
+}
+
+// Takes a configuration without doing anything about it. For the one caller
+// that runs before there is a registry to reconfigure - boot, restoring what
+// the Config tab was last set to, which has to happen before the corpus is
+// parsed so the parse happens under those rules rather than being paid for
+// twice. Throws what validated( ) throws, so a stored setting that no longer
+// makes sense is the caller's to catch.
+export function useAbaplintSettings(next) {
+  settings = validated(next);
+}
+
 // Applies an edited configuration. Reparsing is the cost here - the rules run
 // per object and changing them dirties all of them - so this is deliberately
 // behind an explicit Apply rather than reacting to typing.
@@ -81,14 +106,7 @@ export function allRuleNames() {
 // are validated before anything is changed, so a rejected edit leaves the
 // registry exactly as it was.
 export async function applyAbaplintSettings(next, onProgress) {
-  const unknown = Object.keys(next.rules ?? {}).filter((r) => !allRuleNames().includes(r));
-  if (unknown.length > 0) {
-    throw new Error(`abaplint has no rule called ${unknown.join(", ")}.`);
-  }
-  if (!/^v\d{3}$|^open-abap$|^cloud$/.test(next.version ?? "")) {
-    throw new Error(`${next.version} is not an ABAP release abaplint knows.`);
-  }
-  settings = { version: next.version, rules: { ...next.rules } };
+  useAbaplintSettings(next);
   registry.setConfig(config());
   await parseWithYields(registry, onProgress);
 }
@@ -114,19 +132,33 @@ function removeFile(reg, name) {
 // Builds the registry and parses it. `onProgress(done, total)` is called as it
 // goes and gets a chance to paint between objects, because parseAsync awaits the
 // progress hook - which is the whole reason for using it over parse().
-export async function buildRegistry(corpus, files, onProgress) {
+//
+// `filesReady` is a promise, not a list, and that is the point of the split
+// below. The corpus is nine hundred objects and several seconds of parsing, and
+// not one of them depends on what the user is about to edit. Where the files
+// come from a ?src= link - the documentation's own way in - waiting for them
+// first meant a network round trip to GitHub, and then a second one for the
+// classes beside it, before the parse could even start. So the corpus is
+// parsed against itself, and the handful of files the editor holds are added
+// when they arrive and parsed incrementally, which is the same move
+// updateFiles( ) makes on every keystroke and costs the same few milliseconds.
+export async function buildRegistry(corpus, filesReady, onProgress) {
   const reg = new abaplint.Registry(config());
 
   reg.addDependencies(
     Object.entries(corpus).map(([name, contents]) => new abaplint.MemoryFile(`/lib/${name}`, contents)),
   );
+
+  await parseWithYields(reg, onProgress);
+
   held = new Map();
-  for (const file of files) {
+  for (const file of await filesReady) {
     addFile(reg, file);
     held.set(file.name, file.source);
   }
-
-  await parseWithYields(reg, onProgress);
+  // Only the files just added are dirty, so this is the incremental parse and
+  // not the whole corpus again.
+  reg.parse();
 
   registry = reg;
   return reg;
@@ -290,18 +322,43 @@ export function hasEntryClass(files) {
 // Every class and interface completion can offer. The corpus half is fixed for
 // the life of the page and is read once; the user's own objects are read every
 // time, because a class added a minute ago has to be offerable a minute ago.
+//
+// Kept sorted rather than sorted on the way out. There are several thousand
+// names in the corpus and this is asked on a keystroke, from inside Monaco's
+// completion provider - so a localeCompare sort of the whole list per
+// character typed was the expensive half of offering a suggestion. The corpus
+// half is sorted once; the user's handful is merged into it, which is a walk
+// rather than a sort.
 let corpusNames;
 export function knownObjectNames() {
   if (corpusNames === undefined) {
     const mine = new Set(userObjects().map((o) => o.getName()));
     corpusNames = [...registry.getObjects()]
       .filter((o) => (o.getType() === "CLAS" || o.getType() === "INTF") && !mine.has(o.getName()))
-      .map((o) => ({ name: o.getName(), type: o.getType() }));
+      .map((o) => ({ name: o.getName(), type: o.getType() }))
+      .sort(byName);
   }
   const own = userObjects()
     .filter((o) => o.getType() === "CLAS" || o.getType() === "INTF")
-    .map((o) => ({ name: o.getName(), type: o.getType() }));
-  return [...own, ...corpusNames].sort((a, b) => a.name.localeCompare(b.name));
+    .map((o) => ({ name: o.getName(), type: o.getType() }))
+    .sort(byName);
+  return merge(own, corpusNames);
+}
+
+const byName = (a, b) => a.name.localeCompare(b.name);
+
+// Two sorted lists into one. The right-hand list is thousands of names that
+// were sorted once; the left is the two or three the user has open.
+function merge(left, right) {
+  const out = [];
+  let i = 0;
+  let j = 0;
+  while (i < left.length && j < right.length) {
+    out.push(byName(left[i], right[j]) <= 0 ? left[i++] : right[j++]);
+  }
+  while (i < left.length) out.push(left[i++]);
+  while (j < right.length) out.push(right[j++]);
+  return out;
 }
 
 // The name of the global object a source declares, if it declares one. Read off

@@ -40,6 +40,18 @@ export async function openFiles(page) {
   );
 }
 
+// Adds a file: press "+", type the name into the strip, press Enter.
+//
+// This was a window.prompt( ) driven with page.once("dialog", ...) until it
+// turned out that a cross-origin iframe - which is what an embedded playground
+// is - never shows one, so the button did nothing there.
+export async function addNamedFile(page, name) {
+  await page.locator(".file-add").click();
+  await page.locator(".file-new").fill(name);
+  await page.locator(".file-new").press("Enter");
+  await expect(page.locator(".file-tab", { hasText: name })).toBeVisible();
+}
+
 // The problems abaplint is reporting on the current source, as Monaco shows
 // them in the gutter.
 export async function markers(page) {

@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { control, open, outputText, setSource } from "./helpers.mjs";
+import { addNamedFile, control, open, outputText, setSource } from "./helpers.mjs";
 
 // The playground's whole point: what is in the editor is what runs. These tests
 // change the ABAP and check that the app on the right changed with it, and that
@@ -173,8 +173,7 @@ test("the reported errors do not outlive the run that reported them", async ({ p
 test("a class can inherit from another file in the editor", async ({ page }) => {
   await open(page);
 
-  page.once("dialog", (d) => d.accept("zcl_pg_base.clas.abap"));
-  await page.locator(".file-add").click();
+  await addNamedFile(page, "zcl_pg_base.clas.abap");
   await setSource(
     page,
     `CLASS zcl_pg_base DEFINITION PUBLIC CREATE PUBLIC.
@@ -228,8 +227,7 @@ ENDCLASS.`,
 test("a class can inherit from the framework - a custom exception works", async ({ page }) => {
   await open(page);
 
-  page.once("dialog", (d) => d.accept("zcx_pg_oops.clas.abap"));
-  await page.locator(".file-add").click();
+  await addNamedFile(page, "zcx_pg_oops.clas.abap");
   await setSource(
     page,
     `CLASS zcx_pg_oops DEFINITION PUBLIC INHERITING FROM cx_static_check CREATE PUBLIC.

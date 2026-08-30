@@ -21,8 +21,8 @@ import "monaco-editor/editor/contrib/wordHighlighter/browser/wordHighlighter.js"
 import "monaco-editor/editor/contrib/comment/browser/comment.js";
 import "monaco-editor/editor/contrib/contextmenu/browser/contextmenu.js";
 import "monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching.js";
-import { registerABAP, updateMarkers } from "@abaplint/monaco";
-import { applyLinterFixes, findingsFor, linterFixable } from "./abap2ui5-lint.mjs";
+import { registerABAP } from "@abaplint/monaco";
+import { applyLinterFixes, fixableAmong, findingsFor } from "./abap2ui5-lint.mjs";
 
 import { uriFor } from "./files.mjs";
 import {
@@ -59,6 +59,12 @@ const THEME_LIGHT = "abap-light";
 
 let editor;
 let onChange;
+// Bumped whenever a model is created or disposed. It is half of the key the
+// analysis below is cached under, and it is there for one case a version id
+// cannot cover: two different samples under the same file name. A freshly
+// created model starts at version 1, so loading sample B over an untouched
+// sample A would produce exactly the key sample A had.
+let modelGeneration = 0;
 // Until the corpus has been parsed there is nothing to check against, so the
 // editor edits and highlights but says nothing about the code.
 let connected = false;
@@ -94,6 +100,7 @@ export function createEditor(container, files, options = {}) {
 }
 
 function createModel(file) {
+  modelGeneration += 1;
   const model = monaco.editor.createModel(file.source, "abap", monaco.Uri.parse(uriFor(file.name)));
   let pending;
   model.onDidChangeContent(() => {
@@ -150,6 +157,7 @@ export function closeFile(name) {
   if (remaining.length === 0) return;
   if (currentFile() === name) openFile(remaining[0].name);
   model.dispose();
+  modelGeneration += 1;
   if (connected) refresh();
   onChange?.(getFiles());
 }
@@ -157,45 +165,109 @@ export function closeFile(name) {
 // Replaces everything - what loading a sample or a shared link does.
 export function setFiles(files) {
   for (const model of monaco.editor.getModels()) model.dispose();
+  modelGeneration += 1;
   for (const file of files) createModel(file);
   editor.setModel(modelFor(files[0].name));
   if (connected) refresh();
   onChange?.(getFiles());
 }
 
-// Pushes the editor's state into the registry and the registry's opinion back
-// into the gutters. Returns everything wrong with everything open, so the caller
-// can decide whether a run is worth attempting.
+// One analysis of everything open, and everybody's answer to it.
+//
+// Three questions are asked of the same text, from three places, on every
+// keystroke: what is wrong with it (the underlines and the Problems list), how
+// much of that can be repaired (the Fix them bar), and - through updateInsight
+// - what the panel should now show. They used to be three separate walks over
+// the file set, and a single debounced change ran the whole analysis three
+// times over: once in the editor's own change handler, once in the page's
+// remember( ), and once more when the panel rendered its problem list and
+// asked fixableNow( ).
+//
+// So the walk happens once and is kept. The key is what the editor is: the
+// generation counter above, plus every open model's uri and version id, which
+// Monaco bumps on every edit. Anything that changes the text changes the key;
+// anything that does not - a second reader asking the same question - gets the
+// answer already computed. What that does NOT cover is a checker whose
+// configuration changed under unchanged text, which is why the Config tabs
+// call invalidateAnalysis( ) before they ask again.
+let analysis = { key: undefined, problems: [], fixable: 0 };
+
+const analysisKey = () =>
+  monaco.editor
+    .getModels()
+    .filter((m) => m.uri.scheme === "file")
+    .map((m) => `${m.uri.path}@${m.getVersionId()}`)
+    .join("|") + `#${modelGeneration}`;
+
+// Throws the kept answer away. For the one caller whose change is invisible to
+// the key: a checker reconfigured while the text stayed exactly as it was.
+export function invalidateAnalysis() {
+  analysis = { key: undefined, problems: [], fixable: 0 };
+}
+
 // Everything wrong with what is open, from both checkers, and the markers to
 // match. The two sources are kept apart by their marker owner: Monaco replaces
 // all markers of one owner at a time, so a shared owner would have whichever
 // checker ran second erase the other's underlines.
-export function refresh() {
+function analyse() {
   // Nothing to check against, and nothing to check with. The registry does not
   // exist until the corpus has been parsed, and the editor is typeable for the
   // whole of that - a moment on a fast connection, several seconds on a slow
   // one. Every path that reacts to a change in the editor arrives here, so the
   // guard belongs here rather than at each caller: it was at one of them and
   // not at the other, and the one without it reached straight into a registry
-  // that was not there yet.
-  if (!connected) return [];
+  // that was not there yet. Not cached either - the very next call, once the
+  // corpus has landed, has to do the work.
+  if (!connected) return { problems: [], fixable: 0 };
+
+  const key = analysisKey();
+  if (key === analysis.key) return analysis;
 
   const files = getFiles();
   updateFiles(files);
 
   const problems = [];
+  // abaplint's own count, over the whole registry, is one call rather than one
+  // per file - so it is asked here rather than inside the loop.
+  let fixable = abaplintFixable();
+
   for (const file of files) {
     const model = modelFor(file.name);
-    updateMarkers(getRegistry(), model);
-    for (const issue of diagnostics(file.name)) {
+
+    // @abaplint/monaco's updateMarkers( ) written out, because it asked the
+    // language server for these diagnostics and then this function asked for
+    // them a second time to build the Problems list from. The marker shape is
+    // theirs, code and all - what is gone is the duplicate parse and the
+    // duplicate analysis.
+    const found = diagnostics(file.name);
+    monaco.editor.setModelMarkers(
+      model,
+      ABAPLINT_OWNER,
+      found.map((d) => ({
+        severity: LSP_SEVERITY[d.severity] ?? monaco.MarkerSeverity.Error,
+        message: typeof d.message === "string" ? d.message : d.message.value,
+        code: {
+          value: typeof d.code === "string" ? d.code : "",
+          target: monaco.Uri.parse(d.codeDescription?.href || ""),
+        },
+        startLineNumber: d.range.start.line + 1,
+        startColumn: d.range.start.character + 1,
+        endLineNumber: d.range.end.line + 1,
+        endColumn: d.range.end.character + 1,
+      })),
+    );
+    for (const issue of found) {
       problems.push({ file: file.name, source: "abaplint", ...issue });
     }
 
-    const found = findingsFor(file.source);
+    // The linter's findings, asked for once and then used three times over:
+    // the underlines, the Problems rows, and how many of them carry a fix.
+    const findings = findingsFor(file.source);
+    fixable += fixableAmong(findings).length;
     monaco.editor.setModelMarkers(
       model,
       LINT_OWNER,
-      found.map((f) => ({
+      findings.map((f) => ({
         severity: MONACO_SEVERITY[f.severity] ?? monaco.MarkerSeverity.Warning,
         message: `${f.message}  (abap2UI5: ${f.type})`,
         startLineNumber: f.line,
@@ -206,7 +278,7 @@ export function refresh() {
         endColumn: f.column + 1,
       })),
     );
-    for (const f of found) {
+    for (const f of findings) {
       problems.push({
         file: file.name,
         source: "abap2UI5",
@@ -217,8 +289,27 @@ export function refresh() {
       });
     }
   }
-  return problems;
+
+  analysis = { key, problems, fixable };
+  return analysis;
 }
+
+// Pushes the editor's state into the registry and the registry's opinion back
+// into the gutters. Returns everything wrong with everything open, so the
+// caller can decide whether a run is worth attempting.
+export function refresh() {
+  return analyse().problems;
+}
+
+const ABAPLINT_OWNER = "abaplint";
+
+// The language server speaks LSP severities; Monaco has its own numbers. Only
+// the two @abaplint/monaco mapped are mapped here, and for the same reason:
+// everything else is an error, including a severity it did not recognise.
+const LSP_SEVERITY = {
+  2: monaco.MarkerSeverity.Warning,
+  3: monaco.MarkerSeverity.Info,
+};
 
 const LINT_OWNER = "abap2ui5";
 
@@ -275,24 +366,35 @@ function abapNameCompletion() {
       // names that merely contain it, and the cut to 200 has to respect that -
       // an alphabetical cut would happily drop the one class being typed while
       // keeping two hundred incidental substring matches.
-      const starts = (o) => (o.name.toLowerCase().startsWith(lower) ? 0 : 1);
-      const suggestions = knownObjectNames()
-        .filter((o) => o.name.toLowerCase().includes(lower))
-        .sort((a, b) => starts(a) - starts(b) || a.name.localeCompare(b.name))
-        .slice(0, 200)
-        .map((o) => ({
-          label: o.name.toLowerCase(),
-          kind:
-            o.type === "INTF"
-              ? monaco.languages.CompletionItemKind.Interface
-              : monaco.languages.CompletionItemKind.Class,
-          detail: o.type === "INTF" ? "interface" : "class",
-          insertText: o.name.toLowerCase(),
-          range,
-          // Names that start with what was typed belong above names that merely
-          // contain it.
-          sortText: (o.name.toLowerCase().startsWith(lower) ? "0" : "1") + o.name,
-        }));
+      //
+      // One pass into two buckets rather than a filter and a sort. This runs on
+      // a keystroke over several thousand names, and knownObjectNames( ) hands
+      // them back in name order already, so appending to two lists keeps that
+      // order within each and costs no comparisons at all. Each name is also
+      // lower-cased once here rather than the four times the sort and the map
+      // between them used to ask for.
+      const leading = [];
+      const anywhere = [];
+      for (const object of knownObjectNames()) {
+        const name = object.name.toLowerCase();
+        if (!name.includes(lower)) continue;
+        (name.startsWith(lower) ? leading : anywhere).push({ name, type: object.type });
+      }
+
+      const suggestions = [...leading, ...anywhere].slice(0, 200).map((o, i) => ({
+        label: o.name,
+        kind:
+          o.type === "INTF"
+            ? monaco.languages.CompletionItemKind.Interface
+            : monaco.languages.CompletionItemKind.Class,
+        detail: o.type === "INTF" ? "interface" : "class",
+        insertText: o.name,
+        range,
+        // The order they are in is the order they belong in, and Monaco sorts
+        // by this string rather than by position - so the position is what it
+        // is given. Padded, or "10" would sort between "1" and "2".
+        sortText: String(i).padStart(4, "0"),
+      }));
 
       return { suggestions };
     },
@@ -308,9 +410,7 @@ function abapNameCompletion() {
 // is still parsing, and asking abaplint anything at that point reaches a
 // registry that is not there yet.
 export function fixableNow() {
-  if (!connected) return 0;
-  refresh();
-  return abaplintFixable() + getFiles().reduce((n, f) => n + linterFixable(f.source), 0);
+  return analyse().fixable;
 }
 
 // Applies both checkers' fixes to everything open.

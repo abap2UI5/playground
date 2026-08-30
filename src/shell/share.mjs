@@ -12,10 +12,19 @@
 // costs one character and saves every link ever shared.
 const VERSION = "2";
 
+// btoa wants a binary string, and building one a character at a time is
+// quadratic in the engines that do not rope their strings - which is felt on
+// exactly the link worth sharing, the one carrying several classes. Handed to
+// String.fromCharCode a block at a time instead; the block is kept well under
+// the argument-count limit that spreading a whole array would hit.
+const CHUNK = 0x8000;
+
 const toBase64Url = (bytes) => {
-  let binary = "";
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+  const parts = [];
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    parts.push(String.fromCharCode(...bytes.subarray(i, i + CHUNK)));
+  }
+  return btoa(parts.join("")).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 };
 
 const fromBase64Url = (text) => {

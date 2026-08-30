@@ -11,6 +11,7 @@ import {
   fixableNow,
   focusProblem,
   getFiles,
+  invalidateAnalysis,
   refresh,
 } from "../editor/editor.mjs";
 import {
@@ -21,6 +22,8 @@ import {
   documentSymbols,
 } from "../editor/registry.mjs";
 import { applyLinterSettings, linterDefaults, linterSettings } from "../editor/abap2ui5-lint.mjs";
+import { keepAbaplintSettings, keepLinterSettings } from "./checker-settings.mjs";
+import { readStored, writeStored } from "./storage.mjs";
 import { currentLog, hideOutput, onLogChange, setStatus } from "./ui.mjs";
 
 let panel;
@@ -100,7 +103,7 @@ export function setUpInsight() {
 // only person who knows which is happening is the one looking at it.
 function setUpResize() {
   const grip = document.getElementById("insight-grip");
-  const stored = Number(localStorage.getItem(HEIGHT_KEY));
+  const stored = Number(readStored(HEIGHT_KEY));
   if (Number.isFinite(stored) && stored >= MIN_HEIGHT) panel.style.height = `${stored}px`;
 
   const apply = (px) => {
@@ -129,7 +132,7 @@ function setUpResize() {
     if (!grip.hasPointerCapture?.(e.pointerId)) return;
     grip.releasePointerCapture(e.pointerId);
     grip.classList.remove("is-dragging");
-    localStorage.setItem(HEIGHT_KEY, String(apply(panel.getBoundingClientRect().bottom - e.clientY)));
+    writeStored(HEIGHT_KEY, String(apply(panel.getBoundingClientRect().bottom - e.clientY)));
   };
   grip.addEventListener("pointerup", stop);
   grip.addEventListener("pointercancel", stop);
@@ -140,7 +143,7 @@ function setUpResize() {
     if (step === 0) return;
     e.preventDefault();
     expand();
-    localStorage.setItem(HEIGHT_KEY, String(apply(panel.getBoundingClientRect().height + step)));
+    writeStored(HEIGHT_KEY, String(apply(panel.getBoundingClientRect().height + step)));
   });
 }
 
@@ -192,7 +195,11 @@ const VIEWS = {
 
 function render() {
   if (!panel) return;
-  for (const tab of tabs) tab.classList.toggle("is-active", tab.dataset.insight === view);
+  for (const tab of tabs) {
+    const active = tab.dataset.insight === view;
+    tab.classList.toggle("is-active", active);
+    tab.setAttribute("aria-selected", String(active));
+  }
   body.replaceChildren((VIEWS[view] ?? problemList)());
 }
 
@@ -223,20 +230,30 @@ function problemList() {
       (a.range?.start?.line ?? 0) - (b.range?.start?.line ?? 0),
   );
 
+  // Asked once for the list rather than once per row: getFiles( ) reads every
+  // open model's full text out of Monaco, and the answer cannot change halfway
+  // down a list that is being built in one go.
+  const several = getFiles().length > 1;
+
   for (const problem of sorted) {
     const line = (problem.range?.start?.line ?? 0) + 1;
     const column = (problem.range?.start?.character ?? 0) + 1;
 
     const item = document.createElement("li");
-    item.className = `insight-row is-${SEVERITY_LABEL[problem.severity] ?? "info"}`;
-    item.dataset.file = problem.file;
-    item.dataset.line = String(line);
-    item.dataset.column = String(column);
+    // The row is a button in the item rather than the item itself: going to a
+    // problem is the whole purpose of this list, and a <li> cannot be tabbed
+    // to or pressed. The click handler is delegated on [data-file] either way.
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = `insight-row is-${SEVERITY_LABEL[problem.severity] ?? "info"}`;
+    row.dataset.file = problem.file;
+    row.dataset.line = String(line);
+    row.dataset.column = String(column);
 
     const where = document.createElement("span");
     where.className = "insight-where";
     // The file name only earns its space when there is more than one.
-    where.textContent = getFiles().length > 1 ? `${problem.file}:${line}` : `line ${line}`;
+    where.textContent = several ? `${problem.file}:${line}` : `line ${line}`;
 
     const what = document.createElement("span");
     what.className = "insight-what";
@@ -248,7 +265,8 @@ function problemList() {
     // says this will not compile, abap2UI5 says it will compile and be wrong.
     who.textContent = problem.source === "abap2UI5" ? `abap2UI5 · ${problem.rule ?? ""}` : "abaplint";
 
-    item.append(where, what, who);
+    row.append(where, what, who);
+    item.append(row);
     list.append(item);
   }
   return wrap;
@@ -302,10 +320,12 @@ function outlineList() {
   list.className = "insight-list is-outline";
   for (const symbol of symbols) {
     const item = document.createElement("li");
-    item.className = `insight-row is-symbol depth-${symbol.depth}`;
-    item.dataset.file = file;
-    item.dataset.line = String(symbol.line);
-    item.dataset.column = "1";
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = `insight-row is-symbol depth-${symbol.depth}`;
+    row.dataset.file = file;
+    row.dataset.line = String(symbol.line);
+    row.dataset.column = "1";
 
     const kind = document.createElement("span");
     kind.className = "insight-kind";
@@ -315,7 +335,8 @@ function outlineList() {
     name.className = "insight-what";
     name.textContent = symbol.name;
 
-    item.append(kind, name);
+    row.append(kind, name);
+    item.append(row);
     list.append(item);
   }
   return list;
@@ -372,7 +393,7 @@ function empty(text) {
 // checkbox per rule would be a screen nobody reads to reach a setting nobody
 // wanted. What a reader actually asks is "why is it not warning here" - and
 // the answer is to add the rule name and press Apply.
-function configEditor({ title, blurb, value, onApply, onReset, extra }) {
+function configEditor({ title, blurb, value, onApply, onKeep, onReset, extra }) {
   const wrap = document.createElement("div");
   wrap.className = "config";
 
@@ -425,6 +446,14 @@ function configEditor({ title, blurb, value, onApply, onReset, extra }) {
       await onApply(parsed, (done, total) => {
         said.textContent = `applying… ${Math.round((done / total) * 100)}%`;
       });
+      // Kept only once the checker accepted it, so a rejected edit is not
+      // what greets somebody on their next visit.
+      onKeep(parsed);
+      // The text did not change, the rules did - and the editor keys its kept
+      // analysis on the text alone. Without this the count below would be the
+      // one from before the change, which is precisely the number this tab
+      // exists to move.
+      invalidateAnalysis();
       // The panel says what changed rather than only that something did: the
       // whole point of the tab is understanding why a message is or is not
       // there, so the count is the answer.
@@ -487,6 +516,7 @@ function abaplintConfig() {
       "syntax check holds you to.",
     value: abaplintSettings(),
     onApply: applyAbaplintSettings,
+    onKeep: keepAbaplintSettings,
     onReset: abaplintDefaults,
     extra: appended(links, note),
   });
@@ -500,6 +530,7 @@ function linterConfig() {
       "newer system would render and an older one would not.",
     value: linterSettings(),
     onApply: applyLinterSettings,
+    onKeep: keepLinterSettings,
     onReset: linterDefaults,
     extra: appended(
       docsLink("https://github.com/abap2UI5/linter", "The abap2UI5 linter, its rules and its config file"),

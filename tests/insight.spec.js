@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { getSource, open, setSource } from "./helpers.mjs";
+import { getSource, markers, open, setSource } from "./helpers.mjs";
 
 // The panel under the editor: the problems list, the outline, and the second
 // checker that feeds the first.
@@ -28,6 +28,20 @@ CLASS zcl_playground IMPLEMENTATION.
   METHOD view_display.
   ENDMETHOD.
 ENDCLASS.`;
+
+// The same view, with a Button property that OpenUI5 only grew in 1.84. It is
+// the cleanest observable difference between the two UI5 floors: reported at
+// 1.71, silent at 1.120, and abaplint has nothing to say about it either way.
+const withAriaHasPopup = () =>
+  withIcon("accept").replace(
+    "              )->a( n = `icon` v = `sap-icon://accept` ).",
+    "              )->a( n = `icon` v = `sap-icon://accept`\n" +
+      "              )->a( n = `ariaHasPopup` v = `Dialog` ).",
+  );
+
+// The row the abap2UI5 linter writes about a property the chosen release does
+// not have. Its presence is the observable difference between the two floors.
+const tooNewRow = (page) => page.locator(".insight-row", { hasText: /ariaHasPopup/i });
 
 test("the problems list reports what abaplint found, and going to one moves the cursor", async ({ page }) => {
   await open(page);
@@ -164,8 +178,16 @@ test("a config that names a rule abaplint does not have says so", async ({ page 
 
 test("the abap2UI5 lint config decides which UI5 release the view is held to", async ({ page }) => {
   await open(page);
-  await page.locator('[data-insight="abap2ui5"]').click();
 
+  // A property sap.m.Button only grew in 1.84, so the default 1.71 floor
+  // reports it. This is the assertion that matters: the tab echoing back what
+  // was typed into it proves nothing, and for a while it was all this checked -
+  // the release was passed to the linter under a name the linter does not read,
+  // so the setting reported "applied" and changed nothing at all.
+  await setSource(page, withAriaHasPopup());
+  await expect(tooNewRow(page).first()).toBeVisible({ timeout: 20000 });
+
+  await page.locator('[data-insight="abap2ui5"]').click();
   const box = page.locator(".config-text");
   expect(JSON.parse(await box.inputValue())).toEqual({ ui5: "1.71", distribution: "openui5" });
 
@@ -173,9 +195,99 @@ test("the abap2UI5 lint config decides which UI5 release the view is held to", a
   await page.locator(".config-row .primary").click();
   await expect(page.locator(".config-said.is-error")).toContainText("not a UI5 release");
 
+  // Raising the floor makes it go away, and lowering it brings it back.
+  await box.fill(JSON.stringify({ ui5: "1.120", distribution: "openui5" }));
+  await page.locator(".config-row .primary").click();
+  await expect(page.locator(".config-said")).toContainText("applied");
+  await page.locator('[data-insight="problems"]').click();
+  await expect(tooNewRow(page)).toHaveCount(0);
+
+  await page.locator('[data-insight="abap2ui5"]').click();
   await page.locator(".config-row button", { hasText: "Reset" }).click();
   await expect(page.locator(".config-said")).toContainText("applied");
   expect(JSON.parse(await page.locator(".config-text").inputValue()).ui5).toBe("1.71");
+  await page.locator('[data-insight="problems"]').click();
+  await expect(tooNewRow(page).first()).toBeVisible({ timeout: 20000 });
+});
+
+test("a changed checker setting is still there after a reload", async ({ page }) => {
+  await open(page);
+
+  // The UI5 floor, because it is the one somebody has a real reason to move:
+  // an app that only has to run on a current system is held to 1.71 by default
+  // and is told about properties that are perfectly fine on theirs.
+  await setSource(page, withAriaHasPopup());
+  await expect(tooNewRow(page).first()).toBeVisible({ timeout: 20000 });
+
+  await page.locator('[data-insight="abap2ui5"]').click();
+  await page.locator(".config-text").fill(JSON.stringify({ ui5: "1.120", distribution: "openui5" }));
+  await page.locator(".config-row .primary").click();
+  await expect(page.locator(".config-said")).toContainText("applied");
+
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await page.locator('[data-insight="abap2ui5"]').click();
+  expect(JSON.parse(await page.locator(".config-text").inputValue()).ui5).toBe("1.120");
+  // And it is in force, not merely on screen: the draft came back with it.
+  await page.locator('[data-insight="problems"]').click();
+  await expect(tooNewRow(page)).toHaveCount(0);
+
+  // Reset puts it back - to the default of the day rather than to a frozen
+  // copy of it, which is why a setting that equals the default is forgotten
+  // rather than stored.
+  await page.locator('[data-insight="abap2ui5"]').click();
+  await page.locator(".config-row button", { hasText: "Reset" }).click();
+  await expect(page.locator(".config-said")).toContainText("applied");
+
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await page.locator('[data-insight="abap2ui5"]').click();
+  expect(JSON.parse(await page.locator(".config-text").inputValue()).ui5).toBe("1.71");
+});
+
+test("an embedded playground does not pick up a stored checker setting", async ({ page }) => {
+  await open(page);
+  await page.locator('[data-insight="abap2ui5"]').click();
+  await page.locator(".config-text").fill(JSON.stringify({ ui5: "1.120", distribution: "openui5" }));
+  await page.locator(".config-row .primary").click();
+  await expect(page.locator(".config-said")).toContainText("applied");
+
+  // A demo in somebody's documentation has to read the same to every reader -
+  // the same reason an embedded playground never restores a draft.
+  //
+  // Asked of the markers rather than of the Config tab, because an embedded
+  // playground tucks the whole panel away: the setting has to be observed
+  // through what the linter does with it, which is the thing that matters
+  // anyway.
+  await page.goto("/?embed=1");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await setSource(page, withAriaHasPopup());
+
+  await expect
+    .poll(async () => (await markers(page)).some((m) => /ariaHasPopup/i.test(m.message)), {
+      timeout: 20000,
+    })
+    .toBe(true);
+});
+
+test("a stored setting that no longer makes sense is dropped rather than fatal", async ({ page }) => {
+  await open(page);
+
+  // What an old deploy could leave behind: a rule abaplint has since dropped.
+  // The page has to start on the defaults, not refuse to start.
+  await page.evaluate(() =>
+    localStorage.setItem(
+      "abap2ui5-playground:abaplint",
+      JSON.stringify({ version: "v750", rules: { no_such_rule_at_all: true } }),
+    ),
+  );
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+
+  await page.locator('[data-insight="abaplint"]').click();
+  const config = JSON.parse(await page.locator(".config-text").inputValue());
+  expect(config.rules.no_such_rule_at_all).toBeUndefined();
+  expect(config.rules.check_syntax).toBe(true);
 });
 
 test("the info button opens the credits", async ({ page }) => {

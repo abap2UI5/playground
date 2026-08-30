@@ -25,6 +25,10 @@ const BUILD = path.join(ROOT, "build");
 const DOWNPORT = path.join(BUILD, "downport");
 const OUTPUT = path.join(BUILD, "output");
 const PG_ABAP = path.join(ROOT, "src", "abap");
+// What this step is finally judged by: both have to exist for its output to
+// count as current, or a deleted dist/ would be "cached" into a missing site.
+const FRAMEWORK_BUNDLE = path.join(ROOT, "dist", "runtime", "framework.mjs");
+const WASM_COPY = path.join(ROOT, "dist", "runtime", "sql-wasm.wasm");
 
 const log = (m) => console.log(`build-framework: ${m}`);
 const run = (cmd, args) =>
@@ -50,6 +54,37 @@ function inputHash() {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
   h.update(JSON.stringify(pkg.devDependencies));
   h.update(fs.readFileSync(fileURLToPath(import.meta.url)));
+  return h.digest("hex");
+}
+
+// The second stamp: everything that decides what the transpile and the bundle
+// should produce. That is the downported tree (whatever produced it), the
+// transpiler and its runtime, and the playground's own runtime sources, which
+// the bundle pulls in and the transpiler's `setup` option points at.
+//
+// Kept apart from inputHash( ) on purpose. The downport is three minutes and is
+// keyed on its own inputs; the transpile and the bundle are about a minute
+// together and are keyed on the downport's OUTPUT - so a change that the
+// downport absorbs without changing a byte of build/downport correctly skips
+// both, and a restored downport cache still has to prove the output tree
+// matches before the transpile is skipped.
+function outputHash() {
+  const h = crypto.createHash("sha256");
+  for (const file of walk(DOWNPORT).sort()) {
+    h.update(path.relative(DOWNPORT, file)).update(fs.readFileSync(file));
+  }
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+  h.update(JSON.stringify(pkg.devDependencies));
+  // The runtime the bundle is built from, and the esbuild plugins that build
+  // it. A change to either has to rebuild framework.mjs.
+  for (const dir of [path.join(ROOT, "src", "runtime")]) {
+    for (const file of walk(dir).sort()) h.update(path.relative(ROOT, file)).update(fs.readFileSync(file));
+  }
+  h.update(fs.readFileSync(path.join(ROOT, "tools", "esbuild-plugins.mjs")));
+  h.update(fs.readFileSync(fileURLToPath(import.meta.url)));
+  // Debug builds differ from published ones in exactly this, and swapping
+  // between them has to rebuild rather than reuse.
+  h.update(String(process.env.PG_DEBUG === "1"));
   return h.digest("hex");
 }
 
@@ -176,20 +211,44 @@ if (!force && fs.existsSync(stampPath) && fs.readFileSync(stampPath, "utf8").tri
   fs.writeFileSync(stampPath, hash);
 }
 
-transpile();
+// The transpile and the bundle, skipped together when nothing that feeds them
+// has moved. They used to run on every build, downport cache or not - about a
+// minute of a nine-hundred-object transpile and an eight-megabyte esbuild, for
+// a byte-identical result. That is a minute off every warm CI job and off every
+// rebuild somebody runs while working on the page.
+const outStampPath = path.join(BUILD, "output.stamp");
+const outHash = outputHash();
+const outputIsCurrent =
+  !force &&
+  fs.existsSync(outStampPath) &&
+  fs.readFileSync(outStampPath, "utf8").trim() === outHash &&
+  fs.existsSync(path.join(OUTPUT, "init.mjs")) &&
+  fs.existsSync(FRAMEWORK_BUNDLE) &&
+  fs.existsSync(WASM_COPY);
 
-const modules = walk(OUTPUT).filter((f) => f.endsWith(".mjs"));
-log(`${modules.length} modules in build/output`);
-if (!fs.existsSync(path.join(OUTPUT, "init.mjs"))) {
-  console.error("build-framework: ERROR build/output/init.mjs missing - transpile did not produce a runnable tree");
-  process.exit(1);
+if (outputIsCurrent) {
+  log("transpile and bundle up to date, reusing build/output and dist/runtime");
+} else {
+  // Written only once both have succeeded, so an interrupted build is not
+  // recorded as a finished one.
+  transpile();
+
+  const modules = walk(OUTPUT).filter((f) => f.endsWith(".mjs"));
+  log(`${modules.length} modules in build/output`);
+  if (!fs.existsSync(path.join(OUTPUT, "init.mjs"))) {
+    console.error("build-framework: ERROR build/output/init.mjs missing - transpile did not produce a runnable tree");
+    process.exit(1);
+  }
+
+  await bundle();
+  fs.writeFileSync(outStampPath, outHash);
 }
 
 // -------------------------------------------------------------------- bundle
 
 async function bundle() {
   const esbuild = await import("esbuild");
-  const outfile = path.join(ROOT, "dist", "runtime", "framework.mjs");
+  const outfile = FRAMEWORK_BUNDLE;
 
   const result = await esbuild.build({
     entryPoints: [path.join(ROOT, "src", "runtime", "index.mjs")],
@@ -213,15 +272,11 @@ async function bundle() {
     metafile: true,
   });
 
-  fs.copyFileSync(
-    path.join(ROOT, "node_modules", "sql.js", "dist", "sql-wasm-browser.wasm"),
-    path.join(ROOT, "dist", "runtime", "sql-wasm.wasm"),
-  );
+  fs.mkdirSync(path.dirname(WASM_COPY), { recursive: true });
+  fs.copyFileSync(path.join(ROOT, "node_modules", "sql.js", "dist", "sql-wasm-browser.wasm"), WASM_COPY);
 
   const kb = (n) => `${Math.round(n / 1024)} KB`;
   log(`bundled dist/runtime/framework.mjs (${kb(fs.statSync(outfile).size)})`);
-  log(`plus dist/runtime/sql-wasm.wasm (${kb(fs.statSync(path.join(ROOT, "dist", "runtime", "sql-wasm.wasm")).size)})`);
+  log(`plus dist/runtime/sql-wasm.wasm (${kb(fs.statSync(WASM_COPY).size)})`);
   fs.writeFileSync(path.join(BUILD, "framework.metafile.json"), JSON.stringify(result.metafile));
 }
-
-await bundle();

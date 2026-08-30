@@ -132,7 +132,9 @@ Both lists are only a default. The **abaplint** and **abap2UI5 lint** tabs hold
 the live configuration: add any of abaplint's 188 rules, change the ABAP release
 the syntax check holds you to, or lower the UI5 floor the view is checked
 against to find a control an older system would not render. Apply reports how
-many problems there are now, so a rule can be tried rather than argued about.
+many problems there are now, so a rule can be tried rather than argued about,
+and what you change is still there the next time you open the page — Reset puts
+it back to the curated list of the day.
 
 ## The examples browser
 

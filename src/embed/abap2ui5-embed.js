@@ -97,9 +97,14 @@
         new Blob([payload]).stream().pipeThrough(new CompressionStream("deflate-raw")),
       ).arrayBuffer(),
     );
-    let binary = "";
-    for (const b of deflated) binary += String.fromCharCode(b);
-    return "2" + btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    // A block at a time rather than a character at a time - the same reason
+    // src/shell/share.mjs does it, and the same 0x8000 block, which stays well
+    // under the argument-count limit spreading the whole array would hit.
+    const parts = [];
+    for (let i = 0; i < deflated.length; i += 0x8000) {
+      parts.push(String.fromCharCode.apply(null, deflated.subarray(i, i + 0x8000)));
+    }
+    return "2" + btoa(parts.join("")).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
 
   async function mount(el) {
