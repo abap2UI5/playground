@@ -341,3 +341,8 @@ to Dependabot and the pin once sat four minors behind that way — an editor
 blessing sources every other repository's CI would reject. The build itself
 refuses a linter whose UI5 metadata snapshot disagrees with `UI5_VERSION`
 (`tools/build-ui5.mjs`), so that drift surfaces in the bump PR, not on main.
+The git-source pins move the same way: `bump-sources.yaml` runs
+`tools/fetch-deps.mjs --update-pins` weekly - the frontend leads, its
+`result/cloud/VERSION` names the framework commit, the framework names
+open-abap-core - behind the same full gate, so the last freshness work done
+by hand is gone too.

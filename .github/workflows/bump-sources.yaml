@@ -1,0 +1,69 @@
+# The three git-source pins in tools/fetch-deps.mjs were the last freshness
+# work still done entirely by hand: upstream.yml warns weekly when a build
+# against upstream HEAD breaks, but nothing ever MOVED the pins - the same
+# gap bump-linter.yaml closed for the npm side. This closes it for the
+# sources: --update-pins derives the one consistent set (the frontend leads,
+# its result/cloud/VERSION names the framework commit, the framework's own
+# node/setup pin names open-abap-core), the full build and the browser tests
+# gate it, and a PR carries it. The deps cache in the build action is keyed
+# on tools/fetch-deps.mjs, so a moved pin forces the fresh clone by itself.
+name: bump-sources
+
+on:
+  schedule:
+    - cron: '31 7 * * 1'   # Mondays 07:31 UTC - after bump-linter's 06:52
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump-sources:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version: '22'
+
+    - name: Move the source pins to the current consistent set
+      id: pins
+      run: |
+        set -euo pipefail
+        node tools/fetch-deps.mjs --update-pins
+        if git diff --quiet tools/fetch-deps.mjs; then
+          echo "changed=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "pins<<EOF" >> "$GITHUB_OUTPUT"
+          git diff tools/fetch-deps.mjs | grep '^[+-]    sha:' >> "$GITHUB_OUTPUT" || true
+          echo "EOF" >> "$GITHUB_OUTPUT"
+        fi
+
+    # The gate: the same build and browser tests every branch runs. A source
+    # set that breaks the downport, the transpile, the size budget or the 106
+    # browser tests fails this run instead of landing on main.
+    - if: steps.pins.outputs.changed == 'true'
+      uses: ./.github/actions/build
+    - if: steps.pins.outputs.changed == 'true'
+      run: npm test
+
+    - if: steps.pins.outputs.changed == 'true'
+      uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+      with:
+        branch: bump-sources
+        title: 'chore: bump the pinned framework sources'
+        commit-message: 'chore: bump the pinned framework sources'
+        body: |
+          Weekly move of the three git-source pins in `tools/fetch-deps.mjs`
+          to the current consistent set - the frontend's main HEAD, the
+          framework commit its `result/cloud/VERSION` names, and the
+          open-abap-core commit that framework pins itself. The full build
+          and the browser tests ran green in the workflow that opened this
+          PR.
+
+          ```diff
+          ${{ steps.pins.outputs.pins }}
+          ```
