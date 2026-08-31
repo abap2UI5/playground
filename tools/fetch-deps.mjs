@@ -6,9 +6,15 @@
 //
 //   node tools/fetch-deps.mjs                 fetch/refresh the pins
 //   node tools/fetch-deps.mjs --print-latest  show upstream HEADs (to bump)
+//   node tools/fetch-deps.mjs --update-pins   rewrite the shas below to the
+//                                             current consistent set
 //
-// Bumping a pin is an ordinary reviewed commit: run --print-latest, replace
-// the sha below, run the script, run the build and the tests.
+// Bumping a pin is an ordinary reviewed commit: --update-pins moves the three
+// shas TOGETHER along the documented invariant (the frontend leads, its
+// result/cloud/VERSION names the framework commit, the framework's own
+// node/setup pin names open-abap-core), then the build and the tests decide.
+// bump-sources.yaml runs exactly that weekly and opens a PR; by hand it is
+// the same three steps.
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -60,6 +66,61 @@ if (process.argv.includes("--print-latest")) {
     const head = git(["ls-remote", p.url, "HEAD"]).split("\t")[0];
     const mark = head === p.sha ? "(pinned = latest)" : `(pinned: ${p.sha})`;
     console.log(`${p.name}: ${head} ${mark}`);
+  }
+  process.exit(0);
+}
+
+/* --update-pins: move the three shas together, along the invariant
+ * checkFrontendProvenance( ) enforces after the fact - so the proposed set is
+ * consistent BY CONSTRUCTION instead of by luck:
+ *
+ *   1. the frontend pin becomes the frontend's main HEAD;
+ *   2. the framework pin becomes whatever THAT commit's result/cloud/VERSION
+ *      says its webapp was mirrored from (never the framework's own HEAD -
+ *      main may already be ahead of the last frontend delivery);
+ *   3. the open-abap-core pin becomes what THAT framework commit pins in its
+ *      own node/setup/fetch-deps.mjs, so the playground keeps transpiling
+ *      against the same standard library upstream's CI tests against.
+ *
+ * Rewrites the shas in this file and exits; running the fetch and the build
+ * on the result is the caller's job (the workflow does both, gated). */
+if (process.argv.includes("--update-pins")) {
+  const raw = async (repo, sha, file) => {
+    const res = await fetch(`https://raw.githubusercontent.com/${repo}/${sha}/${file}`, {
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!res.ok) throw new Error(`${repo}@${sha.slice(0, 12)}/${file}: HTTP ${res.status}`);
+    return res.text();
+  };
+  const frontendHead = git(["ls-remote", "https://github.com/abap2UI5/frontend", "HEAD"]).split("\t")[0];
+  const version = await raw("abap2UI5/frontend", frontendHead, "result/cloud/VERSION");
+  const framework = version.match(/abap2UI5\/abap2UI5@([0-9a-f]{40})/)?.[1];
+  if (!framework) {
+    console.error("update-pins: result/cloud/VERSION carries no `abap2UI5/abap2UI5@<sha>` line - the provenance format changed.");
+    process.exit(1);
+  }
+  const upstreamPins = await raw("abap2UI5/abap2UI5", framework, "node/setup/fetch-deps.mjs");
+  const openAbap = upstreamPins.match(/open-abap-core[\s\S]{0,200}?sha:\s*"([0-9a-f]{40})"/)?.[1];
+  if (!openAbap) {
+    console.error("update-pins: could not read the open-abap-core sha from the framework's node/setup/fetch-deps.mjs - its pin shape changed.");
+    process.exit(1);
+  }
+  const next = { "abap2ui5": framework, "abap2ui5-frontend": frontendHead, "open-abap-core": openAbap };
+  const self = fileURLToPath(import.meta.url);
+  let text = fs.readFileSync(self, "utf8");
+  let moved = 0;
+  for (const p of PINS) {
+    if (next[p.name] === p.sha) continue;
+    // each sha literal appears exactly once, on its PINS line
+    text = text.replace(`sha: "${p.sha}"`, `sha: "${next[p.name]}"`);
+    console.log(`update-pins: ${p.name} ${p.sha.slice(0, 12)} -> ${next[p.name].slice(0, 12)}`);
+    moved++;
+  }
+  if (moved) {
+    fs.writeFileSync(self, text);
+    console.log(`update-pins: ${moved} pin(s) moved - now run the fetch, the build and the tests`);
+  } else {
+    console.log("update-pins: the pins already are the current consistent set");
   }
   process.exit(0);
 }

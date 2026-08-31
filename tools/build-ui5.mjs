@@ -41,6 +41,26 @@ const OUT = path.join(ROOT, "dist", "app");
 // commit: run the build, run the tests, look at the app.
 export const UI5_VERSION = "1.151.0";
 
+// The linter judges views against ITS UI5 snapshot (data/properties.json,
+// bundled into the editor), and this build decides which UI5 actually runs on
+// the right-hand side. The two agreed only by coincidence of maintenance
+// until this check: a linter release that moves its snapshot now fails the
+// build - which surfaces in the bump-linter PR, not on main - and says which
+// side has to move.
+{
+  const snapshot = JSON.parse(
+    fs.readFileSync(path.join(ROOT, "node_modules", "@abap2ui5", "linter", "data", "properties.json"), "utf8"),
+  ).ui5Version;
+  if (snapshot !== UI5_VERSION) {
+    console.error(
+      `build-ui5: the linter's metadata snapshot is UI5 ${snapshot}, this build runs ${UI5_VERSION} - ` +
+      `the editor would judge against a different release than the page runs. ` +
+      `Move UI5_VERSION (and look at src/shell/ui5-libraries.mjs) or hold the linter bump.`,
+    );
+    process.exit(1);
+  }
+}
+
 // The closed set of libraries this build carries - UI5_LIBRARIES - lives in
 // src/shell/ui5-libraries.mjs, because the examples browser filters the
 // samples-controls catalogue against the same list. What the imported comment
