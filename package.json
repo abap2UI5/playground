@@ -5,7 +5,9 @@
   "description": "Browser playground for abap2UI5 - ABAP in the editor, the running app next to it, nothing but a static page.",
   "type": "module",
   "license": "MIT",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "deps": "node tools/fetch-deps.mjs",
     "build:framework": "node tools/build-framework.mjs",
