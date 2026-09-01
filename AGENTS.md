@@ -90,10 +90,12 @@ without it neither ships one.
 
 Four assets stand between opening the page and an app on screen, and
 `tools/check-size.mjs` budgets all four: the shell bundle (~1.4 MB compressed,
-Monaco and abaplint and the transpiler), the transpiled framework (~0.8 MB),
-the ABAP corpus (~0.6 MB) and SQLite (~0.3 MB). About three megabytes, and
-then several seconds of processor to parse them. Two things keep that from
-being worse than it is, and both have to be kept in step with the code:
+Monaco and abaplint and the transpiler), the transpiled framework (~0.7 MB),
+the ABAP corpus (~0.4 MB) and SQLite (~0.3 MB). About three megabytes, and
+then several seconds of processor to parse them. The same file carries a fifth
+budget that is not a size at all — how much **JavaScript stack** the boot parse
+may want, which is the third trap below. Two things keep the wait from being
+worse than it is, and both have to be kept in step with the code:
 
 - **The preloads in `src/shell/index.html`.** Left alone these four arrive in a
   chain — nothing asks for the framework or the corpus until the shell bundle
@@ -270,10 +272,10 @@ a sample without a test is not possible. CI:
 | `pages.yml` | pushes to `main`: the same build and tests, then deploy `dist/` to GitHub Pages — a red test never publishes |
 | `upstream.yml` | weekly: build and test against upstream `HEAD` without moving the pins, and open or extend an issue when that fails, so a bump stays a two-line commit |
 
-## Two traps the browser sets, and what they cost
+## Three traps the browser sets, and what they cost
 
-Both were found the hard way and both look like working code until they are on
-somebody else's page.
+All three were found the hard way and all three look like working code until
+they are on somebody else's page, or on a phone.
 
 - **`window.prompt()` and `window.alert()` are not shown at all in a
   cross-origin iframe.** Chrome has ignored them there for years. Naming a new
@@ -289,7 +291,25 @@ somebody else's page.
   file name deleted what they had typed. Escape is the way out of the naming
   input, deliberately and only.
 
-A third of the same family, in a library rather than the browser: **the
+- **The JavaScript stack is not the same size in every browser, and abaplint's
+  parser is recursive.** Statements are matched by a tree of combinators, so a
+  long statement is a deep stack — and abap2UI5's `src/01/03` is its UI5
+  frontend generated into ABAP string constants, where a whole module becomes
+  *one* statement of up to 1600 tokens joined with `&&`. Those 124 classes took
+  the corpus parse from 130 KB of stack to over 610 KB. Node and Chrome hand out
+  a little under a megabyte, so it worked on every desk; mobile Safari hands out
+  less, and the parse threw `RangeError: Maximum call stack size exceeded` out
+  of `boot()` before the page had started. It was reported as two lines of
+  minified frames, because the report was `String(e.stack)` and only V8 puts the
+  message in a stack — see `describeError()` in `src/shell/ui.mjs`, which is the
+  half of this to keep even if the corpus changes again. The playground serves
+  that frontend from `dist/app`, built from source, and never reads the ABAP
+  copy; `writeCorpus()` in `tools/build-site.mjs` leaves the directory out and
+  fails the build if it stops finding it, and `check-size.mjs` parses the
+  shipped corpus in 256 KB of stack so a new blob fails there rather than on
+  somebody's phone.
+
+A fourth of the same family, in a library rather than the browser: **the
 abap2UI5 linter's release option is `minUi5`, not `ui5`**, and an option it does
 not know is ignored rather than refused. The playground passed `ui5` — so the
 release in the **abap2UI5 lint** tab reported "applied", moved the problem count
@@ -321,12 +341,18 @@ try/catch that reports a startup failure, so that throw left the page on
   refused (PLAYGROUND_PLAN.md, phase 8): restored rows would be orphaned data,
   or would revive an instance of an old shape of the class. "Run starts fresh"
   is the promise.
-- **The corpus ships whole — method bodies and all.** It is the largest single
-  thing the editor waits on and the obvious place to look for a saving, so
-  here is the measurement, to save the next person from running it again.
+- **The corpus ships whole — method bodies and all, for everything the editor
+  can be asked about.** The one exception is abap2UI5's generated frontend
+  (`src/01/03`), which is not ABAP anybody reads and is left out for the stack
+  rather than for the bytes — the third trap above. For the rest: it is the
+  largest single thing the editor waits on and the obvious place to look for a
+  saving, so here is the measurement, to save the next person from running it
+  again.
   Replacing every `METHOD … ENDMETHOD` with an empty one takes
   `corpus.json` from 0.60 MB compressed to 0.21 MB and roughly halves the
-  parse. But of the 3.8 MB of ABAP in it, 2.9 MB is abap2UI5 itself and only
+  parse. (Measured before the generated frontend came out of it, which took the
+  same file to 0.43 MB on its own; the shape of the argument is unchanged.)
+  But of the 3.8 MB of ABAP in it, 2.9 MB is abap2UI5 itself and only
   0.8 MB is open-abap — so stripping only the standard library, where nobody
   ever reads an implementation, saves 0.05 MB and is not worth having. The
   saving is only there if the abap2UI5 sources go too, and those are exactly

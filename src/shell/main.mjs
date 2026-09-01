@@ -37,7 +37,7 @@ import { announceAppHeight, announceReady, announceStatus, startEmbedMessages } 
 import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
 import { state } from "./state.mjs";
 import { readStoredJson, removeStored, writeStoredJson } from "./storage.mjs";
-import { hideOutput, setStatus, showOutput } from "./ui.mjs";
+import { describeError, hideOutput, setStatus, showOutput } from "./ui.mjs";
 
 // The framework bundle is 8 MB and built by a separate step, so it is not part
 // of this bundle - it is fetched at run time. The URL is built rather than
@@ -248,7 +248,7 @@ async function boot() {
     connectRegistry();
   } catch (e) {
     setStatus("the playground could not start", true);
-    showOutput("Startup", String(e.stack || e));
+    showOutput("Startup", describeError(e));
     return;
   }
 
