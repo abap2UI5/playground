@@ -35,11 +35,12 @@ const ASSETS = path.join(DIST, "assets");
 // of `&& ... &&` - and abaplint parses an expression with recursive
 // combinators, so that single statement drives the parser some 800 levels deep.
 // With src/01/03 in it the boot parse needs more than 610 KB of JavaScript
-// stack; without it, 150 KB. Node and Chrome give a little under 1 MB, which is
-// why this worked on every desk and on no iPhone: mobile Safari's stack is
-// smaller, and the corpus parse threw RangeError: Maximum call stack size
-// exceeded before the playground had finished starting. tools/check-size.mjs
-// holds the parse to a budget so this cannot come back unnoticed.
+// stack; without it, a little over 130 KB. Node and Chrome give a little under
+// a megabyte, which is why this worked on every desk and on no iPhone: mobile
+// Safari's stack is smaller, and the corpus parse threw RangeError: Maximum
+// call stack size exceeded before the playground had finished starting.
+// tools/check-size.mjs holds the parse to a budget so this cannot come back
+// unnoticed.
 const GENERATED_FRONTEND = path.join(DEPS, "abap2ui5", "src", "01", "03");
 
 const log = (m) => console.log(`build-site: ${m}`);
