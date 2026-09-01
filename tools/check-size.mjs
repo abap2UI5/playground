@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// A budget for what the playground weighs.
+// A budget for what the playground weighs, and for what it asks of the browser
+// it opens in.
 //
 // The page is big by nature - it carries a whole ABAP runtime, a whole UI5, and
 // a compiler - so "big" is not the thing to guard against. What is worth
@@ -10,6 +11,12 @@
 // The numbers are the measured sizes with room above them, not aspirations.
 // Raising one is fine - it is a line in a commit that says the cost was
 // accepted, which is the whole point.
+//
+// The second budget is not a size. Starting the playground parses nine hundred
+// ABAP objects with abaplint, whose statement parser is a tree of recursive
+// combinators - so one long enough statement is a stack deep enough to end the
+// page, and how deep is too deep is not the same number in every browser.
+// tools/build-site.mjs has the story of the phone that found this.
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -34,6 +41,25 @@ const TRANSFERRED = [
 // never downloaded whole - so this guards the Pages artifact, not the visitor.
 const TOTAL_LIMIT = 200 * MB;
 
+// How much JavaScript stack the boot parse is allowed to want. Measured: the
+// shipped corpus needs a little over 130 KB, and needed more than 610 KB while
+// abap2UI5's generated frontend was still in it. Node and Chrome hand out a
+// little under a megabyte, mobile Safari less - so this is set where a change
+// that costs several times more fails here rather than on somebody's phone,
+// which is the only place the last one was reported from.
+const STACK_BUDGET_KB = 256;
+
+// The budget is checked by doing the thing: this file re-runs itself with that
+// much stack and parses the corpus the way boot( ) does - the same registry,
+// the same rules, out of the same dist/ the tests run against - so what is
+// measured is the playground rather than a model of it.
+if (process.argv[2] === "--parse-corpus") {
+  const { buildRegistry } = await import(new URL("../src/editor/registry.mjs", import.meta.url));
+  const corpus = JSON.parse(fs.readFileSync(path.join(DIST, "editor", "corpus.json"), "utf8"));
+  await buildRegistry(corpus, Promise.resolve([]), () => {});
+  process.exit(0);
+}
+
 const size = (p) => fs.statSync(p).size;
 const gzipped = (p) => zlib.gzipSync(fs.readFileSync(p), { level: 9 }).length;
 const mb = (n) => `${(n / MB).toFixed(2)} MB`;
@@ -54,6 +80,33 @@ for (const { file, limit, note } of TRANSFERRED) {
   console.log(
     `  ${over ? "OVER   " : "ok     "} ${file.padEnd(26)} ${mb(actual).padStart(9)} of ${mb(limit).padStart(9)}` +
       `   (${mb(size(full))} uncompressed, ${note})`,
+  );
+}
+
+console.log("\nwhat it asks of the browser:");
+let stackDetail = "";
+let stackOk = true;
+try {
+  execFileSync(process.execPath, [`--stack-size=${STACK_BUDGET_KB}`, fileURLToPath(import.meta.url), "--parse-corpus"], {
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+} catch (e) {
+  stackOk = false;
+  failed = true;
+  stackDetail = String(e.stderr ?? "")
+    .split("\n")
+    .find((l) => l.includes("Error"))
+    ?.trim() ?? "the parse did not finish";
+}
+console.log(
+  `  ${stackOk ? "ok     " : "OVER   "} the corpus parses in ${STACK_BUDGET_KB} KB of JavaScript stack` +
+    (stackOk ? "" : `   (${stackDetail})`),
+);
+if (!stackOk) {
+  console.error(
+    "  A statement somewhere in the corpus is deep enough to exhaust the stack. That is a page\n" +
+      "  that does not start on a browser with less of one than this machine has - see the\n" +
+      "  GENERATED_FRONTEND note in tools/build-site.mjs for the last source of it.",
   );
 }
 

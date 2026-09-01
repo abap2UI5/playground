@@ -18,6 +18,30 @@ const DEPS = path.join(ROOT, "deps");
 const DIST = path.join(ROOT, "dist");
 const ASSETS = path.join(DIST, "assets");
 
+// The one directory of abap2UI5 that never reaches the editor.
+//
+// abap2UI5 ships its UI5 frontend a second time, as ABAP: src/01/03 is
+// app/webapp/ generated into `z2ui5_cl_ui5f_*` classes whose whole content is
+// the frontend's JavaScript, XML, CSS and HTML held as string constants, so a
+// real system can serve it over ICF. The playground serves none of that - the
+// frontend it runs is built from source into dist/app - so in the editor's
+// corpus these are payload and nothing else. Nobody control-clicks into a
+// comment-stripped copy of a UI5 module to find out how abap2UI5 works, which
+// is the argument that keeps the rest of the corpus whole (AGENTS.md, "the
+// corpus ships whole").
+//
+// They are also what made the playground unusable on a phone. Generated ABAP
+// puts a whole frontend module into ONE statement - the largest is 1600 tokens
+// of `&& ... &&` - and abaplint parses an expression with recursive
+// combinators, so that single statement drives the parser some 800 levels deep.
+// With src/01/03 in it the boot parse needs more than 610 KB of JavaScript
+// stack; without it, 150 KB. Node and Chrome give a little under 1 MB, which is
+// why this worked on every desk and on no iPhone: mobile Safari's stack is
+// smaller, and the corpus parse threw RangeError: Maximum call stack size
+// exceeded before the playground had finished starting. tools/check-size.mjs
+// holds the parse to a budget so this cannot come back unnoticed.
+const GENERATED_FRONTEND = path.join(DEPS, "abap2ui5", "src", "01", "03");
+
 const log = (m) => console.log(`build-site: ${m}`);
 
 // Cleared, not merged into: a file this step stops producing has to disappear
@@ -42,13 +66,17 @@ writeCorpus();
 // object by the file's base name, so the tree is flattened; package files are
 // left out because they are the one base name that repeats and the editor has
 // no use for them.
+//
+// And one directory is left out for a reason that has nothing to do with size.
+// See GENERATED_FRONTEND above - it is the difference between a playground that
+// starts on a phone and one that does not.
 function writeCorpus() {
   const files = {};
   const add = (dir) => {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       const p = path.join(dir, e.name);
       if (e.isDirectory()) {
-        add(p);
+        if (p !== GENERATED_FRONTEND) add(p);
         continue;
       }
       if (!/\.(abap|xml)$/.test(e.name)) continue;
@@ -59,6 +87,16 @@ function writeCorpus() {
       files[e.name] = fs.readFileSync(p, "utf8");
     }
   };
+  // A filter that quietly stops matching is the failure this cannot have: the
+  // corpus would grow by a megabyte, the size budget would still pass it, and
+  // the only report would be a phone somewhere that no longer starts.
+  if (!fs.existsSync(GENERATED_FRONTEND)) {
+    throw new Error(
+      `build-site: ${path.relative(ROOT, GENERATED_FRONTEND)} is not there any more. ` +
+        "That is where abap2UI5 keeps its generated frontend, which the corpus leaves out on " +
+        "purpose - find where it moved to and point GENERATED_FRONTEND at it.",
+    );
+  }
   add(path.join(DEPS, "abap2ui5", "src"));
   add(path.join(DEPS, "open-abap-core", "src"));
 
