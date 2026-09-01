@@ -57,6 +57,15 @@ export function announceStatus(message, isError) {
 // down - and every one of those left the demo in the box it was given at
 // boot, scrolling inside somebody's documentation page. The observer is what
 // makes the height message a live figure rather than a first impression.
+//
+// What this can and cannot answer, because it has been read as more than it
+// is: `scrollHeight` is never SMALLER than the box, so a document reports a
+// height above the one it was given only when it overflows. An app laid out at
+// 100% of its box - a `Shell` around a `Page`, which is most of them - never
+// overflows, so every measurement here confirms the box it already has. That
+// is not a defect to fix here; it is the shape of the question. It means the
+// starting height the embedding page chooses is the height such an app is read
+// at, and the loader's default is set for that rather than for growing into.
 export function announceAppHeight(frame) {
   if (!enabled) return;
   watchAppHeight(frame);
