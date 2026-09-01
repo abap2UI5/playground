@@ -84,6 +84,22 @@ const CHECKS = {
   },
 };
 
+// What the panel is allowed to say the moment a sample is opened, as the
+// problem badge shows it - empty when there is nothing to report.
+//
+// A sample somebody picked to learn from should not greet them with a complaint
+// about the code they were handed, so the answer is "" for all but one. The
+// exception is named rather than tolerated: the linter and the samples move
+// independently, and a rule that starts reporting one of these has to be a red
+// test rather than a surprise on the deployed page.
+const REPORTED = {
+  // z2ui5_cl_pop_to_confirm is abap2UI5's frozen built-in popup (src/99/02) and
+  // non-released-api says so. Its successor lives in the popups addon, which
+  // the playground does not carry - so the warning stands until the sample is
+  // rewritten around a popup this class builds itself.
+  popup: "1",
+};
+
 // The two samples that are wrong on purpose. What has to hold for them is not
 // "it runs" but "it is reported, the fix repairs it, and then it runs" - the
 // whole reason they are in the menu.
@@ -140,5 +156,10 @@ for (const sample of SAMPLES) {
     const check = CHECKS[sample.id];
     expect(check, `${sample.id} has no check - add one when adding a sample`).toBeDefined();
     await check(page);
+
+    await expect(
+      page.locator("#problem-count"),
+      `the "${sample.title}" sample reports something it does not mean to`,
+    ).toHaveText(REPORTED[sample.id] ?? "");
   });
 }

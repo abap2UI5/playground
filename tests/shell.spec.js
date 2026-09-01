@@ -141,6 +141,29 @@ test("picking a sample replaces the draft", async ({ page }) => {
   expect(await getSource(page)).toContain("Counter");
 });
 
+test("a sample that was only read is not kept as a draft", async ({ page }) => {
+  await open(page);
+  await runSample(page, "counter");
+
+  // Reading a sample is not work to continue. Stored as a draft it would pin
+  // this visitor to a frozen copy of it - the sample improves in a later deploy
+  // and they go on being opened on the old one, findings and all, labelled as
+  // their own last session.
+  expect(await page.evaluate(() => localStorage.getItem("abap2ui5-playground:files"))).toBeNull();
+
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  expect(await getSource(page)).toContain("Hello abap2UI5");
+  await expect(page.locator("#samples"), "and the menu opens on the sample, not on a draft").toHaveValue("hello");
+
+  // One keystroke and it is a draft like any other.
+  await runSample(page, "counter");
+  await setSource(page, (await getSource(page)).replace("Counter", "a counter of my own"));
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  expect(await getSource(page)).toContain("a counter of my own");
+});
+
 test("the splitter moves the divide and remembers it", async ({ page }) => {
   await open(page);
 
