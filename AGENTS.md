@@ -177,6 +177,14 @@ Reset; and an embedded playground never restores either — a demo in somebody's
 documentation has to read the same to every reader, the same reason it never
 restores a draft.
 
+The **draft** follows the middle rule for the same reason: a file set identical
+to one of the built-in samples is forgotten rather than stored (`isSample()` in
+`src/editor/samples.mjs`, applied in `remember()`). Reading a sample is not work
+to continue, and storing it as a draft pinned that visitor to a frozen copy of
+it — the sample was improved in a later deploy and they went on being opened on
+the old one, findings and all, labelled "from your last session". One keystroke
+makes it a draft again, and `tests/shell.spec.js` holds both halves.
+
 **Fix them** (`applyFixes()` in `src/editor/editor.mjs`) applies both checkers'
 fixes to everything open: abaplint's structural fixes first, then the linter's,
 each in a bounded loop because one fix uncovers the next. The rewrite is

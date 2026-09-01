@@ -222,7 +222,10 @@ CLASS zcl_playground IMPLEMENTATION.
 
     me->client = client.
 
-    IF client->check_on_init( ) OR client->check_on_navigated( ).
+    " check_on_init( ) implies check_on_navigated( ) - the framework raises both
+    " on an instance's first main( ) - so this one condition covers the first
+    " render and every return from another app.
+    IF client->check_on_navigated( ).
       view_display( ).
       RETURN.
     ENDIF.
@@ -516,7 +519,10 @@ CLASS zcl_playground IMPLEMENTATION.
 
     me->client = client.
 
-    IF client->check_on_init( ) OR client->check_on_navigated( ).
+    " check_on_init( ) implies check_on_navigated( ) - the framework raises both
+    " on an instance's first main( ) - so this one condition covers the first
+    " render and every return from another app.
+    IF client->check_on_navigated( ).
       view_display( ).
       RETURN.
     ENDIF.
@@ -871,3 +877,18 @@ export const DEFAULT_SAMPLE = SAMPLES[0];
 export const DEFAULT_FILES = DEFAULT_SAMPLE.files;
 
 export const sampleById = (id) => SAMPLES.find((s) => s.id === id);
+
+// Is this file set exactly one of the samples, character for character?
+//
+// What remember( ) asks before it stores a draft. A sample somebody picked and
+// read is not work to continue, and keeping it as a draft pinned that visitor
+// to a frozen copy of it: the sample was improved in a later deploy and they
+// went on being handed the old one - findings and all - labelled as their own
+// last session. The same rule the checker settings follow, for the same
+// reason, and one keystroke makes it a draft again.
+export const isSample = (files) =>
+  SAMPLES.some(
+    (s) =>
+      s.files.length === files.length &&
+      s.files.every((f, i) => f.name === files[i].name && f.source === files[i].source),
+  );

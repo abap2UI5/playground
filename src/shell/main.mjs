@@ -27,7 +27,7 @@ import {
   linkedSources,
   originOf,
 } from "./deep-link.mjs";
-import { DEFAULT_FILES, SAMPLES, sampleById } from "../editor/samples.mjs";
+import { DEFAULT_FILES, isSample, SAMPLES, sampleById } from "../editor/samples.mjs";
 import { openExamples, setUpExamples } from "./examples.mjs";
 import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
 import { setUpInsight, showInsight, updateInsight } from "./insight.mjs";
@@ -36,7 +36,7 @@ import { setUpSplitter, setUpTabs } from "./layout.mjs";
 import { announceAppHeight, announceReady, announceStatus, startEmbedMessages } from "./embed.mjs";
 import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
 import { state } from "./state.mjs";
-import { readStoredJson, writeStoredJson } from "./storage.mjs";
+import { readStoredJson, removeStored, writeStoredJson } from "./storage.mjs";
 import { hideOutput, setStatus, showOutput } from "./ui.mjs";
 
 // The framework bundle is 8 MB and built by a separate step, so it is not part
@@ -371,7 +371,14 @@ function remember(files) {
   // analysis of text that has not changed since the first.
   updateInsight(refresh());
   if (embedded) return;
-  writeStoredJson(STORAGE_KEY, files ?? getFiles());
+  // A sample that was picked and read is not a draft, and is forgotten rather
+  // than stored - the rule the checker settings already follow. Kept, it pinned
+  // the reader to a frozen copy: the sample was improved in a later deploy and
+  // they went on being opened on the old one, findings and all, labelled as
+  // their own last session. One keystroke makes it a draft again.
+  const current = files ?? getFiles();
+  if (isSample(current)) removeStored(STORAGE_KEY);
+  else writeStoredJson(STORAGE_KEY, current);
   // A fragment in the address bar is a claim about what the editor holds, and
   // it just stopped being true. Left there, it would also win over this draft
   // on the next reload (a link outranks stored code in startingFiles), quietly
