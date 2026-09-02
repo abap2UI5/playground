@@ -40,6 +40,7 @@ import { state } from "./state.mjs";
 import { startRuntime } from "./runtime-client.mjs";
 import { readStoredJson, removeStored, writeStoredJson } from "./storage.mjs";
 import { describeError, hideOutput, setStatus, showOutput } from "./ui.mjs";
+import { warmUpAppFrame } from "./warm-up.mjs";
 
 // Built rather than written as a literal, so it resolves under a GitHub Pages
 // project path as well as at a site root.
@@ -189,6 +190,12 @@ async function boot() {
       return r.json();
     }),
   );
+
+  // What the app frame will load first, fetched into the cache while the
+  // corpus parses - see src/shell/warm-up.mjs. After the corpus has landed,
+  // not before: until then the network is busy with what the page cannot
+  // start without, and these can wait for the stretch where it is not.
+  corpusReady.then(() => warmUpAppFrame(uiTheme())).catch(() => {});
 
   setUpSplitter();
   setUpAbout();
