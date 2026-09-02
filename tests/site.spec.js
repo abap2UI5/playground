@@ -16,6 +16,17 @@ test("the page loads clean", async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test("the tab wears the abap2UI5 mark", async ({ page, request }) => {
+  await page.goto("/");
+  const icon = page.locator('link[rel="icon"]');
+  await expect(icon).toHaveAttribute("href", "favicon.png");
+  for (const file of ["favicon.png", "apple-touch-icon.png"]) {
+    const answer = await request.get(`/${file}`);
+    expect(answer.status(), `${file} is served`).toBe(200);
+    expect(answer.headers()["content-type"]).toContain("image/png");
+  }
+});
+
 test("the bar names the framework version it is running", async ({ page }) => {
   await page.goto("/");
   // Read out of the transpiled z2ui5_if_app=>version, so a wrong lookup shows

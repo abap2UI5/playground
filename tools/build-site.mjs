@@ -180,6 +180,9 @@ const result = await esbuild.build({
 });
 
 writeIndex();
+for (const icon of ["favicon.png", "apple-touch-icon.png"]) {
+  fs.copyFileSync(path.join(SHELL, icon), path.join(DIST, icon));
+}
 
 // A same-origin ABAP file, so ?src= can be exercised without depending on
 // somebody else's host being up. It is also the smallest possible worked

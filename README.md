@@ -140,10 +140,15 @@ it back to the curated list of the day.
 
 The sample repositories — [abap2UI5/samples](https://github.com/abap2UI5/samples)
 and [abap2UI5/samples-controls](https://github.com/abap2UI5/samples-controls) —
-commit a machine-readable `catalogue.json` at their roots. **Samples** in the
-bar fetches those catalogues and lists what they hold next to the built-in
-samples: the learning path by stage, the demo kit ports by library, all of it
-searchable. A chosen entry opens through the same path a `?src=` link takes —
+commit a machine-readable `catalogue.json` at their roots, and so does
+[abap2UI5/samples-stack](https://github.com/abap2UI5/samples-stack). **Samples**
+in the bar fetches those catalogues and lists what they hold next to the
+built-in samples: the learning path by stage, the demo kit ports by library,
+the stack samples by technology, all of it searchable and filterable by
+repository, "OpenUI5 only" and "newer than 1.71". What cannot run here - a
+stack sample, which needs a system; a SAPUI5-only port - is listed all the
+same, says what it needs, and is disabled; every row links to its file on
+GitHub. A chosen entry opens through the same path a `?src=` link takes —
 the raw URL of its class, fetched, checked and run — so it arrives with the
 **on GitHub** link back to where it lives.
 

@@ -18,7 +18,7 @@ them before touching `tools/` or `src/runtime`.
 
 | Path | Purpose |
 | --- | --- |
-| `src/shell/` | The page: boot and Run (`main.mjs`), layout and splitter, toolbar, share links (`share.mjs`), `?src=` deep links (`deep-link.mjs`), the examples browser over the sample repositories' catalogues (`examples.mjs`, filtering by the closed library list in `ui5-libraries.mjs`), the bottom panel (`insight.mjs`), embed messaging (`embed.mjs`), every `localStorage` touch (`storage.mjs`) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`) and the warm-up of the app frame's first load (`warm-up.mjs`) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
+| `src/shell/` | The page: boot and Run (`main.mjs`), layout and splitter, toolbar, share links (`share.mjs`), `?src=` deep links (`deep-link.mjs`), the examples browser over the sample repositories' catalogues (`examples.mjs`, filtering by the closed library list in `ui5-libraries.mjs`), the bottom panel (`insight.mjs`), embed messaging (`embed.mjs`), every `localStorage` touch (`storage.mjs`) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
 | `src/editor/` | Monaco plus the abaplint registry — in a worker: `registry-core.mjs` and `transpile-core.mjs` are abaplint and the single-object transpile as they run there, `registry-worker.mjs` the worker's entry, `registry.mjs` the page's client with a promise in front of everything, `providers.mjs` Monaco's language providers answered over it — the abap2UI5 linter wrapper (`abap2ui5-lint.mjs`), the file set and the sample catalogue (`samples.mjs`) |
 | `src/runtime/` | The ABAP side of the page: the framework entry (`index.mjs`, `roundtrip()` and `defineClasses()`), `worker.mjs` around it, which is the bundle's entry and answers those over `postMessage` when it runs as the worker the page starts, the sql.js database (`db-setup.mjs`), and the browser shims for Node modules |
 | `src/abap/` | The playground's own ABAP (`zcl_pg_bridge`, `zcl_pg_hello`); it travels through the same downport and transpile as the framework |
@@ -347,7 +347,15 @@ deploy — readers get the published playground, never your checkout.
   `catalogue.json` that **abap2UI5/samples** and **abap2UI5/samples-controls**
   commit at their roots (from `raw.githubusercontent.com` — a host `?src=`
   already trusts) and lists the entries next to the built-in samples, grouped
-  by learning-path stage and by library, searchable. A chosen entry becomes the
+  by learning-path stage and by library, searchable — and **abap2UI5/samples-stack**'s,
+  grouped by technology, whose samples all need a real system: listed and
+  saying so, their rows disabled. Every row links to its file on GitHub —
+  the repositories' own pages are gone, and this list is where a sample is
+  looked up now. Beside the search are filters, kept between visits: the
+  three repositories as one tinted group (Learn, Controls, Stack — on),
+  "OpenUI5 only" (off; on, it drops the src/03 collection, a library only
+  SAPUI5 carries, a stack sample that names SAPUI5) and "newer than 1.71"
+  (on; off, it drops the controls repository's src/02). A chosen entry becomes the
   raw URL of its class and goes through the `?src=` loading path above — there
   is one loader, and this is a menu in front of it. The catalogue shapes
   (`samples[]` with `stage`, `ports[]` with `library`/`category`) are a
@@ -355,11 +363,12 @@ deploy — readers get the published playground, never your checkout.
   clicked (a missing catalogue answers 404, and the browser logs that on its
   own — a page nobody asked for examples loads clean); the answer, hit or
   miss, is kept in localStorage for a day. No catalogue means the built-ins
-  alone, silently. Two kinds of controls entries are never offered: the
-  SAPUI5-only `src/03` collection, and ports whose library is not in
-  `UI5_LIBRARIES` — everything else is offered and judged by the two checkers
-  and Run, exactly like typed code; a catalogued sample the transpiler cannot
-  compile fails visibly there, and that is the designed behaviour, not a bug.
+  alone, silently. Two kinds of controls entries are listed but disabled,
+  saying what they need: the SAPUI5-only `src/03` collection, and ports
+  whose library is not in `UI5_LIBRARIES` — everything else is run and
+  judged by the two checkers and Run, exactly like typed code; a catalogued
+  sample the transpiler cannot compile fails visibly there, and that is the
+  designed behaviour, not a bug.
 - **`embed/abap2ui5-embed.js`**: turns an element into a click-to-load demo —
   `data-src` (one URL or several, first is the app), `data-code` (inline ABAP;
   the file is named after the class in it), `data-view`, `data-height`,

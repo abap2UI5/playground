@@ -13,6 +13,7 @@ import { control, open, openFiles } from "./helpers.mjs";
 const CATALOGUE_URL = {
   samples: "https://raw.githubusercontent.com/abap2UI5/samples/main/catalogue.json",
   controls: "https://raw.githubusercontent.com/abap2UI5/samples-controls/main/catalogue.json",
+  stack: "https://raw.githubusercontent.com/abap2UI5/samples-stack/main/catalogue.json",
 };
 
 // raw.githubusercontent.com answers with CORS `*` - on hits and misses alike -
@@ -102,6 +103,25 @@ const CONTROLS_CATALOGUE = {
   ],
 };
 
+// abap2UI5/samples-stack: samples[] on delivery branches of their own, none of
+// which runs without a system - listed for finding, opened for reading.
+const STACK_CATALOGUE = {
+  repo: "abap2UI5/samples-stack",
+  samples: [
+    {
+      class: "Z2UI5_CL_SMPS_APP_314",
+      path: "src/02/z2ui5_cl_smps_app_314.clas.abap",
+      package: "src/02",
+      technology: "Smart Controls",
+      title: "Switch Default Model",
+      summary: "device, HTTP and OData model side by side",
+      keywords: ["odata", "model", "smart"],
+      needs: "SAPUI5 + an activated Gateway service",
+      branch: "02-smart-controls",
+    },
+  ],
+};
+
 // What a catalogued class looks like when its raw URL is fetched: one global
 // class named after its file, the shape abapGit serves.
 const catalogueAbap = (cls) => `CLASS ${cls} DEFINITION PUBLIC CREATE PUBLIC.
@@ -154,14 +174,17 @@ ENDCLASS.
 async function serveCatalogues(page) {
   await page.route(CATALOGUE_URL.samples, (route) => route.fulfill(json(SAMPLES_CATALOGUE)));
   await page.route(CATALOGUE_URL.controls, (route) => route.fulfill(json(CONTROLS_CATALOGUE)));
-  await page.route("https://raw.githubusercontent.com/abap2UI5/samples/main/src/**", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "text/plain",
-      headers: CORS,
-      body: catalogueAbap(route.request().url().split("/").pop().replace(".clas.abap", "")),
-    }),
-  );
+  await page.route(CATALOGUE_URL.stack, (route) => route.fulfill(json(STACK_CATALOGUE)));
+  for (const repo of ["samples", "samples-controls", "samples-stack"]) {
+    await page.route(`https://raw.githubusercontent.com/abap2UI5/${repo}/*/src/**`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/plain",
+        headers: CORS,
+        body: catalogueAbap(route.request().url().split("/").pop().replace(".clas.abap", "")),
+      }),
+    );
+  }
 }
 
 // Opens the browser and waits until both catalogues have answered - the
@@ -279,17 +302,77 @@ test("the running app cannot take the focus off the examples browser", async ({ 
   expect(await appTakesFocus()).toBe(true);
 });
 
-test("entries the playground cannot run are not offered", async ({ page }) => {
+test("entries the playground cannot run are listed, say why, cannot be clicked, and link to GitHub", async ({ page }) => {
   await serveCatalogues(page);
   await open(page);
   await openBrowser(page);
 
-  // The port that runs is there; the SAPUI5-only collection entry and the port
-  // whose library is not built into the site are not - offering either would
-  // be offering a control that cannot load.
+  // The port that runs is there and says nothing; the SAPUI5-only collection
+  // entry, the port whose library is not built into the site and the stack
+  // sample are there too, each saying what it needs and disabled - this
+  // browser is where the repositories' own pages used to be, and a sample
+  // somebody cannot find is worse than one they cannot run.
+  const runs = page.locator(".example-row", { hasText: "z2ui5_cl_smpc_app_003" });
+  await expect(runs).toBeVisible();
+  await expect(runs).toBeEnabled();
+  await expect(runs.locator(".example-needs")).toHaveCount(0);
+  const sapui5 = page.locator(".example-row", { hasText: "z2ui5_cl_smpc_app_900" });
+  await expect(sapui5.locator(".example-needs")).toHaveText("needs SAPUI5");
+  await expect(sapui5).toBeDisabled();
+  // sap.viz is a library only SAPUI5 carries, so that port says SAPUI5 rather
+  // than the library: the reader's question is which runtime, not which jar.
+  const viz = page.locator(".example-row", { hasText: "z2ui5_cl_smpc_app_901" });
+  await expect(viz.locator(".example-needs")).toHaveText("needs SAPUI5");
+  await expect(viz).toBeDisabled();
+  const stack = page.locator(".example-row", { hasText: "z2ui5_cl_smps_app_314" });
+  await expect(page.locator(".examples-group", { hasText: "Stack — Smart Controls" })).toBeVisible();
+  await expect(stack.locator(".example-needs")).toContainText("needs a system");
+  await expect(stack).toBeDisabled();
+  await expect(page.locator("#examples-count")).toHaveText(/^\d+ of \d+$/);
+
+  // Every row links to the file on GitHub - the stack one on its own branch.
+  const item = page.locator(".example-item", { hasText: "z2ui5_cl_smps_app_314" });
+  await expect(item.locator(".example-github")).toHaveAttribute(
+    "href",
+    "https://github.com/abap2UI5/samples-stack/blob/02-smart-controls/src/02/z2ui5_cl_smps_app_314.clas.abap",
+  );
+  await expect(page.locator(".example-item", { hasText: "z2ui5_cl_smpc_app_003" }).locator(".example-github")).toHaveAttribute(
+    "href",
+    "https://github.com/abap2UI5/samples-controls/blob/main/src/01/01/z2ui5_cl_smpc_app_003.clas.abap",
+  );
+  await expect(page.locator(".example-item[data-sample], .example-item", { has: page.locator("[data-sample]") }).first().locator(".example-github")).toHaveAttribute("href", /playground/);
+
+  // The filters cut them away: "OpenUI5 only" takes the SAPUI5 ones (the
+  // stack sample names SAPUI5 too), the Stack box the stack - and what was
+  // ticked is remembered for the next open.
+  await page.locator('input[data-filter="openui5only"]').check();
+  await expect(sapui5).toHaveCount(0);
+  await expect(viz).toHaveCount(0);
+  await expect(stack).toHaveCount(0);
+  await expect(runs).toBeVisible();
+  await page.locator('input[data-filter="openui5only"]').uncheck();
+  await page.locator('input[data-filter="stack"]').uncheck();
+  await expect(stack).toHaveCount(0);
+  await expect(sapui5).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#examples-dialog")).toBeHidden();
+  await openBrowser(page);
+  await expect(page.locator('input[data-filter="stack"]')).not.toBeChecked();
+  await page.locator('input[data-filter="stack"]').check();
+});
+
+test("the release filter hides what needs a UI5 newer than 1.71", async ({ page }) => {
+  await serveCatalogues(page);
+  await open(page);
+  await openBrowser(page);
+  // src/01 runs on 1.71 and stays; src/02 needs a newer UI5 and goes.
+  await page.locator('input[data-filter="newer"]').uncheck();
   await expect(page.locator(".example-row", { hasText: "z2ui5_cl_smpc_app_003" })).toBeVisible();
-  await expect(page.locator(".example-row", { hasText: "z2ui5_cl_smpc_app_900" })).toHaveCount(0);
   await expect(page.locator(".example-row", { hasText: "z2ui5_cl_smpc_app_901" })).toHaveCount(0);
+  // The built-ins stay whatever the boxes say: they are the page's own.
+  await expect(page.locator(".example-row[data-sample]").first()).toBeVisible();
+  await page.locator('input[data-filter="newer"]').check();
+  await expect(page.locator(".example-row", { hasText: "z2ui5_cl_smpc_app_901" })).toBeVisible();
 });
 
 test("without the catalogues the browser degrades to the built-in samples, quietly", async ({ page }) => {
@@ -338,6 +421,7 @@ test("a catalogue in a shape the browser does not know is skipped without a soun
     route.fulfill({ status: 200, contentType: "text/html", headers: CORS, body: "<!doctype html>not json" }),
   );
   await page.route(CATALOGUE_URL.controls, (route) => route.fulfill(json({ ports: "not an array" })));
+  await page.route(CATALOGUE_URL.stack, (route) => route.fulfill(json({ samples: { not: "an array" } })));
 
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
@@ -353,7 +437,7 @@ test("a catalogue in a shape the browser does not know is skipped without a soun
 });
 
 test("a fetched catalogue is served from the stored copy for a day", async ({ page }) => {
-  const hits = { samples: 0, controls: 0 };
+  const hits = { samples: 0, controls: 0, stack: 0 };
   await page.route(CATALOGUE_URL.samples, (route) => {
     hits.samples += 1;
     return route.fulfill(json(SAMPLES_CATALOGUE));
@@ -362,10 +446,14 @@ test("a fetched catalogue is served from the stored copy for a day", async ({ pa
     hits.controls += 1;
     return route.fulfill(json(CONTROLS_CATALOGUE));
   });
+  await page.route(CATALOGUE_URL.stack, (route) => {
+    hits.stack += 1;
+    return route.fulfill(json(STACK_CATALOGUE));
+  });
 
   await open(page);
   await openBrowser(page);
-  expect(hits).toEqual({ samples: 1, controls: 1 });
+  expect(hits).toEqual({ samples: 1, controls: 1, stack: 1 });
 
   // Closing and reopening in the same page costs nothing more...
   await page.keyboard.press("Escape");
@@ -381,11 +469,11 @@ test("a fetched catalogue is served from the stored copy for a day", async ({ pa
    * happens. */
   await expect(page.locator("#examples-dialog")).toBeHidden();
   await openBrowser(page);
-  expect(hits).toEqual({ samples: 1, controls: 1 });
+  expect(hits).toEqual({ samples: 1, controls: 1, stack: 1 });
 
   // ...and neither does the next visit: the copy in localStorage answers.
   await open(page);
   await openBrowser(page);
   await expect(page.locator(".examples-group", { hasText: "Start here" })).toBeVisible();
-  expect(hits).toEqual({ samples: 1, controls: 1 });
+  expect(hits).toEqual({ samples: 1, controls: 1, stack: 1 });
 });

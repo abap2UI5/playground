@@ -6,6 +6,12 @@
 <title>abap2UI5 Playground</title>
 <meta name="description" content="Write abap2UI5 apps in the browser: ABAP on the left, the running app on the right, no server involved.">
 <link rel="stylesheet" href="assets/shell.css">
+<!-- The abap2UI5 mark, as the documentation site wears it - rendered down from
+     the docs' logo.png (tools have no ImageMagick here; the PNGs are checked
+     in). 64px covers a tab at any pixel density; the touch icon is what a
+     phone puts on its home screen. -->
+<link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 
 <!-- The ABAP runtime, started before anything else on this page.
 
@@ -222,9 +228,25 @@
   <header class="about-head examples-head">
     <h2>Samples</h2>
     <input id="examples-search" type="search" placeholder="Search title, control, class…"
-           autocomplete="off" spellcheck="false" aria-label="Search the examples">
+           autocomplete="off" spellcheck="false" aria-label="Search the samples">
     <form method="dialog"><button class="ghost" aria-label="Close">✕</button></form>
   </header>
+  <!-- The filters: the three repositories as one tinted group (all on),
+       "OpenUI5 only" (off: it narrows the list to what an OpenUI5 runtime
+       carries) and "newer than 1.71" (on: off, it hides what needs a UI5
+       newer than the floor abap2UI5 holds its shipped apps to).
+       src/shell/examples.mjs reads them by data-filter and keeps them
+       between visits. -->
+  <div class="examples-filters" role="group" aria-label="Filter the samples">
+    <span class="examples-filter-group is-sources" role="group" aria-label="Repositories">
+      <label><input type="checkbox" data-filter="learn" checked> Learn</label>
+      <label><input type="checkbox" data-filter="controls" checked> Controls</label>
+      <label><input type="checkbox" data-filter="stack" checked> Stack</label>
+    </span>
+    <label class="examples-filter"><input type="checkbox" data-filter="openui5only"> OpenUI5 only</label>
+    <label class="examples-filter"><input type="checkbox" data-filter="newer" checked> newer than 1.71</label>
+    <span id="examples-count" class="examples-count" aria-live="polite"></span>
+  </div>
   <div class="about-body examples-body" id="examples-body"></div>
 </dialog>
 
