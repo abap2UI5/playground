@@ -29,7 +29,7 @@ test("the heavy assets come out of the worker's cache on a second visit", async 
   await open(page);
   expect(await workerReady(page)).toBe(true);
 
-  const { served } = watch(page);
+  const { served, fetched } = watch(page);
   await open(page);
 
   // The four the size budget is written around - every byte a visitor waits on
@@ -42,6 +42,11 @@ test("the heavy assets come out of the worker's cache on a second visit", async 
   ]) {
     expect([...served], `${asset} should have been served by the worker`).toContain(asset);
   }
+  // And the chunks split off the bundle - the transpiler, the linter - whose
+  // hashed names the build writes into the worker so it can precache them.
+  const chunks = [...served, ...fetched].filter((p) => /^\/assets\/[\w.-]+\.mjs$/.test(p) && p !== "/assets/shell.mjs");
+  expect(chunks.length, "the bundle has chunks").toBeGreaterThan(0);
+  expect([...fetched].filter((p) => chunks.includes(p)), "every chunk came out of the worker's cache").toEqual([]);
 });
 
 test("what has to stay live is not cached", async ({ page }) => {
@@ -77,7 +82,7 @@ test("what has to stay live is not cached", async ({ page }) => {
         entry === "/editor/corpus.json" ||
         entry === "/runtime/framework.mjs" ||
         entry === "/runtime/sql-wasm.wasm" ||
-        /^\/assets\/[\w.-]+\.ttf$/.test(entry) ||
+        /^\/assets\/[\w.-]+\.(ttf|mjs)$/.test(entry) ||
         (entry.startsWith("/app/") && entry !== "/app/index.html"),
       `${entry} is in the cache and is not on the allow list`,
     ).toBe(true);

@@ -45,11 +45,17 @@ const CACHE = `abap2ui5-playground-${BUILD}`;
 // path below is relative to it, so none of this assumes where the site lives.
 const BASE = new URL(self.registration.scope);
 
-// The heavy, unchanging four - the ones check-size.mjs budgets, plus the
+// The bundle's chunks - the transpiler and the abap2UI5 linter, split off the
+// shell bundle and named with a hash - written in by tools/build-site.mjs,
+// which is the only place that knows their names.
+const CHUNKS = __CHUNKS__;
+
+// The heavy, unchanging assets - the ones check-size.mjs budgets, plus the
 // stylesheet that comes with the bundle. These are what a visitor waits for.
 const CORE = [
   "assets/shell.mjs",
   "assets/shell.css",
+  ...CHUNKS,
   "editor/corpus.json",
   "runtime/framework.mjs",
   "runtime/sql-wasm.wasm",
@@ -118,8 +124,10 @@ function isCacheable(url) {
   // fills up with things that will never be asked for again.
   if (url.search !== "") return false;
   if (CORE.includes(rel)) return true;
-  // Monaco's icon font, under the hashed name esbuild gave it.
-  if (/^assets\/[\w.-]+\.ttf$/.test(rel)) return true;
+  // Monaco's icon font and the bundle's chunks, under the hashed names esbuild
+  // gave them - the chunks are in CORE by name as well, this is for a chunk of
+  // a build this worker was not written for, which is still worth keeping.
+  if (/^assets\/[\w.-]+\.(ttf|mjs)$/.test(rel)) return true;
   return false;
 }
 

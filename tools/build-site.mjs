@@ -108,9 +108,24 @@ function writeCorpus() {
   log(`corpus.json: ${Object.keys(files).length} ABAP sources (${mb} MB)`);
 }
 
+// The page bundle, in pieces: assets/shell.mjs is what the page cannot start
+// without - Monaco and abaplint - and what it only needs later comes as
+// chunks of its own, which esbuild splits off wherever the source says
+// import( ). Two things do: the transpiler (src/editor/transpile.mjs), which
+// nothing needs before the first Run, and the abap2UI5 linter with its
+// half-megabyte of UI5 metadata (src/editor/abap2ui5-lint.mjs), which
+// nothing needs before the corpus has parsed. Both used to be evaluated on
+// the way to the first editor frame; now they download during the parse,
+// where the network is idle, and are evaluated when they land. The chunks
+// carry a hash in their name, so the service worker's precache list and the
+// build id are written from the directory rather than from a fixed list -
+// see writeServiceWorker( ) below.
 const result = await esbuild.build({
-  entryPoints: [path.join(SHELL, "main.mjs")],
-  outfile: path.join(ASSETS, "shell.mjs"),
+  entryPoints: [{ in: path.join(SHELL, "main.mjs"), out: "shell" }],
+  outdir: ASSETS,
+  outExtension: { ".js": ".mjs" },
+  splitting: true,
+  chunkNames: "[name]-[hash]",
   bundle: true,
   format: "esm",
   platform: "browser",
@@ -140,7 +155,7 @@ const result = await esbuild.build({
   inject: [path.join(ROOT, "src", "runtime", "buffer-shim.mjs")],
 });
 
-fs.copyFileSync(path.join(SHELL, "index.html"), path.join(DIST, "index.html"));
+writeIndex();
 
 // A same-origin ABAP file, so ?src= can be exercised without depending on
 // somebody else's host being up. It is also the smallest possible worked
@@ -161,6 +176,7 @@ for (const name of fs.readdirSync(path.join(ROOT, "src", "embed"))) {
 
 const kb = (p) => `${Math.round(fs.statSync(p).size / 1024)} KB`;
 log(`shell.mjs (${kb(path.join(ASSETS, "shell.mjs"))})`);
+for (const chunk of chunks()) log(`${path.basename(chunk)} (${kb(path.join(DIST, chunk))})`);
 
 // Fail loudly rather than publish a page whose two halves are missing - the
 // symptom would otherwise be a blank frame and a 404 in the console.
@@ -182,33 +198,78 @@ writeServiceWorker();
 // build that produced identical output produces an identical worker, which the
 // browser then correctly declines to reinstall.
 //
-// Everything the worker may cache goes into the id. The five core assets go in
-// by content. dist/app - the UI5 build, thousands of files and most of the site
-// by weight - goes in as a listing of paths and sizes: reading it whole to hash
-// it would cost more than the rest of this step put together, and a UI5 build
-// that changed without a single file changing size is not a thing that happens.
+// Everything the worker may cache goes into the id. The core assets go in by
+// content - everything under assets/, which is the bundle, its chunks, its
+// stylesheet and Monaco's font, plus the corpus and the runtime. dist/app -
+// the UI5 build, thousands of files and most of the site by weight - goes in
+// as a listing of paths and sizes: reading it whole to hash it would cost
+// more than the rest of this step put together, and a UI5 build that changed
+// without a single file changing size is not a thing that happens.
+//
+// The chunks are written into the worker as well, so it can precache them:
+// their names carry a hash, so no list in sw.js could name them in advance.
 function writeServiceWorker() {
   const id = crypto.createHash("sha256");
-  for (const rel of [
-    "assets/shell.mjs",
-    "assets/shell.css",
+  const core = [
+    ...fs.readdirSync(ASSETS).sort().map((name) => `assets/${name}`),
     "editor/corpus.json",
     "runtime/framework.mjs",
     "runtime/sql-wasm.wasm",
-  ]) {
+  ];
+  for (const rel of core) {
     id.update(rel);
     id.update(fs.readFileSync(path.join(DIST, rel)));
   }
   for (const entry of listing(path.join(DIST, "app")).sort()) id.update(entry);
 
   const source = fs.readFileSync(path.join(SHELL, "sw.js"), "utf8");
-  if (!source.includes("__BUILD_ID__")) {
-    console.error("build-site: ERROR src/shell/sw.js no longer has a __BUILD_ID__ to substitute");
-    process.exit(1);
+  for (const marker of ["__BUILD_ID__", "__CHUNKS__"]) {
+    if (!source.includes(marker)) {
+      console.error(`build-site: ERROR src/shell/sw.js no longer has a ${marker} to substitute`);
+      process.exit(1);
+    }
   }
   const build = id.digest("hex").slice(0, 16);
-  fs.writeFileSync(path.join(DIST, "sw.js"), source.replaceAll("__BUILD_ID__", build));
+  fs.writeFileSync(
+    path.join(DIST, "sw.js"),
+    source.replaceAll("__BUILD_ID__", build).replace("__CHUNKS__", JSON.stringify(chunks())),
+  );
   log(`sw.js (build ${build})`);
+}
+
+// index.html, with a modulepreload for every chunk assets/shell.mjs imports
+// statically. Splitting the bundle put the code the entry shares with its
+// chunks - most of abaplint, which the transpiler needs too - into a chunk of
+// its own that shell.mjs imports at its top, and a static import is only
+// discovered once the importing file has arrived: without the preload the
+// chunk would be fetched after the bundle instead of beside it, a round trip
+// and a serialized download on the path to the first editor frame. The names
+// carry a hash, so the tags are written here rather than by hand. Only the
+// static imports: the dynamic ones are wanted during the parse and fetched
+// then, where the network is idle.
+function writeIndex() {
+  const entry = result.metafile.outputs[path.relative(ROOT, path.join(ASSETS, "shell.mjs"))];
+  const tags = entry.imports
+    .filter((i) => i.kind === "import-statement")
+    .map((i) => `<link rel="modulepreload" href="${path.relative(DIST, path.join(ROOT, i.path))}">`);
+  const source = fs.readFileSync(path.join(SHELL, "index.html"), "utf8");
+  const marker = "<!-- __MODULEPRELOADS__ -->";
+  if (!source.includes(marker)) {
+    console.error(`build-site: ERROR src/shell/index.html no longer has a ${marker} to substitute`);
+    process.exit(1);
+  }
+  fs.writeFileSync(path.join(DIST, "index.html"), source.replace(marker, tags.join("\n")));
+  log(`index.html (${tags.length} chunk${tags.length === 1 ? "" : "s"} preloaded)`);
+}
+
+// The bundle's chunks, as paths relative to dist/: every module under assets/
+// that is not the entry itself.
+function chunks() {
+  return fs
+    .readdirSync(ASSETS)
+    .filter((name) => name.endsWith(".mjs") && name !== "shell.mjs")
+    .sort()
+    .map((name) => `assets/${name}`);
 }
 
 function listing(dir, prefix = "") {

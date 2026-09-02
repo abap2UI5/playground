@@ -15,8 +15,29 @@
 //
 // The findings carry the same `severity` names as the config file, and the
 // same rule names, so a message here is the message CI would print.
-import { checkAbapSource } from "@abap2ui5/linter";
-import { applyFixes, isFixable } from "@abap2ui5/linter/fix";
+// The linter itself, and the half-megabyte of UI5 metadata it checks against,
+// arrive as a chunk of their own rather than with the page: nothing needs
+// them before the corpus has parsed, and until then they were being
+// downloaded and evaluated on the way to the first editor frame. boot( ) asks
+// for them as soon as the corpus has landed, and re-runs the analysis when
+// they arrive; until then this module answers "no findings", which is also
+// what it answers for a class that builds no view. The settings below are
+// this module's own and need nothing loaded.
+let lib;
+let loading;
+export function loadLinter() {
+  // Named exports, or the same names on `default` - which is where a bundler
+  // puts a CommonJS module's exports when it is imported dynamically.
+  const named = (mod, name) => mod[name] ?? mod.default?.[name];
+  loading ??= Promise.all([import("@abap2ui5/linter"), import("@abap2ui5/linter/fix")]).then(([main, fix]) => {
+    lib = {
+      checkAbapSource: named(main, "checkAbapSource"),
+      applyFixes: named(fix, "applyFixes"),
+      isFixable: named(fix, "isFixable"),
+    };
+  });
+  return loading;
+}
 
 // The floor abap2UI5 holds its own shipped apps to (abap2ui5lint.jsonc), and
 // therefore the one an example copied out of the playground has to clear. A
@@ -66,8 +87,9 @@ const settingsFor = (s) => ({ minUi5: s.ui5, distribution: s.distribution });
 // falls over on unusual input must not take the editor's diagnostics with it,
 // and the file being typed into is unusual input by definition.
 export function findingsFor(source) {
+  if (lib === undefined) return [];
   try {
-    const result = checkAbapSource(source, settingsFor(settings));
+    const result = lib.checkAbapSource(source, settingsFor(settings));
     // A class that builds no view has nothing for this linter to say. Reporting
     // that as a finding would put a message on every helper class.
     if (!result.usesBuilder) return [];
@@ -87,7 +109,8 @@ export function findingsFor(source) {
 // the editor's one analysis pass has just asked findingsFor( ), and asking it
 // again from here was a second reconstruction of the same builder chain.
 export function fixableAmong(findings) {
-  return findings.filter(isFixable);
+  if (lib === undefined) return [];
+  return findings.filter(lib.isFixable);
 }
 
 // Repairs what can be repaired, and says how much. `deferred` counts fixes that
@@ -96,6 +119,6 @@ export function fixableAmong(findings) {
 export function applyLinterFixes(source) {
   const fixable = fixableAmong(findingsFor(source));
   if (fixable.length === 0) return { source, fixed: 0 };
-  const { output, applied } = applyFixes(source, fixable);
+  const { output, applied } = lib.applyFixes(source, fixable);
   return { source: output, fixed: applied };
 }

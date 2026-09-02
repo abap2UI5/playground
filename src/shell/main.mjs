@@ -15,11 +15,13 @@ import {
   focusProblem,
   format,
   getFiles,
+  invalidateAnalysis,
   refresh,
   setFiles,
 } from "../editor/editor.mjs";
 import { buildRegistry, declaredObjectName, entryClass } from "../editor/registry.mjs";
-import { compile } from "../editor/transpile.mjs";
+import { loadLinter } from "../editor/abap2ui5-lint.mjs";
+import { compile, preloadTranspiler } from "../editor/transpile.mjs";
 import { checkFileSet, MAIN_FILE, parseName } from "../editor/files.mjs";
 import {
   fetchLinkedFiles,
@@ -197,6 +199,14 @@ async function boot() {
   // start without, and these can wait for the stretch where it is not.
   corpusReady.then(() => warmUpAppFrame(uiTheme())).catch(() => {});
 
+  // The two pieces of the page bundle that ride in the same stretch: the
+  // transpiler, which the first Run needs, and the abap2UI5 linter, which the
+  // first analysis needs - both split off assets/shell.mjs so the editor is on
+  // screen before either has been downloaded, let alone evaluated. The linter
+  // is picked up again below, once there is an analysis to re-run.
+  heard(preloadTranspiler());
+  const linterReady = heard(loadLinter());
+
   setUpSplitter();
   setUpAbout();
   const tabs = setUpTabs(appOnly);
@@ -260,6 +270,16 @@ async function boot() {
     document.getElementById("about-versions").textContent = version;
 
     connectRegistry();
+    // The analysis just run had whatever the linter had to say - which is
+    // nothing if its chunk was still on its way. When it lands, the kept
+    // answer is thrown away and asked for again; if it has landed already,
+    // this runs at once and costs one incremental analysis.
+    linterReady
+      .then(() => {
+        invalidateAnalysis();
+        updateInsight(refresh());
+      })
+      .catch((e) => showOutput("abap2UI5 lint", `The abap2UI5 linter could not be loaded: ${String(e?.message ?? e)}`));
   } catch (e) {
     setStatus("the playground could not start", true);
     showOutput("Startup", describeError(e));

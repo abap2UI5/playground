@@ -15,8 +15,25 @@
 // marking them dirty, findIssues checking them) are called with the proxy as
 // their receiver, so they iterate the filtered list too. That is what keeps a
 // compile from marking the whole corpus dirty and forcing a reparse.
-import { Transpiler } from "@abaplint/transpiler";
 import { entryClass, getRegistry, hasEntryClass, updateFiles, userObjects } from "./registry.mjs";
+
+// The transpiler is loaded when it is first asked for rather than with the
+// page, so the bundler splits it into a chunk of its own: nothing needs it
+// before the first Run, and the first Run comes after the corpus has parsed -
+// several seconds during which the download would otherwise have been in the
+// way of what the page was actually waiting on. boot( ) asks for it as soon
+// as the corpus has landed, so it downloads during the parse and is there by
+// the time Run wants it; a page that does not ask early simply waits for it
+// at the first Run.
+//
+// The package is CommonJS, and a bundler turns a dynamic import of one into a
+// chunk whose whole export is `default` - the names are on that, not on the
+// namespace. Read from wherever they are, so this works bundled and not.
+let transpiler;
+export function preloadTranspiler() {
+  transpiler ??= import("@abaplint/transpiler").then((mod) => mod.Transpiler ? mod : mod.default);
+  return transpiler;
+}
 
 function onlyTheUsersObjects(reg) {
   const objects = userObjects();
@@ -53,6 +70,8 @@ export async function compile(files) {
   // from dirtying the entire corpus.
   const view = onlyTheUsersObjects(reg);
   const editorConfig = reg.getConfig();
+
+  const { Transpiler } = await preloadTranspiler();
 
   let output;
   try {

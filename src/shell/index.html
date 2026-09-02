@@ -65,6 +65,11 @@
      the worker fetches it, and a document's preload does not reach a worker's
      fetch - it would only have been downloaded twice. -->
 <link rel="preload" href="editor/corpus.json" as="fetch" crossorigin>
+
+<!-- The chunks assets/shell.mjs imports at its top, preloaded so they travel
+     beside it rather than after it. Written by tools/build-site.mjs, which
+     knows their hashed names; the marker is replaced, not kept. -->
+<!-- __MODULEPRELOADS__ -->
 </head>
 <body>
 <header class="bar">
