@@ -7,30 +7,64 @@
 <meta name="description" content="Write abap2UI5 apps in the browser: ABAP on the left, the running app on the right, no server involved.">
 <link rel="stylesheet" href="assets/shell.css">
 
-<!-- The three heavy assets the page is going to want, asked for now rather
-     than when the code that needs them gets around to running.
+<!-- The ABAP runtime, started before anything else on this page.
 
-     Left alone they arrive in a chain, because each one is requested by the
-     code in the one before it: nothing asks for the framework or the corpus
-     until assets/shell.mjs has been downloaded and evaluated, and nothing asks
-     for SQLite until the framework has been. Every link in that chain is a
-     round trip that could have been spent transferring something.
+     The transpiled framework runs in a dedicated worker (src/runtime/
+     worker.mjs, src/shell/runtime-client.mjs), and it is started here, in an
+     inline script at the top of the document, rather than from the shell
+     bundle that will use it. Left to the bundle, nothing would ask for the
+     framework until assets/shell.mjs had been downloaded and evaluated - a
+     megabyte and a half over the wire and most of a second of processor -
+     and the framework's own download and evaluation would follow that
+     instead of overlapping it. From here it starts with the document, on a
+     thread of its own, and is usually up before the editor is.
 
-     What that is worth depends on which of the two is scarce. Where bandwidth
-     is the whole story there is nothing to win and these change nothing;
-     where round trips cost anything they are worth about a tenth of the wait.
-     AGENTS.md, "What a visitor waits for", has the measurements.
+     A plain script rather than a module: a module script is deferred until
+     the document has been parsed, and this is meant to run the moment the
+     parser reaches it. The bundle picks the worker up by this name; a page
+     without this script still works, it only starts the runtime later.
 
-     These are relative to the document, like everything else here, so they
-     resolve under a GitHub Pages project path as well as at a site root. Keep
-     them in step with what src/shell/main.mjs and the framework actually
-     fetch: a preload nothing collects is downloaded twice and warned about in
-     the console. `crossorigin` is on the two fetched ones because fetch()
-     makes a CORS request and a preload only satisfies a request it matches;
-     the framework is an ES module, so it gets modulepreload instead. -->
-<link rel="modulepreload" href="runtime/framework.mjs">
+     What the worker says before the bundle is listening is kept, because it
+     would otherwise be lost: a Worker dispatches its events whether or not
+     anybody has attached a handler yet. Both things it can say arrive in
+     exactly that window on a fast machine - "ready", when the framework came
+     out of the cache and booted before the bundle had been evaluated, and an
+     error, when the script could not be loaded at all - and either one lost
+     is a page that waits for a runtime forever. The bundle replays the
+     buffer when it attaches and then switches it off.
+
+     Relative to the document, like everything else here, so it resolves
+     under a GitHub Pages project path as well as at a site root. Keep the
+     path in step with tools/build-framework.mjs, which writes the bundle. -->
+<script>
+  (function () {
+    var worker = new Worker(new URL("runtime/framework.mjs", document.baseURI), { type: "module" });
+    worker.early = [];
+    worker.addEventListener("message", function (event) {
+      if (worker.early) worker.early.push({ data: event.data });
+    });
+    worker.addEventListener("error", function (event) {
+      if (worker.early) worker.early.push({ error: event.message });
+    });
+    window.__abap2ui5Runtime = worker;
+  })();
+</script>
+
+<!-- The corpus the editor checks against, asked for now rather than when the
+     code that needs it gets around to running. Left alone it would arrive
+     after the shell bundle had been downloaded and evaluated, because that is
+     what asks for it; started here it travels beside the bundle instead.
+     Measured against a built dist/ served with gzip: no difference where
+     bandwidth is the whole story, about a tenth of the wait where round trips
+     cost anything (AGENTS.md, "What a visitor waits for").
+
+     A preload that nothing collects is downloaded twice and warned about in
+     the console, so if what the page fetches changes, this changes with it.
+     `crossorigin` because fetch() makes a CORS request and a preload only
+     satisfies a request it matches. SQLite's .wasm is not preloaded any more:
+     the worker fetches it, and a document's preload does not reach a worker's
+     fetch - it would only have been downloaded twice. -->
 <link rel="preload" href="editor/corpus.json" as="fetch" crossorigin>
-<link rel="preload" href="runtime/sql-wasm.wasm" as="fetch" crossorigin>
 </head>
 <body>
 <header class="bar">

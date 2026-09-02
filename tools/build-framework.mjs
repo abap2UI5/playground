@@ -292,7 +292,10 @@ async function bundle() {
   const outfile = FRAMEWORK_BUNDLE;
 
   const result = await esbuild.build({
-    entryPoints: [path.join(ROOT, "src", "runtime", "index.mjs")],
+    // worker.mjs rather than index.mjs: the same exports, plus the message
+    // handling the page talks to when this runs as a worker - which is how
+    // index.html starts it.
+    entryPoints: [path.join(ROOT, "src", "runtime", "worker.mjs")],
     outfile,
     bundle: true,
     format: "esm",

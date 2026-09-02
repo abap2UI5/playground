@@ -3,8 +3,9 @@
 // It owns three things the rest of the code reaches through: the ABAP runtime
 // that answers roundtrips, the abaplint registry the editor thinks with, and the
 // iframe the app renders in. The iframe asks this page for every roundtrip (see
-// frontend-bridge.js), so the framework runs here, in the top window, and the
-// frame is only a screen.
+// frontend-bridge.js); the page hands it to the framework, which runs in a
+// worker of this page's (src/shell/runtime-client.mjs), and the frame is only
+// a screen.
 import "./shell.css";
 
 import {
@@ -36,13 +37,12 @@ import { setUpSplitter, setUpTabs } from "./layout.mjs";
 import { announceAppHeight, announceReady, announceStatus, startEmbedMessages } from "./embed.mjs";
 import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
 import { state } from "./state.mjs";
+import { startRuntime } from "./runtime-client.mjs";
 import { readStoredJson, removeStored, writeStoredJson } from "./storage.mjs";
 import { describeError, hideOutput, setStatus, showOutput } from "./ui.mjs";
 
-// The framework bundle is 8 MB and built by a separate step, so it is not part
-// of this bundle - it is fetched at run time. The URL is built rather than
-// written as a literal so the bundler leaves the import alone, and so it
-// resolves under a GitHub Pages project path as well as at a site root.
+// Built rather than written as a literal, so it resolves under a GitHub Pages
+// project path as well as at a site root.
 const asset = (p) => new URL(p, document.baseURI).href;
 
 const prefersDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -161,23 +161,28 @@ async function boot() {
   // Started before anything at all is awaited, because nothing about them
   // depends on the rest of this function.
   //
-  // Two independent slow starts: the transpiled framework (a download and a
-  // parse) and the ABAP corpus the editor checks against. Neither needs the
-  // other, so they run together - and the corpus half does not stop at its
-  // download. Parsing what arrives is the expensive part of it, several seconds
-  // of processor against a megabyte and a half of network, and it starts the
-  // moment the JSON lands rather than after the framework has finished
-  // arriving. That is the difference between the two costs adding up and the
-  // longer one covering the shorter.
+  // Two independent slow starts: the transpiled framework and the ABAP corpus
+  // the editor checks against. The framework is a worker (src/shell/
+  // runtime-client.mjs), started by index.html before this bundle had even
+  // arrived, and evaluating it - the better part of a second, several on a
+  // phone - happens on that worker's thread; what is picked up here is the
+  // handle. The corpus half does not stop at its download either: parsing
+  // what arrives is the expensive part of it, several seconds of processor
+  // against a megabyte and a half of network, and it starts the moment the
+  // JSON lands. The two used to share this thread, and the framework's
+  // evaluation - one synchronous block - sat in front of the parse: the corpus
+  // had landed at a fifth of a second and abaplint could not start on it
+  // until the framework was done. Now they overlap.
   //
   // And they are started here rather than after startingFiles( ), which is
   // where they used to be. That await is instant for a draft or a sample and
   // is two network round trips to GitHub for a ?src= link - the fetch of the
   // linked class, then the fetch of the classes beside it - which is the path
-  // every Run button in the documentation takes. The preload tags in
-  // index.html had these bytes moving with the document already; what was
-  // still waiting on the link was every bit of processor work behind them.
-  const runtimeReady = heard(import(/* @vite-ignore */ asset("runtime/framework.mjs")));
+  // every Run button in the documentation takes. The preload tag in
+  // index.html had the corpus moving with the document already; what was
+  // still waiting on the link was every bit of processor work behind it.
+  const runtime = startRuntime();
+  heard(runtime.ready);
   const corpusReady = heard(
     fetch(asset("editor/corpus.json")).then((r) => {
       if (!r.ok) throw new Error(`corpus.json: ${r.status}`);
@@ -229,10 +234,12 @@ async function boot() {
 
   try {
     setStatus("loading the ABAP runtime…");
-    // Awaited together rather than one after the other, because both are
-    // already running: awaiting them in sequence would leave whichever failed
-    // second rejecting with nobody listening yet.
-    const [runtime] = await Promise.all([runtimeReady, registryReady]);
+    // The registry first, then the runtime - which is usually up by now, and
+    // if it is not, whenReady( ) is what finds out whether it ever will be.
+    // Both are already running and both are heard( ), so whichever fails
+    // while the other is being awaited still rejects to somebody.
+    await registryReady;
+    await runtime.whenReady();
     state.runtime = runtime;
     // What the frontend in the app frame reaches for: the roundtrip it would
     // otherwise POST to a backend, and whether the shell has a dialog open -

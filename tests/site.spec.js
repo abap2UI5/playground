@@ -64,6 +64,32 @@ test("the framework bundle leaves the generated frontend out as well", async ({ 
   expect(bundle.includes("which the playground does not carry"), "the stub's message is missing").toBe(true);
 });
 
+// The framework runs in a worker of the page's, started by index.html before
+// the shell bundle has arrived - so its evaluation, the better part of a second
+// on a desk, overlaps the corpus parse instead of sitting in front of it. Both
+// halves are held here: that the worker exists, and that the page itself never
+// evaluated the bundle on its own thread.
+test("the ABAP runtime runs in a worker, not on the page's thread", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 90000 });
+
+  const workers = page.workers().map((w) => new URL(w.url()).pathname);
+  expect(workers).toContain("/runtime/framework.mjs");
+  // The bundle registers the framework under globalThis.abap wherever it is
+  // evaluated - so the page not having one is the page not having paid for it.
+  expect(await page.evaluate(() => typeof globalThis.abap)).toBe("undefined");
+});
+
+test("a runtime that will not start is reported, not waited for", async ({ page }) => {
+  await page.route("**/runtime/framework.mjs", (route) => route.fulfill({ status: 503, body: "" }));
+
+  await page.goto("/");
+  await expect(page.locator("#status")).toHaveText("the playground could not start", { timeout: 90000 });
+  // Whatever the browser could say about a worker that never started, rather
+  // than an empty line: a worker fails with an ErrorEvent, not an exception.
+  await expect(page.locator(".log-body")).not.toBeEmpty();
+});
+
 test("a startup failure says what went wrong, not only where", async ({ page }) => {
   // The corpus is the one asset boot( ) cannot do without, so refusing it is
   // the shortest way to a real startup failure.
