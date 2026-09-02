@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { addNamedFile, control, open, outputText, setSource } from "./helpers.mjs";
+import { addNamedFile, control, markers, open, outputText, setSource } from "./helpers.mjs";
 
 // The playground's whole point: what is in the editor is what runs. These tests
 // change the ABAP and check that the app on the right changed with it, and that
