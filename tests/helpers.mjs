@@ -90,5 +90,7 @@ export async function runSample(page, id) {
   const before = await page.locator("#app").getAttribute("src");
   await pickSample(page, id);
   await expect(page.locator("#app")).not.toHaveAttribute("src", before ?? "", { timeout: 60000 });
-  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+  // "running", or "running - your draft is one Undo away" when the sample
+  // went in over somebody's own work.
+  await expect(page.locator("#status")).toHaveText(/^running/, { timeout: 60000 });
 }
