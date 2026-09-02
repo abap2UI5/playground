@@ -169,9 +169,24 @@ export async function buildRegistry(corpus, filesReady, onProgress) {
 // setTimeout is the obvious way to write this and the wrong one: a timer set
 // from inside a timer's own callback is clamped to four milliseconds, and at a
 // yield per frame that is a fifth of the parse spent waiting on the clock
-// rather than parsing. scheduler.yield() has no timer behind it.
+// rather than parsing. scheduler.yield() was the next answer and is wrong in
+// a quieter way: its continuation is scheduled ahead of ordinary tasks, so a
+// parse yielding through it paints and answers input but starves everything
+// else on the queue for its whole duration - the ABAP runtime's "ready"
+// message from its worker, the evaluation of the bundle's chunks as they
+// land - and all of that then happens in a lump after the parse, which is
+// exactly where the page is next waiting on it. A message posted to
+// ourselves has no timer behind it either, and it takes its turn: whatever
+// was queued before it runs first.
 const yieldToBrowser = () =>
-  globalThis.scheduler?.yield?.() ?? new Promise((r) => setTimeout(r, 0));
+  new Promise((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      channel.port1.close();
+      resolve();
+    };
+    channel.port2.postMessage(null);
+  });
 
 // Parses a registry without taking the page down with it, reporting progress as
 // it goes. Both callers need this: the corpus at startup, and a changed rule
