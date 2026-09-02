@@ -22,7 +22,7 @@ import "monaco-editor/editor/contrib/comment/browser/comment.js";
 import "monaco-editor/editor/contrib/contextmenu/browser/contextmenu.js";
 import "monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching.js";
 import { registerABAP } from "@abaplint/monaco";
-import { applyLinterFixes, fixableAmong, findingsFor } from "./abap2ui5-lint.mjs";
+import { applyLinterFixes, fixableAmong, findingsFor, ruleUrl } from "./abap2ui5-lint.mjs";
 
 import { uriFor } from "./files.mjs";
 import {
@@ -269,7 +269,12 @@ function analyse() {
       LINT_OWNER,
       findings.map((f) => ({
         severity: MONACO_SEVERITY[f.severity] ?? monaco.MarkerSeverity.Warning,
-        message: `${f.message}  (abap2UI5: ${f.type})`,
+        message: f.message,
+        // the same shape abaplint's markers have above: Monaco shows the
+        // source and the code behind the message, and the code is a link -
+        // here to the rule's card, which is where "what does this mean" is
+        source: "abap2UI5",
+        code: { value: f.type, target: monaco.Uri.parse(ruleUrl(f)) },
         startLineNumber: f.line,
         startColumn: f.column,
         endLineNumber: f.line,
@@ -285,6 +290,7 @@ function analyse() {
         severity: f.severity === "error" ? 1 : f.severity === "warning" ? 2 : 3,
         message: f.message,
         rule: f.type,
+        url: ruleUrl(f),
         range: { start: { line: f.line - 1, character: f.column - 1 } },
       });
     }

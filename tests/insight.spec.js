@@ -72,6 +72,11 @@ test("the abap2UI5 linter reports an icon that abaplint is happy with", async ({
   await expect(row).toBeVisible({ timeout: 20000 });
   await expect(row).toContainText("abap2UI5");
 
+  // …and beside the row, the link to the rule's card - the page that says
+  // what the finding means and shows the same code fixed.
+  const doc = row.locator("xpath=..").locator(".insight-doc");
+  await expect(doc).toHaveAttribute("href", /abap2ui5\.github\.io\/linter\/#unknown-icon$/);
+
   // It is a finding about the view, not about the ABAP: the app still runs,
   // and looking at it is how somebody understands the finding.
   await page.locator("#run").click();
