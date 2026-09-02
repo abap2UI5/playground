@@ -176,7 +176,11 @@ both are easy to undo by tidying up:
   a **toggle** at its far end — clicking the open tab has always collapsed the
   panel too, but nothing on the screen said so — and the five tabs scroll among
   themselves underneath it, so the control that gives the room back never
-  scrolls out of reach.
+  scrolls out of reach. Where the pointer is a finger (`(pointer: coarse)`) the
+  strip grows to a height a finger can hit and the toggle to a width one can,
+  and the toggle's hit area reaches up past the resize grip, which otherwise
+  sits over its top edge and turns a tap that lands there into a drag of
+  nothing; `tests/insight.spec.js` taps it under touch emulation.
 - **Run brings the app forward**, the way picking a sample always did: with one
   pane on screen, pressing Run and being left looking at the code is a dead end.
   `run()` answers whether it got as far as starting an app, and only then does

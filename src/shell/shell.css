@@ -341,6 +341,9 @@ iframe {
   font-size: 12px;
   padding: .3rem .55rem;
   cursor: pointer;
+  /* A tap, not a double-tap-to-zoom candidate: without this iOS Safari holds
+     every tap on the strip for 300ms to see whether a second one follows. */
+  touch-action: manipulation;
 }
 .insight-tab.is-active { color: var(--fg); border-bottom-color: var(--accent); }
 .insight-tab:hover { color: var(--fg); }
@@ -373,8 +376,35 @@ iframe {
      scrolling under it disappears behind. */
   border-left: 1px solid var(--line);
   padding-left: .5rem;
+  /* Above the grip. The grip's hit area reaches three pixels down into the
+     strip (see .insight-grip), and a press that starts there is a drag, never
+     a click - which for a mouse aimed at the glyph never mattered, and for a
+     finger, which lands where it lands, was the toggle not answering. */
+  position: relative;
+  z-index: 2;
 }
 .insight-toggle:hover { color: var(--fg); }
+
+/* The toggle is the one control on the strip a finger most needs, and it was
+   a 29 by 26 pixel glyph under a 5 pixel drag handle. Where the pointer is a
+   finger, the strip grows to a height a finger can hit, the toggle to a width
+   one can, and its hit area reaches up past the grip and the editor's bottom
+   edge - the tap lands on the toggle whether the finger is on the glyph or
+   half a centimetre above it. Only the hit area grows upward: below the strip
+   is the first problem row, which a tap has to keep reaching. */
+@media (pointer: coarse) {
+  .insight-tab { padding: .5rem .65rem; }
+  .insight-toggle {
+    min-width: 2.75rem;
+    font-size: 15px;
+    color: var(--fg);
+  }
+  .insight-toggle::before {
+    content: "";
+    position: absolute;
+    inset: -.75rem -.4rem 0 0;
+  }
+}
 
 .config-link { margin: .35rem 0 0; font-size: 12px; }
 .config-link a { color: var(--accent); }
@@ -602,6 +632,7 @@ button.insight-row {
     color: var(--fg-dim);
     padding: 0 1rem;
     border-bottom: 2px solid transparent;
+    touch-action: manipulation;
   }
   .tab.is-active { color: var(--fg); border-bottom-color: var(--accent); }
 
