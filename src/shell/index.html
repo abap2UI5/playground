@@ -83,11 +83,12 @@
 <header class="bar">
   <span class="brand">abap2UI5 <span class="brand-dim">Playground</span></span>
 
-  <!-- Icon only: it is the one control here whose meaning a glyph carries on
-       its own, and it sits where a toolbar keeps its undo. Enabled only while
-       there is something to take back. -->
+  <!-- Icons only, the two of them: an arrow back is undo anywhere, and a pair
+       of braces is what a code editor puts on its format action. Both sit
+       where a toolbar keeps them, first. Undo is enabled only while there is
+       something to take back; the title carries the keyboard shortcut. -->
   <button id="undo" class="icon" disabled title="Undo (Ctrl+Z)" aria-label="Undo">&#x21B6;</button>
-  <button id="format" disabled title="Pretty print (Shift+Alt+F)">Format</button>
+  <button id="format" class="icon" disabled title="Format (Shift+Alt+F)" aria-label="Format">{&#x2009;}</button>
   <button id="examples" class="invite" disabled title="Browse the built-in samples and the sample repositories">Samples</button>
   <button id="run" class="primary" disabled title="Run (Ctrl+Enter)">Run</button>
 
