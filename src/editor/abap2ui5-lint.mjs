@@ -28,6 +28,13 @@ import { applyFixes, isFixable } from "@abap2ui5/linter/fix";
 // for it is `minUi5`, and settingsFor( ) below is where the two meet.
 const DEFAULTS = { ui5: "1.71", distribution: "openui5" };
 
+// The rule's card on the linter's rules page - what it means, how severe it
+// is, the same code fixed. A finding that carries `url` itself is believed
+// (the linter sets one on every finding from 0.7 on); an older one gets the
+// page's anchor, which is the rule id.
+export const RULES_PAGE = "https://abap2ui5.github.io/linter/";
+export const ruleUrl = (finding) => finding.url ?? `${RULES_PAGE}#${finding.type}`;
+
 let settings = { ...DEFAULTS };
 
 export const linterSettings = () => ({ ...settings });
