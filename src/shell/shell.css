@@ -101,6 +101,10 @@ button.primary {
 
 button.ghost { border: none; background: none; color: var(--fg-dim); padding: 0 .4rem; }
 
+/* A button that is only a glyph: square-ish, the glyph a little larger than
+   text so it reads as a symbol rather than as a stray character. */
+button.icon { padding: .2rem .55rem; font-size: 1.15em; line-height: 1.2; }
+
 /* The samples browser: the one way to a sample now that there is no menu, so
    it is the one button in the bar dressed to be clicked - the accent as an
    outline rather than a fill, which stays Run's. */

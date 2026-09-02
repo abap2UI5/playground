@@ -119,6 +119,26 @@ test("a link nobody wrote opens on the sample instead of failing", async ({ page
   expect(await getSource(page)).toContain("CLASS zcl_playground DEFINITION");
 });
 
+test("the Undo button takes the last edit back, and is inactive when there is none", async ({ page }) => {
+  await open(page);
+  // A sample as it was opened has nothing to take back.
+  await expect(page.locator("#undo")).toBeDisabled();
+
+  const original = await getSource(page);
+  // Through the undo stack, the way typing and Fix them go - setValue( ), which
+  // setSource( ) uses, replaces the document and resets the stack instead.
+  await page.evaluate((text) => {
+    const model = window.monaco.editor.getModels()[0];
+    model.pushEditOperations([], [{ range: model.getFullModelRange(), text }], () => null);
+  }, original.replace("Hello abap2UI5", "about to be undone"));
+  await expect(page.locator("#undo")).toBeEnabled();
+
+  await page.locator("#undo").click();
+  await expect.poll(() => getSource(page)).toBe(original);
+  // One edit, so one press took the whole of it back.
+  await expect(page.locator("#undo")).toBeDisabled();
+});
+
 test("the editor content survives a reload", async ({ page }) => {
   await open(page);
   await setSource(page, (await getSource(page)).replace("Hello abap2UI5", "kept across a reload"));
@@ -230,7 +250,7 @@ test("the bar keeps to a few rows on a phone", async ({ page }) => {
   expect(bar.height, "the bar is not a fifth of the phone").toBeLessThan(100);
 
   // And nothing that has to be reachable was compacted away with the rows.
-  for (const id of ["#format", "#examples", "#run", "#share", "#source-link", "#status", "#about"]) {
+  for (const id of ["#undo", "#format", "#examples", "#run", "#share", "#source-link", "#status", "#about"]) {
     await expect(page.locator(id)).toBeVisible();
   }
 });

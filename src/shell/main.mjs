@@ -9,6 +9,7 @@
 import "./shell.css";
 
 import {
+  canUndo,
   connectRegistry,
   createEditor,
   currentFile,
@@ -18,6 +19,7 @@ import {
   invalidateAnalysis,
   refresh,
   setFiles,
+  undo,
 } from "../editor/editor.mjs";
 import { buildRegistry, declaredObjectName, entryClass } from "../editor/registry.mjs";
 import { loadLinter } from "../editor/abap2ui5-lint.mjs";
@@ -53,6 +55,7 @@ const prefersDark = () => window.matchMedia("(prefers-color-scheme: dark)").matc
 const STORAGE_KEY = "abap2ui5-playground:files";
 
 const runButton = document.getElementById("run");
+const undoButton = document.getElementById("undo");
 const formatButton = document.getElementById("format");
 const shareButton = document.getElementById("share");
 const fullscreenButton = document.getElementById("fullscreen");
@@ -294,6 +297,10 @@ async function boot() {
   const runAndShow = () => run().then((started) => started && tabs.show("right"));
 
   runButton.addEventListener("click", runAndShow);
+  undoButton.addEventListener("click", () => {
+    undo();
+    reflectUndo();
+  });
   formatButton.addEventListener("click", () => format());
   shareButton.addEventListener("click", () => share());
   fullscreenButton.addEventListener("click", () => openFullScreen());
@@ -377,10 +384,18 @@ function applyFrameTheme() {
 }
 
 // A different file is now on screen: the outline is about that file, and so is
-// the link to where it came from.
+// the link to where it came from, and so is what Undo has to take back.
 function fileOpened() {
   showSourceLink();
+  reflectUndo();
   updateInsight(refresh());
+}
+
+// The Undo button follows the open file's undo stack: live while there is an
+// edit to take back, inactive over a file as it was opened. Monaco keeps the
+// stack per model, so switching files switches what the button means.
+function reflectUndo() {
+  undoButton.disabled = !canUndo();
 }
 
 // The way back to where linked code lives, following whichever file is open.
@@ -405,6 +420,7 @@ export function showSourceLink() {
 function remember(files) {
   renderFiles();
   showSourceLink();
+  reflectUndo();
   // The editor has already re-checked by the time this runs (both hang off the
   // same debounce), and the analysis is kept under a key made of the models'
   // version ids - so this reads that result back rather than running a second

@@ -333,6 +333,19 @@ export async function format() {
   editor.focus();
 }
 
+// One step back in the open file, through Monaco's own undo - the same one
+// Ctrl+Z is bound to, so a Format or a Fix them comes back the way it went:
+// as one edit. For the bar's button, which is there for the reader on a
+// phone, where there is no Ctrl+Z to press.
+export function undo() {
+  editor.trigger("bar", "undo", null);
+  editor.focus();
+}
+
+// Whether that button has anything to do. Asked after every change and every
+// file switch; a button that does nothing when pressed is worse than none.
+export const canUndo = () => editor?.getModel()?.canUndo() ?? false;
+
 // Completion over the names of the classes and interfaces the registry knows -
 // the framework's and the user's own.
 //
