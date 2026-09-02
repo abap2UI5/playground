@@ -89,11 +89,13 @@ test("what the transpiler refuses is underlined at its line, until the text chan
   await setSource(page, wrong);
   await page.locator("#run").click();
   await expect(page.locator("#status")).toHaveText("the app could not be started", { timeout: 60000 });
-  await expect(page.locator(".log-body")).toContainText("when_others_last");
 
-  // Underlined where it is, and in the Problems list, saying who said so.
+  // Underlined where it is, and in the Problems list - which the run opened,
+  // because a line is where somebody looks. The Log still has the full text.
   await expect.poll(async () => (await markers(page)).filter((m) => m.message.includes("(transpiler)")).length).toBe(1);
   await expect(page.locator("#insight-body .insight-row", { hasText: /transpiler|WHEN OTHERS/i })).toBeVisible();
+  await page.locator('[data-insight="log"]').click();
+  await expect(page.locator(".log-body")).toContainText("when_others_last");
 
   // Gone the moment the text changes - the next Run says what is still true.
   await setSource(page, wrong.replace("WHEN OTHERS.\n        out = `other`.\n      ", "") + "\n");
