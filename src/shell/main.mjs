@@ -30,7 +30,7 @@ import {
   linkedSources,
   originOf,
 } from "./deep-link.mjs";
-import { DEFAULT_FILES, isSample, SAMPLES, sampleById } from "../editor/samples.mjs";
+import { DEFAULT_FILES, isSample, sampleById } from "../editor/samples.mjs";
 import { openExamples, setUpExamples } from "./examples.mjs";
 import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
 import { setUpInsight, showInsight, updateInsight } from "./insight.mjs";
@@ -57,7 +57,6 @@ const formatButton = document.getElementById("format");
 const shareButton = document.getElementById("share");
 const fullscreenButton = document.getElementById("fullscreen");
 const examplesButton = document.getElementById("examples");
-const sampleSelect = document.getElementById("samples");
 const frame = document.getElementById("app");
 
 // Embedded in somebody else's page: no chrome, no sample menu, just the code it
@@ -232,22 +231,18 @@ async function boot() {
     }),
   );
 
-  const { files, from } = await startingReady;
+  const { files } = await startingReady;
   createEditor(document.getElementById("editor"), files, { onChange: remember });
   setUpFiles({ onChanged: remember, onOpened: fileOpened });
   setUpInsight();
   // The examples browser hands back either a built-in sample's id or the raw
   // URL of a catalogued class; the URL goes through the same code a ?src=
-  // link goes through.
+  // link goes through. It is the one way to a sample - there is no sample
+  // menu beside it, and the built-ins are its first group.
   setUpExamples({
-    openSample: (id) => {
-      sampleSelect.value = id;
-      loadSample(id, tabs);
-    },
+    openSample: (id) => loadSample(id, tabs),
     openLinked: (url) => loadLinked(url, tabs),
   });
-
-  fillSampleMenu(from);
 
   try {
     setStatus("loading the ABAP runtime…");
@@ -286,7 +281,7 @@ async function boot() {
     return;
   }
 
-  for (const control of [runButton, formatButton, shareButton, fullscreenButton, examplesButton, sampleSelect]) {
+  for (const control of [runButton, formatButton, shareButton, fullscreenButton, examplesButton]) {
     control.disabled = false;
   }
   showSourceLink();
@@ -303,7 +298,6 @@ async function boot() {
   shareButton.addEventListener("click", () => share());
   fullscreenButton.addEventListener("click", () => openFullScreen());
   examplesButton.addEventListener("click", () => openExamples());
-  sampleSelect.addEventListener("change", () => loadSample(sampleSelect.value, tabs));
 
   // A theme change must not restart the app - somebody has a half-filled form
   // open and the sun went down. UI5 can swap its theme at runtime, so the
@@ -429,21 +423,7 @@ function remember(files) {
   }
 }
 
-// The sample menu. When the editor did not start on a sample, the menu opens on
-// a disabled entry saying where the code did come from - picking a sample then
-// replaces it, and the menu never claims that edited code is still the sample.
-function fillSampleMenu(from) {
-  if (from !== "sample") {
-    const placeholder = new Option(`from ${from}`, "");
-    placeholder.disabled = true;
-    sampleSelect.add(placeholder);
-  }
-  for (const sample of SAMPLES) {
-    sampleSelect.add(new Option(`${sample.title} — ${sample.note}`, sample.id));
-  }
-  sampleSelect.value = from === "sample" ? SAMPLES[0].id : "";
-}
-
+// A built-in sample, chosen in the examples browser.
 function loadSample(id, tabs) {
   const sample = sampleById(id);
   if (!sample) return;
@@ -465,16 +445,6 @@ async function loadLinked(url, tabs) {
     const alongside = await followNavigation(linked);
     setFiles(checkFileSet([...linked, ...alongside]).map((f) => ({ ...f })));
     renderFiles();
-    // The menu stops claiming the editor holds one of its samples - the same
-    // move fillSampleMenu makes when the page opens on somebody's link.
-    let placeholder = [...sampleSelect.options].find((o) => o.value === "");
-    if (!placeholder) {
-      placeholder = new Option("", "");
-      placeholder.disabled = true;
-      sampleSelect.add(placeholder, 0);
-    }
-    placeholder.text = "from the examples browser";
-    sampleSelect.value = "";
     if (await run()) tabs.show("right");
   } catch (e) {
     // The catalogue said the class is there and it was not, or the fetch

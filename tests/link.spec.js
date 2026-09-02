@@ -115,7 +115,6 @@ test("the embedded playground drops the chrome and keeps the code", async ({ pag
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
 
   await expect(page.locator(".brand")).toBeHidden();
-  await expect(page.locator("#samples")).toBeHidden();
   await expect(page.locator("#share")).toBeHidden();
 
   // Still a playground: the editor is there and Run works.

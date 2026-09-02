@@ -208,8 +208,6 @@ test("the catalogues are listed by learning-path stage, and an entry runs throug
     "https://github.com/abap2UI5/samples/blob/main/src/01/z2ui5_cl_smp_app_493.clas.abap",
   );
 
-  // And the sample menu no longer claims the editor holds one of its samples.
-  await expect(page.locator("#samples")).toHaveValue("");
 });
 
 test("the search narrows the list across every group", async ({ page }) => {

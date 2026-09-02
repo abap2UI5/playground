@@ -101,9 +101,6 @@ button.primary {
 
 button.ghost { border: none; background: none; color: var(--fg-dim); padding: 0 .4rem; }
 
-.field { display: flex; align-items: center; gap: .35rem; }
-.field-label { color: var(--fg-dim); font-size: 12px; }
-
 select {
   font: inherit;
   border-radius: 6px;
@@ -250,10 +247,10 @@ iframe {
 
 /* --------------------------------------------------------------- embedded */
 
-/* Inside somebody else's page there is no room for a brand, a sample menu or a
-   share button - what is embedded is one piece of code and the app it makes. */
+/* Inside somebody else's page there is no room for a brand, an examples
+   browser or a share button - what is embedded is one piece of code and the
+   app it makes. */
 .is-embedded .brand,
-.is-embedded .field,
 .is-embedded #examples,
 .is-embedded #share,
 .is-embedded .versions { display: none; }
@@ -597,18 +594,15 @@ button.insight-row {
   /* The bar is the one cost on this page that is paid before anything is
      looked at, and on a phone it was four wrapped rows - a fifth of the screen,
      before the editor or the app got any of it. So what is said twice goes:
-     the brand's second word, the label over a dropdown that names itself, and
-     the version line, which the About dialog carries as well. What is left is
-     packed tighter, and the sample menu takes the slack instead of a spacer
-     pushing the last control onto a row of its own. */
+     the brand's second word and the version line, which the About dialog
+     carries as well. What is left is packed tighter, and the spacer that
+     holds the right-hand group at the edge goes, so it stops pushing the
+     last control onto a row of its own. */
   .bar { gap: .35rem; padding: .35rem .5rem; }
   .bar button { padding: .3rem .6rem; }
   .brand-dim,
-  .field-label,
   .versions,
   .spacer { display: none; }
-  .field { flex: 1; min-width: 8rem; }
-  .field select { flex: 1; min-width: 0; max-width: none; }
 
   .panes {
     display: block;

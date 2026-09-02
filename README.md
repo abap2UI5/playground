@@ -188,7 +188,7 @@ limited to this site and GitHub's raw hosts — the playground fetches on behalf
 of whoever opened the link, and should not be a general-purpose reader for
 arbitrary URLs.
 
-**`?embed=1`** drops the brand, the sample menu and the share button, leaving
+**`?embed=1`** drops the brand, the examples browser and the share button, leaving
 the editor, Run and the app — for embedding in a documentation page. An
 embedded playground never touches the stored draft, so it cannot overwrite what
 a reader has open in a normal one. **`?view=app`** drops the editor too, for a

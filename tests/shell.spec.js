@@ -126,10 +126,6 @@ test("the editor content survives a reload", async ({ page }) => {
   await page.reload();
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
   expect(await getSource(page)).toContain("kept across a reload");
-
-  // And the menu says where the code came from rather than naming a sample it
-  // is not.
-  await expect(page.locator("#samples")).toHaveValue("");
 });
 
 test("picking a sample replaces the draft", async ({ page }) => {
@@ -154,7 +150,6 @@ test("a sample that was only read is not kept as a draft", async ({ page }) => {
   await page.reload();
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
   expect(await getSource(page)).toContain("Hello abap2UI5");
-  await expect(page.locator("#samples"), "and the menu opens on the sample, not on a draft").toHaveValue("hello");
 
   // One keystroke and it is a draft like any other.
   await runSample(page, "counter");
@@ -235,7 +230,7 @@ test("the bar keeps to a few rows on a phone", async ({ page }) => {
   expect(bar.height, "the bar is not a fifth of the phone").toBeLessThan(100);
 
   // And nothing that has to be reachable was compacted away with the rows.
-  for (const id of ["#run", "#format", "#samples", "#examples", "#share", "#status", "#about"]) {
+  for (const id of ["#examples", "#run", "#format", "#share", "#status", "#about"]) {
     await expect(page.locator(id)).toBeVisible();
   }
 });

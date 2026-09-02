@@ -143,11 +143,12 @@ let callbacks;
 let started = false;
 let loading = false;
 
-// The always-there group: the same nine the Sample menu offers, so the browser
-// has something to search and to open even when no catalogue can be reached.
+// The always-there group: the built-in samples, which have no other way in -
+// there is no sample menu in the bar - so the browser has something to search
+// and to open even when no catalogue can be reached.
 const builtIn = {
   title: "Built in",
-  blurb: "The Sample menu, searchable. These live in the page and need no network.",
+  blurb: "A handful to start from. These live in the page and need no network.",
   entries: SAMPLES.map((sample) => ({
     title: sample.title,
     note: sample.note,
@@ -259,6 +260,8 @@ function row(entry) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "insight-row example-row";
+  // The built-ins by id, so a test can pick one without matching its title.
+  if (entry.sampleId !== undefined) button.dataset.sample = entry.sampleId;
 
   const title = document.createElement("span");
   title.className = "example-title";

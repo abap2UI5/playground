@@ -227,8 +227,8 @@ both are easy to undo by tidying up:
 - **The bar compacts rather than wrapping.** At desk width it is one row; on a
   phone it wrapped to four — a fifth of the screen, spent before the editor or
   the app got any of it. What repeats itself goes (the brand's second word, the
-  label over a dropdown that names itself, the version line, which the About
-  dialog carries as well), the paddings shrink, and the `.spacer` is dropped so
+  version line, which the About dialog carries as well), the paddings shrink,
+  and the `.spacer` that holds the right-hand group at the edge is dropped so
   it stops pushing the last control onto a row of its own. Nothing is *removed*:
   every control is still there and still reachable, which is what
   `tests/shell.spec.js` holds it to, along with the height.
@@ -253,7 +253,7 @@ both are easy to undo by tidying up:
   `run()` answers whether it got as far as starting an app, and only then does
   the caller switch — a run that stopped on an abaplint error left the problems
   list open, and that is what the reader has to be looking at. Both halves are
-  in `tests/shell.spec.js`; the same `if (started)` guards the sample menu and
+  in `tests/shell.spec.js`; the same `if (started)` guards a sample picked in
   the examples browser, which had switched either way.
 
 ## The two checkers, and the Fix-them contract
