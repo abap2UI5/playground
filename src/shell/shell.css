@@ -524,7 +524,9 @@ iframe {
 .example-row { padding: .3rem .6rem; }
 /* A sample that cannot run here: the reason is on the row, the row is
    disabled and dimmed, and the link beside it is the way to it. */
-.example-needs { color: var(--fg-dim); font-size: 12px; white-space: nowrap; }
+.example-needs { color: var(--fg-dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.example-row { overflow: hidden; }
+.example-row .insight-who { flex: none; }
 .example-row:disabled { opacity: .55; cursor: not-allowed; }
 .example-row:disabled .example-title { text-decoration: line-through; text-decoration-color: var(--fg-dim); }
 .example-github {
