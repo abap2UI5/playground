@@ -78,10 +78,38 @@ test("what has to stay live is not cached", async ({ page }) => {
         entry === "/runtime/framework.mjs" ||
         entry === "/runtime/sql-wasm.wasm" ||
         /^\/assets\/[\w.-]+\.ttf$/.test(entry) ||
-        entry.startsWith("/app/resources/"),
+        (entry.startsWith("/app/") && entry !== "/app/index.html"),
       `${entry} is in the cache and is not on the allow list`,
     ).toBe(true);
   }
+});
+
+test("the app frame's stylesheets and component come out of the cache as well", async ({ page }) => {
+  await open(page);
+  expect(await workerReady(page)).toBe(true);
+  // The first visit's app is still fetching its fonts when the status line
+  // says running, and this page is not the worker's yet - so the watch would
+  // count those against the second visit. Let it finish first.
+  await page.waitForLoadState("networkidle");
+
+  const { served, fetched } = watch(page);
+  await open(page);
+  await expect(control(page, "btnGreet")).toBeVisible();
+
+  // The two theme stylesheets carry a query (?sap-ui-dist-version=...) that
+  // names the build rather than a moment, and the frontend's own bundle and
+  // manifest sit beside app/resources rather than under it. Every one of them
+  // went to the network on every Run until the allow list said otherwise -
+  // and the stylesheets are what the app's first paint waits on.
+  const kept = [...served];
+  expect(kept.some((p) => /^\/app\/resources\/sap\/m\/themes\/[^/]+\/library\.css\?/.test(p))).toBe(true);
+  expect(kept.some((p) => /^\/app\/resources\/sap\/ui\/core\/themes\/[^/]+\/library\.css\?/.test(p))).toBe(true);
+  expect(kept).toContain("/app/Component-preload.js");
+  expect(kept).toContain("/app/frontend-bridge.js");
+  expect(kept.some((p) => p.startsWith("/app/manifest.json"))).toBe(true);
+
+  // The document itself is the one thing under app/ that stays live.
+  expect([...fetched].filter((p) => p.startsWith("/app/")).map((p) => p.split("?")[0])).toEqual(["/app/index.html"]);
 });
 
 test("a ?src= link is still read from where it lives, and still runs", async ({ page }) => {

@@ -96,22 +96,30 @@ self.addEventListener("activate", (event) => {
 function isCacheable(url) {
   if (url.origin !== BASE.origin) return false;
   if (!url.pathname.startsWith(BASE.pathname)) return false;
-  // A query says the URL is about a particular moment - the counter Run puts on
-  // the app document, somebody's cache buster - and caching one moment is how a
-  // cache fills up with things that will never be asked for again.
-  if (url.search !== "") return false;
-
   const rel = url.pathname.slice(BASE.pathname.length);
+
+  // The app frame: the UI5 build, by a distance the largest thing on the site,
+  // fetched a bundle at a time as the app reaches for it and identical on
+  // every visit - and beside it the frontend's own files, its component
+  // bundle, its manifest, the bridge script. Not precached - that is a hundred
+  // megabytes nobody asked for - but kept as it is used. Its own document is
+  // the one exception: app/index.html is what Run reloads with a new query
+  // each time, and it has to stay live for the app to restart at all.
+  //
+  // Queries are allowed here, and only here. UI5 puts one on every
+  // stylesheet it loads (?sap-ui-dist-version=1.151.0) and on the manifest
+  // (?sap-language=EN), and both name something fixed for a build rather than
+  // a moment - so refusing them left the two theme stylesheets, which block
+  // the app's first paint, going to the network on every single Run.
+  if (rel.startsWith("app/")) return rel !== "app/index.html";
+
+  // Everywhere else a query says the URL is about a particular moment -
+  // somebody's cache buster, a draft - and caching one moment is how a cache
+  // fills up with things that will never be asked for again.
+  if (url.search !== "") return false;
   if (CORE.includes(rel)) return true;
   // Monaco's icon font, under the hashed name esbuild gave it.
   if (/^assets\/[\w.-]+\.ttf$/.test(rel)) return true;
-  // The UI5 build: by a distance the largest thing on the site, fetched a
-  // bundle at a time as the app reaches for it and identical on every visit.
-  // Not precached - that is a hundred megabytes nobody asked for - but kept as
-  // it is used. Its own document is deliberately not here: that is
-  // app/index.html, which Run reloads with a new query each time and which has
-  // to stay live for the app to restart at all.
-  if (rel.startsWith("app/resources/")) return true;
   return false;
 }
 
