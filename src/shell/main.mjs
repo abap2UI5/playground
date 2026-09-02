@@ -257,7 +257,14 @@ async function boot() {
   }
   showSourceLink();
 
-  runButton.addEventListener("click", () => run());
+  // A click on Run is a request to see the app, so on a narrow screen it brings
+  // the app forward - the same move picking a sample makes, and at desk width
+  // show( ) only marks the tab because both panes are already on screen. Not
+  // when the run did not get that far: the panel it left open, the problems or
+  // the log, is exactly what the reader has to be looking at.
+  const runAndShow = () => run().then((started) => started && tabs.show("right"));
+
+  runButton.addEventListener("click", runAndShow);
   formatButton.addEventListener("click", () => format());
   shareButton.addEventListener("click", () => share());
   fullscreenButton.addEventListener("click", () => openFullScreen());
@@ -273,7 +280,7 @@ async function boot() {
   document.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
-      run();
+      runAndShow();
     }
   });
 
@@ -409,7 +416,7 @@ function loadSample(id, tabs) {
   setFiles(sample.files.map((f) => ({ ...f })));
   renderFiles();
   // Picking a sample is a request to see it, so it runs without a second click.
-  run().then(() => tabs.show("right"));
+  run().then((started) => started && tabs.show("right"));
 }
 
 // A catalogued example, chosen in the examples browser. The URL goes down the
@@ -434,8 +441,7 @@ async function loadLinked(url, tabs) {
     }
     placeholder.text = "from the examples browser";
     sampleSelect.value = "";
-    await run();
-    tabs.show("right");
+    if (await run()) tabs.show("right");
   } catch (e) {
     // The catalogue said the class is there and it was not, or the fetch
     // failed under way. Somebody clicked expecting particular code, so this
@@ -593,6 +599,11 @@ export async function run() {
     setStatus("running");
     // After the load event, so the app has rendered and has a height to report.
     if (appOnly) announceAppHeight(frame);
+    // Answered rather than returned blank, because on a narrow screen the
+    // caller brings the app forward - and every path out of here above this
+    // line is one where there is no app to bring: nothing compiled, or the
+    // problems list is what the reader now needs to be looking at.
+    return true;
   } catch (e) {
     setStatus("the app could not be started", true);
     showOutput("Run", String(e.message || e));

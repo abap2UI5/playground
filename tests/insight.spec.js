@@ -109,6 +109,47 @@ test("clicking the open tab collapses the panel, and clicking again brings it ba
   await expect(page.locator("#insight-body")).toBeVisible();
 });
 
+test("the toggle folds the panel away, and the choice survives a reload", async ({ page }) => {
+  await open(page);
+  const body = page.locator("#insight-body");
+  const toggle = page.locator("#insight-toggle");
+  await expect(body).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+  const editorBefore = (await page.locator("#editor").boundingBox()).height;
+  await toggle.click();
+  await expect(body).toBeHidden();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+  // The point of folding it away is the height the editor gets back - and what
+  // stays behind is the strip, so the problem count still reports from it.
+  const editorAfter = (await page.locator("#editor").boundingBox()).height;
+  expect(editorAfter, "the editor got the space").toBeGreaterThan(editorBefore + 60);
+  await expect(page.locator('[data-insight="problems"]')).toBeVisible();
+
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await expect(page.locator("#insight-body"), "still folded away").toBeHidden();
+
+  await page.locator("#insight-toggle").click();
+  await expect(page.locator("#insight-body")).toBeVisible();
+});
+
+test("on a phone the panel starts folded away, and a failure still opens it", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 760 });
+  await open(page);
+
+  // Nobody has said either way, and on a screen this size the editor is what
+  // the room is for. The strip stays, so it is one tap back.
+  await expect(page.locator("#insight-body")).toBeHidden();
+  await expect(page.locator("#insight-toggle")).toBeVisible();
+
+  // A failure is not tooling: it takes the room it needs even here.
+  await setSource(page, (await getSource(page)).replace(/zcl_playground/g, "zcl_renamed"));
+  await page.locator("#run").click();
+  await expect(page.locator(".log-body")).toBeVisible({ timeout: 30000 });
+});
+
 test("an embedded playground does not show the panel", async ({ page }) => {
   await page.goto("/?embed=1");
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });

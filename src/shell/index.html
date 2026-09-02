@@ -189,22 +189,32 @@
     <div class="insight" id="insight">
       <div class="insight-grip" id="insight-grip" role="separator" aria-orientation="horizontal"
            tabindex="0" aria-label="Resize the panel"></div>
-      <div class="insight-tabs" role="tablist">
-        <button type="button" data-insight="problems" class="insight-tab is-active" role="tab"
-                aria-selected="true" aria-controls="insight-body">
-          Problems <span id="problem-count" class="insight-badge"></span>
-        </button>
-        <button type="button" data-insight="outline" class="insight-tab" role="tab"
-                aria-selected="false" aria-controls="insight-body">Outline</button>
-        <button type="button" data-insight="log" class="insight-tab" role="tab"
-                aria-selected="false" aria-controls="insight-body">
-          Log <span id="log-dot" class="insight-badge"></span>
-        </button>
-        <span class="insight-gap"></span>
-        <button type="button" data-insight="abaplint" class="insight-tab" role="tab"
-                aria-selected="false" aria-controls="insight-body">abaplint</button>
-        <button type="button" data-insight="abap2ui5" class="insight-tab" role="tab"
-                aria-selected="false" aria-controls="insight-body">abap2UI5 lint</button>
+      <!-- The strip is the tablist plus one control that is not a view of
+           anything: the toggle that folds the panel away. It sits outside the
+           tablist because it is not a tab - and, on a screen too narrow for
+           five tabs, because that lets them scroll under it while the way to
+           get the space back stays where it is. -->
+      <div class="insight-tabs">
+        <div class="insight-tablist" role="tablist" aria-label="Panel views">
+          <button type="button" data-insight="problems" class="insight-tab is-active" role="tab"
+                  aria-selected="true" aria-controls="insight-body">
+            Problems <span id="problem-count" class="insight-badge"></span>
+          </button>
+          <button type="button" data-insight="outline" class="insight-tab" role="tab"
+                  aria-selected="false" aria-controls="insight-body">Outline</button>
+          <button type="button" data-insight="log" class="insight-tab" role="tab"
+                  aria-selected="false" aria-controls="insight-body">
+            Log <span id="log-dot" class="insight-badge"></span>
+          </button>
+          <span class="insight-gap"></span>
+          <button type="button" data-insight="abaplint" class="insight-tab" role="tab"
+                  aria-selected="false" aria-controls="insight-body">abaplint</button>
+          <button type="button" data-insight="abap2ui5" class="insight-tab" role="tab"
+                  aria-selected="false" aria-controls="insight-body">abap2UI5 lint</button>
+        </div>
+        <button type="button" id="insight-toggle" class="insight-tab insight-toggle"
+                aria-expanded="true" aria-controls="insight-body"
+                title="Hide the panel" aria-label="Hide the panel">▾</button>
       </div>
       <div class="insight-body" id="insight-body" role="tabpanel"></div>
     </div>

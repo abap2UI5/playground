@@ -201,6 +201,45 @@ test("a narrow window shows tabs instead of a split", async ({ page }) => {
   await expect(page.locator("#pane-left")).toBeHidden();
 });
 
+test("on a phone Run brings the app forward - unless there is no app to bring", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 760 });
+  await open(page);
+  await expect(page.locator("#pane-left"), "the page opens on the code").toBeVisible();
+
+  // Pressing Run and being left looking at the code is a dead end where only
+  // one pane is on screen.
+  await page.locator("#run").click();
+  await expect(page.locator("#pane-right")).toBeVisible();
+  await expect(page.locator("#pane-left")).toBeHidden();
+
+  // A run that never started an app is the other way round: what it left open -
+  // here the problems it stopped on - is what has to stay in front.
+  await page.locator(".tab", { hasText: "ABAP" }).click();
+  await setSource(
+    page,
+    (await getSource(page)).replace("PUBLIC SECTION.", "PUBLIC SECTION.\n    DATA broken TYPE zcl_does_not_exist."),
+  );
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toContainText("fix them");
+  await expect(page.locator("#pane-left")).toBeVisible();
+  await expect(page.locator(".insight-row.is-error").first()).toBeVisible();
+});
+
+test("the bar keeps to a few rows on a phone", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 760 });
+  await open(page);
+
+  // It wrapped to four rows - a fifth of the screen, spent before the editor or
+  // the app got any of it. What it must not do is grow back.
+  const bar = await page.locator(".bar").boundingBox();
+  expect(bar.height, "the bar is not a fifth of the phone").toBeLessThan(100);
+
+  // And nothing that has to be reachable was compacted away with the rows.
+  for (const id of ["#run", "#format", "#samples", "#examples", "#share", "#status", "#about"]) {
+    await expect(page.locator(id)).toBeVisible();
+  }
+});
+
 test("both panes stay visible when a wide window gets narrow and wide again", async ({ page }) => {
   await open(page);
   await page.setViewportSize({ width: 480, height: 800 });
