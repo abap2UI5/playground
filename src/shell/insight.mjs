@@ -42,15 +42,42 @@ function collapse() {
   heightBeforeCollapse = panel.style.height;
   panel.style.height = "";
   panel.classList.add("is-collapsed");
+  paintToggle();
 }
 
 function expand() {
   panel.classList.remove("is-collapsed", "is-tucked");
   if (heightBeforeCollapse !== "") panel.style.height = heightBeforeCollapse;
+  paintToggle();
+}
+
+// Folded or not is a preference, so it is kept - but only when somebody said
+// so. The panel opens itself when something is written to the log, and a
+// failure taking the screen is not a request to have it open tomorrow.
+function remember(collapsed) {
+  writeStored(COLLAPSED_KEY, collapsed ? "1" : "0");
+}
+
+function paintToggle() {
+  const button = document.getElementById("insight-toggle");
+  if (!button) return;
+  const open = !panel.classList.contains("is-collapsed");
+  button.textContent = open ? "▾" : "▴";
+  button.setAttribute("aria-expanded", String(open));
+  const label = open ? "Hide the panel" : "Show the panel";
+  button.title = label;
+  button.setAttribute("aria-label", label);
 }
 
 const HEIGHT_KEY = "abap2ui5-playground:insight-height";
+const COLLAPSED_KEY = "abap2ui5-playground:insight-collapsed";
 const MIN_HEIGHT = 80;
+
+// Where the panel starts when nobody has said. At desk width it is a stripe
+// under a tall editor and there is no reason to hide it; on a phone it is a
+// third of what the editor has to begin with, and the Problems badge in the
+// strip says whether it is worth the room before it takes any.
+const NARROW = "(max-width: 820px)";
 
 export function setUpInsight() {
   panel = document.getElementById("insight");
@@ -59,16 +86,30 @@ export function setUpInsight() {
 
   setUpResize();
 
+  const toggle = document.getElementById("insight-toggle");
+  toggle?.addEventListener("click", () => {
+    const open = !panel.classList.contains("is-collapsed");
+    if (open) collapse();
+    else expand();
+    remember(open);
+  });
+
+  const stored = readStored(COLLAPSED_KEY);
+  if (stored === null ? window.matchMedia(NARROW).matches : stored === "1") collapse();
+  paintToggle();
+
   for (const tab of tabs) {
     tab.addEventListener("click", () => {
-      // Clicking the tab that is already open collapses the panel. On a short
-      // screen the editor is what matters, and this is the only control that
-      // gives the space back.
+      // Clicking the tab that is already open collapses the panel - the toggle
+      // beside them is the same thing said out loud, for the reader who never
+      // guessed that a tab does two things.
       if (tab.dataset.insight === view && !panel.classList.contains("is-collapsed")) {
         collapse();
+        remember(true);
         return;
       }
       expand();
+      remember(false);
       view = tab.dataset.insight;
       render();
     });

@@ -310,13 +310,29 @@ iframe {
 
 .insight-tabs {
   display: flex;
-  gap: .25rem;
+  align-items: stretch;
   padding: 0 .35rem;
   background: var(--bg-sunken);
   border-bottom: 1px solid var(--line);
 }
 
+/* The five views scroll among themselves when there is not room for them - a
+   phone has room for about three - so that the toggle beside them, which is
+   what gives the screen back, never scrolls out of reach. The scrollbar is
+   hidden because a strip 26 pixels tall has no room for one; the tabs are the
+   affordance. */
+.insight-tablist {
+  display: flex;
+  gap: .25rem;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.insight-tablist::-webkit-scrollbar { display: none; }
+
 .insight-tab {
+  flex: none;
   background: none;
   border: 0;
   border-bottom: 2px solid transparent;
@@ -343,14 +359,22 @@ iframe {
 
 .insight-gap { flex: 1; }
 
-/* Pushed to the far end and set apart: it is not a fifth view, it is what
-   makes the other four go away. */
+/* Pushed to the far end and set apart: it is not a sixth view, it is what
+   makes the other five go away. Clicking the open tab collapses the panel as
+   well, and always did - but nothing on the screen said so, and on a phone,
+   where the panel is a third of what the editor has, that is the control the
+   page most needs to offer. */
 .insight-toggle {
   margin-left: auto;
   font-family: var(--font-mono);
   min-width: 1.8rem;
-  border-bottom-color: transparent !important;
+  border-bottom-color: transparent;
+  /* The rule is what says it is not one of the tabs, and it is the edge a tab
+     scrolling under it disappears behind. */
+  border-left: 1px solid var(--line);
+  padding-left: .5rem;
 }
+.insight-toggle:hover { color: var(--fg); }
 
 .config-link { margin: .35rem 0 0; font-size: 12px; }
 .config-link a { color: var(--accent); }
@@ -540,6 +564,22 @@ button.insight-row {
 }
 
 @media (max-width: 820px) {
+  /* The bar is the one cost on this page that is paid before anything is
+     looked at, and on a phone it was four wrapped rows - a fifth of the screen,
+     before the editor or the app got any of it. So what is said twice goes:
+     the brand's second word, the label over a dropdown that names itself, and
+     the version line, which the About dialog carries as well. What is left is
+     packed tighter, and the sample menu takes the slack instead of a spacer
+     pushing the last control onto a row of its own. */
+  .bar { gap: .35rem; padding: .35rem .5rem; }
+  .bar button { padding: .3rem .6rem; }
+  .brand-dim,
+  .field-label,
+  .versions,
+  .spacer { display: none; }
+  .field { flex: 1; min-width: 8rem; }
+  .field select { flex: 1; min-width: 0; max-width: none; }
+
   .panes {
     display: block;
     position: relative;

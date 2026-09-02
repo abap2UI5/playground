@@ -150,6 +150,41 @@ the text recomputes and a second reader of unchanged text does not. A checker
 whose *configuration* changed under unchanged text is invisible to that key,
 which is why the Config tabs call `invalidateAnalysis()` before asking again.
 
+## On a phone
+
+Below 820px (`src/shell/shell.css`, one media query; `setUpTabs()` in
+`src/shell/layout.mjs`) the split becomes two tabs, ABAP and App, because half
+of a phone is not a pane. Two more things follow from the same arithmetic, and
+both are easy to undo by tidying up:
+
+- **The bar compacts rather than wrapping.** At desk width it is one row; on a
+  phone it wrapped to four — a fifth of the screen, spent before the editor or
+  the app got any of it. What repeats itself goes (the brand's second word, the
+  label over a dropdown that names itself, the version line, which the About
+  dialog carries as well), the paddings shrink, and the `.spacer` is dropped so
+  it stops pushing the last control onto a row of its own. Nothing is *removed*:
+  every control is still there and still reachable, which is what
+  `tests/shell.spec.js` holds it to, along with the height.
+- **The panel starts folded away** (`setUpInsight()` in `src/shell/insight.mjs`).
+  It is a fixed 11rem under an editor that has about 25 to give, so on a narrow
+  screen it opens collapsed to its tab strip — where the Problems badge still
+  carries the count, so it says whether it is worth the room before taking any.
+  Folded or open is remembered from then on
+  (`abap2ui5-playground:insight-collapsed`), and only when somebody *said* so:
+  the panel opens itself when something is written to the log, and a failure
+  taking the screen is not a request to have it open tomorrow. The strip carries
+  a **toggle** at its far end — clicking the open tab has always collapsed the
+  panel too, but nothing on the screen said so — and the five tabs scroll among
+  themselves underneath it, so the control that gives the room back never
+  scrolls out of reach.
+- **Run brings the app forward**, the way picking a sample always did: with one
+  pane on screen, pressing Run and being left looking at the code is a dead end.
+  `run()` answers whether it got as far as starting an app, and only then does
+  the caller switch — a run that stopped on an abaplint error left the problems
+  list open, and that is what the reader has to be looking at. Both halves are
+  in `tests/shell.spec.js`; the same `if (started)` guards the sample menu and
+  the examples browser, which had switched either way.
+
 ## The two checkers, and the Fix-them contract
 
 - **abaplint** (`src/editor/registry.mjs`) answers *does this compile*, against
