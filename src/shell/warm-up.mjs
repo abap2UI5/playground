@@ -36,11 +36,12 @@ const FIRST_LOAD = (theme) => [
 
 export function warmUpAppFrame(theme) {
   for (const rel of FIRST_LOAD(theme)) {
-    // The answer is not read: landing in the cache is the whole point. A
-    // failure is not worth reporting either - the frame will ask again, and
-    // its failure is the one that means something.
+    // The bytes are read to the end and dropped: a response whose body is
+    // cancelled is a download aborted half way, and nothing half way lands in
+    // a cache. A failure is not worth reporting either - the frame will ask
+    // again, and its failure is the one that means something.
     fetch(new URL(rel, document.baseURI), { priority: "low" })
-      .then((r) => r.body?.cancel())
+      .then((r) => r.arrayBuffer())
       .catch(() => {});
   }
 }
