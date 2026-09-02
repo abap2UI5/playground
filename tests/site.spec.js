@@ -47,6 +47,23 @@ test("the corpus carries the framework and leaves out its generated frontend", a
   expect(names.filter((n) => n.startsWith("z2ui5_cl_ui5f_"))).toEqual([]);
 });
 
+// And the same directory stays out of the framework bundle, for the bytes this
+// time: 62 classes holding the frontend's source as string constants, read by
+// nothing the playground ever runs - see generatedFrontendStubPlugin in
+// tools/esbuild-plugins.mjs. The marker is a line of the frontend's own
+// JavaScript (core/Server.js), which only those classes carry as text.
+//
+// Asserted as booleans on purpose: a toContain( ) over a six-megabyte string
+// prints the whole string when it fails.
+test("the framework bundle leaves the generated frontend out as well", async ({ request }) => {
+  const bundle = await (await request.get("/runtime/framework.mjs")).text();
+  expect(bundle.includes("z2ui5.checkLocal"), "the generated frontend is in the bundle").toBe(false);
+  // The classes are still there by name, so a reference to one fails with a
+  // sentence rather than with "undefined".
+  expect(bundle.includes("Z2UI5_CL_UI5F_PRELOAD"), "the stub for the generated frontend is missing").toBe(true);
+  expect(bundle.includes("which the playground does not carry"), "the stub's message is missing").toBe(true);
+});
+
 test("a startup failure says what went wrong, not only where", async ({ page }) => {
   // The corpus is the one asset boot( ) cannot do without, so refusing it is
   // the shortest way to a real startup failure.

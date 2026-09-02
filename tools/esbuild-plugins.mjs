@@ -197,3 +197,57 @@ export function abap2ui5LinterPlugin(root) {
     },
   };
 }
+
+// abap2UI5's generated frontend, left out of the framework bundle.
+//
+// abap2UI5 ships its UI5 frontend a second time, as ABAP: src/01/03 is
+// app/webapp generated into z2ui5_cl_ui5f_* classes whose whole content is the
+// frontend's JavaScript, XML, CSS and HTML held as string constants, so a real
+// system can serve it over ICF. The playground serves the frontend from
+// dist/app, built from source, and the only code that reads those classes is
+// the GET branch of z2ui5_cl_ui5_http_handler - the page a browser asks a real
+// system for, which nothing here ever asks for (the bridge POSTs, and the
+// frame's document comes from dist/app). tools/build-site.mjs already keeps
+// them out of the editor's corpus for a different reason (the stack the parse
+// needs on a phone).
+//
+// In the bundle they were 1.7 MB of the 15 MB transpilat - 11% of what a
+// visitor downloads and evaluates for the framework, for text the page never
+// reads. So the bundle gets a stub in each one's place: the same class name,
+// registered under abap.Classes like the real one, whose GET says what is
+// missing rather than leaving a TypeError about undefined for somebody to
+// puzzle over. The transpile itself is untouched - the downport and the
+// syntax check still see the whole tree - so the framework is compiled
+// exactly as it is, and only the bundle leaves these out.
+export const generatedFrontendStubPlugin = {
+  name: "generated-frontend-stub",
+  setup(build) {
+    build.onResolve({ filter: /\/z2ui5_cl_ui5f_[a-z0-9_]+\.clas\.mjs$/ }, (args) => ({
+      path: args.path,
+      namespace: "generated-frontend-stub",
+    }));
+    build.onLoad({ filter: /.*/, namespace: "generated-frontend-stub" }, (args) => {
+      const name = /z2ui5_cl_ui5f_[a-z0-9_]+/.exec(args.path)[0];
+      const upper = name.toUpperCase();
+      const message =
+        `${upper} is abap2UI5's generated UI5 frontend, which the playground does not carry - ` +
+        `it serves the frontend from dist/app instead, and nothing here should reach this class.`;
+      return {
+        loader: "js",
+        contents:
+          `class ${name} {\n` +
+          `  static STATIC_SUPER = undefined;\n` +
+          `  static INTERNAL_TYPE = 'CLAS';\n` +
+          `  static INTERNAL_NAME = ${JSON.stringify(upper)};\n` +
+          `  static IMPLEMENTED_INTERFACES = [];\n` +
+          `  static ATTRIBUTES = {};\n` +
+          `  static METHODS = {};\n` +
+          `  static async get() { throw new Error(${JSON.stringify(message)}); }\n` +
+          `  async constructor_() { throw new Error(${JSON.stringify(message)}); }\n` +
+          `}\n` +
+          `abap.Classes[${JSON.stringify(upper)}] = ${name};\n` +
+          `export { ${name} };\n`,
+      };
+    });
+  },
+};
