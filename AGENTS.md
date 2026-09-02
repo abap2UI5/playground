@@ -18,9 +18,9 @@ them before touching `tools/` or `src/runtime`.
 
 | Path | Purpose |
 | --- | --- |
-| `src/shell/` | The page: boot and Run (`main.mjs`), layout and splitter, toolbar, share links (`share.mjs`), `?src=` deep links (`deep-link.mjs`), the examples browser over the sample repositories' catalogues (`examples.mjs`, filtering by the closed library list in `ui5-libraries.mjs`), the bottom panel (`insight.mjs`), embed messaging (`embed.mjs`), every `localStorage` touch (`storage.mjs`) and what is kept in it between visits (`checker-settings.mjs`) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
+| `src/shell/` | The page: boot and Run (`main.mjs`), layout and splitter, toolbar, share links (`share.mjs`), `?src=` deep links (`deep-link.mjs`), the examples browser over the sample repositories' catalogues (`examples.mjs`, filtering by the closed library list in `ui5-libraries.mjs`), the bottom panel (`insight.mjs`), embed messaging (`embed.mjs`), every `localStorage` touch (`storage.mjs`) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`) and the warm-up of the app frame's first load (`warm-up.mjs`) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
 | `src/editor/` | Monaco plus the abaplint registry (`registry.mjs`), the single-object transpile (`transpile.mjs`), the abap2UI5 linter wrapper (`abap2ui5-lint.mjs`), the file set and the sample catalogue (`samples.mjs`) |
-| `src/runtime/` | The ABAP side of the page: the framework entry (`index.mjs`, `roundtrip()` and `defineClass()`), the sql.js database (`db-setup.mjs`), and the browser shims for Node modules |
+| `src/runtime/` | The ABAP side of the page: the framework entry (`index.mjs`, `roundtrip()` and `defineClasses()`), `worker.mjs` around it, which is the bundle's entry and answers those over `postMessage` when it runs as the worker the page starts, the sql.js database (`db-setup.mjs`), and the browser shims for Node modules |
 | `src/abap/` | The playground's own ABAP (`zcl_pg_bridge`, `zcl_pg_hello`); it travels through the same downport and transpile as the framework |
 | `src/examples/` | ABAP served as static files, so `?src=` has same-origin targets and the link tests depend on no foreign host |
 | `src/embed/` | The embed loader (`abap2ui5-embed.js`) and a worked example page; copied verbatim to `dist/embed/` |
@@ -45,10 +45,16 @@ of each line. Each step is still its own script and still runnable by name
 2. **`tools/build-framework.mjs`** copies the framework plus `src/abap` to
    `build/downport/`, downports to v702 syntax (`abaplint --fix`, ~3 minutes,
    deterministic), transpiles, and esbuild-bundles the result with the runtime
-   and the sql.js setup into `dist/runtime/framework.mjs`. The esbuild flags
-   (`keepNames`, the injected `Buffer`, the console and crypto shims in
+   and the sql.js setup into `dist/runtime/framework.mjs`, from
+   `src/runtime/worker.mjs` as the entry. The esbuild flags (`keepNames`, the
+   injected `Buffer`, the console and crypto shims in
    `tools/esbuild-plugins.mjs`) are all load-bearing — the plan's phase 1
-   findings explain each one. It keeps **two** stamps, not one:
+   findings explain each one. One plugin leaves something *out*:
+   `generatedFrontendStubPlugin` puts a stub in the place of each of the 62
+   `z2ui5_cl_ui5f_*` classes (the UI5 frontend held as ABAP string constants,
+   1.7 MB of the 15 MB transpilat, read only by the GET branch of the http
+   handler, which nothing here calls) — the transpile still sees the whole
+   tree, only the bundle does not carry them. It keeps **two** stamps, not one:
    `downport.stamp` over the sources, and `output.stamp` over what the downport
    *produced* plus the transpiler, `src/runtime` and the esbuild plugins — so
    the transpile and the bundle (about a minute together) are skipped as well
@@ -56,7 +62,8 @@ of each line. Each step is still its own script and still runnable by name
    would have produced is still on disk, so a deleted `dist/` rebuilds rather
    than being cached into a missing site.
 3. **`tools/build-ui5.mjs`** builds the abap2UI5 UI5 frontend against a pinned
-   OpenUI5 (`UI5_VERSION`, from npm — no CDN) into `dist/app/`. The copy into
+   OpenUI5 (`UI5_VERSION` in `src/shell/ui5-libraries.mjs` — the page reads it
+   too, for the warm-up's stylesheet URLs; from npm — no CDN) into `dist/app/`. The copy into
    `dist/app` is its own stamp (`app.stamp`, over the build's input hash and the
    two files `patchFrontend()` rewrites afterwards): it is 155 MB and tens of
    thousands of files, and it used to run on every build including the ones that
@@ -70,18 +77,37 @@ of each line. Each step is still its own script and still runnable by name
    corpus (`dist/editor/corpus.json`), copies examples and the embed kit, and
    writes `dist/sw.js` from `src/shell/sw.js` with an id for this build
    substituted into it. It deletes the directories it owns before writing.
+   The page bundle is **split**: `assets/shell.mjs` is Monaco and abaplint,
+   and what the page only needs later — the transpiler
+   (`src/editor/transpile.mjs`) and the abap2UI5 linter with its UI5 metadata
+   (`src/editor/abap2ui5-lint.mjs`) — is a chunk each, split off wherever the
+   source says `import()`, downloaded during the corpus parse and evaluated
+   when it lands. Two things follow from the hashed chunk names, and both are
+   written by this step rather than by hand: the `modulepreload` tags for the
+   chunks the entry imports statically (a marker in `index.html`; without them
+   a static import is fetched after the bundle instead of beside it), and the
+   list of chunks the service worker precaches (a marker in `sw.js`). The size
+   budget is over `assets/*.mjs` as a sum, so a module that moved into a chunk
+   has not gotten any smaller.
 
 At run time the pieces meet like this: the UI5 frontend runs in an iframe and
 POSTs to its backend with a plain `fetch`; `frontend-bridge.js` replaces
 `window.fetch` for exactly that one request (comparing origin and pathname
-only — the run counter lives in the query) and hands the body to the transpiled
-handler in the parent page. It also makes the frame decline the focus while the
+only — the run counter lives in the query) and hands the body to the parent
+page, which hands it to the transpiled handler — running in a **dedicated
+worker** the page started (`src/shell/runtime-client.mjs`,
+`src/runtime/worker.mjs`), so the framework's evaluation and every roundtrip
+happen off the thread the editor paints on. It also makes the frame decline the focus while the
 shell has a dialog open: UI5 focuses a control as a render settles, and
 `showModal()` cannot make another document inert, so a frame that takes the
 focus swallows what is typed into the dialog and the Escape that would close it.
 The drafts abap2UI5 keeps in a database live in an in-memory SQLite — sql.js,
 compiled to WebAssembly. Run means: a fresh database, then reload the iframe
-with `?app_start=<CLASS>&run=<n>`.
+with `?app_start=<CLASS>&run=<n>`. "Fresh" is SQLite reopened on an image of
+the empty database taken once after the transpiled init seeded it
+(`db-setup.mjs`) — under a millisecond, where rebuilding it from the DDL (27
+tables, 724 seed rows) was 85 ms per Run on a desk and several times that on
+a phone.
 
 `PG_DEBUG=1` builds the page and framework bundles unminified with source maps;
 without it neither ships one.
@@ -89,47 +115,88 @@ without it neither ships one.
 ## What a visitor waits for
 
 Four assets stand between opening the page and an app on screen, and
-`tools/check-size.mjs` budgets all four: the shell bundle (~1.4 MB compressed,
-Monaco and abaplint and the transpiler), the transpiled framework (~0.7 MB),
-the ABAP corpus (~0.4 MB) and SQLite (~0.3 MB). About three megabytes, and
-then several seconds of processor to parse them. The same file carries a fifth
+`tools/check-size.mjs` budgets all four: the page bundle with its chunks
+(~1.5 MB compressed — Monaco and abaplint in `shell.mjs`, the transpiler and
+the abap2UI5 linter as chunks), the transpiled framework (~0.6 MB), the ABAP
+corpus (~0.4 MB) and SQLite (~0.3 MB). About three megabytes, and then
+several seconds of processor to parse them. The same file carries a fifth
 budget that is not a size at all — how much **JavaScript stack** the boot parse
-may want, which is the third trap below. Two things keep the wait from being
-worse than it is, and both have to be kept in step with the code:
+may want, which is the third trap below.
 
-- **The preloads in `src/shell/index.html`.** Left alone these four arrive in a
-  chain — nothing asks for the framework or the corpus until the shell bundle
-  has downloaded *and evaluated*, and nothing asks for SQLite until the
-  framework has. The `modulepreload` and `preload` tags start all of them with
-  the document instead. Measured against a built `dist/` served with gzip: no
-  difference where bandwidth is the whole story (4 Mbit/s, 100 ms: 11.8 s
-  either way), and about 10% where round trips cost anything (12 Mbit/s,
-  300 ms: 9.0 s → 8.0 s; 50 Mbit/s, 40 ms: 5.8 s → 5.2 s). A preload that
-  nothing collects is downloaded twice and warned about in the console, so if
-  what the page fetches changes, these change with it.
+Measured on a built `dist/`, localhost, Chromium, from opening the page to
+"running": 3.8 s before the round of changes that produced the shape below,
+3.4 s after; with a 4x CPU throttle, 17.5 s → 14.6 s. What is left is the
+corpus parse (about 2 s of it, 8 s throttled, and it is abaplint's), the
+bundle's evaluation, and the app frame's own boot. Four things keep the wait
+from being worse than it is, and all four have to be kept in step with the
+code:
+
+- **The framework runs in a worker, started by an inline script at the top of
+  `src/shell/index.html`** — before the shell bundle has arrived, so its
+  download and evaluation (0.85 s on a desk, several seconds on a phone) move
+  with the document and on a thread of their own. On the page's thread they
+  used to sit in front of the corpus parse: throttled, the corpus had landed
+  at 0.2 s and abaplint could not start on it until 7.1 s. Two consequences
+  of being that early, both held by `tests/site.spec.js`: what the worker says
+  before the bundle is listening (`ready`, or an error) is buffered by the
+  inline script and replayed by `runtime-client.mjs`; and a worker script
+  Chromium could not fetch fires **no** error event for a module worker, so
+  the client probes it by `HEAD` at the one moment the page is waiting on a
+  runtime that has not spoken.
+- **The preloads in `src/shell/index.html`.** The corpus (`preload`), and the
+  chunks `shell.mjs` imports statically (`modulepreload`, written by the
+  build). Left alone each would arrive in a chain behind the file that asks
+  for it. Measured when the framework was still an import: no difference where
+  bandwidth is the whole story (4 Mbit/s, 100 ms: 11.8 s either way), and
+  about 10% where round trips cost anything (12 Mbit/s, 300 ms: 9.0 s →
+  8.0 s; 50 Mbit/s, 40 ms: 5.8 s → 5.2 s). A preload that nothing collects is
+  downloaded twice and warned about in the console, so if what the page
+  fetches changes, these change with it — and that is why SQLite's `.wasm` is
+  no longer preloaded: the worker fetches it, and a document's preload does
+  not reach a worker's fetch.
+- **The warm-up of the app frame** (`src/shell/warm-up.mjs`). Nothing asked
+  for UI5 until Run set the frame's src, which is the last thing boot does —
+  so the frame's megabyte and a half (the core, two library preloads, the two
+  theme stylesheets, the component) started at the very end of the chain,
+  after seconds of idle network. Once the corpus has landed the page fetches
+  that list at low priority, into the HTTP cache the frame's own requests hit
+  (Pages serves with a ten-minute max-age; the test server on purpose does
+  not, so `tests/app.spec.js` holds the asking, not the hitting). The list
+  mirrors what the frame loads first and may go stale harmlessly.
 - **The service worker** (`src/shell/sw.js`, `tests/worker.spec.js`). Cache
   first, over an allow list, in a cache named after the build. Its own comment
-  is the long form: what it caches, what it deliberately leaves live (the app
-  frame's document, linked ABAP, the catalogues), and why it neither calls
-  `skipWaiting()` nor claims the page that registered it. `main.mjs` registers
-  it last thing in `boot()`, after the first run.
+  is the long form: what it caches (the core assets and the chunks by name,
+  everything under `app/` except the frame's document — *with* the queries
+  UI5 puts on its stylesheets and manifest, which name the build, not a
+  moment), what it deliberately leaves live (the app frame's document, linked
+  ABAP, the catalogues), and why it neither calls `skipWaiting()` nor claims
+  the page that registered it. `main.mjs` registers it last thing in
+  `boot()`, after the first run.
 
 The registry parse is the processor half, and it is
 [yielded on a clock](src/editor/registry.mjs) rather than on a count of objects
-so the page keeps painting through it. Applying an edited abaplint
-configuration goes through the same path, because changing a rule dirties every
-object in the corpus and costs the whole parse again.
+so the page keeps painting through it. The yield is a message posted to
+ourselves, not `scheduler.yield()`: that one's continuation runs ahead of
+ordinary tasks, so the parse starved the runtime worker's `ready` message and
+the evaluation of the chunks as they landed until it was over — and the page
+then paid for all of it in a lump, right where it was next waiting. Applying
+an edited abaplint configuration goes through the same path, because changing
+a rule dirties every object in the corpus and costs the whole parse again.
 
 Two orderings in `boot()` keep those costs overlapping rather than stacking,
 and both are easy to undo by accident:
 
-- **The framework import and the corpus fetch start before anything is
-  awaited.** They used to be started after `startingFiles()`, which is instant
-  for a draft or a sample and is two round trips to GitHub for a `?src=` link —
-  the linked class, then the classes beside it — which is the path every Run
-  button in the documentation takes. The preloads had the *bytes* moving with
-  the document already; what still waited on the link was every bit of processor
-  work behind them.
+- **The runtime's handle and the corpus fetch start before anything is
+  awaited**, and the transpiler and linter chunks are asked for the moment
+  the corpus has landed, so they download during the parse. They used to be
+  started after `startingFiles()`, which is instant for a draft or a sample
+  and is two round trips to GitHub for a `?src=` link — the linked class, then
+  the classes beside it — which is the path every Run button in the
+  documentation takes. The preloads had the *bytes* moving with the document
+  already; what still waited on the link was every bit of processor work
+  behind them. The linter arriving after the first analysis is the one
+  wrinkle: `boot()` invalidates the kept analysis and asks again when it
+  lands, and `abap2ui5-lint.mjs` answers "no findings" until then.
 - **`buildRegistry()` takes the files as a promise, not a list.** The corpus is
   nine hundred objects and several seconds, and none of it depends on what the
   user is about to edit — so it parses against itself, and the handful of files
@@ -398,6 +465,12 @@ try/catch that reports a startup failure, so that throw left the page on
   what somebody control-clicks into to find out how the framework does
   something. Reading the framework is the playground; a tenth of the download
   does not buy it.
+- **The generated frontend is a stub in the framework bundle.** The 62
+  `z2ui5_cl_ui5f_*` classes are registered by name and throw a sentence from
+  `get()`; only the http handler's GET branch reads them, and the playground
+  never GETs — the frame's document comes from `dist/app`. Wiring that branch
+  up would mean carrying 1.7 MB of frontend text a second time for nothing
+  on screen.
 - **The `?src=` host allow list stays short.** The playground fetches on
   behalf of whoever opened the link and must not become a general-purpose
   reader for arbitrary URLs.

@@ -272,9 +272,9 @@ seconds.
 |---|---|
 | `tools/build.mjs` | what `npm run build` runs: the four below, the middle two together |
 | `tools/fetch-deps.mjs` | pins abap2UI5 and open-abap-core by commit under `deps/` |
-| `tools/build-framework.mjs` | downport → transpile → `dist/runtime/framework.mjs` |
+| `tools/build-framework.mjs` | downport → transpile → `dist/runtime/framework.mjs`, the worker the page runs the framework in |
 | `tools/build-ui5.mjs` | the abap2UI5 frontend built against OpenUI5 → `dist/app/` |
-| `tools/build-site.mjs` | the page bundle, the ABAP corpus the editor uses, and the service worker |
+| `tools/build-site.mjs` | the page bundle and its chunks, the ABAP corpus the editor uses, and the service worker |
 | `tools/check-size.mjs` | the budget for what a visitor downloads |
 
 `PG_DEBUG=1` builds the page and framework bundles unminified and with source
@@ -289,7 +289,7 @@ files so `?src=` has something to point at.
 
 ```sh
 node tools/fetch-deps.mjs --print-latest   # what upstream has today
-# edit the sha in tools/fetch-deps.mjs (or UI5_VERSION in tools/build-ui5.mjs)
+# edit the sha in tools/fetch-deps.mjs (or UI5_VERSION in src/shell/ui5-libraries.mjs)
 npm run build && npm test
 ```
 
