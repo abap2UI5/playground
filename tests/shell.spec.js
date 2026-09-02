@@ -119,10 +119,11 @@ test("a link nobody wrote opens on the sample instead of failing", async ({ page
   expect(await getSource(page)).toContain("CLASS zcl_playground DEFINITION");
 });
 
-test("the Undo button takes the last edit back, and is inactive when there is none", async ({ page }) => {
+test("Undo takes the last edit back, Redo brings it again, and both are inactive when they cannot", async ({ page }) => {
   await open(page);
-  // A sample as it was opened has nothing to take back.
+  // A sample as it was opened has nothing to take back, nothing to do again.
   await expect(page.locator("#undo")).toBeDisabled();
+  await expect(page.locator("#redo")).toBeDisabled();
 
   const original = await getSource(page);
   // Through the undo stack, the way typing and Fix them go - setValue( ), which
@@ -135,8 +136,22 @@ test("the Undo button takes the last edit back, and is inactive when there is no
 
   await page.locator("#undo").click();
   await expect.poll(() => getSource(page)).toBe(original);
-  // One edit, so one press took the whole of it back.
+  // One edit, so one press took the whole of it back - and it is there to redo.
   await expect(page.locator("#undo")).toBeDisabled();
+  await expect(page.locator("#redo")).toBeEnabled();
+
+  await page.locator("#redo").click();
+  await expect.poll(() => getSource(page)).toContain("about to be undone");
+  await expect(page.locator("#redo")).toBeDisabled();
+});
+
+test("Ctrl+S runs, instead of offering to save the page", async ({ page }) => {
+  await open(page);
+  const before = await page.locator("#app").getAttribute("src");
+  await page.locator("#editor").click();
+  await page.keyboard.press("Control+s");
+  await expect(page.locator("#app")).not.toHaveAttribute("src", before ?? "", { timeout: 60000 });
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
 });
 
 test("the editor content survives a reload", async ({ page }) => {
@@ -148,13 +163,24 @@ test("the editor content survives a reload", async ({ page }) => {
   expect(await getSource(page)).toContain("kept across a reload");
 });
 
-test("picking a sample replaces the draft", async ({ page }) => {
+test("picking a sample replaces the draft, and leaves it one Undo away", async ({ page }) => {
   await open(page);
   await setSource(page, (await getSource(page)).replace("Hello abap2UI5", "about to be replaced"));
 
   await runSample(page, "counter");
   expect(await getSource(page)).not.toContain("about to be replaced");
   expect(await getSource(page)).toContain("Counter");
+  // Said, because the click just wrote over somebody's work.
+  await expect(page.locator("#status")).toContainText("one Undo away");
+
+  // And it is: the sample went in through the undo stack, not over it.
+  await expect(page.locator("#undo")).toBeEnabled();
+  await page.locator("#undo").click();
+  await expect.poll(() => getSource(page)).toContain("about to be replaced");
+  // A sample opened over a sample says nothing - there was no work to lose.
+  await runSample(page, "hello");
+  await runSample(page, "counter");
+  await expect(page.locator("#status")).toHaveText("running");
 });
 
 test("a sample that was only read is not kept as a draft", async ({ page }) => {
@@ -250,7 +276,7 @@ test("the bar keeps to a few rows on a phone", async ({ page }) => {
   expect(bar.height, "the bar is not a fifth of the phone").toBeLessThan(100);
 
   // And nothing that has to be reachable was compacted away with the rows.
-  for (const id of ["#undo", "#format", "#examples", "#run", "#share", "#source-link", "#status", "#about"]) {
+  for (const id of ["#undo", "#redo", "#format", "#examples", "#run", "#share", "#source-link", "#status", "#about"]) {
     await expect(page.locator(id)).toBeVisible();
   }
 });

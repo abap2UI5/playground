@@ -21,9 +21,13 @@
 // needed, a file it starts asking for is one it fetches itself as before.
 // Nothing here can break the app. The two stylesheets carry the query UI5
 // puts on them, because a cache is keyed on the whole URL.
+//
+// The service worker precaches the same list, for both themes, so a second
+// visit runs its first app without the network at all - tools/build-site.mjs
+// writes it into sw.js, which as a plain script cannot import this.
 import { UI5_VERSION } from "./ui5-libraries.mjs";
 
-const FIRST_LOAD = (theme) => [
+export const appFirstLoad = (theme) => [
   "app/resources/sap-ui-core.js",
   "app/resources/sap/ui/core/library-preload.js",
   `app/resources/sap/ui/core/themes/${theme}/library.css?sap-ui-dist-version=${UI5_VERSION}`,
@@ -35,7 +39,7 @@ const FIRST_LOAD = (theme) => [
 ];
 
 export function warmUpAppFrame(theme) {
-  for (const rel of FIRST_LOAD(theme)) {
+  for (const rel of appFirstLoad(theme)) {
     // The bytes are read to the end and dropped: a response whose body is
     // cancelled is a download aborted half way, and nothing half way lands in
     // a cache. A failure is not worth reporting either - the frame will ask

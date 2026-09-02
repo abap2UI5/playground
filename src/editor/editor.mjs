@@ -162,11 +162,24 @@ export function closeFile(name) {
   onChange?.(getFiles());
 }
 
-// Replaces everything - what loading a sample or a shared link does.
+// Replaces everything - what loading a sample or a catalogued example does.
+//
+// Through the undo stack where it can: a file that is open under the same
+// name is rewritten in place rather than disposed and recreated, so what was
+// there - a draft somebody had been typing for an hour and then clicked a
+// sample over - is one Ctrl+Z away instead of gone. Files the new set does
+// not have are closed; files it adds are created. Every sample starts in
+// the same main file, so the draft's main file is always kept this way.
 export function setFiles(files) {
-  for (const model of monaco.editor.getModels()) model.dispose();
+  const wanted = new Set(files.map((f) => f.name));
+  for (const model of monaco.editor.getModels()) {
+    if (model.uri.scheme === "file" && !wanted.has(model.uri.path.replace(/^\//, ""))) model.dispose();
+  }
   modelGeneration += 1;
-  for (const file of files) createModel(file);
+  for (const file of files) {
+    if (modelFor(file.name)) writeSource(file.name, file.source);
+    else createModel(file);
+  }
   editor.setModel(modelFor(files[0].name));
   if (connected) refresh();
   onChange?.(getFiles());
@@ -222,6 +235,7 @@ function analyse() {
 
   const key = analysisKey();
   if (key === analysis.key) return analysis;
+  if (key !== transpilerKey) forgetTranspilerProblems();
 
   const files = getFiles();
   updateFiles(files);
@@ -298,10 +312,65 @@ function analyse() {
 // into the gutters. Returns everything wrong with everything open, so the
 // caller can decide whether a run is worth attempting.
 export function refresh() {
-  return analyse().problems;
+  const problems = analyse().problems;
+  return transpilerProblems.length === 0 ? problems : [...problems, ...transpilerProblems];
 }
 
 const ABAPLINT_OWNER = "abaplint";
+
+// What the transpiler refused, at the line it named. A third source beside
+// the two checkers, with a life of its own: it is not part of the analysis,
+// because it is not computed from the text but reported by a Run - and it
+// goes away the moment the text changes, because the next Run will say again
+// whatever is still true. Until then it is underlined and listed, so "the
+// transpiler cannot compile this" points at a line rather than at the Log.
+const TRANSPILER_OWNER = "transpiler";
+let transpilerProblems = [];
+let transpilerKey;
+
+export function reportTranspilerProblems(found) {
+  transpilerKey = analysisKey();
+  transpilerProblems = [];
+  const byFile = new Map();
+  for (const { file, line, message } of found) {
+    if (!modelFor(file)) continue;
+    transpilerProblems.push({
+      file,
+      source: "transpiler",
+      severity: 1,
+      message,
+      range: { start: { line: line - 1, character: 0 } },
+    });
+    if (!byFile.has(file)) byFile.set(file, []);
+    byFile.get(file).push({ line, message });
+  }
+  for (const [file, list] of byFile) {
+    const model = modelFor(file);
+    monaco.editor.setModelMarkers(
+      model,
+      TRANSPILER_OWNER,
+      list.map(({ line, message }) => ({
+        severity: monaco.MarkerSeverity.Error,
+        message: `${message}  (transpiler)`,
+        startLineNumber: line,
+        startColumn: 1,
+        endLineNumber: line,
+        endColumn: model.getLineMaxColumn(line),
+      })),
+    );
+  }
+}
+
+// Dropped as soon as the text they were about has changed. Called from
+// analyse( ) on every fresh key, which is exactly that moment.
+function forgetTranspilerProblems() {
+  if (transpilerProblems.length === 0) return;
+  transpilerProblems = [];
+  transpilerKey = undefined;
+  for (const model of monaco.editor.getModels()) {
+    if (model.uri.scheme === "file") monaco.editor.setModelMarkers(model, TRANSPILER_OWNER, []);
+  }
+}
 
 // The language server speaks LSP severities; Monaco has its own numbers. Only
 // the two @abaplint/monaco mapped are mapped here, and for the same reason:
@@ -342,9 +411,16 @@ export function undo() {
   editor.focus();
 }
 
-// Whether that button has anything to do. Asked after every change and every
-// file switch; a button that does nothing when pressed is worse than none.
+export function redo() {
+  editor.trigger("bar", "redo", null);
+  editor.focus();
+}
+
+// Whether those buttons have anything to do. Asked after every change and
+// every file switch; a button that does nothing when pressed is worse than
+// none.
 export const canUndo = () => editor?.getModel()?.canUndo() ?? false;
+export const canRedo = () => editor?.getModel()?.canRedo() ?? false;
 
 // Completion over the names of the classes and interfaces the registry knows -
 // the framework's and the user's own.

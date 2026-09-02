@@ -8,9 +8,10 @@
 // import that drags a second copy of abaplint into the page bundle, a corpus
 // that stopped being filtered, a UI5 build that stopped being trimmed.
 //
-// The numbers are the measured sizes with room above them, not aspirations.
-// Raising one is fine - it is a line in a commit that says the cost was
-// accepted, which is the whole point.
+// The numbers are the measured sizes with a little room above them, not
+// aspirations - close enough that a stray import shows up as red rather than
+// as a number nobody looks at. Raising one is fine - it is a line in a commit
+// that says the cost was accepted, which is the whole point.
 //
 // The second budget is not a size. Starting the playground parses nine hundred
 // ABAP objects with abaplint, whose statement parser is a tree of recursive
@@ -36,10 +37,10 @@ const MB = 1024 * 1024;
 // the budget is over their sum: a chunk is still a download, and a module
 // that moved from the entry into a chunk has not gotten any smaller.
 const TRANSFERRED = [
-  { file: "assets/*.mjs", limit: 3.5 * MB, note: "Monaco, abaplint, the transpiler and the abap2UI5 linter" },
-  { file: "runtime/framework.mjs", limit: 1.5 * MB, note: "abap2UI5 and open-abap, transpiled" },
-  { file: "editor/corpus.json", limit: 1.5 * MB, note: "the ABAP sources the editor checks against" },
-  { file: "runtime/sql-wasm.wasm", limit: 0.5 * MB, note: "SQLite" },
+  { file: "assets/*.mjs", limit: 1.8 * MB, note: "Monaco, abaplint, the transpiler and the abap2UI5 linter" },
+  { file: "runtime/framework.mjs", limit: 0.8 * MB, note: "abap2UI5 and open-abap, transpiled" },
+  { file: "editor/corpus.json", limit: 0.6 * MB, note: "the ABAP sources the editor checks against" },
+  { file: "runtime/sql-wasm.wasm", limit: 0.4 * MB, note: "SQLite" },
 ];
 
 // The whole site. Most of it is UI5, which is fetched a bundle at a time and

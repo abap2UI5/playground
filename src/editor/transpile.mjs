@@ -89,7 +89,11 @@ export async function compile(files) {
       keywords: ["return", "in", "class", "for", "delete", "var", "with"],
     }).run(view);
   } catch (e) {
-    throw new Error(transpilerMessage(e));
+    const error = new Error(transpilerMessage(e));
+    // The same lines, structured, for the editor to underline - see
+    // reportTranspilerProblems( ) in editor.mjs.
+    error.problems = transpilerProblems(e);
+    throw error;
   } finally {
     view.setConfig(editorConfig);
     reg.parse();
@@ -158,6 +162,18 @@ const rank = (o) => (o.object.type === "INTF" ? 0 : 1);
 // Transpiler errors arrive as one string with a line per problem, each of them
 // "rule, message, file:row". The file name in it is a uri; the reader knows the
 // file by its plain name.
+// The lines that name a file and a row, as problems the editor can point at.
+// A line without one - a rule that speaks about the whole object - stays in
+// the log text alone.
+function transpilerProblems(e) {
+  const out = [];
+  for (const line of String(e?.message ?? e).split("\n")) {
+    const match = /^(.*), file:\/\/\/([^:]+):(\d+)$/.exec(line);
+    if (match) out.push({ file: match[2], line: Number(match[3]), message: match[1] });
+  }
+  return out;
+}
+
 function transpilerMessage(e) {
   const raw = String(e?.message ?? e);
   const lines = raw

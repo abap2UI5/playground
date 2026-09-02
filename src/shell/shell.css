@@ -105,6 +105,15 @@ button.ghost { border: none; background: none; color: var(--fg-dim); padding: 0 
    text so it reads as a symbol rather than as a stray character. */
 button.icon { padding: .2rem .55rem; font-size: 1.15em; line-height: 1.2; }
 
+/* The shortcuts in the About dialog. */
+.about-keys { display: grid; grid-template-columns: max-content 1fr; gap: .35rem .9rem; margin: .5rem 0; }
+.about-keys dt { white-space: nowrap; }
+.about-keys dd { margin: 0; color: var(--fg-dim); }
+kbd {
+  font: 12px var(--font-mono); padding: .05rem .35rem; border-radius: 4px;
+  border: 1px solid var(--line); border-bottom-width: 2px; background: var(--bg);
+}
+
 /* The samples browser: the one way to a sample now that there is no menu, so
    it is the one button in the bar dressed to be clicked - the accent as an
    outline rather than a fill, which stays Run's. */
@@ -113,7 +122,10 @@ button.invite {
   border-color: var(--accent);
   font-weight: 600;
 }
-button.invite::before { content: "✦ "; }
+/* The glyph is decoration, and the alternative-text form of `content` says so
+   to a screen reader; a browser without that syntax drops the declaration and
+   shows the plain label, which is fine. */
+button.invite::before { content: "✦ " / ""; }
 button.invite:hover:not(:disabled) { background: var(--accent); color: var(--accent-fg); }
 
 select {
@@ -612,13 +624,15 @@ button.insight-row {
   /* The bar is the one cost on this page that is paid before anything is
      looked at, and on a phone it was four wrapped rows - a fifth of the screen,
      before the editor or the app got any of it. So what is said twice goes:
-     the brand's second word and the version line, which the About dialog
-     carries as well. What is left is packed tighter, and the spacer that
-     holds the right-hand group at the edge goes, so it stops pushing the
-     last control onto a row of its own. */
-  .bar { gap: .35rem; padding: .35rem .5rem; }
-  .bar button { padding: .3rem .6rem; }
-  .brand-dim,
+     the brand, which the About dialog carries as well as the version line,
+     and the version line itself. What is left is packed tighter, and the
+     spacer that holds the right-hand group at the edge goes, so it stops
+     pushing the last control onto a row of its own. Two rows of controls
+     is what fits a 390px phone; tests/shell.spec.js holds the height. */
+  .bar { gap: .3rem; padding: .3rem .4rem; }
+  .bar button, .bar .source-link { padding: .3rem .5rem; }
+  .bar button.icon { padding: .2rem .45rem; }
+  .brand,
   .versions,
   .spacer { display: none; }
 

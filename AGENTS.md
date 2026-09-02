@@ -226,8 +226,8 @@ both are easy to undo by tidying up:
 
 - **The bar compacts rather than wrapping.** At desk width it is one row; on a
   phone it wrapped to four — a fifth of the screen, spent before the editor or
-  the app got any of it. What repeats itself goes (the brand's second word, the
-  version line, which the About dialog carries as well), the paddings shrink,
+  the app got any of it. What repeats itself goes (the brand and the version
+  line, which the About dialog carries as well), the paddings shrink,
   and the `.spacer` that holds the right-hand group at the edge is dropped so
   it stops pushing the last control onto a row of its own. Nothing is *removed*:
   every control is still there and still reachable, which is what
@@ -317,7 +317,10 @@ deploy — readers get the published playground, never your checkout.
 - **`?src=<url>`** (`src/shell/deep-link.mjs`): opens ABAP from same-origin or
   GitHub's raw hosts (`raw.githubusercontent.com`,
   `gist.githubusercontent.com`) — an allow list on purpose, not an open read
-  proxy. Several `src` parameters open several files; **the first file is the
+  proxy. A `github.com/<o>/<r>/blob/<ref>/<path>` page URL, which is what a
+  reader copies out of the address bar, is translated to the raw file behind
+  it before the list looks at it (`rawFor()`). Several `src` parameters open
+  several files; **the first file is the
   app**. Classes the app needs are looked for beside it: siblings only, at most
   6 files, 2 levels deep, silent when a name is not found.
 - **`?embed=1`**: drops the chrome, and never reads or writes the stored

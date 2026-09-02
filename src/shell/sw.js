@@ -50,6 +50,14 @@ const BASE = new URL(self.registration.scope);
 // which is the only place that knows their names.
 const CHUNKS = __CHUNKS__;
 
+// What the app frame loads first, in both themes - the same list the page
+// warms the HTTP cache with on a first visit (src/shell/warm-up.mjs), written
+// in by the build as well. Precached so that a second visit's first Run needs
+// nothing from the network either: everything else the frame asks for is
+// kept as it is used, and this is the part it asks for before anything is
+// on screen.
+const APP_FIRST_LOAD = __APP_FIRST_LOAD__;
+
 // The heavy, unchanging assets - the ones check-size.mjs budgets, plus the
 // stylesheet that comes with the bundle. These are what a visitor waits for.
 const CORE = [
@@ -72,7 +80,7 @@ self.addEventListener("install", (event) => {
     (async () => {
       const cache = await caches.open(CACHE);
       await Promise.allSettled(
-        CORE.map(async (rel) => {
+        [...CORE, ...APP_FIRST_LOAD].map(async (rel) => {
           const url = new URL(rel, BASE);
           const response = await fetch(url, { credentials: "same-origin" });
           if (response.status === 200) await cache.put(url, response);

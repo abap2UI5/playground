@@ -108,7 +108,7 @@ const BROKEN_CHECKS = {
     // abaplint says the ABAP does not compile, so Run refuses.
     before: async (page) => {
       await expect(page.locator("#status")).toContainText("error");
-      await expect(page.locator(".insight-row", { hasText: /implement/i }).first()).toBeVisible();
+      await expect(page.locator("#insight-body .insight-row", { hasText: /implement/i }).first()).toBeVisible();
     },
     rendered: "abaplint: a method with no implementation",
   },
@@ -116,7 +116,7 @@ const BROKEN_CHECKS = {
     // Valid ABAP: it starts, and the finding is about the view it built.
     before: async (page) => {
       await expect(page.locator("#status")).toHaveText("running");
-      await expect(page.locator(".insight-row", { hasText: /namespace/i }).first()).toBeVisible();
+      await expect(page.locator("#insight-body .insight-row", { hasText: /namespace/i }).first()).toBeVisible();
     },
     rendered: "abap2UI5 lint: a namespace nobody declared",
   },

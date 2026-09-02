@@ -11,6 +11,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
 import { abap2ui5LinterPlugin, nodeStubPlugin } from "./esbuild-plugins.mjs";
+import { appFirstLoad } from "../src/shell/warm-up.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "src", "shell");
@@ -223,16 +224,22 @@ function writeServiceWorker() {
   for (const entry of listing(path.join(DIST, "app")).sort()) id.update(entry);
 
   const source = fs.readFileSync(path.join(SHELL, "sw.js"), "utf8");
-  for (const marker of ["__BUILD_ID__", "__CHUNKS__"]) {
+  for (const marker of ["__BUILD_ID__", "__CHUNKS__", "__APP_FIRST_LOAD__"]) {
     if (!source.includes(marker)) {
       console.error(`build-site: ERROR src/shell/sw.js no longer has a ${marker} to substitute`);
       process.exit(1);
     }
   }
   const build = id.digest("hex").slice(0, 16);
+  // The frame's first load in both themes, for the worker to precache - the
+  // list the page warms the HTTP cache with, so the two cannot drift apart.
+  const firstLoad = [...new Set([...appFirstLoad("sap_horizon"), ...appFirstLoad("sap_horizon_dark")])];
   fs.writeFileSync(
     path.join(DIST, "sw.js"),
-    source.replaceAll("__BUILD_ID__", build).replace("__CHUNKS__", JSON.stringify(chunks())),
+    source
+      .replaceAll("__BUILD_ID__", build)
+      .replace("__CHUNKS__", JSON.stringify(chunks()))
+      .replace("__APP_FIRST_LOAD__", JSON.stringify(firstLoad)),
   );
   log(`sw.js (build ${build})`);
 }

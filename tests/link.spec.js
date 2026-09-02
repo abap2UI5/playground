@@ -104,6 +104,26 @@ test("a link to somewhere the playground will not fetch from says so", async ({ 
   expect(await getSource(page)).toContain("CLASS zcl_playground DEFINITION");
 });
 
+test("a github.com page URL is read as the raw file behind it", async ({ page }) => {
+  // What a reader copies out of the address bar, not what a machine builds.
+  const blob = "https://github.com/abap2UI5/samples/blob/main/src/zcl_blob_example.clas.abap";
+  const raw = "https://raw.githubusercontent.com/abap2UI5/samples/main/src/zcl_blob_example.clas.abap";
+  const asked = [];
+  await page.route("https://raw.githubusercontent.com/**", async (route) => {
+    asked.push(route.request().url());
+    const source = (await page.request.get("/examples/zcl_linked_example.clas.abap").then((r) => r.text()))
+      .replaceAll("zcl_linked_example", "zcl_blob_example");
+    await route.fulfill({ status: 200, contentType: "text/plain", body: source });
+  });
+
+  await page.goto(`/?src=${encodeURIComponent(blob)}`);
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  expect(asked).toContain(raw);
+  expect(await getSource(page, "zcl_blob_example.clas.abap")).toContain("CLASS zcl_blob_example DEFINITION");
+  // And the way back is the page the reader started from.
+  await expect(page.locator("#source-link")).toHaveAttribute("href", blob);
+});
+
 test("a link to a file that is not an ABAP object says so", async ({ page }) => {
   await page.goto("/?src=index.html");
   await expect(page.locator(".log-body")).toBeVisible({ timeout: 120000 });

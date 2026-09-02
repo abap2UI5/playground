@@ -9,6 +9,7 @@
 import "./shell.css";
 
 import {
+  canRedo,
   canUndo,
   connectRegistry,
   createEditor,
@@ -17,7 +18,9 @@ import {
   format,
   getFiles,
   invalidateAnalysis,
+  redo,
   refresh,
+  reportTranspilerProblems,
   setFiles,
   undo,
 } from "../editor/editor.mjs";
@@ -56,6 +59,7 @@ const STORAGE_KEY = "abap2ui5-playground:files";
 
 const runButton = document.getElementById("run");
 const undoButton = document.getElementById("undo");
+const redoButton = document.getElementById("redo");
 const formatButton = document.getElementById("format");
 const shareButton = document.getElementById("share");
 const fullscreenButton = document.getElementById("fullscreen");
@@ -299,7 +303,11 @@ async function boot() {
   runButton.addEventListener("click", runAndShow);
   undoButton.addEventListener("click", () => {
     undo();
-    reflectUndo();
+    reflectHistory();
+  });
+  redoButton.addEventListener("click", () => {
+    redo();
+    reflectHistory();
   });
   formatButton.addEventListener("click", () => format());
   shareButton.addEventListener("click", () => share());
@@ -312,8 +320,11 @@ async function boot() {
   // keeps the theme it started with until the next Run.
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => applyFrameTheme());
 
+  // Ctrl+S as well as Ctrl+Enter: the hand that has typed in an editor for
+  // twenty years presses it, and a browser answers with a dialog for saving
+  // the page as HTML, which nobody has ever wanted here.
   document.addEventListener("keydown", (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+    if ((e.metaKey || e.ctrlKey) && (e.key === "Enter" || e.key === "s" || e.key === "S")) {
       e.preventDefault();
       runAndShow();
     }
@@ -387,15 +398,16 @@ function applyFrameTheme() {
 // the link to where it came from, and so is what Undo has to take back.
 function fileOpened() {
   showSourceLink();
-  reflectUndo();
+  reflectHistory();
   updateInsight(refresh());
 }
 
-// The Undo button follows the open file's undo stack: live while there is an
-// edit to take back, inactive over a file as it was opened. Monaco keeps the
-// stack per model, so switching files switches what the button means.
-function reflectUndo() {
+// Undo and Redo follow the open file's history: live while there is an edit
+// to take back or to do again, inactive otherwise. Monaco keeps the stack per
+// model, so switching files switches what the buttons mean.
+function reflectHistory() {
   undoButton.disabled = !canUndo();
+  redoButton.disabled = !canRedo();
 }
 
 // The way back to where linked code lives, following whichever file is open.
@@ -420,7 +432,7 @@ export function showSourceLink() {
 function remember(files) {
   renderFiles();
   showSourceLink();
-  reflectUndo();
+  reflectHistory();
   // The editor has already re-checked by the time this runs (both hang off the
   // same debounce), and the analysis is kept under a key made of the models'
   // version ids - so this reads that result back rather than running a second
@@ -444,14 +456,33 @@ function remember(files) {
   }
 }
 
-// A built-in sample, chosen in the examples browser.
+// A built-in sample, chosen in the samples browser.
 function loadSample(id, tabs) {
   const sample = sampleById(id);
   if (!sample) return;
-  setFiles(sample.files.map((f) => ({ ...f })));
-  renderFiles();
+  const hadDraft = replaceWith(sample.files);
   // Picking a sample is a request to see it, so it runs without a second click.
-  run().then((started) => started && tabs.show("right"));
+  run().then((started) => {
+    if (started) tabs.show("right");
+    if (hadDraft) sayDraftIsKept();
+  });
+}
+
+// Puts a set of files in the editor in place of what is there, and answers
+// whether what was there was somebody's own work - a draft rather than a
+// sample as it was opened - which setFiles( ) has kept in the undo stack.
+function replaceWith(files) {
+  const hadDraft = !isSample(getFiles());
+  setFiles(files.map((f) => ({ ...f })));
+  renderFiles();
+  return hadDraft;
+}
+
+// Said after the run, because run( ) ends by writing "running" over the
+// status line - and said at all because a click that replaced an hour's work
+// is the one moment the reader has to be told the work is not gone.
+function sayDraftIsKept() {
+  setStatus("running - your draft is one Undo away");
 }
 
 // A catalogued example, chosen in the examples browser. The URL goes down the
@@ -464,9 +495,9 @@ async function loadLinked(url, tabs) {
     setStatus("fetching the example…");
     const linked = checkFileSet(await fetchLinkedFiles(new URLSearchParams([["src", url]])));
     const alongside = await followNavigation(linked);
-    setFiles(checkFileSet([...linked, ...alongside]).map((f) => ({ ...f })));
-    renderFiles();
+    const hadDraft = replaceWith(checkFileSet([...linked, ...alongside]));
     if (await run()) tabs.show("right");
+    if (hadDraft) sayDraftIsKept();
   } catch (e) {
     // The catalogue said the class is there and it was not, or the fetch
     // failed under way. Somebody clicked expecting particular code, so this
@@ -632,6 +663,19 @@ export async function run() {
   } catch (e) {
     setStatus("the app could not be started", true);
     showOutput("Run", String(e.message || e));
+    // What the transpiler refused, at the lines it named: underlined and in
+    // the Problems list, the way the checkers' findings are - the Log has
+    // the full text, but a line is where somebody looks.
+    if (e.problems?.length > 0) {
+      reportTranspilerProblems(e.problems);
+      const problems = refresh();
+      updateInsight(problems);
+      const first = problems.find((p) => p.source === "transpiler");
+      if (first) {
+        showInsight("problems");
+        focusProblem(first.file, first.range.start.line + 1, 1);
+      }
+    }
   } finally {
     running = false;
     runButton.disabled = false;

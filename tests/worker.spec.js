@@ -89,6 +89,23 @@ test("what has to stay live is not cached", async ({ page }) => {
   }
 });
 
+test("the app frame's first load is precached, in the theme the page has not used", async ({ page }) => {
+  await open(page);
+  expect(await workerReady(page)).toBe(true);
+
+  // The light theme the page just ran in would be in the cache through use;
+  // the dark one it never asked for is only there because install put it
+  // there - and so, on a second visit, is a first Run that needs no network.
+  const cached = await page.evaluate(async () => {
+    const names = await caches.keys();
+    const cache = await caches.open(names[0]);
+    return (await cache.keys()).map((r) => new URL(r.url).pathname + new URL(r.url).search);
+  });
+  expect(cached.some((p) => /^\/app\/resources\/sap\/m\/themes\/sap_horizon_dark\/library\.css\?/.test(p))).toBe(true);
+  expect(cached).toContain("/app/resources/sap-ui-core.js");
+  expect(cached).toContain("/app/Component-preload.js");
+});
+
 test("the app frame's stylesheets and component come out of the cache as well", async ({ page }) => {
   await open(page);
   expect(await workerReady(page)).toBe(true);
