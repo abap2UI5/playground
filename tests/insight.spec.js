@@ -150,6 +150,38 @@ test("on a phone the panel starts folded away, and a failure still opens it", as
   await expect(page.locator(".log-body")).toBeVisible({ timeout: 30000 });
 });
 
+// A finger is not a mouse: it lands where it lands, a centimetre wide, and
+// it does not get a second try at a glyph 26 pixels tall under a drag handle.
+// Playwright's touch emulation is what makes `(pointer: coarse)` true, which
+// is the query the strip grows under.
+test.describe("with a finger", () => {
+  test.use({ hasTouch: true, viewport: { width: 390, height: 760 } });
+
+  test("the toggle is a size a finger can hit, and answers a tap that lands above it", async ({ page }) => {
+    await open(page);
+    const body = page.locator("#insight-body");
+    const toggle = page.locator("#insight-toggle");
+    await expect(body).toBeHidden();
+    expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches), "a finger").toBe(true);
+
+    const box = await toggle.boundingBox();
+    expect(box.width, "wide enough for a finger").toBeGreaterThanOrEqual(40);
+    expect(box.height, "tall enough for a finger").toBeGreaterThanOrEqual(32);
+
+    // Where the glyph is.
+    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(body).toBeVisible();
+
+    // A few pixels above it - on the resize grip, and on the editor's bottom
+    // edge, where a finger aimed at the glyph as often lands. Before, that
+    // press went to the grip and became a drag of nothing. Measured again:
+    // opening the panel moved the strip up.
+    const opened = await toggle.boundingBox();
+    await page.touchscreen.tap(opened.x + opened.width / 2, opened.y - 4);
+    await expect(body).toBeHidden();
+  });
+});
+
 test("an embedded playground does not show the panel", async ({ page }) => {
   await page.goto("/?embed=1");
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
