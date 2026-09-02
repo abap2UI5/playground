@@ -281,7 +281,8 @@ seconds.
 `PG_DEBUG=1` builds the page and framework bundles unminified and with source
 maps; without it neither ships one.
 
-`src/runtime` is the ABAP side of the page, `src/editor` is Monaco and abaplint,
+`src/runtime` is the ABAP side of the page (run in a worker), `src/editor` is
+Monaco and abaplint (the registry in a worker of its own),
 `src/shell` is the page around them, `src/abap` is the handful of ABAP the
 playground adds to the framework, and `src/examples` is ABAP served as static
 files so `?src=` has something to point at.

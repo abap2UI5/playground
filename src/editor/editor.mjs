@@ -21,22 +21,16 @@ import "monaco-editor/editor/contrib/wordHighlighter/browser/wordHighlighter.js"
 import "monaco-editor/editor/contrib/comment/browser/comment.js";
 import "monaco-editor/editor/contrib/contextmenu/browser/contextmenu.js";
 import "monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching.js";
-import { registerABAP } from "@abaplint/monaco";
 import { applyLinterFixes, fixableAmong, findingsFor } from "./abap2ui5-lint.mjs";
 
 import { uriFor } from "./files.mjs";
-import {
-  abaplintFixable,
-  applyAbaplintFixes,
-  diagnostics,
-  getRegistry,
-  knownObjectNames,
-  updateFiles,
-} from "./registry.mjs";
+import { registerProviders } from "./providers.mjs";
+import { analyse as analyseInWorker, applyAbaplintFixes, knownObjectNames } from "./registry.mjs";
 
-// @abaplint/monaco reaches for a global `monaco`, the way a script tag would
-// have provided it. It is a library written for a page that loads Monaco from a
-// CDN; here it is bundled, so the global has to be put there.
+// @abaplint/monaco's snippet provider reaches for a global `monaco`, the way a
+// script tag would have provided it. It is a library written for a page that
+// loads Monaco from a CDN; here it is bundled, so the global has to be put
+// there.
 globalThis.monaco = monaco;
 
 // Monaco's own workers do word-based suggestions and diff computation. Neither
@@ -116,11 +110,32 @@ function createModel(file) {
 }
 
 export function connectRegistry() {
-  registerABAP(getRegistry());
+  registerProviders();
   monaco.languages.registerCompletionItemProvider("abap", abapNameCompletion());
   connected = true;
   refresh();
 }
+
+// The names of the open files, without reading their text - which getFiles( )
+// does, and which a completion on every keystroke should not.
+const openNames = () =>
+  monaco.editor
+    .getModels()
+    .filter((m) => m.uri.scheme === "file")
+    .map((m) => m.uri.path.replace(/^\//, ""));
+
+// The version Monaco keeps per model, bumped on every edit - for a reader
+// that caches something about a file and has to know when it went stale.
+export const fileVersion = (name) => modelFor(name)?.getVersionId();
+
+// Told whenever a fresh analysis has landed, with everything wrong with
+// everything open. The registry answers from a worker now, so an analysis is
+// a round trip: refresh( ) hands back what was last known and starts the
+// next one, and this is how the page hears the next one.
+let onAnalysed;
+export const whenAnalysed = (fn) => {
+  onAnalysed = fn;
+};
 
 // Everything currently open, in the order it was opened.
 export function getFiles() {
@@ -222,7 +237,11 @@ export function invalidateAnalysis() {
 // match. The two sources are kept apart by their marker owner: Monaco replaces
 // all markers of one owner at a time, so a shared owner would have whichever
 // checker ran second erase the other's underlines.
-function analyse() {
+// The analysis under way, if one is, so two readers asking during the same
+// round trip share it rather than sending the worker the same text twice.
+let inFlight;
+
+async function analyse() {
   // Nothing to check against, and nothing to check with. The registry does not
   // exist until the corpus has been parsed, and the editor is typeable for the
   // whole of that - a moment on a fast connection, several seconds on a slow
@@ -235,25 +254,39 @@ function analyse() {
 
   const key = analysisKey();
   if (key === analysis.key) return analysis;
+  if (inFlight?.key === key) return inFlight.promise;
   if (key !== transpilerKey) forgetTranspilerProblems();
 
+  const promise = analyseKey(key).finally(() => {
+    if (inFlight?.key === key) inFlight = undefined;
+  });
+  inFlight = { key, promise };
+  return promise;
+}
+
+async function analyseKey(key) {
   const files = getFiles();
-  updateFiles(files);
+  // One round trip: the registry brought in line with the editor, then
+  // abaplint's diagnostics per file and its count of what it could fix.
+  const told = await analyseInWorker(files);
+  // The text moved on while the worker was answering: this answer is about a
+  // key nobody holds any more, so it is thrown away and the question asked
+  // again about the text that is there now.
+  if (analysisKey() !== key) return analyse();
 
   const problems = [];
-  // abaplint's own count, over the whole registry, is one call rather than one
-  // per file - so it is asked here rather than inside the loop.
-  let fixable = abaplintFixable();
+  let fixable = told.fixable;
 
   for (const file of files) {
     const model = modelFor(file.name);
+    if (!model) continue;
 
     // @abaplint/monaco's updateMarkers( ) written out, because it asked the
     // language server for these diagnostics and then this function asked for
     // them a second time to build the Problems list from. The marker shape is
     // theirs, code and all - what is gone is the duplicate parse and the
     // duplicate analysis.
-    const found = diagnostics(file.name);
+    const found = told.diagnostics[file.name] ?? [];
     monaco.editor.setModelMarkers(
       model,
       ABAPLINT_OWNER,
@@ -305,15 +338,26 @@ function analyse() {
   }
 
   analysis = { key, problems, fixable };
+  onAnalysed?.(currentProblems());
   return analysis;
 }
 
-// Pushes the editor's state into the registry and the registry's opinion back
-// into the gutters. Returns everything wrong with everything open, so the
-// caller can decide whether a run is worth attempting.
+const currentProblems = () =>
+  transpilerProblems.length === 0 ? analysis.problems : [...analysis.problems, ...transpilerProblems];
+
+// Pushes the editor's state towards the registry and answers with what was
+// last known about everything open. The fresh answer arrives through
+// whenAnalysed( ), because the registry is a worker and an analysis is a
+// round trip - so a caller that has to decide on the current text, Run,
+// uses refreshNow( ) and waits for it.
 export function refresh() {
-  const problems = analyse().problems;
-  return transpilerProblems.length === 0 ? problems : [...problems, ...transpilerProblems];
+  analyse().catch(() => {});
+  return currentProblems();
+}
+
+export async function refreshNow() {
+  await analyse();
+  return currentProblems();
 }
 
 const ABAPLINT_OWNER = "abaplint";
@@ -464,7 +508,7 @@ function abapNameCompletion() {
       // between them used to ask for.
       const leading = [];
       const anywhere = [];
-      for (const object of knownObjectNames()) {
+      for (const object of knownObjectNames(openNames())) {
         const name = object.name.toLowerCase();
         if (!name.includes(lower)) continue;
         (name.startsWith(lower) ? leading : anywhere).push({ name, type: object.type });
@@ -499,7 +543,8 @@ function abapNameCompletion() {
 // is still parsing, and asking abaplint anything at that point reaches a
 // registry that is not there yet.
 export function fixableNow() {
-  return analyse().fixable;
+  analyse().catch(() => {});
+  return analysis.fixable;
 }
 
 // Applies both checkers' fixes to everything open.
@@ -512,11 +557,11 @@ export function fixableNow() {
 // abaplint first: its fixes are structural (a missing ENDMETHOD, a statement in
 // the wrong place) and the abap2UI5 linter reads the builder chain, which is
 // easier to read correctly once the ABAP around it parses.
-export function applyFixes() {
+export async function applyFixes() {
   if (!connected) return 0;
   let fixed = 0;
 
-  const afterAbaplint = applyAbaplintFixes(getFiles());
+  const afterAbaplint = await applyAbaplintFixes(getFiles());
   fixed += afterAbaplint.fixed;
   for (const file of afterAbaplint.files) writeSource(file.name, file.source);
 

@@ -56,6 +56,30 @@ for (const owned of [ASSETS, path.join(DIST, "editor"), path.join(DIST, "example
 fs.mkdirSync(ASSETS, { recursive: true });
 writeCorpus();
 
+// The registry worker: abaplint, the corpus parse and the transpiler, as one
+// bundle beside the corpus it fetches (src/editor/registry-worker.mjs). Its
+// own bundle rather than a chunk of the page's, because a worker's script
+// is a top-level fetch of its own - started by index.html before the page
+// bundle has arrived - and because nothing in it is shared with the page:
+// abaplint left the page bundle when the registry left the page's thread.
+await esbuild.build({
+  entryPoints: [path.join(ROOT, "src", "editor", "registry-worker.mjs")],
+  outfile: path.join(DIST, "editor", "registry.mjs"),
+  bundle: true,
+  format: "esm",
+  platform: "browser",
+  target: "es2022",
+  minify: true,
+  // abaplint identifies some of its own node types by class name - see the
+  // page bundle below, which needed this for the same library.
+  keepNames: true,
+  sourcemap: process.env.PG_DEBUG === "1",
+  logLevel: "warning",
+  plugins: [nodeStubPlugin(ROOT)],
+  inject: [path.join(ROOT, "src", "runtime", "buffer-shim.mjs")],
+});
+log(`editor/registry.mjs (${Math.round(fs.statSync(path.join(DIST, "editor", "registry.mjs")).size / 1024)} KB)`);
+
 // --------------------------------------------------------------- ABAP corpus
 
 // The ABAP sources the editor knows about: abap2UI5 itself and the open-abap
@@ -110,14 +134,13 @@ function writeCorpus() {
 }
 
 // The page bundle, in pieces: assets/shell.mjs is what the page cannot start
-// without - Monaco and abaplint - and what it only needs later comes as
-// chunks of its own, which esbuild splits off wherever the source says
-// import( ). Two things do: the transpiler (src/editor/transpile.mjs), which
-// nothing needs before the first Run, and the abap2UI5 linter with its
-// half-megabyte of UI5 metadata (src/editor/abap2ui5-lint.mjs), which
-// nothing needs before the corpus has parsed. Both used to be evaluated on
-// the way to the first editor frame; now they download during the parse,
-// where the network is idle, and are evaluated when they land. The chunks
+// without - Monaco - and what it only needs later comes as chunks of its
+// own, which esbuild splits off wherever the source says import( ): the
+// abap2UI5 linter with its half-megabyte of UI5 metadata
+// (src/editor/abap2ui5-lint.mjs), which nothing needs before the corpus has
+// parsed, and Monaco's own ABAP grammar. abaplint and the transpiler are in
+// the registry worker's bundle above. What is split off downloads during
+// the parse, where the network is idle, and is evaluated when it lands. The chunks
 // carry a hash in their name, so the service worker's precache list and the
 // build id are written from the directory rather than from a fixed list -
 // see writeServiceWorker( ) below.
@@ -213,6 +236,7 @@ function writeServiceWorker() {
   const id = crypto.createHash("sha256");
   const core = [
     ...fs.readdirSync(ASSETS).sort().map((name) => `assets/${name}`),
+    "editor/registry.mjs",
     "editor/corpus.json",
     "runtime/framework.mjs",
     "runtime/sql-wasm.wasm",

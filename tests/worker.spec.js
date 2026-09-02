@@ -36,6 +36,7 @@ test("the heavy assets come out of the worker's cache on a second visit", async 
   // before the playground can do anything.
   for (const asset of [
     "/assets/shell.mjs",
+    "/editor/registry.mjs",
     "/editor/corpus.json",
     "/runtime/framework.mjs",
     "/runtime/sql-wasm.wasm",
@@ -80,6 +81,7 @@ test("what has to stay live is not cached", async ({ page }) => {
       entry === "/assets/shell.mjs" ||
         entry === "/assets/shell.css" ||
         entry === "/editor/corpus.json" ||
+        entry === "/editor/registry.mjs" ||
         entry === "/runtime/framework.mjs" ||
         entry === "/runtime/sql-wasm.wasm" ||
         /^\/assets\/[\w.-]+\.(ttf|mjs)$/.test(entry) ||

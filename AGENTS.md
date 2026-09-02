@@ -19,7 +19,7 @@ them before touching `tools/` or `src/runtime`.
 | Path | Purpose |
 | --- | --- |
 | `src/shell/` | The page: boot and Run (`main.mjs`), layout and splitter, toolbar, share links (`share.mjs`), `?src=` deep links (`deep-link.mjs`), the examples browser over the sample repositories' catalogues (`examples.mjs`, filtering by the closed library list in `ui5-libraries.mjs`), the bottom panel (`insight.mjs`), embed messaging (`embed.mjs`), every `localStorage` touch (`storage.mjs`) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`) and the warm-up of the app frame's first load (`warm-up.mjs`) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
-| `src/editor/` | Monaco plus the abaplint registry (`registry.mjs`), the single-object transpile (`transpile.mjs`), the abap2UI5 linter wrapper (`abap2ui5-lint.mjs`), the file set and the sample catalogue (`samples.mjs`) |
+| `src/editor/` | Monaco plus the abaplint registry — in a worker: `registry-core.mjs` and `transpile-core.mjs` are abaplint and the single-object transpile as they run there, `registry-worker.mjs` the worker's entry, `registry.mjs` the page's client with a promise in front of everything, `providers.mjs` Monaco's language providers answered over it — the abap2UI5 linter wrapper (`abap2ui5-lint.mjs`), the file set and the sample catalogue (`samples.mjs`) |
 | `src/runtime/` | The ABAP side of the page: the framework entry (`index.mjs`, `roundtrip()` and `defineClasses()`), `worker.mjs` around it, which is the bundle's entry and answers those over `postMessage` when it runs as the worker the page starts, the sql.js database (`db-setup.mjs`), and the browser shims for Node modules |
 | `src/abap/` | The playground's own ABAP (`zcl_pg_bridge`, `zcl_pg_hello`); it travels through the same downport and transpile as the framework |
 | `src/examples/` | ABAP served as static files, so `?src=` has same-origin targets and the link tests depend on no foreign host |
@@ -73,8 +73,10 @@ of each line. Each step is still its own script and still runnable by name
    rewrite. `UI5_LIBRARIES` (`src/shell/ui5-libraries.mjs` — shared with the
    examples browser, which filters catalogue entries by it) is the closed set
    of libraries the site carries.
-4. **`tools/build-site.mjs`** bundles the page, writes the editor's source
-   corpus (`dist/editor/corpus.json`), copies examples and the embed kit, and
+4. **`tools/build-site.mjs`** bundles the page and, as a bundle of its own,
+   the registry worker (`dist/editor/registry.mjs`: abaplint, the corpus
+   parse and the transpiler, from `src/editor/registry-worker.mjs`), writes
+   the editor's source corpus (`dist/editor/corpus.json`), copies examples and the embed kit, and
    writes `dist/sw.js` from `src/shell/sw.js` with an id for this build
    substituted into it. It deletes the directories it owns before writing.
    The page bundle is **split**: `assets/shell.mjs` is Monaco and abaplint,
@@ -114,11 +116,11 @@ without it neither ships one.
 
 ## What a visitor waits for
 
-Four assets stand between opening the page and an app on screen, and
-`tools/check-size.mjs` budgets all four: the page bundle with its chunks
-(~1.5 MB compressed — Monaco and abaplint in `shell.mjs`, the transpiler and
-the abap2UI5 linter as chunks), the transpiled framework (~0.6 MB), the ABAP
-corpus (~0.4 MB) and SQLite (~0.3 MB). About three megabytes, and then
+Five assets stand between opening the page and an app on screen, and
+`tools/check-size.mjs` budgets all five: the page bundle with its chunks
+(~1.1 MB compressed — Monaco in `shell.mjs`, the abap2UI5 linter as a chunk),
+the registry worker (~0.5 MB — abaplint and the transpiler), the transpiled
+framework (~0.6 MB), the ABAP corpus (~0.4 MB) and SQLite (~0.3 MB). About three megabytes, and then
 several seconds of processor to parse them. The same file carries a fifth
 budget that is not a size at all — how much **JavaScript stack** the boot parse
 may want, which is the third trap below.
@@ -131,22 +133,33 @@ bundle's evaluation, and the app frame's own boot. Four things keep the wait
 from being worse than it is, and all four have to be kept in step with the
 code:
 
-- **The framework runs in a worker, started by an inline script at the top of
-  `src/shell/index.html`** — before the shell bundle has arrived, so its
-  download and evaluation (0.85 s on a desk, several seconds on a phone) move
-  with the document and on a thread of their own. On the page's thread they
-  used to sit in front of the corpus parse: throttled, the corpus had landed
-  at 0.2 s and abaplint could not start on it until 7.1 s. Two consequences
-  of being that early, both held by `tests/site.spec.js`: what the worker says
-  before the bundle is listening (`ready`, or an error) is buffered by the
-  inline script and replayed by `runtime-client.mjs`; and a worker script
-  Chromium could not fetch fires **no** error event for a module worker, so
-  the client probes it by `HEAD` at the one moment the page is waiting on a
-  runtime that has not spoken.
-- **The preloads in `src/shell/index.html`.** The corpus (`preload`), and the
-  chunks `shell.mjs` imports statically (`modulepreload`, written by the
-  build). Left alone each would arrive in a chain behind the file that asks
-  for it. Measured when the framework was still an import: no difference where
+- **The framework and the abaplint registry each run in a worker, both
+  started by an inline script at the top of `src/shell/index.html`** — before
+  the shell bundle has arrived, so their downloads and evaluations move with
+  the document and on threads of their own. The framework's evaluation (0.85 s
+  on a desk, several seconds on a phone) used to sit on the page's thread in
+  front of the corpus parse: throttled, the corpus had landed at 0.2 s and
+  abaplint could not start on it until 7.1 s. The registry worker fetches the
+  corpus itself and parses it beside Monaco's own start, and the global type
+  pass abaplint runs synchronously at the end — half a second on a desk,
+  several on a phone — no longer freezes the page; the page bundle lost
+  abaplint and the transpiler to `editor/registry.mjs`. Everything the page
+  asks the registry is a message (`src/editor/registry.mjs`), so an analysis
+  is a round trip: `refresh()` answers with what was last known and
+  `whenAnalysed()` delivers the fresh one; Run waits on `refreshNow()`; the
+  Monaco providers (`src/editor/providers.mjs`) return promises, which Monaco
+  allows. Two consequences of starting that early, both held by
+  `tests/site.spec.js`: what a worker says before the bundle is listening
+  (`ready`, `corpus`, or an error) is buffered by the inline script and
+  replayed by the client; and a worker script Chromium could not fetch fires
+  **no** error event for a module worker, so each client probes it by `HEAD`
+  — the runtime's at the one moment the page is waiting on a runtime that
+  has not spoken, the registry's after ten seconds without its first word.
+- **The preloads in `src/shell/index.html`.** The chunks `shell.mjs` imports
+  statically (`modulepreload`, written by the build). Left alone each would
+  arrive in a chain behind the file that asks for it. The corpus is not
+  preloaded any more: the registry worker fetches it, and a document's
+  preload does not reach a worker's fetch. Measured when the framework was still an import: no difference where
   bandwidth is the whole story (4 Mbit/s, 100 ms: 11.8 s either way), and
   about 10% where round trips cost anything (12 Mbit/s, 300 ms: 9.0 s →
   8.0 s; 50 Mbit/s, 40 ms: 5.8 s → 5.2 s). A preload that nothing collects is
@@ -174,21 +187,21 @@ code:
   `boot()`, after the first run.
 
 The registry parse is the processor half, and it is
-[yielded on a clock](src/editor/registry.mjs) rather than on a count of objects
-so the page keeps painting through it. The yield is a message posted to
-ourselves, not `scheduler.yield()`: that one's continuation runs ahead of
-ordinary tasks, so the parse starved the runtime worker's `ready` message and
-the evaluation of the chunks as they landed until it was over — and the page
-then paid for all of it in a lump, right where it was next waiting. Applying
-an edited abaplint configuration goes through the same path, because changing
-a rule dirties every object in the corpus and costs the whole parse again.
+[yielded on a clock](src/editor/registry-core.mjs) rather than on a count of
+objects — now so the worker can report progress and answer between objects,
+where it used to be so the page kept painting. The yield is a message posted
+to ourselves, not `scheduler.yield()`: that one's continuation runs ahead of
+ordinary tasks and starved everything else on the queue. Applying an edited
+abaplint configuration goes through the same path, because changing a rule
+dirties every object in the corpus and costs the whole parse again.
 
 Two orderings in `boot()` keep those costs overlapping rather than stacking,
 and both are easy to undo by accident:
 
-- **The runtime's handle and the corpus fetch start before anything is
-  awaited**, and the transpiler and linter chunks are asked for the moment
-  the corpus has landed, so they download during the parse. They used to be
+- **Both workers' handles are picked up before anything is awaited**, and
+  the linter chunk and the app frame's warm-up are asked for the moment the
+  registry worker says the corpus has landed, so they download during the
+  parse. They used to be
   started after `startingFiles()`, which is instant for a draft or a sample
   and is two round trips to GitHub for a `?src=` link — the linked class, then
   the classes beside it — which is the path every Run button in the

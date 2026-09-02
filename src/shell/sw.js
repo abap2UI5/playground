@@ -64,6 +64,7 @@ const CORE = [
   "assets/shell.mjs",
   "assets/shell.css",
   ...CHUNKS,
+  "editor/registry.mjs",
   "editor/corpus.json",
   "runtime/framework.mjs",
   "runtime/sql-wasm.wasm",

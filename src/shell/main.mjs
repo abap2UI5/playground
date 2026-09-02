@@ -20,13 +20,15 @@ import {
   invalidateAnalysis,
   redo,
   refresh,
+  refreshNow,
   reportTranspilerProblems,
   setFiles,
   undo,
+  whenAnalysed,
 } from "../editor/editor.mjs";
-import { buildRegistry, declaredObjectName, entryClass } from "../editor/registry.mjs";
+import { buildRegistry, corpusLanded, declaredObjectName, entryClass, startRegistry } from "../editor/registry.mjs";
 import { loadLinter } from "../editor/abap2ui5-lint.mjs";
-import { compile, preloadTranspiler } from "../editor/transpile.mjs";
+import { compile } from "../editor/transpile.mjs";
 import { checkFileSet, MAIN_FILE, parseName } from "../editor/files.mjs";
 import {
   fetchLinkedFiles,
@@ -192,25 +194,22 @@ async function boot() {
   // still waiting on the link was every bit of processor work behind it.
   const runtime = startRuntime();
   heard(runtime.ready);
-  const corpusReady = heard(
-    fetch(asset("editor/corpus.json")).then((r) => {
-      if (!r.ok) throw new Error(`corpus.json: ${r.status}`);
-      return r.json();
-    }),
-  );
+  // The registry's worker, which fetches the corpus itself and has usually
+  // done so by now; picked up here the way the runtime's is.
+  startRegistry();
+  heard(corpusLanded);
 
   // What the app frame will load first, fetched into the cache while the
   // corpus parses - see src/shell/warm-up.mjs. After the corpus has landed,
   // not before: until then the network is busy with what the page cannot
   // start without, and these can wait for the stretch where it is not.
-  corpusReady.then(() => warmUpAppFrame(uiTheme())).catch(() => {});
+  corpusLanded.then(() => warmUpAppFrame(uiTheme())).catch(() => {});
 
-  // The two pieces of the page bundle that ride in the same stretch: the
-  // transpiler, which the first Run needs, and the abap2UI5 linter, which the
-  // first analysis needs - both split off assets/shell.mjs so the editor is on
-  // screen before either has been downloaded, let alone evaluated. The linter
-  // is picked up again below, once there is an analysis to re-run.
-  heard(preloadTranspiler());
+  // The piece of the page bundle that rides in the same stretch: the abap2UI5
+  // linter, which the first analysis needs - split off assets/shell.mjs so
+  // the editor is on screen before it has been downloaded, let alone
+  // evaluated. It is picked up again below, once there is an analysis to
+  // re-run.
   const linterReady = heard(loadLinter());
 
   setUpSplitter();
@@ -222,10 +221,9 @@ async function boot() {
   const startingReady = heard(startingFiles());
 
   const registryReady = heard(
-    corpusReady.then(async (corpus) => {
+    (async () => {
       setStatus("reading the abap2UI5 sources…");
       await buildRegistry(
-        corpus,
         startingReady.then((s) => s.files),
         (done, total) => {
           setStatus(`checking the sources… ${Math.round((done / total) * 100)}%`);
@@ -235,13 +233,17 @@ async function boot() {
       // so beats leaving the line reading 100% with nothing apparently
       // happening.
       setStatus("loading the ABAP runtime…");
-    }),
+    })(),
   );
 
   const { files } = await startingReady;
   createEditor(document.getElementById("editor"), files, { onChange: remember });
   setUpFiles({ onChanged: remember, onOpened: fileOpened });
   setUpInsight();
+  // The registry answers from a worker, so what remember( ) and fileOpened( )
+  // show is what was last known; this is how the fresh answer reaches the
+  // panel, the badge and the fix bar.
+  whenAnalysed((problems) => updateInsight(problems));
   // The examples browser hands back either a built-in sample's id or the raw
   // URL of a catalogued class; the URL goes through the same code a ?src=
   // link goes through. It is the one way to a sample - there is no sample
@@ -606,7 +608,9 @@ export async function run() {
     // and is wrong somewhere - and the fastest way to understand one of those
     // is to look at the app it produced. Blocking Run on it would hide the
     // evidence. They are underlined in the editor and listed under Problems.
-    const problems = refresh();
+    // Waited for, not read back: Run decides on the text as it is now, and
+    // the registry answers from a worker.
+    const problems = await refreshNow();
     updateInsight(problems);
     const errors = problems.filter((i) => i.severity === 1 && i.source === "abaplint");
     if (errors.length > 0) {

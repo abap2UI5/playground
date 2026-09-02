@@ -75,9 +75,22 @@ test("the ABAP runtime runs in a worker, not on the page's thread", async ({ pag
 
   const workers = page.workers().map((w) => new URL(w.url()).pathname);
   expect(workers).toContain("/runtime/framework.mjs");
+  // And so does the abaplint registry, whose corpus parse is the boot's
+  // largest single cost - off the page's thread as well.
+  expect(workers).toContain("/editor/registry.mjs");
   // The bundle registers the framework under globalThis.abap wherever it is
   // evaluated - so the page not having one is the page not having paid for it.
   expect(await page.evaluate(() => typeof globalThis.abap)).toBe("undefined");
+});
+
+test("a registry worker that will not start is reported, not waited for", async ({ page }) => {
+  await page.route("**/editor/registry.mjs", (route) => route.fulfill({ status: 503, body: "" }));
+
+  await page.goto("/");
+  await expect(page.locator("#status")).toHaveText("the playground could not start", { timeout: 90000 });
+  // Named either by the browser's error event (Chromium does fire one for a
+  // 503, with an empty message) or by the HEAD probe that stands in for it.
+  await expect(page.locator(".log-body")).toContainText("editor/registry.mjs");
 });
 
 test("a runtime that will not start is reported, not waited for", async ({ page }) => {

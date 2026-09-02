@@ -17,7 +17,7 @@
 //   - an embedded playground restores neither. A demo in somebody's
 //     documentation has to read the same to every reader - the same reason it
 //     never restores a draft.
-import { abaplintDefaults, useAbaplintSettings } from "../editor/registry.mjs";
+import { abaplintDefaults, onAbaplintSettingsRejected, useAbaplintSettings } from "../editor/registry.mjs";
 import { applyLinterSettings, linterDefaults } from "../editor/abap2ui5-lint.mjs";
 import { readStoredJson, removeStored, writeStoredJson } from "./storage.mjs";
 
@@ -41,6 +41,10 @@ export const keepLinterSettings = (settings) => keep(LINTER_KEY, settings, linte
 export function restoreCheckerSettings() {
   restore(ABAPLINT_KEY, useAbaplintSettings);
   restore(LINTER_KEY, applyLinterSettings);
+  // A rule abaplint has retired is only found out by the registry worker when
+  // it builds - the page cannot know the rule list before then. It says so
+  // through this, and the setting is dropped the same way a malformed one is.
+  onAbaplintSettingsRejected(() => removeStored(ABAPLINT_KEY));
 }
 
 function restore(key, use) {
