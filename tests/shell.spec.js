@@ -230,7 +230,7 @@ test("the bar keeps to a few rows on a phone", async ({ page }) => {
   expect(bar.height, "the bar is not a fifth of the phone").toBeLessThan(100);
 
   // And nothing that has to be reachable was compacted away with the rows.
-  for (const id of ["#examples", "#run", "#format", "#share", "#status", "#about"]) {
+  for (const id of ["#format", "#examples", "#run", "#share", "#source-link", "#status", "#about"]) {
     await expect(page.locator(id)).toBeVisible();
   }
 });

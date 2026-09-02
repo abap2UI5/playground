@@ -140,7 +140,7 @@ it back to the curated list of the day.
 
 The sample repositories — [abap2UI5/samples](https://github.com/abap2UI5/samples)
 and [abap2UI5/samples-controls](https://github.com/abap2UI5/samples-controls) —
-commit a machine-readable `catalogue.json` at their roots. **Examples** in the
+commit a machine-readable `catalogue.json` at their roots. **Samples** in the
 bar fetches those catalogues and lists what they hold next to the built-in
 samples: the learning path by stage, the demo kit ports by library, all of it
 searchable. A chosen entry opens through the same path a `?src=` link takes —

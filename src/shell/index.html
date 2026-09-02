@@ -72,17 +72,20 @@
 <!-- __MODULEPRELOADS__ -->
 </head>
 <body>
-<!-- Two groups: on the left what makes something run - the examples, which
-     carry the built-in samples too (there is no sample menu; the searchable
-     browser is the one way in), Run, Format, and the status line that answers
+<!-- Two groups: on the left what makes something run - Format, the samples
+     browser (the built-in samples and the sample repositories, searchable;
+     there is no sample menu, this is the one way in, which is why it is the
+     one button dressed to be clicked), Run, and the status line that answers
      them; on the right, after the spacer, what one does with a running app -
-     share it, go to where its code lives, open it on its own. -->
+     share it, go to where its code lives, open it on its own. The GitHub
+     link is always there and merely inactive over code that came from
+     nowhere, so the bar does not rearrange itself when a linked file opens. -->
 <header class="bar">
   <span class="brand">abap2UI5 <span class="brand-dim">Playground</span></span>
 
-  <button id="examples" disabled title="Browse the samples and the sample repositories">Examples</button>
-  <button id="run" class="primary" disabled title="Run (Ctrl+Enter)">Run</button>
   <button id="format" disabled title="Pretty print (Shift+Alt+F)">Format</button>
+  <button id="examples" class="invite" disabled title="Browse the built-in samples and the sample repositories">Samples</button>
+  <button id="run" class="primary" disabled title="Run (Ctrl+Enter)">Run</button>
 
   <!-- The one channel the page reports through, and under ?view=full the only
        one it has left - so it is announced rather than only shown. Polite: it
@@ -92,7 +95,8 @@
   <span class="spacer"></span>
 
   <button id="share" disabled title="Copy a link that carries this code">Share</button>
-  <a id="source-link" class="source-link" target="_blank" rel="noopener" hidden>on GitHub</a>
+  <a id="source-link" class="source-link" target="_blank" rel="noopener" aria-disabled="true"
+     title="Only code that came from GitHub has a page to go to">GitHub</a>
   <button id="fullscreen" disabled title="Open the app on its own, in a new tab">Full screen</button>
 
   <span id="versions" class="versions"></span>
@@ -134,7 +138,7 @@
 
     <h3>Where the apps come from</h3>
     <p>
-      <b>Examples</b> above carries a handful of built-in samples to start
+      <b>Samples</b> above carries a handful of built-in samples to start
       from and browses, without leaving this page, the catalogues of the first
       two of three sibling repositories; every card on their own pages has a
       button that opens the class right here, and what needs a real system
@@ -205,7 +209,7 @@
      on purpose: inside it, Enter in the input would close the dialog. -->
 <dialog id="examples-dialog" class="about examples">
   <header class="about-head examples-head">
-    <h2>Examples</h2>
+    <h2>Samples</h2>
     <input id="examples-search" type="search" placeholder="Search title, control, class…"
            autocomplete="off" spellcheck="false" aria-label="Search the examples">
     <form method="dialog"><button class="ghost" aria-label="Close">✕</button></form>

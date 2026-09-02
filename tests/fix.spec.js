@@ -84,13 +84,18 @@ test("the fix bar stays away when there is nothing it could do", async ({ page }
 
 test("linked code offers the way back to GitHub, and only linked code does", async ({ page }) => {
   await open(page);
-  await expect(page.locator("#source-link"), "a sample was not linked from anywhere").toBeHidden();
+  // Over a sample the link is there but inactive: no page to go to, and the
+  // bar does not rearrange itself when one appears.
+  const inactive = page.locator("#source-link");
+  await expect(inactive, "a sample was not linked from anywhere").toHaveAttribute("aria-disabled", "true");
+  await expect(inactive).not.toHaveAttribute("href", /./);
 
   await page.goto("/?src=examples/zcl_linked_example.clas.abap");
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
 
   const link = page.locator("#source-link");
   await expect(link).toBeVisible();
+  await expect(link).not.toHaveAttribute("aria-disabled", "true");
   await expect(link).toHaveAttribute("target", "_blank");
   // Same-origin here, so the href is the file itself; the interesting case is
   // the translation from raw.githubusercontent to the page a human wants,

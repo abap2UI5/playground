@@ -326,7 +326,8 @@ deploy — readers get the published playground, never your checkout.
   restarted is a screenshot). **`?view=full`**: no bar either — what the Full
   screen button opens; the bar returns while the status line reports an error,
   because it is the only channel that mode has left.
-- **The Examples button** (`src/shell/examples.mjs`): fetches the
+- **The Samples button** (`src/shell/examples.mjs` — the ids and the module
+  keep the older name): fetches the
   `catalogue.json` that **abap2UI5/samples** and **abap2UI5/samples-controls**
   commit at their roots (from `raw.githubusercontent.com` — a host `?src=`
   already trusts) and lists the entries next to the built-in samples, grouped

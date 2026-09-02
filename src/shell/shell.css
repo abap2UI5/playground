@@ -101,6 +101,17 @@ button.primary {
 
 button.ghost { border: none; background: none; color: var(--fg-dim); padding: 0 .4rem; }
 
+/* The samples browser: the one way to a sample now that there is no menu, so
+   it is the one button in the bar dressed to be clicked - the accent as an
+   outline rather than a fill, which stays Run's. */
+button.invite {
+  color: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+button.invite::before { content: "✦ "; }
+button.invite:hover:not(:disabled) { background: var(--accent); color: var(--accent-fg); }
+
 select {
   font: inherit;
   border-radius: 6px;
@@ -567,13 +578,16 @@ button.insight-row {
 .insight-fixbar button { font-size: 12px; padding: .15rem .6rem; }
 
 /* The way back to where linked code lives. A link, not a button: it opens a
-   page, and middle-click and "copy link" should work the way they do. */
+   page, and middle-click and "copy link" should work the way they do. Always
+   in the bar, styled as its neighbours are, and inactive - no href, dimmed,
+   not clickable - over code that did not come from anywhere. */
 .source-link {
-  color: var(--accent); font-size: 12px; text-decoration: none;
-  border: 1px solid var(--line); border-radius: 6px; padding: .2rem .55rem;
+  color: var(--fg); font-size: inherit; text-decoration: none;
+  border: 1px solid var(--line); border-radius: 6px; padding: .3rem .8rem;
+  background: var(--bg);
 }
 .source-link:hover { border-color: var(--accent); }
-.source-link[hidden] { display: none; }
+.source-link[aria-disabled="true"] { opacity: .5; pointer-events: none; }
 
 /* ------------------------------------------------------------------- log */
 

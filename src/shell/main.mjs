@@ -384,16 +384,21 @@ function fileOpened() {
 }
 
 // The way back to where linked code lives, following whichever file is open.
-// Only for files that actually came from a link: over a draft or a sample it
-// would be a link to somebody else's page with no relation to what is on
-// screen.
+// Live only for files that actually came from a link: over a draft or a
+// sample it would be a link to somebody else's page with no relation to what
+// is on screen - so there it stays in the bar, inactive, rather than
+// disappearing and having the controls beside it shift.
 export function showSourceLink() {
   const link = document.getElementById("source-link");
   const origin = originOf(currentFile());
-  link.hidden = origin === undefined;
-  if (origin === undefined) return;
+  if (origin === undefined) {
+    link.removeAttribute("href");
+    link.setAttribute("aria-disabled", "true");
+    link.title = "Only code that came from GitHub has a page to go to";
+    return;
+  }
   link.href = humanUrl(origin);
-  link.textContent = "on GitHub";
+  link.removeAttribute("aria-disabled");
   link.title = `Open ${currentFile()} where it lives`;
 }
 
@@ -451,7 +456,7 @@ async function loadLinked(url, tabs) {
     // failed under way. Somebody clicked expecting particular code, so this
     // failure is said out loud - unlike a catalogue that never loaded.
     setStatus("the example could not be opened", true);
-    showOutput("Examples", String(e.message || e));
+    showOutput("Samples", String(e.message || e));
   }
 }
 
