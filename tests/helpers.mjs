@@ -40,6 +40,15 @@ export async function openFiles(page) {
   );
 }
 
+// Picks a built-in sample in the samples browser and waits for the dialog to
+// close - and for nothing else, because a sample that starts broken on
+// purpose never reaches "running" (see tests/samples.spec.js).
+export async function pickSample(page, id) {
+  await page.locator("#examples").click();
+  await page.locator(`.example-row[data-sample="${id}"]`).click();
+  await expect(page.locator("#examples-dialog")).toBeHidden();
+}
+
 // Adds a file: press "+", type the name into the strip, press Enter.
 //
 // This was a window.prompt( ) driven with page.once("dialog", ...) until it
@@ -79,9 +88,7 @@ export const outputText = (page) => page.locator(".log-body").textContent();
 // up once per run, which is unambiguous.
 export async function runSample(page, id) {
   const before = await page.locator("#app").getAttribute("src");
-  await page.locator("#examples").click();
-  await page.locator(`.example-row[data-sample="${id}"]`).click();
-  await expect(page.locator("#examples-dialog")).toBeHidden();
+  await pickSample(page, id);
   await expect(page.locator("#app")).not.toHaveAttribute("src", before ?? "", { timeout: 60000 });
   await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
 }

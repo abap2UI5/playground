@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { control, open, runSample } from "./helpers.mjs";
+import { control, open, pickSample, runSample } from "./helpers.mjs";
 
 // Every sample in the menu, run. A sample that no longer compiles or no longer
 // renders is worse than no sample: somebody picks it to learn from and gets an
@@ -126,7 +126,7 @@ for (const sample of SAMPLES) {
   if (sample.startsBroken) {
     test(`the "${sample.title}" sample is reported, fixed and then runs`, async ({ page }) => {
       await open(page);
-      await page.locator("#samples").selectOption(sample.id);
+      await pickSample(page, sample.id);
 
       const check = BROKEN_CHECKS[sample.id];
       expect(check, `${sample.id} has no check - add one when adding a sample`).toBeDefined();
