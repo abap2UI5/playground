@@ -41,11 +41,13 @@ import {
 import { DEFAULT_FILES, isSample, sampleById } from "../editor/samples.mjs";
 import { openExamples, setUpExamples } from "./examples.mjs";
 import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
-import { setUpInsight, showInsight, updateInsight } from "./insight.mjs";
+import { setTestResults, setUpInsight, showInsight, updateInsight } from "./insight.mjs";
 import { restoreCheckerSettings } from "./checker-settings.mjs";
 import { setUpSplitter, setUpTabs } from "./layout.mjs";
 import { announceAppHeight, announceReady, announceStatus, startEmbedMessages } from "./embed.mjs";
 import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
+import { openShare, setUpShareDialog } from "./share-dialog.mjs";
+import { clearRoundtrips, recordRoundtrip } from "./roundtrips.mjs";
 import { state } from "./state.mjs";
 import { STALLED, startRuntime } from "./runtime-client.mjs";
 import { readStoredJson, removeStored, writeStoredJson } from "./storage.mjs";
@@ -218,6 +220,7 @@ async function boot() {
   setUpTheme({ restore: !embedded });
   setUpSplitter();
   setUpAbout();
+  setUpShareDialog();
   const tabs = setUpTabs(appOnly);
 
   // The files, as a promise the registry build can hold: the corpus parse does
@@ -255,6 +258,10 @@ async function boot() {
   setUpExamples({
     openSample: (id) => loadSample(id, tabs),
     openLinked: (url) => loadLinked(url, tabs),
+    // The reader's own drafts (src/shell/drafts.mjs): what is open, to save,
+    // and a saved one to open - which runs, the way a sample does.
+    currentFiles: () => getFiles(),
+    openDraft: (files) => loadDraft(files, tabs),
   });
 
   try {
@@ -270,7 +277,24 @@ async function boot() {
     // otherwise POST to a backend, and whether the shell has a dialog open -
     // see src/shell/frontend-bridge.js for what the frame does with that.
     window.__z2ui5Playground = {
-      roundtrip: (body) => state.runtime.roundtrip(body),
+      // Every roundtrip is kept for the Roundtrips tab on its way through -
+      // see src/shell/roundtrips.mjs. Timed around the worker's answer, so
+      // the number is the ABAP plus the message hops and not the render.
+      roundtrip: async (body) => {
+        const started = performance.now();
+        try {
+          const response = await state.runtime.roundtrip(body);
+          recordRoundtrip({ request: body, response, ms: performance.now() - started });
+          if (response.location) pointAtDump(response.location, firstLine(response.body));
+          return response;
+        } catch (e) {
+          // A JavaScript error out of the transpiled code, rather than an
+          // ABAP exception the framework turned into a dump: the frame's
+          // fetch rejects, and the line is still worth pointing at.
+          if (e?.location) pointAtDump(e.location, String(e.message ?? e));
+          throw e;
+        }
+      },
       dialogOpen: () => document.querySelector("dialog[open]") !== null,
     };
     const version = `abap2UI5 ${state.runtime.abapVersion()}`;
@@ -510,6 +534,24 @@ function loadSample(id, tabs) {
   });
 }
 
+// A named draft, chosen in the samples browser - the same move as a sample,
+// with the same word about the draft it replaced.
+function loadDraft(files, tabs) {
+  let checked;
+  try {
+    checked = checkFileSet(files);
+  } catch (e) {
+    setStatus("the draft could not be opened", true);
+    showOutput("Drafts", String(e.message || e));
+    return;
+  }
+  const hadDraft = replaceWith(checked);
+  run().then((started) => {
+    if (started) tabs.show("right");
+    if (hadDraft) sayDraftIsKept();
+  });
+}
+
 // Puts a set of files in the editor in place of what is there, and answers
 // whether what was there was somebody's own work - a draft rather than a
 // sample as it was opened - which setFiles( ) has kept in the undo stack.
@@ -580,16 +622,47 @@ async function openFullScreen() {
   }
 }
 
+// The link first - copied and in the address bar before anything else is on
+// screen, because that is what most presses are for - and then the dialog
+// with the other ways out (src/shell/share-dialog.mjs).
 async function share() {
   try {
-    const url = await shareUrl(getFiles());
+    const files = getFiles();
+    const url = await shareUrl(files);
     history.replaceState(null, "", url);
     const copied = await copyToClipboard(url);
     setStatus(copied ? "link copied to the clipboard" : "link is in the address bar");
+    openShare(files, url, copied);
   } catch (e) {
     setStatus("the link could not be built", true);
     showOutput("Share", String(e.message || e));
   }
+}
+
+// A dump, at the line it was raised at. The framework has already answered
+// the frontend with the dump and the frame is showing it; this is the half
+// the frame cannot do - underline the line in the editor, list it under
+// Problems as a runtime error, and put the cursor there - the way a
+// transpiler error is pointed at. It goes away with the next edit, like
+// that one.
+function pointAtDump(location, message) {
+  const said = `${location.exception ? `${location.exception}: ` : ""}${message || "the app dumped here"}`;
+  reportTranspilerProblems([{ file: location.file, line: location.line, message: said }], "runtime");
+  updateInsight(refresh());
+  showInsight("problems");
+  focusProblem(location.file, location.line, 1);
+  setStatus(`the app dumped - ${location.file} line ${location.line}`, true);
+}
+
+// The first line of a dump that says something - the framework's dump
+// starts with a heading and the request it failed in, and the sentence a
+// reader wants is the exception's own text, a few lines down.
+function firstLine(body) {
+  const lines = String(body ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l !== "" && !l.startsWith("---") && !l.startsWith("Request failed in app"));
+  return lines[0] ?? "";
 }
 
 // What has to be true before the transpiler is worth asking. Each of these
@@ -597,11 +670,16 @@ async function share() {
 // nothing to somebody looking at an editor.
 function structuralProblem(files) {
   if (files.length === 0) return "There is nothing to run.";
-  if (parseName(files[0].name)?.kind !== "clas") {
+  const first = parseName(files[0].name);
+  if (first?.kind !== "clas" || first.include) {
     return `The playground starts the class in the first file, and ${files[0].name} is not a class.`;
   }
   for (const file of files) {
-    const expected = parseName(file.name)?.object;
+    const parsed = parseName(file.name);
+    // A test include declares local test classes, not the object; abaplint
+    // checks what is in it.
+    if (parsed?.include) continue;
+    const expected = parsed?.object;
     const declared = declaredObjectName(file.source);
     if (declared === undefined) {
       return `${file.name} declares no global class or interface.`;
@@ -665,11 +743,28 @@ export async function run() {
     }
 
     setStatus("compiling…");
-    const chunks = await compile(files);
-    state.runtime.defineClasses(chunks.map((c) => c.js));
+    const { chunks, tests } = await compile(files);
+    state.runtime.defineClasses(chunks.map(({ name, js, lines }) => ({ name, js, lines })));
+
+    // The unit tests in the test includes, before the app: a run is compile,
+    // test, start - the order a developer works in - and a failing test is
+    // no reason to withhold the app, which is the fastest way to see what
+    // the test is about. The results go to the Tests tab; failures bring it
+    // forward and are said in the status line after the app is up.
+    let testsFailed = 0;
+    if (tests.length > 0) {
+      setStatus("running the tests…");
+      const results = await state.runtime.runUnitTests(tests);
+      setTestResults(results);
+      testsFailed = results.filter((r) => !r.passed).length;
+    } else {
+      setTestResults([]);
+    }
 
     setStatus("starting the app…");
     await state.runtime.resetDatabase();
+    // A run is a fresh app; what the last one said to its frontend is over.
+    clearRoundtrips();
 
     state.runCounter += 1;
     const src = new URL("app/index.html", document.baseURI);
@@ -696,7 +791,13 @@ export async function run() {
       );
       frame.src = src.href;
     });
-    setStatus("running");
+    if (testsFailed > 0) {
+      const total = tests.reduce((n, t) => n + t.methods.length, 0);
+      setStatus(`running - ${testsFailed} of ${total} test${total === 1 ? "" : "s"} failed`, true);
+      showInsight("tests");
+    } else {
+      setStatus("running");
+    }
     // After the load event, so the app has rendered and has a height to report.
     if (appOnly) announceAppHeight(frame);
     // Answered rather than returned blank, because on a narrow screen the

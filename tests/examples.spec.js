@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { control, open, openFiles } from "./helpers.mjs";
+import { SAMPLES } from "../src/editor/samples.mjs";
 
 // The examples browser: the sample repositories' committed catalogues, fetched
 // when the Examples button is clicked, listed next to the built-in samples,
@@ -204,9 +205,11 @@ test("the catalogues are listed by learning-path stage, and an entry runs throug
   await open(page);
   await openBrowser(page);
 
-  // The built-ins first, then the samples repository in reading order, then
+  // The reader's own drafts first (none yet, but the row that saves one),
+  // then the built-ins, then the samples repository in reading order, then
   // the controls grouped by library.
-  await expect(page.locator(".examples-group").first()).toHaveText("Built in");
+  await expect(page.locator(".examples-group").first()).toHaveText("Your drafts");
+  await expect(page.locator(".examples-group").nth(1)).toHaveText("Built in");
   await expect(page.locator(".examples-group", { hasText: "Start here" })).toBeVisible();
   await expect(page.locator(".examples-group", { hasText: "Show many rows" })).toBeVisible();
   await expect(page.locator(".examples-group", { hasText: "Controls — sap.m" })).toBeVisible();
@@ -393,10 +396,10 @@ test("without the catalogues the browser degrades to the built-in samples, quiet
   await open(page);
   await openBrowser(page);
 
-  // Only the built-ins - all nine of them, searchable - and not a word about
-  // what could not be fetched.
-  await expect(page.locator(".examples-group")).toHaveText(["Built in"]);
-  await expect(page.locator(".example-row")).toHaveCount(9);
+  // Only the drafts' row and the built-ins - every one of them, searchable -
+  // and not a word about what could not be fetched.
+  await expect(page.locator(".examples-group")).toHaveText(["Your drafts", "Built in"]);
+  await expect(page.locator(".example-row")).toHaveCount(SAMPLES.length);
   await expect(page.locator("#examples-body")).not.toContainText("404");
 
   // And they open: the degraded browser is still a browser.
@@ -432,7 +435,7 @@ test("a catalogue in a shape the browser does not know is skipped without a soun
   await open(page);
   await openBrowser(page);
 
-  await expect(page.locator(".examples-group")).toHaveText(["Built in"]);
+  await expect(page.locator(".examples-group")).toHaveText(["Your drafts", "Built in"]);
   expect(errors).toEqual([]);
 });
 

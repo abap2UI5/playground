@@ -18,7 +18,7 @@ them before touching `tools/` or `src/runtime`.
 
 | Path | Purpose |
 | --- | --- |
-| `src/shell/` | The page: boot and Run (`main.mjs`), layout and splitter, toolbar, share links (`share.mjs`), `?src=` deep links (`deep-link.mjs`), the examples browser over the sample repositories' catalogues (`examples.mjs`, filtering by the closed library list in `ui5-libraries.mjs`), the bottom panel (`insight.mjs`), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch at the bar's right-hand end, applied as `data-theme` on `<html>` and handed to the editor and the app frame), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
+| `src/shell/` | The page: boot and Run (`main.mjs`), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the examples browser over the sample repositories' catalogues (`examples.mjs`, filtering by the closed library list in `ui5-libraries.mjs`), the bottom panel (`insight.mjs`), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch at the bar's right-hand end, applied as `data-theme` on `<html>` and handed to the editor and the app frame), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
 | `src/editor/` | Monaco plus the abaplint registry — in a worker: `registry-core.mjs` and `transpile-core.mjs` are abaplint and the single-object transpile as they run there, `registry-worker.mjs` the worker's entry, `registry.mjs` the page's client with a promise in front of everything, `providers.mjs` Monaco's language providers answered over it — the abap2UI5 linter wrapper (`abap2ui5-lint.mjs`), the file set and the sample catalogue (`samples.mjs`) |
 | `src/runtime/` | The ABAP side of the page: the framework entry (`index.mjs`, `roundtrip()` and `defineClasses()`), `worker.mjs` around it, which is the bundle's entry and answers those over `postMessage` when it runs as the worker the page starts, the sql.js database (`db-setup.mjs`), and the browser shims for Node modules |
 | `src/abap/` | The playground's own ABAP (`zcl_pg_bridge`, `zcl_pg_hello`); it travels through the same downport and transpile as the framework |
@@ -196,7 +196,16 @@ code:
   same lesson is in `runtime-client.mjs`: a runtime that answers the HEAD
   probe with 200 and then stays silent for a minute is failed with a named
   error, and `boot()` answers that one by discarding every cache the site
-  wrote and unregistering the worker before asking for a reload.
+  wrote and unregistering the worker before asking for a reload. **The two
+  documents** — `index.html` and `app/index.html` — are the one exception to
+  cache-first: network first, so a deploy reaches the next visit, and the
+  cached copy only when the network has nothing to say, which is what lets
+  the installed playground (`manifest.webmanifest`, the 192 and 512 px icons
+  rendered from the docs' logo) open and run offline; `tests/worker.spec.js`
+  holds both halves, the poisoned-cache visit and the offline run. The
+  frontend's own `navigator.onLine` check is answered "yes" by
+  `frontend-bridge.js` for the same reason: the backend is the page around
+  the frame.
 
 The registry parse is the processor half, and it is
 [yielded on a clock](src/editor/registry-core.mjs) rather than on a count of
@@ -325,6 +334,53 @@ three marks, LinkedIn, GitHub and the docs — stores a choice only while it
 differs from what the system says, so a page switched back follows the system
 again, and an embedded playground never restores one.
 
+The **View tab** (`viewPreview()` in `src/shell/insight.mjs`) shows the XML
+the linter reconstructs from the open file's builder chain — `viewsFor()` in
+`abap2ui5-lint.mjs`, the same reconstruction the findings come from, put one
+element per line by `xml-pretty.mjs`. It is a second reconstruction beside
+the analysis pass, run only while that tab is open; the tab says so when the
+linter has not loaded yet and when the file builds no view.
+
+**Unit tests run before the app** (`tests/unit.spec.js`, the `unit-tests`
+sample). A `<class>.clas.testclasses.abap` file is a class's test include
+(`files.mjs` — it has no sidecar of its own, needs its class open, and is
+never the first file); the transpiler emits it as a chunk of its own that
+registers each local class as `CLAS-<class>-<local>`, and `compile()` lists
+the test classes and methods FOR TESTING off abaplint's file info, the same
+way the transpiler's own runner script does. `runUnitTests()` in
+`src/runtime/index.mjs` feeds them to open-abap's `kernel_unit_runner`
+(class_setup, setup, method, teardown; expected, actual, message and the
+JavaScript frame of the assertion, which `locate()` turns into the ABAP
+line), `run()` in `main.mjs` runs them between compile and app start, and
+the **Tests** tab (`testView()` in `insight.mjs`) lists them — a failure
+brings the tab forward and is said in the status line, and the app starts
+regardless, because it is the fastest way to see what the test is about.
+The file strip follows the editor's model change (`onFileShown()`), so a
+row into another file lights the right tab; it used to follow only its own
+clicks.
+
+**A dump is pointed at** (`tests/run.spec.js`, "a dump is pointed at"). The
+transpiler's chunk carries a source map; `compile()` in `transpile-core.mjs`
+keeps it as a line table per chunk and names the chunk, `defineClasses()` in
+`src/runtime/index.mjs` evaluates each chunk under that name (a `sourceURL`),
+and `locate()` there turns a JavaScript stack into an ABAP file and line.
+Two stacks reach it: an ABAP exception's — `cx_root extends Error` in the
+transpiled code, so it carries the stack from where it was raised, and the
+framework's `_error_response` is wrapped to keep the innermost one before
+the 500 is built — and a raw JavaScript error's, on the worker's error path.
+The bridge in `main.mjs` then lists the line under Problems as a `runtime`
+problem, underlines it and puts the cursor there, the way a transpiler
+error is pointed at; the frame keeps showing the framework's own error page.
+
+The **Roundtrips tab** (`src/shell/roundtrips.mjs`, `roundtripView()` in
+`insight.mjs`, `tests/roundtrips.spec.js`) lists every request the app frame
+sends and every answer it gets — the bridge in `main.mjs` records them on
+the way through, timed around the worker's answer — with the event, what the
+answer did (a view for a slot, a popup, a model update, a dump) and the
+bodies as they travelled, the view XML one element per line. Cleared by
+every Run, bounded at 200. The shapes it reads are the wire format
+`app/webapp/core/Server.js` documents in the framework.
+
 The **draft** follows the middle rule for the same reason: a file set identical
 to one of the built-in samples is forgotten rather than stored (`isSample()` in
 `src/editor/samples.mjs`, applied in `remember()`). Reading a sample is not work
@@ -370,7 +426,11 @@ deploy — readers get the published playground, never your checkout.
   screen button opens; the bar returns while the status line reports an error,
   because it is the only channel that mode has left.
 - **The Samples button** (`src/shell/examples.mjs` — the ids and the module
-  keep the older name): fetches the
+  keep the older name): lists the reader's own **named drafts** first
+  (`src/shell/drafts.mjs`, `tests/drafts.spec.js` — a name and Save keep
+  what is open under it in localStorage, fifty at most, opened and deleted
+  where they are listed; the one unnamed draft `remember()` keeps is
+  unchanged), then the built-ins, then fetches the
   `catalogue.json` that **abap2UI5/samples** and **abap2UI5/samples-controls**
   commit at their roots (from `raw.githubusercontent.com` — a host `?src=`
   already trusts) and lists the entries next to the built-in samples, grouped
@@ -489,7 +549,8 @@ try/catch that reports a startup failure, so that throw left the page on
 ## Deliberate limits — do not "fix" these
 
 - **The first file is the app.** Positional on purpose; a required class name
-  would force every deep link to rename what it points at.
+  would force every deep link to rename what it points at. A test include
+  cannot be first for the same reason: it declares no app.
 - **Only what the transpiler implements.** Anything it cannot compile is
   reported in the panel; there is no fallback and none is wanted.
 - **Only the UI5 libraries in `UI5_LIBRARIES`** (`src/shell/ui5-libraries.mjs`,

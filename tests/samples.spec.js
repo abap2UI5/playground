@@ -122,6 +122,16 @@ const BROKEN_CHECKS = {
   },
 };
 
+CHECKS["unit-tests"] = async (page) => {
+  // The tests ran first, all of them green, and the app is up behind them.
+  await expect(page.locator("#test-count")).toHaveText("✓");
+  await page.locator('[data-insight="tests"]').click();
+  await expect(page.locator(".tests-summary")).toHaveText("3 tests passed");
+  await expect(page.locator(".test-row.is-ok")).toHaveCount(3);
+  await control(page, "btnCalc").click();
+  await expect(control(page, "txtTotal")).toHaveText("119");
+};
+
 for (const sample of SAMPLES) {
   if (sample.startsBroken) {
     test(`the "${sample.title}" sample is reported, fixed and then runs`, async ({ page }) => {

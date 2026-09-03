@@ -29,6 +29,7 @@
 // running. The filters beside the search (source, runtime, release) are how
 // the list is cut down to what one is looking for; every one starts on.
 import { SAMPLES } from "../editor/samples.mjs";
+import { deleteDraft, draftNameProblem, listDrafts, saveDraft } from "./drafts.mjs";
 import { readStoredJson, writeStoredJson } from "./storage.mjs";
 import { UI5_LIBRARIES } from "./ui5-libraries.mjs";
 
@@ -191,9 +192,10 @@ function readStack(repo, data) {
 }
 
 // Which entries the filters let through. The built-ins are always there:
-// they are the page's own and every filter is about the repositories.
+// they are the page's own and every filter is about the repositories - and
+// so are the reader's own drafts.
 function passes(entry) {
-  if (entry.sampleId !== undefined) return true;
+  if (entry.sampleId !== undefined || entry.draft !== undefined) return true;
   if (!filters[entry.source]) return false;
   if (filters.openui5only && entry.sapui5) return false;
   if (entry.newer && !filters.newer) return false;
@@ -249,6 +251,74 @@ const builtIn = {
 // One slot per catalogue, filled as each answers, so the samples repository
 // keeps its place above the controls even when the answers cross on the wire.
 const loadedGroups = CATALOGUES.map(() => []);
+
+// The reader's own drafts, first in the list: what one saved is what one
+// is most likely to be looking for. Read on every render, because saving
+// and deleting happen in the same dialog. See src/shell/drafts.mjs.
+function draftsGroup() {
+  const entries = listDrafts().map((draft) => ({
+    title: draft.name,
+    note: `${draft.files.map((f) => f.name).join(", ")} · saved ${new Date(draft.at).toLocaleString()}`,
+    who: "draft",
+    haystack: `${draft.name} ${draft.files.map((f) => f.name).join(" ")}`.toLowerCase(),
+    draft,
+    runs: true,
+  }));
+  return {
+    title: "Your drafts",
+    blurb:
+      entries.length === 0
+        ? "Nothing saved yet. Name what is in the editor and save it here to come back to it another day."
+        : "Saved in this browser. Opening one replaces what is in the editor - the current draft stays one Undo away.",
+    entries,
+    saveRow: true,
+  };
+}
+
+// The row that saves what is in the editor: a name, and Save. Enter in the
+// input saves too, and it is not inside the dialog's form on purpose -
+// there, Enter would close the dialog instead.
+function saveRow() {
+  const row = document.createElement("div");
+  row.className = "drafts-save";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "drafts-name";
+  input.placeholder = "name this draft";
+  input.setAttribute("aria-label", "Name for the draft");
+  input.maxLength = 60;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "drafts-save-button";
+  button.textContent = "Save what is open";
+  const said = document.createElement("span");
+  said.className = "config-said";
+  const save = () => {
+    const problem = draftNameProblem(input.value);
+    if (problem) {
+      said.className = "config-said is-error";
+      said.textContent = problem;
+      input.focus();
+      return;
+    }
+    const kept = saveDraft(input.value, callbacks.currentFiles());
+    if (!kept) {
+      said.className = "config-said is-error";
+      said.textContent = "This browser would not store it.";
+      return;
+    }
+    render();
+  };
+  button.addEventListener("click", save);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      save();
+    }
+  });
+  row.append(input, button, said);
+  return row;
+}
 
 export function setUpExamples(handlers) {
   callbacks = handlers;
@@ -317,10 +387,13 @@ function render() {
   let shown = 0;
   let total = 0;
 
-  for (const group of [builtIn, ...loadedGroups.flat()]) {
+  for (const group of [draftsGroup(), builtIn, ...loadedGroups.flat()]) {
     total += group.entries.length;
     const entries = group.entries.filter((e) => passes(e) && (needle === "" || e.haystack.includes(needle)));
-    if (entries.length === 0) continue;
+    // The drafts group stays on screen with no drafts in it, because its
+    // save row is how the first one gets there - but not while a search is
+    // narrowing the list to something else.
+    if (entries.length === 0 && !(group.saveRow && needle === "")) continue;
     shown += entries.length;
 
     const head = document.createElement("h3");
@@ -333,6 +406,8 @@ function render() {
       blurb.textContent = group.blurb;
       frag.append(blurb);
     }
+    if (group.saveRow) frag.append(saveRow());
+    if (entries.length === 0) continue;
 
     const list = document.createElement("ul");
     list.className = "insight-list";
@@ -379,6 +454,7 @@ function row(entry) {
   button.className = "insight-row example-row";
   // The built-ins by id, so a test can pick one without matching its title.
   if (entry.sampleId !== undefined) button.dataset.sample = entry.sampleId;
+  if (entry.draft !== undefined) button.dataset.draft = entry.draft.name;
 
   const title = document.createElement("span");
   title.className = "example-title";
@@ -405,10 +481,28 @@ function row(entry) {
   button.append(who);
   button.addEventListener("click", () => {
     dialog.close();
-    if (entry.sampleId !== undefined) callbacks.openSample(entry.sampleId);
+    if (entry.draft !== undefined) callbacks.openDraft(entry.draft.files);
+    else if (entry.sampleId !== undefined) callbacks.openSample(entry.sampleId);
     else callbacks.openLinked(entry.url);
   });
   item.append(button);
+
+  // A draft can be deleted where it is listed. One click, no question: the
+  // list is the reader's own, and a draft deleted by mistake is a Save away
+  // while its files are still in the editor.
+  if (entry.draft !== undefined) {
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "ghost example-delete";
+    remove.textContent = "✕";
+    remove.title = `Delete the draft ${entry.draft.name}`;
+    remove.setAttribute("aria-label", `Delete the draft ${entry.draft.name}`);
+    remove.addEventListener("click", () => {
+      deleteDraft(entry.draft.name);
+      render();
+    });
+    item.append(remove);
+  }
 
   if (entry.github) {
     const link = document.createElement("a");

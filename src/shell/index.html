@@ -12,6 +12,16 @@
      phone puts on its home screen. -->
 <link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<!-- Installable: the manifest names the page as an app, the service worker
+     (sw.js) keeps every asset it needs, and a browser that has both offers
+     "install" - after which the playground opens from a home screen and
+     runs with no network at all, on the build the last online visit left
+     in the cache. Every path relative, like everything else here. The
+     theme colour is the bar's, in both palettes, so the window frame an
+     installed app gets is the bar continued. -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f5f7">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1e2024">
 
 <!-- The ABAP runtime, started before anything else on this page.
 
@@ -249,7 +259,7 @@
 
     <h3>Keyboard</h3>
     <dl class="about-keys">
-      <dt><kbd>Ctrl</kbd> <kbd>Enter</kbd></dt><dd>Run - also <kbd>Ctrl</kbd> <kbd>S</kbd>, which a browser would otherwise spend on saving the page</dd>
+      <dt><kbd>Ctrl</kbd> <kbd>Enter</kbd></dt><dd>Run - the unit tests in a <code>.clas.testclasses.abap</code> file first, then the app; also <kbd>Ctrl</kbd> <kbd>S</kbd>, which a browser would otherwise spend on saving the page</dd>
       <dt><kbd>Ctrl</kbd> <kbd>Z</kbd> / <kbd>Y</kbd></dt><dd>Undo and redo, per file</dd>
       <dt><kbd>Shift</kbd> <kbd>Alt</kbd> <kbd>F</kbd></dt><dd>Format the open file</dd>
       <dt><kbd>F1</kbd></dt><dd>Everything else the editor can do, by name</dd>
@@ -271,6 +281,17 @@
       MIT
     </p>
   </div>
+</dialog>
+
+<!-- Share: the link is in the clipboard before this opens; what it adds is
+     the other ways out - an embed block, a markdown fence, a zip for
+     abapGit. Filled by src/shell/share-dialog.mjs on every open. -->
+<dialog id="share-dialog" class="about share">
+  <form method="dialog" class="about-head">
+    <h2>Share</h2>
+    <button class="ghost" aria-label="Close">✕</button>
+  </form>
+  <div class="about-body" id="share-body"></div>
 </dialog>
 
 <!-- The examples browser: the built-in samples plus whatever the sample
@@ -330,6 +351,16 @@
           </button>
           <button type="button" data-insight="outline" class="insight-tab" role="tab"
                   aria-selected="false" aria-controls="insight-body">Outline</button>
+          <button type="button" data-insight="view" class="insight-tab" role="tab"
+                  aria-selected="false" aria-controls="insight-body">View</button>
+          <button type="button" data-insight="tests" class="insight-tab" role="tab"
+                  aria-selected="false" aria-controls="insight-body">
+            Tests <span id="test-count" class="insight-badge"></span>
+          </button>
+          <button type="button" data-insight="roundtrips" class="insight-tab" role="tab"
+                  aria-selected="false" aria-controls="insight-body">
+            Roundtrips <span id="roundtrip-count" class="insight-badge"></span>
+          </button>
           <button type="button" data-insight="log" class="insight-tab" role="tab"
                   aria-selected="false" aria-controls="insight-body">
             Log <span id="log-dot" class="insight-badge"></span>

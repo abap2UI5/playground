@@ -482,3 +482,31 @@ test("an embedded playground keeps the panel away until something goes wrong", a
   await expect(page.locator("#insight")).toBeVisible({ timeout: 30000 });
   await expect(page.locator(".log-body")).toBeVisible();
 });
+
+test("the View tab shows the XML the builder chain makes, and follows the typing", async ({ page }) => {
+  await open(page);
+  await page.locator('[data-insight="view"]').click();
+  // The sample's view, one element per line - reconstructed by the abap2UI5
+  // linter from the chain, not rendered by the app.
+  const xml = page.locator(".view-xml");
+  await expect(xml).toContainText('<Button id="btnGreet" text="say hello"', { timeout: 30000 });
+  const lines = (await xml.textContent()).split("\n");
+  expect(lines.length).toBeGreaterThan(5);
+  expect(lines[0]).toMatch(/^<mvc:View /);
+  expect(lines.some((l) => l.startsWith("      <Input "))).toBe(true);
+
+  // A keystroke changes the chain, and the preview follows it.
+  await setSource(page, (await getSource(page)).replace("say hello", "greet me"));
+  await expect(xml).toContainText('text="greet me"');
+
+  // A file that builds no view says so instead of showing nothing.
+  await setSource(page, `CLASS zcl_playground DEFINITION PUBLIC CREATE PUBLIC.
+  PUBLIC SECTION.
+    INTERFACES z2ui5_if_app.
+ENDCLASS.
+CLASS zcl_playground IMPLEMENTATION.
+  METHOD z2ui5_if_app~main.
+  ENDMETHOD.
+ENDCLASS.`);
+  await expect(page.locator("#insight-body")).toContainText("builds no view");
+});

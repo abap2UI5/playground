@@ -162,9 +162,28 @@ the Problems list, which is the designed behaviour.
 
 ## Linking a playground
 
+**Unit tests.** A file named `<class>.clas.testclasses.abap` beside a class —
+the `+` in the file strip offers one, with a skeleton that passes — holds its
+local test classes, exactly as abapGit keeps them. Run runs them first,
+through the runner open-abap ships, and starts the app after: a failing test
+is listed in the **Tests** tab with what was expected and what was there, its
+row goes to the assertion, and the status line says how many failed. The
+**Unit tests** sample is the worked example.
+
+**Drafts.** The playground keeps whatever was last in the editor on its own.
+For more than one piece of work, the samples browser has **Your drafts** at
+the top: name what is open, save it, and it is listed there — in this
+browser — to open or delete another day.
+
 **Share** puts every open file in the URL fragment, deflated: a 2500-character
 class becomes a link of about 700 characters. Being a fragment, it never leaves
-the browser — it is not sent to the server and does not appear in any log.
+the browser — it is not sent to the server and does not appear in any log. The
+link is copied first; the dialog that opens then has the other ways out: the
+block that embeds this demo in a documentation page (the loader with the class
+inline, or the playground framed when there are several files), the markdown
+fence a docs page prints an example in, and **Download for abapGit** — a zip of
+the files with their metadata, laid out as a repository, for abapGit's offline
+import.
 
 **Light or dark.** The page follows the system until the switch at the
 right-hand end of the bar says otherwise — the same switch the documentation
@@ -173,6 +192,13 @@ the docs put the playground, the docs. A choice is kept between visits; a
 choice that agrees with the system is forgotten rather than stored, so a page
 switched back follows the system again from then on. The switch reaches the
 editor and the running app as well, without restarting it.
+
+**Installable.** The page carries a web app manifest, so a browser that
+supports it offers to install the playground; opened from a home screen it
+runs with no network at all, on the build the last online visit left in the
+service worker's cache — the two documents included, and whatever UI5 modules
+the apps run so far have loaded. The ABAP runs in the tab either way, so there
+is no server to be away from.
 
 **Full screen** opens the app on its own in a new tab — the whole window for the
 app, nothing around it: no editor, and no bar over it either. It is the same URL

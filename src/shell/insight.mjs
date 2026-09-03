@@ -12,6 +12,7 @@ import {
   fixableNow,
   focusProblem,
   getFiles,
+  getSource,
   invalidateAnalysis,
   refresh,
 } from "../editor/editor.mjs";
@@ -22,7 +23,10 @@ import {
   applyAbaplintSettings,
   documentSymbols,
 } from "../editor/registry.mjs";
-import { applyLinterSettings, linterDefaults, linterSettings } from "../editor/abap2ui5-lint.mjs";
+import { applyLinterSettings, linterDefaults, linterSettings, viewsFor } from "../editor/abap2ui5-lint.mjs";
+import { copyToClipboard } from "./share.mjs";
+import { onRoundtrip, roundtripList } from "./roundtrips.mjs";
+import { prettyXml } from "./xml-pretty.mjs";
 import { keepAbaplintSettings, keepLinterSettings } from "./checker-settings.mjs";
 import { readStored, writeStored } from "./storage.mjs";
 import { currentLog, hideOutput, onLogChange, setStatus } from "./ui.mjs";
@@ -137,6 +141,13 @@ export function setUpInsight() {
     focusProblem(row.dataset.file, Number(row.dataset.line), Number(row.dataset.column));
   });
 
+  // A roundtrip landing while its tab is open is listed as it lands; the
+  // badge counts them whichever tab is open.
+  onRoundtrip(() => {
+    paintRoundtripCount();
+    if (view === "roundtrips") render();
+  });
+
   render();
 }
 
@@ -205,7 +216,7 @@ export function updateInsight(problems) {
   paintCount();
   // The config views hold half-typed text somebody is in the middle of - a
   // rerender under their hands would throw it away on every keystroke.
-  if (view === "problems" || view === "outline") render();
+  if (view === "problems" || view === "outline" || view === "view") render();
 }
 
 // A dot on the Log tab while there is something unread in it, so switching
@@ -230,6 +241,9 @@ function paintCount() {
 const VIEWS = {
   problems: problemList,
   outline: outlineList,
+  view: viewPreview,
+  tests: testView,
+  roundtrips: roundtripView,
   log: logView,
   abaplint: abaplintConfig,
   abap2ui5: linterConfig,
@@ -305,7 +319,7 @@ function problemList() {
     who.className = "insight-who";
     // Which checker said it, because the two mean different things: abaplint
     // says this will not compile, abap2UI5 says it will compile and be wrong.
-    who.textContent = problem.source === "abap2UI5" ? `abap2UI5 · ${problem.rule ?? ""}` : "abaplint";
+    who.textContent = problem.source === "abap2UI5" ? `abap2UI5 · ${problem.rule ?? ""}` : (problem.source ?? "abaplint");
 
     row.append(where, what, who);
     item.append(row);
@@ -461,6 +475,54 @@ function empty(text) {
   p.className = "insight-empty";
   p.textContent = text;
   return p;
+}
+
+// ------------------------------------------------------------------- view
+
+// The XML the builder chain in the open file produces, as the abap2UI5
+// linter reconstructs it - without running a line of ABAP, so it follows
+// the typing. Not the view the app rendered: that one is in the Roundtrips
+// tab, where it arrived. This is the answer to "what does this chain make",
+// one element per line, which is the fastest way to learn the builder.
+function viewPreview() {
+  const file = currentFile();
+  const source = file ? getSource(file) : undefined;
+  if (source === undefined) return empty("Nothing to show yet.");
+  const { docs, notes, loaded } = viewsFor(source);
+  if (!loaded) return empty("The abap2UI5 linter is still loading - the view appears when it has.");
+  if (docs.length === 0) {
+    return empty("This file builds no view with z2ui5_cl_ui5_view_builder - nothing to reconstruct.");
+  }
+
+  const wrap = document.createElement("div");
+  wrap.className = "view-preview";
+  docs.forEach((doc, i) => {
+    const pretty = prettyXml(doc);
+    const head = document.createElement("div");
+    head.className = "log-head";
+    const title = document.createElement("span");
+    title.className = "log-title";
+    title.textContent = docs.length === 1 ? "The view this file builds" : `View ${i + 1} of ${docs.length}`;
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "ghost";
+    copy.textContent = "Copy";
+    copy.addEventListener("click", async () => {
+      copy.textContent = (await copyToClipboard(pretty)) ? "copied" : "Copy";
+    });
+    head.append(title, copy);
+    const body = document.createElement("pre");
+    body.className = "log-body view-xml";
+    body.textContent = pretty;
+    wrap.append(head, body);
+  });
+  if (notes.length > 0) {
+    const said = document.createElement("p");
+    said.className = "config-blurb view-notes";
+    said.textContent = notes.join(" · ");
+    wrap.append(said);
+  }
+  return wrap;
 }
 
 // ------------------------------------------------------------------ config
@@ -622,6 +684,196 @@ function appended(...nodes) {
   box.append(...nodes);
   return box;
 }
+
+// ------------------------------------------------------------------ tests
+
+// What the last Run's unit tests said - set by run( ) in main.mjs from the
+// runtime's answer (runUnitTests( ) in src/runtime/index.mjs); a run with
+// no test include sets an empty list, which the tab explains.
+let testResults = [];
+
+export function setTestResults(results) {
+  testResults = results ?? [];
+  paintTestCount();
+  if (view === "tests") render();
+}
+
+function paintTestCount() {
+  const badge = document.getElementById("test-count");
+  if (!badge) return;
+  const failed = testResults.filter((r) => !r.passed).length;
+  badge.textContent = testResults.length === 0 ? "" : failed > 0 ? String(failed) : "✓";
+  badge.className = `insight-badge${failed > 0 ? " is-error" : testResults.length > 0 ? " is-ok" : ""}`;
+}
+
+// One row per test method: passed or failed, the class and the method, how
+// long it took, and for a failure the assertion's message with what was
+// expected and what was there. A row goes to the assertion's line - the
+// runtime traces the JavaScript frame the assertion was raised from back to
+// the test include - and, for a test that passed, nowhere.
+function testView() {
+  if (testResults.length === 0) {
+    return empty(
+      "No tests ran. Add a file called <class>.clas.testclasses.abap beside your class - the + in the file strip " +
+        "offers it - with local classes FOR TESTING, and Run runs them before starting the app.",
+    );
+  }
+  const wrap = document.createElement("div");
+  wrap.className = "tests";
+
+  const passed = testResults.filter((r) => r.passed).length;
+  const failed = testResults.length - passed;
+  const head = document.createElement("p");
+  head.className = `tests-summary${failed > 0 ? " is-error" : ""}`;
+  head.textContent =
+    failed === 0
+      ? `${passed} test${passed === 1 ? "" : "s"} passed`
+      : `${failed} of ${testResults.length} test${testResults.length === 1 ? "" : "s"} failed`;
+  wrap.append(head);
+
+  const list = document.createElement("ul");
+  list.className = "insight-list";
+  for (const result of testResults) {
+    const item = document.createElement("li");
+    const row = document.createElement(result.location ? "button" : "div");
+    if (result.location) row.type = "button";
+    row.className = `insight-row test-row is-${result.passed ? "ok" : "error"}`;
+    if (result.location) {
+      row.dataset.file = result.location.file;
+      row.dataset.line = String(result.location.line);
+      row.dataset.column = "1";
+    }
+
+    const mark = document.createElement("span");
+    mark.className = "test-mark";
+    mark.textContent = result.passed ? "✓" : "✗";
+
+    const name = document.createElement("span");
+    name.className = "insight-what test-name";
+    name.textContent = `${result.testclass.toLowerCase()}->${result.method.toLowerCase()}`;
+
+    const took = document.createElement("span");
+    took.className = "insight-who";
+    took.textContent = `${Math.max(1, Math.round(result.microseconds / 1000))} ms`;
+
+    row.append(mark, name, took);
+    item.append(row);
+
+    if (!result.passed) {
+      const detail = document.createElement("div");
+      detail.className = "test-detail";
+      const lines = [];
+      if (result.message) lines.push(result.message);
+      if (result.expected !== "" || result.actual !== "") {
+        lines.push(`expected: ${result.expected}`, `actual:   ${result.actual}`);
+      }
+      if (lines.length === 0) lines.push(result.status.toLowerCase());
+      detail.textContent = lines.join("\n");
+      item.append(detail);
+    }
+    list.append(item);
+  }
+  wrap.append(list);
+  return wrap;
+}
+
+// ------------------------------------------------------------- roundtrips
+
+function paintRoundtripCount() {
+  const badge = document.getElementById("roundtrip-count");
+  if (!badge) return;
+  const list = roundtripList();
+  const failed = list.some((r) => r.status >= 400);
+  badge.textContent = list.length === 0 ? "" : String(list.length);
+  badge.className = `insight-badge${failed ? " is-error" : ""}`;
+}
+
+// Which roundtrip is opened up in the list, by its number; a new Run starts
+// the numbering over, so a stale selection simply matches nothing.
+let openedRoundtrip;
+
+// The conversation between the frontend and the app, one row per roundtrip:
+// the event, how long the ABAP took, and what the answer did - a view, a
+// popup, a model update, a dump. A row opens up into the request and the
+// response as they travelled, and the view XML the answer carried, one
+// element per line.
+function roundtripView() {
+  const list = roundtripList();
+  if (list.length === 0) {
+    return empty("Nothing yet. Every request the app sends and every answer it gets lands here, with the time the ABAP took.");
+  }
+
+  const wrap = document.createElement("div");
+  wrap.className = "roundtrips";
+
+  const rows = document.createElement("ul");
+  rows.className = "insight-list";
+  for (const entry of list) {
+    const item = document.createElement("li");
+    item.className = "roundtrip-item";
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = `insight-row roundtrip-row${entry.status >= 400 ? " is-error" : ""}${entry.n === openedRoundtrip ? " is-open" : ""}`;
+    row.setAttribute("aria-expanded", String(entry.n === openedRoundtrip));
+
+    const n = document.createElement("span");
+    n.className = "insight-where";
+    n.textContent = `#${entry.n}`;
+
+    const what = document.createElement("span");
+    what.className = "insight-what";
+    what.textContent = entry.args.length > 0 ? `${entry.event} (${entry.args.join(", ")})` : entry.event;
+
+    const did = document.createElement("span");
+    did.className = "roundtrip-did";
+    did.textContent = entry.did.join(" · ");
+
+    const ms = document.createElement("span");
+    ms.className = "insight-who";
+    ms.textContent = `${entry.ms} ms`;
+
+    row.append(n, what, did, ms);
+    row.addEventListener("click", () => {
+      openedRoundtrip = openedRoundtrip === entry.n ? undefined : entry.n;
+      render();
+    });
+    item.append(row);
+    if (entry.n === openedRoundtrip) item.append(roundtripDetail(entry));
+    rows.append(item);
+  }
+  wrap.append(rows);
+  return wrap;
+}
+
+function roundtripDetail(entry) {
+  const detail = document.createElement("div");
+  detail.className = "roundtrip-detail";
+  const block = (title, text) => {
+    const head = document.createElement("div");
+    head.className = "log-head";
+    const label = document.createElement("span");
+    label.className = "log-title";
+    label.textContent = title;
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "ghost";
+    copy.textContent = "Copy";
+    copy.addEventListener("click", async () => {
+      copy.textContent = (await copyToClipboard(text)) ? "copied" : "Copy";
+    });
+    head.append(label, copy);
+    const pre = document.createElement("pre");
+    pre.className = "log-body roundtrip-body";
+    pre.textContent = text;
+    detail.append(head, pre);
+  };
+  for (const view of entry.views) block(`View for slot ${view.slot}`, prettyXml(view.xml));
+  block("Request", asText(entry.request));
+  block(entry.status >= 400 ? `Response (${entry.status})` : "Response", asText(entry.response));
+  return detail;
+}
+
+const asText = (value) => (typeof value === "string" ? value : JSON.stringify(value, null, 2));
 
 // ------------------------------------------------------------------- log
 

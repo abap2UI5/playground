@@ -835,6 +835,156 @@ CLASS zcl_playground IMPLEMENTATION.
 ENDCLASS.`;
 
 // One file each, unless the sample is about more than one object.
+const UNIT_APP = `CLASS zcl_playground DEFINITION PUBLIC CREATE PUBLIC.
+
+  PUBLIC SECTION.
+    INTERFACES z2ui5_if_app.
+
+    DATA amount   TYPE i.
+    DATA rate     TYPE i.
+    DATA total    TYPE string.
+
+    "! The logic under test: a percentage, rounded to whole units.
+    METHODS with_tax
+      IMPORTING
+        net           TYPE i
+        percent       TYPE i
+      RETURNING
+        VALUE(result) TYPE i.
+
+  PROTECTED SECTION.
+    DATA client TYPE REF TO z2ui5_if_client.
+    METHODS view_display.
+
+ENDCLASS.
+
+
+CLASS zcl_playground IMPLEMENTATION.
+
+  METHOD with_tax.
+
+    result = net + ( net * percent + 50 ) DIV 100.
+
+  ENDMETHOD.
+
+
+  METHOD z2ui5_if_app~main.
+
+    me->client = client.
+
+    IF client->check_on_init( ).
+      amount = 100.
+      rate   = 19.
+      view_display( ).
+      RETURN.
+    ENDIF.
+
+    IF client->check_on_navigated( ).
+      view_display( ).
+      RETURN.
+    ENDIF.
+
+    CASE client->get_event( ).
+      WHEN \`CALC\`.
+        total = |{ with_tax( net = amount percent = rate ) }|.
+    ENDCASE.
+
+  ENDMETHOD.
+
+
+  METHOD view_display.
+
+    DATA(view) = z2ui5_cl_ui5_view_builder=>factory(
+        )->ele( n = \`View\` ns = \`mvc\`
+            )->a( n = \`xmlns\`        v = \`sap.m\`
+            )->a( n = \`xmlns:mvc\`    v = \`sap.ui.core.mvc\`
+            )->a( n = \`displayBlock\` v = \`true\`
+            )->a( n = \`height\`       v = \`100%\` ).
+
+    DATA(page) = view->ele( \`Shell\`
+        )->ele( \`Page\`
+            )->a( n = \`title\` v = \`Unit tests run before the app\` ).
+
+    page->tag( \`Input\`
+        )->a( n = \`id\`    v = \`inpAmount\`
+        )->a( n = \`value\` v = client->_bind( amount ) ).
+
+    page->tag( \`Input\`
+        )->a( n = \`id\`    v = \`inpRate\`
+        )->a( n = \`value\` v = client->_bind( rate ) ).
+
+    page->tag( \`Button\`
+        )->a( n = \`id\`    v = \`btnCalc\`
+        )->a( n = \`text\`  v = \`with tax\`
+        )->a( n = \`type\`  v = \`Emphasized\`
+        )->a( n = \`press\` v = client->_event( \`CALC\` ) ).
+
+    page->tag( \`Text\`
+        )->a( n = \`id\`   v = \`txtTotal\`
+        )->a( n = \`text\` v = client->_bind( total ) ).
+
+    client->view_display( view->stringify( ) ).
+
+  ENDMETHOD.
+
+ENDCLASS.
+`;
+
+const UNIT_TESTS = `"! The tests of zcl_playground. A file named <class>.clas.testclasses.abap
+"! beside the class holds its local test classes, exactly as abapGit keeps
+"! them - and Run runs them here, before the app, in this browser.
+CLASS ltcl_with_tax DEFINITION FOR TESTING RISK LEVEL HARMLESS DURATION SHORT.
+
+  PRIVATE SECTION.
+    DATA cut TYPE REF TO zcl_playground.
+
+    METHODS setup.
+    METHODS nineteen_percent FOR TESTING.
+    METHODS rounds_to_whole_units FOR TESTING.
+    METHODS zero_percent_changes_nothing FOR TESTING.
+
+ENDCLASS.
+
+
+CLASS ltcl_with_tax IMPLEMENTATION.
+
+  METHOD setup.
+
+    cut = NEW #( ).
+
+  ENDMETHOD.
+
+
+  METHOD nineteen_percent.
+
+    cl_abap_unit_assert=>assert_equals(
+      act = cut->with_tax( net = 100 percent = 19 )
+      exp = 119 ).
+
+  ENDMETHOD.
+
+
+  METHOD rounds_to_whole_units.
+
+    " 7% of 10 is 0.7, which rounds up to a unit.
+    cl_abap_unit_assert=>assert_equals(
+      act = cut->with_tax( net = 10 percent = 7 )
+      exp = 11 ).
+
+  ENDMETHOD.
+
+
+  METHOD zero_percent_changes_nothing.
+
+    cl_abap_unit_assert=>assert_equals(
+      act = cut->with_tax( net = 42 percent = 0 )
+      exp = 42 ).
+
+  ENDMETHOD.
+
+ENDCLASS.
+`;
+
 const one = (source) => [{ name: MAIN_FILE, source }];
 
 export const SAMPLES = [
@@ -844,6 +994,15 @@ export const SAMPLES = [
   { id: "form", title: "Form and validation", note: "message box, layout library", files: one(FORM) },
   { id: "tabs", title: "Tabs and a list", note: "event arguments, growing table", files: one(TABS) },
   { id: "popup", title: "Confirmation popup", note: "nav_app_call, on-navigated", files: one(POPUP) },
+  {
+    id: "unit-tests",
+    title: "Unit tests",
+    note: "a test include, run before the app",
+    files: [
+      { name: MAIN_FILE, source: UNIT_APP },
+      { name: "zcl_playground.clas.testclasses.abap", source: UNIT_TESTS },
+    ],
+  },
   {
     id: "navigation",
     title: "Two apps",

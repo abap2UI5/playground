@@ -50,21 +50,30 @@ test("the heavy assets come out of the worker's cache on a second visit", async 
   expect([...fetched].filter((p) => chunks.includes(p)), "every chunk came out of the worker's cache").toEqual([]);
 });
 
-test("what has to stay live is not cached", async ({ page }) => {
+test("the documents are answered from the network first, and the cache is only the fallback", async ({ page }) => {
   await open(page);
   expect(await workerReady(page)).toBe(true);
 
-  const { served, fetched } = watch(page);
+  // Both documents are in the cache - that is what the installed playground
+  // opens on with no network - but a copy in the cache must never win over
+  // the network: this page's, because a cached index.html would outlive the
+  // deploy that wrote it; the app's, because Run reloads it with a new
+  // counter every time and the counter is the whole mechanism. So the
+  // cached copies are replaced by hand with pages that would say so, and
+  // the visit has to be the real thing anyway.
+  await page.evaluate(async () => {
+    const [name] = await caches.keys();
+    const cache = await caches.open(name);
+    for (const rel of ["index.html", "app/index.html"]) {
+      await cache.put(
+        new URL(rel, document.baseURI),
+        new Response("<title>stale</title><p>a copy from the cache</p>", { headers: { "content-type": "text/html" } }),
+      );
+    }
+  });
   await open(page);
-
-  // The page itself. A cached index.html would outlive the deploy that wrote
-  // it, and it is the one file cheap enough that there is nothing to save.
-  expect([...served]).not.toContain("/");
-  expect([...fetched]).toContain("/");
-
-  // The app's own document. Run reloads it with a new counter every time, and
-  // the counter is the whole mechanism: cached, an app would never restart.
-  expect([...served].filter((p) => p.startsWith("/app/index.html"))).toEqual([]);
+  await expect(page).not.toHaveTitle("stale");
+  await expect(page.frameLocator("#app").getByText("Hello abap2UI5")).toBeVisible();
 
   // And nothing at all is in the cache that was not asked for by name.
   const cached = await page.evaluate(async () => {
@@ -84,8 +93,9 @@ test("what has to stay live is not cached", async ({ page }) => {
         entry === "/editor/registry.mjs" ||
         entry === "/runtime/framework.mjs" ||
         entry === "/runtime/sql-wasm.wasm" ||
+        entry === "/index.html" ||
         /^\/assets\/[\w.-]+\.(ttf|mjs)$/.test(entry) ||
-        (entry.startsWith("/app/") && entry !== "/app/index.html"),
+        entry.startsWith("/app/"),
       `${entry} is in the cache and is not on the allow list`,
     ).toBe(true);
   }
@@ -132,8 +142,41 @@ test("the app frame's stylesheets and component come out of the cache as well", 
   expect(kept).toContain("/app/frontend-bridge.js");
   expect(kept.some((p) => p.startsWith("/app/manifest.json"))).toBe(true);
 
-  // The document itself is the one thing under app/ that stays live.
-  expect([...fetched].filter((p) => p.startsWith("/app/")).map((p) => p.split("?")[0])).toEqual(["/app/index.html"]);
+  // The document itself is the one thing under app/ that goes to the network
+  // (through the worker, which asks the network first - see the test above).
+  expect([...fetched].filter((p) => p.startsWith("/app/")).map((p) => p.split("?")[0]).filter((p) => p !== "/app/index.html")).toEqual([]);
+});
+
+test("the playground opens and runs with no network, on what the last visit left in the cache", async ({ page, context }) => {
+  // Installed from a home screen, opened on a train: the manifest makes the
+  // page installable, and this is the half the worker has to hold up - every
+  // asset the page and the app frame ask for is in the cache, the two
+  // documents included, and the ABAP runs where it always did, in this tab.
+  await open(page);
+  expect(await workerReady(page)).toBe(true);
+  await page.waitForLoadState("networkidle");
+  // A controlled visit, so the app's own assets have all passed through the
+  // worker once and been kept - including what the app only reaches for on
+  // the first press of its button, UI5's message toast, which is the honest
+  // shape of "what the last visit left": the modules a UI5 app loads lazily
+  // are in the cache once they have been loaded, and not before.
+  await open(page);
+  await expect(page.frameLocator("#app").getByText("Hello abap2UI5")).toBeVisible();
+  await control(page, "inpName", "-inner").fill("online");
+  await control(page, "btnGreet").click();
+  await expect(control(page, "txtGreeting")).toContainText("Hello online!");
+  await page.waitForLoadState("networkidle");
+
+  await context.setOffline(true);
+  try {
+    await open(page);
+    await expect(page.frameLocator("#app").getByText("Hello abap2UI5")).toBeVisible();
+    await control(page, "inpName", "-inner").fill("offline");
+    await control(page, "btnGreet").click();
+    await expect(control(page, "txtGreeting")).toContainText("Hello offline!");
+  } finally {
+    await context.setOffline(false);
+  }
 });
 
 test("a ?src= link is still read from where it lives, and still runs", async ({ page }) => {
