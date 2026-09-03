@@ -171,7 +171,12 @@ const result = await esbuild.build({
   // the CSS lands next to the bundle as assets/shell.css (the shell's own
   // stylesheet is imported by main.mjs so both end up in that one file), and
   // the font is copied out with a hashed name.
-  loader: { ".ttf": "file" },
+  // Monaco's icon font is copied out beside the bundle; the built-in samples'
+  // ABAP (src/samples/, listed in src/editor/sample-list.mjs) is inlined into
+  // it as text. They are real .clas.abap files so that the samples browser can
+  // link a row to the ABAP rather than to the JavaScript that used to quote it
+  // - see src/editor/samples.mjs, which is the only importer.
+  loader: { ".ttf": "file", ".abap": "text" },
   // The linter plugin goes first: it claims `fs` and `path` for the abap2UI5
   // linter alone, and leaves every other importer to the ordinary stubs.
   plugins: [abap2ui5LinterPlugin(ROOT), nodeStubPlugin(ROOT)],

@@ -154,6 +154,97 @@ test("Ctrl+S runs, instead of offering to save the page", async ({ page }) => {
   await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
 });
 
+test("Auto runs the edit by itself, and hands Run back when it is switched off", async ({ page }) => {
+  await open(page);
+  const auto = page.locator("#autorun");
+  const stored = () => page.evaluate(() => localStorage.getItem("abap2ui5-playground:autorun"));
+
+  // Off is the default and nothing is stored for it - a run is a fresh
+  // database and a reloaded frame, so it is a choice somebody makes.
+  await expect(auto).toHaveAttribute("aria-checked", "false");
+  await expect(page.locator("#run")).toBeEnabled();
+  expect(await stored()).toBeNull();
+
+  // An edit with the switch off changes nothing on the right: that is what
+  // Run is for, and it is the behaviour the switch exists to change.
+  const before = await page.locator("#app").getAttribute("src");
+  await setSource(page, (await getSource(page)).replace("Hello abap2UI5", "not run yet"));
+  await page.waitForTimeout(1500);
+  await expect(page.locator("#app")).toHaveAttribute("src", before ?? "");
+
+  // On: Run goes inactive, because there is nothing left for it to do - and
+  // what was typed while it was off is run at once rather than waiting for
+  // the next keystroke.
+  await auto.click();
+  await expect(auto).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("#run")).toBeDisabled();
+  expect(await stored()).toBe("on");
+  await expect(page.locator("#app")).not.toHaveAttribute("src", before ?? "", { timeout: 60000 });
+  await expect(page.frameLocator("#app").getByText("not run yet")).toBeVisible();
+
+  // And from here on every change reaches the app on its own.
+  const running = await page.locator("#app").getAttribute("src");
+  await setSource(page, (await getSource(page)).replace("not run yet", "run by itself"));
+  await expect(page.locator("#app")).not.toHaveAttribute("src", running ?? "", { timeout: 60000 });
+  await expect(page.frameLocator("#app").getByText("run by itself")).toBeVisible();
+
+  // Off again: Run comes back, the setting is forgotten rather than stored as
+  // the default it now equals, and an edit stays in the editor.
+  await auto.click();
+  await expect(auto).toHaveAttribute("aria-checked", "false");
+  await expect(page.locator("#run")).toBeEnabled();
+  expect(await stored()).toBeNull();
+  const last = await page.locator("#app").getAttribute("src");
+  await setSource(page, (await getSource(page)).replace("run by itself", "not run either"));
+  await page.waitForTimeout(1500);
+  await expect(page.locator("#app")).toHaveAttribute("src", last ?? "");
+});
+
+test("Auto is remembered between visits, and never in an embedded playground", async ({ page }) => {
+  await open(page);
+  await page.locator("#autorun").click();
+  await expect(page.locator("#autorun")).toHaveAttribute("aria-checked", "true");
+
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await expect(page.locator("#autorun")).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("#run")).toBeDisabled();
+
+  // A demo in somebody's documentation page reads the same to every reader -
+  // the rule the theme and the checker settings follow, and the draft with
+  // them. The stored choice is still there for the page that made it.
+  await page.goto("/?embed=1");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await expect(page.locator("#autorun")).toHaveAttribute("aria-checked", "false");
+  await expect(page.locator("#run")).toBeEnabled();
+});
+
+// The staged fault: boot( ) asks for the editor's container by id, outside
+// its own try/catch, and every startup failure of this shape used to end the
+// same way - the page reading "loading the ABAP runtime…" for ever with a
+// stack in a console nobody has open. That is how the real one was reported:
+// a cached assets/shell.mjs from one build under the next build's
+// index.html, reaching for a control that document no longer has.
+const breakBoot = (page) =>
+  page.addInitScript(() => {
+    const real = document.getElementById.bind(document);
+    document.getElementById = (id) => {
+      if (id === "editor") throw new Error("staged: no editor container");
+      return real(id);
+    };
+  });
+
+test("a startup failure is said in the bar instead of leaving the page loading", async ({ page }) => {
+  await breakBoot(page);
+  await page.goto("/");
+
+  await expect(page.locator("#status")).toHaveText("the playground could not start", { timeout: 60000 });
+  await expect(page.locator("#status")).toHaveClass(/error/);
+  // Nothing is served from a cache on a first visit, so nothing is said about
+  // one - the message is the failure and nothing else.
+  await expect(page.locator("#status")).not.toContainText("cached");
+});
+
 test("the editor content survives a reload", async ({ page }) => {
   await open(page);
   await setSource(page, (await getSource(page)).replace("Hello abap2UI5", "kept across a reload"));
@@ -276,7 +367,7 @@ test("the bar keeps to a few rows on a phone", async ({ page }) => {
   expect(bar.height, "the bar is not a fifth of the phone").toBeLessThan(100);
 
   // And nothing that has to be reachable was compacted away with the rows.
-  for (const id of ["#undo", "#redo", "#format", "#examples", "#run", "#share", "#source-link", "#status", "#about", "#theme"]) {
+  for (const id of ["#undo", "#redo", "#format", "#examples", "#run", "#autorun", "#share", "#source-link", "#status", "#about", "#theme"]) {
     await expect(page.locator(id)).toBeVisible();
   }
 });

@@ -52,7 +52,12 @@ pipeline and moves the last step into the browser.
   that release does not have, an icon that is in no icon font. Those compile,
   and at run time they render nothing and log nothing.
 - **Run.** Only the classes in the editor are compiled, in about 20 ms, and
-  registered with the running runtime.
+  registered with the running runtime. **Auto** beside it presses Run for you,
+  shortly after you stop typing: while it is on, Run itself is inactive and
+  every edit reaches the app on its own. It is off to begin with, because a run
+  is a fresh database and a reloaded app frame — which is exactly what you do
+  not want halfway through filling in a form, and exactly what you do want
+  while a view is taking shape.
 - **Rendering.** The abap2UI5 frontend runs in an iframe and talks to its backend
   over a plain `fetch` POST, so the playground replaces `window.fetch` for that
   one request with a call into the framework in the parent page. From the
@@ -171,10 +176,11 @@ This replaced three separate GitHub Pages sites, one per sample repository.
 
 **Samples** in the bar is the same list without leaving the editor: drafts you
 saved, the built-in samples, and everything the catalogue holds — searchable,
-filterable by repository, "OpenUI5 only" and "newer than 1.71". A chosen entry
-opens through the same path a `?src=` link takes — the raw URL of its class,
-fetched, checked and run — so it arrives with the **Source** link back to where
-it lives.
+filterable by repository, "OpenUI5 only" and "newer than 1.71". Every row links
+to its ABAP on GitHub — the built-in samples too, which live as ordinary
+`.clas.abap` files under `src/samples/`. A chosen entry opens through the same
+path a `?src=` link takes — the raw URL of its class, fetched, checked and run
+— so it arrives with the **Source** link back to where it lives.
 
 It reads the same index the catalogue page does, from this site rather than
 from GitHub, and nothing is fetched until the button is clicked. Where the

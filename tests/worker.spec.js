@@ -285,3 +285,54 @@ test("a core asset the worker fetches on a miss is hashed against the build, and
   });
   await expect.poll(cachedFramework, { timeout: 20000 }).toBe(before);
 });
+
+test("a startup failure on a page the worker is serving throws the cached site away", async ({ page }) => {
+  // The first visit is the one that installs the worker and fills its cache.
+  await open(page);
+  expect(await workerReady(page)).toBe(true);
+
+  // The second is served by it, and fails - the shape of a cache holding one
+  // build's bundle under another build's document, which is what a deploy
+  // could leave behind before the build stamp above was checked on every
+  // asset. A page that cannot start and is being served from a cache has one
+  // repair, and it is the reader who has to be asked for it.
+  // Staged for one load only: an init script runs on every navigation in this
+  // page, and the reload below has to be the ordinary one a reader would do.
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem("staged-boot-failure")) return;
+    sessionStorage.setItem("staged-boot-failure", "1");
+    const real = document.getElementById.bind(document);
+    document.getElementById = (id) => {
+      if (id === "editor") throw new Error("staged: no editor container");
+      return real(id);
+    };
+  });
+  await page.goto("/");
+
+  await expect(page.locator("#status")).toContainText("cached copy was discarded, please reload", {
+    timeout: 60000,
+  });
+
+  // The worker is gone, and that is the repair: it goes on controlling the
+  // page it is already serving until that page unloads, so the reload is the
+  // first load it cannot touch.
+  //
+  // What is deliberately NOT asserted here is an empty cache, and this cost a
+  // CI run to learn. The caches ARE emptied - for an instant. A startup
+  // failure this early lands with the page's own requests still in flight,
+  // every one of them through a worker that is still serving, and its
+  // on-a-miss path puts what it fetches back under the same name. So the
+  // cache comes back within a second and stays. It is harmless - nothing
+  // reads a cache but a worker, and there is no longer one - and the fresh
+  // worker the next visit registers re-fetches every core asset past the HTTP
+  // cache and checks it against the build. The late failure two tests up
+  // (STALLED) does empty it for good, because by then the page has stopped
+  // asking for anything.
+  expect(await page.evaluate(() => navigator.serviceWorker.getRegistrations().then((r) => r.length))).toBe(0);
+
+  // And the reload the reader was asked for is a first visit: nothing is
+  // served from a cache, and the playground comes up.
+  const { served } = watch(page);
+  await open(page);
+  expect([...served], "the reload went to the network, not to a worker").toEqual([]);
+});

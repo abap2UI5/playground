@@ -18,10 +18,11 @@ them before touching `tools/` or `src/runtime`.
 
 | Path | Purpose |
 | --- | --- |
-| `src/shell/` | The page: boot and Run (`main.mjs`), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the examples browser over the sample catalogue (`examples.mjs`, reading the built index), which UI5 library a control ships in (`ui5-libs.mjs`) beside the closed list of the ones this site carries (`ui5-libraries.mjs`), the bottom panel (`insight.mjs`), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch at the bar's right-hand end, applied as `data-theme` on `<html>` and handed to the editor and the app frame), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
-| `src/editor/` | Monaco plus the abaplint registry — in a worker: `registry-core.mjs` and `transpile-core.mjs` are abaplint and the single-object transpile as they run there, `registry-worker.mjs` the worker's entry, `registry.mjs` the page's client with a promise in front of everything, `providers.mjs` Monaco's language providers answered over it — the abap2UI5 linter wrapper (`abap2ui5-lint.mjs`), the file set and the sample catalogue (`samples.mjs`) |
+| `src/shell/` | The page: boot and Run (`main.mjs`, which also owns the **Auto** switch beside Run - the debounce, the stored setting and the three reasons Run may be inactive), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the examples browser over the sample catalogue (`examples.mjs`, reading the built index), which UI5 library a control ships in (`ui5-libs.mjs`) beside the closed list of the ones this site carries (`ui5-libraries.mjs`), the bottom panel (`insight.mjs`), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch at the bar's right-hand end, applied as `data-theme` on `<html>` and handed to the editor and the app frame), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
+| `src/editor/` | Monaco plus the abaplint registry — in a worker: `registry-core.mjs` and `transpile-core.mjs` are abaplint and the single-object transpile as they run there, `registry-worker.mjs` the worker's entry, `registry.mjs` the page's client with a promise in front of everything, `providers.mjs` Monaco's language providers answered over it — the abap2UI5 linter wrapper (`abap2ui5-lint.mjs`), the file set, and the sample catalogue in two halves - `sample-list.mjs`, which is what the built-in samples are and which files they are made of, and `samples.mjs`, which pairs that with the ABAP it imports out of `src/samples/` |
 | `src/runtime/` | The ABAP side of the page: the framework entry (`index.mjs`, `roundtrip()` and `defineClasses()`), `worker.mjs` around it, which is the bundle's entry and answers those over `postMessage` when it runs as the worker the page starts, the sql.js database (`db-setup.mjs`), and the browser shims for Node modules |
 | `src/abap/` | The playground's own ABAP (`zcl_pg_bridge`, `zcl_pg_hello`); it travels through the same downport and transpile as the framework |
+| `src/samples/` | The built-in samples' ABAP, one real `.clas.abap` file per object under a directory per sample - so every one of them can be `zcl_playground.clas.abap` and still be a file named after its class. Inlined into the page bundle by the `.abap` text loader in `tools/build-site.mjs`; listed by `src/editor/sample-list.mjs` |
 | `src/examples/` | ABAP served as static files, so `?src=` has same-origin targets and the link tests depend on no foreign host |
 | `src/embed/` | The embed loader (`abap2ui5-embed.js`) and a worked example page; copied verbatim to `dist/embed/` |
 | `src/catalogue/` | The sample catalogue at `/samples/`: one page, one stylesheet, one module, over the index `tools/build-catalogue.mjs` writes. Its own document and its own bundle - see "The sample catalogue" below |
@@ -97,7 +98,13 @@ of each line. Each step is still its own script and still runnable by name
    a static import is fetched after the bundle instead of beside it), and the
    list of chunks the service worker precaches (a marker in `sw.js`). The size
    budget is over `assets/*.mjs` as a sum, so a module that moved into a chunk
-   has not gotten any smaller.
+   has not gotten any smaller. Two loaders go with it: Monaco's icon font is
+   copied out with a hashed name, and `.abap` is **text** — which is how the
+   built-in samples under `src/samples/` reach the bundle. They are real ABAP
+   files rather than template literals inside JavaScript so that the samples
+   browser can link a row to the ABAP, and `src/editor/samples.mjs` is their
+   only importer; `src/editor/sample-list.mjs` is the half of the catalogue
+   Node can read, which is what the tests import.
 
 At run time the pieces meet like this: the UI5 frontend runs in an iframe and
 POSTs to its backend with a plain `fetch`; `frontend-bridge.js` replaces
@@ -214,6 +221,34 @@ code:
   `frontend-bridge.js` for the same reason: the backend is the page around
   the frame.
 
+**And `boot()` is caught as a whole** (the last statement in
+`src/shell/main.mjs`). Its own try/catch covers the two slow starts and
+nothing else; everything around that — the editor, the file strip, the panel,
+the dialogs, the examples browser — is code that cannot fail on the machine it
+was written on and does fail on somebody else's, and a throw there left the
+page reading "loading the ABAP runtime…" for ever, with a stack in a console
+nobody has open. That is how it was reported: a cache from before the hash
+check above was serving one build's `assets/shell.mjs` under the next build's
+`index.html`, and the older bundle reached for a control the newer document no
+longer has. So a failure anywhere is said in the status line and written to
+the Log — and where a service worker is serving the page, the cached site is
+discarded and a reload asked for, the way the STALLED runtime is answered,
+because that mix is the prime suspect. A page nothing is serving from a cache
+says nothing about a cache it does not have.
+
+**What that discard actually guarantees is the unregistration**, not an empty
+cache, and the difference cost a CI run. A worker goes on controlling the page
+it is already serving until that page unloads — so where the failure lands
+early, with the page's own requests still in flight, `serve()`'s on-a-miss
+path puts what it fetches back under the same cache name within a second of
+the delete. That is harmless: nothing reads a cache but a worker, there is no
+longer one, and the worker the next visit registers re-fetches every core
+asset past the HTTP cache and checks it against the build. The STALLED failure
+lands late, when the page has stopped asking for anything, and there the
+delete sticks. `tests/worker.spec.js` holds each to the half that is true of
+it, and the early one ends on the reload it asked for: nothing served from a
+cache, and the playground up.
+
 The registry parse is the processor half, and it is
 [yielded on a clock](src/editor/registry-core.mjs) rather than on a count of
 objects — now so the worker can report progress and answer between objects,
@@ -298,6 +333,25 @@ both are easy to undo by tidying up:
   list open, and that is what the reader has to be looking at. Both halves are
   in `tests/shell.spec.js`; the same `if (started)` guards a sample picked in
   the examples browser, which had switched either way.
+
+**Auto, the switch beside Run** (`main.mjs`, `tests/shell.spec.js`). On, Run
+itself goes inactive — there is nothing left for it to do — and every change
+to the ABAP starts the app again 700 ms after the typing stops. Off by
+default, because a run is a fresh database and a full reload of the app frame,
+which throws away whatever was on screen: not what somebody halfway through a
+form in their own app wants, and exactly what somebody watching a view take
+shape wants. Three details are easy to undo by tidying up: Run's disabled
+state has three reasons now (the page has not started, a run is under way,
+autorun has the job) and they are decided in one place, because a run
+finishing under autorun used to hand the button back; a run of any kind
+clears the pending timer, so opening a sample is not followed by a second run
+of the same text; and a change that arrives while a run is under way is run
+after it rather than dropped. It follows the storing rule the theme and the
+checker settings follow — kept only while it differs from the default, and
+never restored in an embedded playground. Autorun does not bring the app
+forward on a phone the way pressing Run does: it fires while somebody is
+typing, and taking the editor off the screen mid-word is not what they asked
+for.
 
 ## The two checkers, and the Fix-them contract
 
@@ -445,7 +499,10 @@ deploy — readers get the published playground, never your checkout.
   repositories' catalogues itself from `raw.githubusercontent.com` and shape
   them here; the catalogue page needs the same list in the same shape, and two
   implementations of one list is exactly the drift those repositories avoid by
-  generating their views from one scan. Beside the search are filters, kept
+  generating their views from one scan. Every row links to its **ABAP** on
+  GitHub, and a built-in to its file under `src/samples/`; it used to link to
+  `src/editor/samples.mjs`, so a reader asking where the code lives landed in
+  the JavaScript that quoted it. Beside the search are filters, kept
   between visits: the three repositories as one tinted group (Learn, Controls,
   Stack — on), "OpenUI5 only" (off; on, it drops what needs SAPUI5) and "newer
   than 1.71" (on; off, it drops what needs a UI5 above the floor) — and a link
@@ -459,7 +516,6 @@ deploy — readers get the published playground, never your checkout.
   not judged here. Everything else is run and judged by the two checkers and
   Run, exactly like typed code; a catalogued sample the transpiler cannot
   compile fails visibly there, and that is the designed behaviour, not a bug.
-
 - **`embed/abap2ui5-embed.js`**: turns an element into a click-to-load demo —
   `data-src` (one URL or several, first is the app), `data-code` (inline ABAP;
   the file is named after the class in it), `data-view`, `data-height`,

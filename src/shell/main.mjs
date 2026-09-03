@@ -50,7 +50,7 @@ import { openShare, setUpShareDialog } from "./share-dialog.mjs";
 import { clearRoundtrips, recordRoundtrip } from "./roundtrips.mjs";
 import { state } from "./state.mjs";
 import { STALLED, startRuntime } from "./runtime-client.mjs";
-import { readStoredJson, removeStored, writeStoredJson } from "./storage.mjs";
+import { readStored, readStoredJson, removeStored, writeStored, writeStoredJson } from "./storage.mjs";
 import { isDark, onThemeChange, setUpTheme } from "./theme.mjs";
 import { describeError, hideOutput, setStatus, showOutput } from "./ui.mjs";
 import { warmUpAppFrame } from "./warm-up.mjs";
@@ -62,6 +62,7 @@ const asset = (p) => new URL(p, document.baseURI).href;
 const STORAGE_KEY = "abap2ui5-playground:files";
 
 const runButton = document.getElementById("run");
+const autorunButton = document.getElementById("autorun");
 const undoButton = document.getElementById("undo");
 const redoButton = document.getElementById("redo");
 const formatButton = document.getElementById("format");
@@ -230,6 +231,7 @@ async function boot() {
   // embedded playground follows its reader's system rather than a choice
   // made in some other tab (see theme.mjs).
   setUpTheme({ restore: !embedded });
+  setUpAutorun({ restore: !embedded });
   setUpSplitter();
   setUpAbout();
   setUpShareDialog();
@@ -342,9 +344,13 @@ async function boot() {
     return;
   }
 
-  for (const control of [runButton, formatButton, shareButton, fullscreenButton, examplesButton]) {
+  for (const control of [autorunButton, formatButton, shareButton, fullscreenButton, examplesButton]) {
     control.disabled = false;
   }
+  // Run is the one control with more than "the page has started" to say about
+  // itself - autorun may already have it.
+  booted = true;
+  reflectRunButton();
   showSourceLink();
 
   // A click on Run is a request to see the app, so on a narrow screen it brings
@@ -533,6 +539,7 @@ function remember(files) {
   renderFiles();
   showSourceLink();
   reflectHistory();
+  autorunAfterChange();
   // The editor has already re-checked by the time this runs (both hang off the
   // same debounce), and the analysis is kept under a key made of the models'
   // version ids - so this reads that result back rather than running a second
@@ -725,6 +732,90 @@ function structuralProblem(files) {
   return undefined;
 }
 
+// ------------------------------------------------------------------ autorun
+//
+// Run, pressed for you. Off by default; the switch beside Run says which it
+// is, and while it is on Run itself is inactive - there is nothing left for
+// it to do - and every change to the ABAP starts the app again once the
+// typing has stopped.
+//
+// Off by default because a run is not free and not invisible: a compile, a
+// fresh database and a full reload of the app frame, which throws away
+// whatever was on screen. Somebody halfway through a form in their own app
+// does not want that on a keystroke; somebody watching a view take shape
+// wants nothing else. So it is a choice, and it is one click.
+//
+// Stored only while it differs from the default, and never restored in an
+// embedded playground - the rule the theme and the checker settings follow
+// (src/shell/theme.mjs), for the same reason: a demo in somebody's
+// documentation page has to read the same to every reader.
+const AUTORUN_KEY = "abap2ui5-playground:autorun";
+
+// Long enough that a word being typed is one run rather than six, short
+// enough that a pause reads as "and now show me". The editor's own change
+// debounce is 150ms and hangs off the same keystrokes, so what this waits for
+// is the analysis having settled as well.
+const AUTORUN_DELAY = 700;
+
+let autorun = false;
+let autorunTimer;
+// Until boot( ) has finished there is no runtime to run against, and Run has
+// been disabled since index.html was parsed. It is one of three reasons the
+// button may be inactive, which is why they are decided together below.
+let booted = false;
+
+function setUpAutorun({ restore }) {
+  autorun = restore && readStored(AUTORUN_KEY) === "on";
+  autorunButton.addEventListener("click", () => {
+    autorun = !autorun;
+    if (autorun) writeStored(AUTORUN_KEY, "on");
+    else removeStored(AUTORUN_KEY);
+    reflectAutorun();
+    // Switching it on is a request to see the code as it stands - whatever was
+    // typed while it was off has not been run, and a switch that shows nothing
+    // until the next keystroke looks like a switch that does nothing. Off, the
+    // change already waiting is dropped rather than run behind the reader's
+    // back.
+    if (autorun) run();
+    else clearTimeout(autorunTimer);
+  });
+  reflectAutorun();
+}
+
+function reflectAutorun() {
+  autorunButton.setAttribute("aria-checked", String(autorun));
+  const said = autorun
+    ? "Autorun is on - every change runs by itself"
+    : "Autorun: run every change as it is typed";
+  autorunButton.title = said;
+  autorunButton.setAttribute("aria-label", said);
+  runButton.title = autorun ? said : "Run (Ctrl+Enter)";
+  reflectRunButton();
+}
+
+// Three reasons Run may be inactive - the page has not started, a run is
+// already under way, autorun has the job - and one button. Decided in one
+// place, because they used to be written by whichever of them moved last: a
+// run finishing under autorun handed the button back.
+function reflectRunButton() {
+  runButton.disabled = !booted || running || autorun;
+}
+
+// Every debounced change to the ABAP comes through remember( ), which calls
+// this: a keystroke, a file added or closed, a set of files opened over the
+// old one.
+function autorunAfterChange() {
+  if (!autorun) return;
+  clearTimeout(autorunTimer);
+  autorunTimer = setTimeout(() => {
+    // A run already under way owns the frame and the database, and run( )
+    // would answer a second one by returning. So the change that arrived
+    // during it is run after it rather than dropped.
+    if (running) autorunAfterChange();
+    else run();
+  }, AUTORUN_DELAY);
+}
+
 // Starts what is in the editor: compile it, register it with the runtime, then
 // a new database and a new frame.
 //
@@ -742,7 +833,11 @@ export async function run() {
   // that is still booting the first.
   if (running) return;
   running = true;
-  runButton.disabled = true;
+  // A run supersedes the one autorun was about to start - pressing Run (or
+  // opening a sample, which runs on its own) while the timer is counting down
+  // must not be followed by a second run of the same text.
+  clearTimeout(autorunTimer);
+  reflectRunButton();
   // Whatever the last run had to say about itself is no longer true.
   hideOutput();
   try {
@@ -857,8 +952,34 @@ export async function run() {
     }
   } finally {
     running = false;
-    runButton.disabled = false;
+    reflectRunButton();
   }
 }
 
-boot();
+// The net under boot( ).
+//
+// Its own try/catch covers the two slow starts - the runtime and the registry
+// - and nothing else. Everything around that (the editor, the file strip, the
+// panel, the dialogs, the examples browser) is code that cannot fail on the
+// machine it was written on and does fail on somebody else's, and a throw
+// there left the page reading "loading the ABAP runtime…" for ever, with
+// nothing but a stack in a console nobody has open. That is how this was
+// reported: a service worker was serving one build's assets/shell.mjs under
+// the next build's index.html, and the older bundle reached for a control the
+// newer document no longer has.
+//
+// So a failure anywhere in boot( ) is said out loud - and where a service
+// worker is serving this page, that mix is the prime suspect, so the cached
+// site goes the way it goes for a runtime that never spoke (see the STALLED
+// branch above) and the reader is asked for the one thing that repairs it. A
+// page nothing is serving from a cache keeps its message and its stack, and
+// says nothing about a cache it does not have.
+boot().catch(async (e) => {
+  if (navigator.serviceWorker?.controller) {
+    await discardCachedSite();
+    setStatus("the playground could not start - the site's cached copy was discarded, please reload", true);
+  } else {
+    setStatus("the playground could not start", true);
+  }
+  showOutput("Startup", describeError(e));
+});

@@ -49,6 +49,12 @@ let floor = "1.71";
 
 const str = (v) => (typeof v === "string" ? v : "");
 
+// The page a human reads a file on. The catalogue's own rows carry their
+// `github` from the index, which builds them the same way; this is for the
+// built-ins, whose ABAP lives in THIS repository under src/samples/ and so is
+// not in any catalogue.
+const githubUrl = (repo, file, branch = "main") => `https://github.com/${repo}/blob/${branch}/${file}`;
+
 /** Compare two dotted UI5 versions numerically ("1.9" < "1.71" < "1.120"). */
 function cmpVersion(a, b) {
   const pa = str(a).split(".").map(Number);
@@ -164,7 +170,11 @@ const builtIn = {
     haystack: `${sample.title} ${sample.note}`.toLowerCase(),
     sampleId: sample.id,
     runs: true,
-    github: "https://github.com/abap2UI5/playground/blob/main/src/editor/samples.mjs",
+    // The sample's own ABAP, on GitHub - the same kind of file every
+    // catalogued row links to. It used to be src/editor/samples.mjs, the
+    // module that quoted the ABAP inside JavaScript, so a reader following
+    // "where does this live" landed in a thousand lines of template literal.
+    github: githubUrl("abap2UI5/playground", sample.path),
   })),
 };
 
@@ -429,7 +439,9 @@ function row(entry) {
     link.target = "_blank";
     link.rel = "noopener";
     link.textContent = "GitHub";
-    link.title = `Open ${entry.who} on GitHub`;
+    // The file, not the row's label: a built-in's label is "built in", which
+    // says nothing about what the link opens.
+    link.title = `Open ${entry.github.slice(entry.github.lastIndexOf("/") + 1)} on GitHub`;
     item.append(link);
   }
   return item;

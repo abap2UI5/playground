@@ -6,8 +6,10 @@ import { control, open, pickSample, runSample } from "./helpers.mjs";
 // error page instead.
 //
 // The catalogue is imported so this list cannot drift from the menu - adding a
-// sample without a check here is not possible.
-import { SAMPLES } from "../src/editor/samples.mjs";
+// sample without a check here is not possible. From sample-list.mjs rather
+// than from samples.mjs, which imports the ABAP out of src/samples/ through a
+// loader only the bundler has.
+import { SAMPLE_LIST } from "../src/editor/sample-list.mjs";
 
 // What proves each one actually ran, rather than merely compiling: a piece of
 // the view it builds, and where there is an interaction, the result of it.
@@ -132,7 +134,7 @@ CHECKS["unit-tests"] = async (page) => {
   await expect(control(page, "txtTotal")).toHaveText("119");
 };
 
-for (const sample of SAMPLES) {
+for (const sample of SAMPLE_LIST) {
   if (sample.startsBroken) {
     test(`the "${sample.title}" sample is reported, fixed and then runs`, async ({ page }) => {
       await open(page);

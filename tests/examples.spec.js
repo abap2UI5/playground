@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { control, open, openFiles } from "./helpers.mjs";
-import { SAMPLES } from "../src/editor/samples.mjs";
+import { SAMPLE_LIST } from "../src/editor/sample-list.mjs";
 
 // The examples browser: the sample catalogue, read when the Examples button is
 // clicked, listed next to the built-in samples, and opened through the same
@@ -380,7 +380,19 @@ test("entries the playground cannot run are listed, say why, cannot be clicked, 
     "href",
     "https://github.com/abap2UI5/samples-controls/blob/main/src/01/01/z2ui5_cl_smpc_app_003.clas.abap",
   );
-  await expect(page.locator(".example-item[data-sample], .example-item", { has: page.locator("[data-sample]") }).first().locator(".example-github")).toHaveAttribute("href", /playground/);
+  // A built-in links to its own ABAP in this repository. It used to link to
+  // src/editor/samples.mjs - the JavaScript that quoted the ABAP - so
+  // "where does this live" answered with a thousand lines of template
+  // literal. Every row, built-in or catalogued, ends at a .clas.abap file.
+  await expect(
+    page.locator(".example-item", { has: page.locator('[data-sample="hello"]') }).locator(".example-github"),
+  ).toHaveAttribute(
+    "href",
+    "https://github.com/abap2UI5/playground/blob/main/src/samples/hello/zcl_playground.clas.abap",
+  );
+  for (const href of await page.locator(".example-github").evaluateAll((as) => as.map((a) => a.href))) {
+    expect(href, "every row links to ABAP, not to the code that carries it").toMatch(/\.clas\.abap$/);
+  }
 
   // The filters cut them away: "OpenUI5 only" takes what needs SAPUI5, the
   // Stack box the stack - and what was ticked is remembered for the next open.
@@ -432,7 +444,7 @@ test("without the index the browser degrades to the built-in samples, quietly", 
   // Only the drafts' row and the built-ins - every one of them, searchable -
   // and not a word about what could not be fetched.
   await expect(page.locator(".examples-group")).toHaveText(["Your drafts", "Built in"]);
-  await expect(page.locator(".example-row")).toHaveCount(SAMPLES.length);
+  await expect(page.locator(".example-row")).toHaveCount(SAMPLE_LIST.length);
   await expect(page.locator("#examples-body")).not.toContainText("404");
 
   // And they open: the degraded browser is still a browser.
