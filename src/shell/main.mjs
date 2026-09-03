@@ -278,9 +278,18 @@ async function boot() {
       // the number is the ABAP plus the message hops and not the render.
       roundtrip: async (body) => {
         const started = performance.now();
-        const response = await state.runtime.roundtrip(body);
-        recordRoundtrip({ request: body, response, ms: performance.now() - started });
-        return response;
+        try {
+          const response = await state.runtime.roundtrip(body);
+          recordRoundtrip({ request: body, response, ms: performance.now() - started });
+          if (response.location) pointAtDump(response.location, firstLine(response.body));
+          return response;
+        } catch (e) {
+          // A JavaScript error out of the transpiled code, rather than an
+          // ABAP exception the framework turned into a dump: the frame's
+          // fetch rejects, and the line is still worth pointing at.
+          if (e?.location) pointAtDump(e.location, String(e.message ?? e));
+          throw e;
+        }
       },
       dialogOpen: () => document.querySelector("dialog[open]") !== null,
     };
@@ -608,6 +617,32 @@ async function share() {
   }
 }
 
+// A dump, at the line it was raised at. The framework has already answered
+// the frontend with the dump and the frame is showing it; this is the half
+// the frame cannot do - underline the line in the editor, list it under
+// Problems as a runtime error, and put the cursor there - the way a
+// transpiler error is pointed at. It goes away with the next edit, like
+// that one.
+function pointAtDump(location, message) {
+  const said = `${location.exception ? `${location.exception}: ` : ""}${message || "the app dumped here"}`;
+  reportTranspilerProblems([{ file: location.file, line: location.line, message: said }], "runtime");
+  updateInsight(refresh());
+  showInsight("problems");
+  focusProblem(location.file, location.line, 1);
+  setStatus(`the app dumped - ${location.file} line ${location.line}`, true);
+}
+
+// The first line of a dump that says something - the framework's dump
+// starts with a heading and the request it failed in, and the sentence a
+// reader wants is the exception's own text, a few lines down.
+function firstLine(body) {
+  const lines = String(body ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l !== "" && !l.startsWith("---") && !l.startsWith("Request failed in app"));
+  return lines[0] ?? "";
+}
+
 // What has to be true before the transpiler is worth asking. Each of these
 // would otherwise surface as an abaplint message about a filename, which means
 // nothing to somebody looking at an editor.
@@ -682,7 +717,7 @@ export async function run() {
 
     setStatus("compiling…");
     const chunks = await compile(files);
-    state.runtime.defineClasses(chunks.map((c) => c.js));
+    state.runtime.defineClasses(chunks.map(({ name, js, lines }) => ({ name, js, lines })));
 
     setStatus("starting the app…");
     await state.runtime.resetDatabase();

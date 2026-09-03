@@ -284,3 +284,36 @@ ENDCLASS.`,
   await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
   await expect(control(page, "txtOut")).toContainText("caught the subclass");
 });
+
+test("a dump is pointed at: the ABAP line it was raised at, underlined, listed and under the cursor", async ({ page }) => {
+  await open(page);
+
+  // A division by zero inside the event - a runtime error, not one either
+  // checker or the transpiler could see. The framework answers the frontend
+  // with a dump, and the playground traces the dump's JavaScript stack back
+  // through the transpiler's line table to the ABAP line.
+  const source = app("Dumps", "DATA(zero) = 0.\n      out = |{ 1 / zero }|.");
+  await setSource(page, source);
+  const line = source.split("\n").findIndex((l) => l.includes("1 / zero")) + 1;
+  await page.locator("#run").click();
+
+  await expect(page.locator("#status")).toHaveText(`the app dumped - zcl_playground.clas.abap line ${line}`, { timeout: 60000 });
+  // Listed as a runtime problem, at that line, naming the exception.
+  const row = page.locator(".insight-row.is-error");
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText(`line ${line}`);
+  await expect(row).toContainText("CX_SY_ZERODIVIDE");
+  await expect(row).toContainText("runtime");
+  // Underlined in the editor, and the cursor is on the line.
+  const found = await markers(page);
+  expect(found.some((m) => m.line === line && /zero/i.test(m.message) && /runtime/.test(m.message))).toBe(true);
+  expect(await page.evaluate(() => window.monaco.editor.getEditors()[0].getPosition().lineNumber)).toBe(line);
+  // The frame still shows the framework's own error page, as on a system.
+  await expect(page.frameLocator("#app").getByText(/Division by zero/)).toBeVisible();
+
+  // Fixed, the pointer goes with the next run.
+  await setSource(page, app("Fixed", "out = `fixed`."));
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+  await expect(page.locator(".insight-row.is-error")).toHaveCount(0);
+});

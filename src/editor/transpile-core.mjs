@@ -85,10 +85,19 @@ export async function compile(files) {
     reg.parse();
   }
 
-  const chunks = ordered(output.objects.filter((o) => o.chunk)).map((o) => ({
-    object: o.object.name,
-    js: prologue(o) + o.chunk.getCode(),
-  }));
+  const chunks = ordered(output.objects.filter((o) => o.chunk)).map((o) => {
+    const before = prologue(o);
+    return {
+      object: o.object.name,
+      // The chunk's name, for the stack a runtime error carries: the
+      // runtime evaluates each chunk under it (a sourceURL), so a frame
+      // says zcl_x.clas.mjs:LINE rather than <anonymous>:LINE, and LINE can
+      // be looked up in `lines` - see locate( ) in src/runtime/index.mjs.
+      name: baseName(o.filename),
+      js: before + o.chunk.getCode(),
+      lines: lineTable(o.chunk, before),
+    };
+  });
 
   if (!chunks.some((c) => c.object === entry)) {
     throw new Error(`The transpiler produced no JavaScript for ${entry}.`);
@@ -144,6 +153,26 @@ function ordered(objects) {
 }
 
 const rank = (o) => (o.object.type === "INTF" ? 0 : 1);
+
+const baseName = (uri) => String(uri).replace(/^.*\//, "");
+
+// Which ABAP line each line of JavaScript came from, as the transpiler
+// recorded it while writing the chunk (its source map, without the map):
+// one entry per generated line, [generatedLine, file, abapLine], ascending,
+// the prologue's lines counted in. A runtime error's stack names a
+// generated line, and this is how it becomes a line in the editor.
+function lineTable(chunk, before) {
+  const offset = before === "" ? 0 : before.split("\n").length - 1;
+  const seen = new Set();
+  const table = [];
+  for (const m of chunk.mappings ?? []) {
+    const generated = m.generated.line + offset;
+    if (seen.has(generated)) continue;
+    seen.add(generated);
+    table.push([generated, baseName(m.source), m.original.line]);
+  }
+  return table.sort((a, b) => a[0] - b[0]);
+}
 
 // Transpiler errors arrive as one string with a line per problem, each of them
 // "rule, message, file:row". The file name in it is a uri; the reader knows the

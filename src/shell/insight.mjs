@@ -318,7 +318,7 @@ function problemList() {
     who.className = "insight-who";
     // Which checker said it, because the two mean different things: abaplint
     // says this will not compile, abap2UI5 says it will compile and be wrong.
-    who.textContent = problem.source === "abap2UI5" ? `abap2UI5 · ${problem.rule ?? ""}` : "abaplint";
+    who.textContent = problem.source === "abap2UI5" ? `abap2UI5 · ${problem.rule ?? ""}` : (problem.source ?? "abaplint");
 
     row.append(where, what, who);
     item.append(row);

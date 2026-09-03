@@ -51,7 +51,14 @@ if (inWorker) {
       self.postMessage({
         id,
         ok: false,
-        error: { name: e?.name, message: String(e?.message ?? e), stack: typeof e?.stack === "string" ? e.stack : "" },
+        error: {
+          name: e?.name,
+          message: String(e?.message ?? e),
+          stack: typeof e?.stack === "string" ? e.stack : "",
+          // A JavaScript error out of the user's own code - a TypeError the
+          // transpiled ABAP ran into - traced to its ABAP line when it can be.
+          location: runtime.locate(e?.stack),
+        },
       });
     }
   });

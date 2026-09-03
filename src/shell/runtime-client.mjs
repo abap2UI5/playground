@@ -161,5 +161,6 @@ function revive(described) {
   const error = new Error(described?.message ?? "the ABAP runtime failed");
   if (described?.name) error.name = described.name;
   if (described?.stack) error.stack = described.stack;
+  if (described?.location) error.location = described.location;
   return error;
 }

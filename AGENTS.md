@@ -341,6 +341,19 @@ element per line by `xml-pretty.mjs`. It is a second reconstruction beside
 the analysis pass, run only while that tab is open; the tab says so when the
 linter has not loaded yet and when the file builds no view.
 
+**A dump is pointed at** (`tests/run.spec.js`, "a dump is pointed at"). The
+transpiler's chunk carries a source map; `compile()` in `transpile-core.mjs`
+keeps it as a line table per chunk and names the chunk, `defineClasses()` in
+`src/runtime/index.mjs` evaluates each chunk under that name (a `sourceURL`),
+and `locate()` there turns a JavaScript stack into an ABAP file and line.
+Two stacks reach it: an ABAP exception's — `cx_root extends Error` in the
+transpiled code, so it carries the stack from where it was raised, and the
+framework's `_error_response` is wrapped to keep the innermost one before
+the 500 is built — and a raw JavaScript error's, on the worker's error path.
+The bridge in `main.mjs` then lists the line under Problems as a `runtime`
+problem, underlines it and puts the cursor there, the way a transpiler
+error is pointed at; the frame keeps showing the framework's own error page.
+
 The **Roundtrips tab** (`src/shell/roundtrips.mjs`, `roundtripView()` in
 `insight.mjs`, `tests/roundtrips.spec.js`) lists every request the app frame
 sends and every answer it gets — the bridge in `main.mjs` records them on

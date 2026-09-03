@@ -378,7 +378,12 @@ const TRANSPILER_OWNER = "transpiler";
 let transpilerProblems = [];
 let transpilerKey;
 
-export function reportTranspilerProblems(found) {
+//
+// The same path reports what a Run found at run time - the ABAP line a dump
+// was raised at (src/runtime/index.mjs traces it) - under the source name
+// "runtime": also not part of the analysis, also true until the text
+// changes, also one line somebody has to look at.
+export function reportTranspilerProblems(found, source = "transpiler") {
   transpilerKey = analysisKey();
   transpilerProblems = [];
   const byFile = new Map();
@@ -386,7 +391,7 @@ export function reportTranspilerProblems(found) {
     if (!modelFor(file)) continue;
     transpilerProblems.push({
       file,
-      source: "transpiler",
+      source,
       severity: 1,
       message,
       range: { start: { line: line - 1, character: 0 } },
@@ -401,7 +406,7 @@ export function reportTranspilerProblems(found) {
       TRANSPILER_OWNER,
       list.map(({ line, message }) => ({
         severity: monaco.MarkerSeverity.Error,
-        message: `${message}  (transpiler)`,
+        message: `${message}  (${source})`,
         startLineNumber: line,
         startColumn: 1,
         endLineNumber: line,
