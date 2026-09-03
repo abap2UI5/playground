@@ -734,6 +734,26 @@ button.insight-row {
 .example-delete { font-size: 12px; padding: .3rem .5rem; }
 .example-delete:hover { color: var(--danger); }
 
+/* ------------------------------------------------------------------ tests */
+
+.insight-badge.is-ok { background: #2f9e44; color: #fff; }
+.tests-summary { margin: .4rem .6rem .2rem; font-size: 12px; color: var(--fg-dim); }
+.tests-summary.is-error { color: var(--danger); }
+.tests .insight-list > li { flex-wrap: wrap; }
+.tests .insight-list > li > .test-row { flex: 1 1 100%; }
+.test-row { display: flex; gap: .6rem; align-items: baseline; }
+.test-row.is-ok { border-left-color: #2f9e44; }
+.test-row.is-error { border-left-color: var(--danger); }
+.test-mark { flex: none; font-weight: 600; }
+.test-row.is-ok .test-mark { color: #2f9e44; }
+.test-row.is-error .test-mark { color: var(--danger); }
+.test-name { flex: 1; }
+.test-detail {
+  flex: 1 1 100%; margin: 0 0 .3rem 2.2rem; padding: .3rem .6rem;
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.5; white-space: pre-wrap;
+  color: var(--fg-dim); border-left: 2px solid var(--line);
+}
+
 /* ------------------------------------------------------------- roundtrips */
 
 .roundtrip-item { flex-direction: column; align-items: stretch; }

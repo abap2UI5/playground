@@ -152,6 +152,14 @@ export function openFile(name) {
   if (model) editor.setModel(model);
 }
 
+// Called whenever a different file is on screen, whoever put it there - the
+// strip, a problem row in another file, a failing test's row - so the strip
+// and everything that follows the open file are told once, here, rather than
+// by each caller that remembers to.
+export function onFileShown(fn) {
+  editor.onDidChangeModel(() => fn());
+}
+
 export const currentFile = () => editor.getModel().uri.path.replace(/^\//, "");
 
 export function addFile(file) {

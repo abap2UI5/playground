@@ -142,6 +142,7 @@ export function startRuntime() {
     roundtrip: (body) => call("roundtrip", body),
     defineClasses: (sources) => call("defineClasses", sources),
     resetDatabase: () => call("resetDatabase"),
+    runUnitTests: (tests) => call("runUnitTests", tests),
     // Known from the ready message, so this can stay synchronous.
     abapVersion: () => version ?? "unknown",
   };

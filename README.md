@@ -162,6 +162,14 @@ the Problems list, which is the designed behaviour.
 
 ## Linking a playground
 
+**Unit tests.** A file named `<class>.clas.testclasses.abap` beside a class —
+the `+` in the file strip offers one, with a skeleton that passes — holds its
+local test classes, exactly as abapGit keeps them. Run runs them first,
+through the runner open-abap ships, and starts the app after: a failing test
+is listed in the **Tests** tab with what was expected and what was there, its
+row goes to the assertion, and the status line says how many failed. The
+**Unit tests** sample is the worked example.
+
 **Drafts.** The playground keeps whatever was last in the editor on its own.
 For more than one piece of work, the samples browser has **Your drafts** at
 the top: name what is open, save it, and it is listed there — in this

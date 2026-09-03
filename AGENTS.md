@@ -341,6 +341,24 @@ element per line by `xml-pretty.mjs`. It is a second reconstruction beside
 the analysis pass, run only while that tab is open; the tab says so when the
 linter has not loaded yet and when the file builds no view.
 
+**Unit tests run before the app** (`tests/unit.spec.js`, the `unit-tests`
+sample). A `<class>.clas.testclasses.abap` file is a class's test include
+(`files.mjs` — it has no sidecar of its own, needs its class open, and is
+never the first file); the transpiler emits it as a chunk of its own that
+registers each local class as `CLAS-<class>-<local>`, and `compile()` lists
+the test classes and methods FOR TESTING off abaplint's file info, the same
+way the transpiler's own runner script does. `runUnitTests()` in
+`src/runtime/index.mjs` feeds them to open-abap's `kernel_unit_runner`
+(class_setup, setup, method, teardown; expected, actual, message and the
+JavaScript frame of the assertion, which `locate()` turns into the ABAP
+line), `run()` in `main.mjs` runs them between compile and app start, and
+the **Tests** tab (`testView()` in `insight.mjs`) lists them — a failure
+brings the tab forward and is said in the status line, and the app starts
+regardless, because it is the fastest way to see what the test is about.
+The file strip follows the editor's model change (`onFileShown()`), so a
+row into another file lights the right tab; it used to follow only its own
+clicks.
+
 **A dump is pointed at** (`tests/run.spec.js`, "a dump is pointed at"). The
 transpiler's chunk carries a source map; `compile()` in `transpile-core.mjs`
 keeps it as a line table per chunk and names the chunk, `defineClasses()` in
@@ -531,7 +549,8 @@ try/catch that reports a startup failure, so that throw left the page on
 ## Deliberate limits — do not "fix" these
 
 - **The first file is the app.** Positional on purpose; a required class name
-  would force every deep link to rename what it points at.
+  would force every deep link to rename what it points at. A test include
+  cannot be first for the same reason: it declares no app.
 - **Only what the transpiler implements.** Anything it cannot compile is
   reported in the panel; there is no fallback and none is wanted.
 - **Only the UI5 libraries in `UI5_LIBRARIES`** (`src/shell/ui5-libraries.mjs`,

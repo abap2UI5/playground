@@ -259,7 +259,7 @@
 
     <h3>Keyboard</h3>
     <dl class="about-keys">
-      <dt><kbd>Ctrl</kbd> <kbd>Enter</kbd></dt><dd>Run - also <kbd>Ctrl</kbd> <kbd>S</kbd>, which a browser would otherwise spend on saving the page</dd>
+      <dt><kbd>Ctrl</kbd> <kbd>Enter</kbd></dt><dd>Run - the unit tests in a <code>.clas.testclasses.abap</code> file first, then the app; also <kbd>Ctrl</kbd> <kbd>S</kbd>, which a browser would otherwise spend on saving the page</dd>
       <dt><kbd>Ctrl</kbd> <kbd>Z</kbd> / <kbd>Y</kbd></dt><dd>Undo and redo, per file</dd>
       <dt><kbd>Shift</kbd> <kbd>Alt</kbd> <kbd>F</kbd></dt><dd>Format the open file</dd>
       <dt><kbd>F1</kbd></dt><dd>Everything else the editor can do, by name</dd>
@@ -353,6 +353,10 @@
                   aria-selected="false" aria-controls="insight-body">Outline</button>
           <button type="button" data-insight="view" class="insight-tab" role="tab"
                   aria-selected="false" aria-controls="insight-body">View</button>
+          <button type="button" data-insight="tests" class="insight-tab" role="tab"
+                  aria-selected="false" aria-controls="insight-body">
+            Tests <span id="test-count" class="insight-badge"></span>
+          </button>
           <button type="button" data-insight="roundtrips" class="insight-tab" role="tab"
                   aria-selected="false" aria-controls="insight-body">
             Roundtrips <span id="roundtrip-count" class="insight-badge"></span>

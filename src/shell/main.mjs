@@ -41,7 +41,7 @@ import {
 import { DEFAULT_FILES, isSample, sampleById } from "../editor/samples.mjs";
 import { openExamples, setUpExamples } from "./examples.mjs";
 import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
-import { setUpInsight, showInsight, updateInsight } from "./insight.mjs";
+import { setTestResults, setUpInsight, showInsight, updateInsight } from "./insight.mjs";
 import { restoreCheckerSettings } from "./checker-settings.mjs";
 import { setUpSplitter, setUpTabs } from "./layout.mjs";
 import { announceAppHeight, announceReady, announceStatus, startEmbedMessages } from "./embed.mjs";
@@ -670,11 +670,16 @@ function firstLine(body) {
 // nothing to somebody looking at an editor.
 function structuralProblem(files) {
   if (files.length === 0) return "There is nothing to run.";
-  if (parseName(files[0].name)?.kind !== "clas") {
+  const first = parseName(files[0].name);
+  if (first?.kind !== "clas" || first.include) {
     return `The playground starts the class in the first file, and ${files[0].name} is not a class.`;
   }
   for (const file of files) {
-    const expected = parseName(file.name)?.object;
+    const parsed = parseName(file.name);
+    // A test include declares local test classes, not the object; abaplint
+    // checks what is in it.
+    if (parsed?.include) continue;
+    const expected = parsed?.object;
     const declared = declaredObjectName(file.source);
     if (declared === undefined) {
       return `${file.name} declares no global class or interface.`;
@@ -738,8 +743,23 @@ export async function run() {
     }
 
     setStatus("compiling…");
-    const chunks = await compile(files);
+    const { chunks, tests } = await compile(files);
     state.runtime.defineClasses(chunks.map(({ name, js, lines }) => ({ name, js, lines })));
+
+    // The unit tests in the test includes, before the app: a run is compile,
+    // test, start - the order a developer works in - and a failing test is
+    // no reason to withhold the app, which is the fastest way to see what
+    // the test is about. The results go to the Tests tab; failures bring it
+    // forward and are said in the status line after the app is up.
+    let testsFailed = 0;
+    if (tests.length > 0) {
+      setStatus("running the tests…");
+      const results = await state.runtime.runUnitTests(tests);
+      setTestResults(results);
+      testsFailed = results.filter((r) => !r.passed).length;
+    } else {
+      setTestResults([]);
+    }
 
     setStatus("starting the app…");
     await state.runtime.resetDatabase();
@@ -771,7 +791,13 @@ export async function run() {
       );
       frame.src = src.href;
     });
-    setStatus("running");
+    if (testsFailed > 0) {
+      const total = tests.reduce((n, t) => n + t.methods.length, 0);
+      setStatus(`running - ${testsFailed} of ${total} test${total === 1 ? "" : "s"} failed`, true);
+      showInsight("tests");
+    } else {
+      setStatus("running");
+    }
     // After the load event, so the app has rendered and has a height to report.
     if (appOnly) announceAppHeight(frame);
     // Answered rather than returned blank, because on a narrow screen the

@@ -32,6 +32,7 @@ const OPS = {
   defineClasses: runtime.defineClasses,
   resetDatabase: runtime.resetDatabase,
   abapVersion: runtime.abapVersion,
+  runUnitTests: runtime.runUnitTests,
 };
 
 const inWorker = typeof WorkerGlobalScope !== "undefined" && self instanceof WorkerGlobalScope;

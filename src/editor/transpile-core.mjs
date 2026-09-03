@@ -102,7 +102,34 @@ export async function compile(files) {
   if (!chunks.some((c) => c.object === entry)) {
     throw new Error(`The transpiler produced no JavaScript for ${entry}.`);
   }
-  return chunks;
+  return { chunks, tests: listTests() };
+}
+
+// The unit tests among the user's files: every local class FOR TESTING in a
+// test include, with its methods FOR TESTING - read off abaplint's own
+// picture of the files, the same one the transpiler's runner script reads.
+// The runtime's kernel_unit_runner takes exactly these three names per test
+// (see runUnitTests( ) in src/runtime/index.mjs).
+function listTests() {
+  const tests = [];
+  for (const obj of userObjects()) {
+    if (obj.getType() !== "CLAS") continue;
+    for (const file of obj.getABAPFiles()) {
+      if (!file.getFilename().includes(".testclasses.")) continue;
+      for (const def of file.getInfo().listClassDefinitions()) {
+        if (!def.isForTesting || def.isGlobal || def.isAbstract) continue;
+        const methods = def.methods.filter((m) => m.isForTesting).map((m) => m.name.toUpperCase());
+        if (methods.length === 0) continue;
+        tests.push({
+          class: obj.getName(),
+          testclass: def.name.toUpperCase(),
+          file: file.getFilename().replace(/^.*\//, ""),
+          methods,
+        });
+      }
+    }
+  }
+  return tests;
 }
 
 // Each chunk runs in a scope of its own (see defineClasses), and almost every
@@ -152,7 +179,10 @@ function ordered(objects) {
   return result;
 }
 
-const rank = (o) => (o.object.type === "INTF" ? 0 : 1);
+// Interfaces, then classes, then test includes - a test include reaches for
+// its class through abap.Classes at call time, but it reads better defined
+// after the thing it tests, and its prologue never binds it (same object).
+const rank = (o) => (o.object.type === "INTF" ? 0 : String(o.filename).includes(".testclasses.") ? 2 : 1);
 
 const baseName = (uri) => String(uri).replace(/^.*\//, "");
 

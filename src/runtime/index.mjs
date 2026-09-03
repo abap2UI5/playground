@@ -42,6 +42,60 @@ export async function roundtrip(body) {
   return answer;
 }
 
+// Runs unit tests, through the runner open-abap ships for exactly this:
+// kernel_unit_runner takes a table of (class, test class, method), creates
+// each test class - registered as CLAS-<class>-<local class> by the
+// transpiled include - calls class_setup, setup, the method, teardown, and
+// answers a row per test with its status, the assertion's expected and
+// actual, the message, and the JavaScript frame the assertion was raised
+// from, which locate( ) turns into the ABAP line. The same runner the
+// transpiler's own test script calls; here it is fed from the editor.
+export async function runUnitTests(tests) {
+  const abap = globalThis.abap;
+  const runner = abap.Classes["KERNEL_UNIT_RUNNER"];
+  if (!runner) throw new Error("This runtime carries no unit test runner.");
+  const row = () =>
+    new abap.types.Structure({
+      class_name: new abap.types.Character(30),
+      testclass_name: new abap.types.Character(30),
+      method_name: new abap.types.Character(30),
+    });
+  const input = new abap.types.Table(row(), { withHeader: false, type: "STANDARD", isUnique: false, keyFields: [] });
+  for (const test of tests) {
+    for (const method of test.methods) {
+      const line = row();
+      line.get().class_name.set(test.class);
+      line.get().testclass_name.set(test.testclass);
+      line.get().method_name.set(method);
+      abap.statements.append({ source: line, target: input });
+    }
+  }
+  const result = await runner.run({ it_input: input });
+  const text = (field) => String(field?.get?.() ?? "").trimEnd();
+  return result
+    .get()
+    .list.array()
+    .map((entry) => {
+      const fields = entry.get();
+      const status = text(fields.status);
+      return {
+        class: text(fields.class_name),
+        testclass: text(fields.testclass_name),
+        method: text(fields.method_name),
+        passed: status === "SUCCESS",
+        status,
+        expected: text(fields.expected),
+        actual: text(fields.actual),
+        message: text(fields.message),
+        // Microseconds on a system; the runtime's GET RUN TIME counts them too.
+        microseconds: Number(fields.runtime?.get?.() ?? 0),
+        // The frame as the runner found it, and the ABAP line behind it.
+        frame: text(fields.js_location),
+        location: locate(text(fields.js_location)),
+      };
+    });
+}
+
 // Registers objects that were transpiled after the bundle was built - the
 // classes the user is editing. A transpiled global object is self-contained: it
 // reads `abap` off the global scope and ends by putting itself into
