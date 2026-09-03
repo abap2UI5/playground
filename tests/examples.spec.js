@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { control, open, openFiles } from "./helpers.mjs";
+import { SAMPLES } from "../src/editor/samples.mjs";
 
 // The examples browser: the sample repositories' committed catalogues, fetched
 // when the Examples button is clicked, listed next to the built-in samples,
@@ -395,10 +396,10 @@ test("without the catalogues the browser degrades to the built-in samples, quiet
   await open(page);
   await openBrowser(page);
 
-  // Only the drafts' row and the built-ins - all nine of them, searchable -
+  // Only the drafts' row and the built-ins - every one of them, searchable -
   // and not a word about what could not be fetched.
   await expect(page.locator(".examples-group")).toHaveText(["Your drafts", "Built in"]);
-  await expect(page.locator(".example-row")).toHaveCount(9);
+  await expect(page.locator(".example-row")).toHaveCount(SAMPLES.length);
   await expect(page.locator("#examples-body")).not.toContainText("404");
 
   // And they open: the degraded browser is still a browser.
