@@ -229,6 +229,10 @@ export const analyse = (files) => call("analyse", files);
 
 export const applyAbaplintFixes = (files) => call("applyFixes", files);
 
+// Layout, over the files as they are open: abaplint's whitespace fixes and
+// then its pretty printer - see formatFiles( ) in registry-core.mjs.
+export const formatFiles = (files) => call("format", files);
+
 export const documentSymbols = (fileName) => call("symbols", fileName);
 
 // One language server call, by name, with plain LSP objects both ways.

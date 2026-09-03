@@ -18,7 +18,7 @@ them before touching `tools/` or `src/runtime`.
 
 | Path | Purpose |
 | --- | --- |
-| `src/shell/` | The page: boot and Run (`main.mjs`, which also owns the **Auto** switch beside Run - the debounce, the stored setting and the three reasons Run may be inactive), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the examples browser over the sample catalogue (`examples.mjs`, reading the built index), which UI5 library a control ships in (`ui5-libs.mjs`) beside the closed list of the ones this site carries (`ui5-libraries.mjs`), the bottom panel (`insight.mjs`), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch at the bar's right-hand end, applied as `data-theme` on `<html>` and handed to the editor and the app frame), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
+| `src/shell/` | The page: boot and Run (`main.mjs`, which also owns the **Auto** switch beside Run - the debounce, the stored setting and the three reasons Run may be inactive), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the samples browser over the sample catalogue (`examples.mjs`, reading the built index — a near-full-screen modal with the filters and the catalogue's three facets down its side), which UI5 library a control ships in (`ui5-libs.mjs`) beside the closed list of the ones this site carries (`ui5-libraries.mjs`), the bottom panel (`insight.mjs`), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch at the bar's right-hand end, applied as `data-theme` on `<html>` and handed to the editor and the app frame), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
 | `src/editor/` | Monaco plus the abaplint registry — in a worker: `registry-core.mjs` and `transpile-core.mjs` are abaplint and the single-object transpile as they run there, `registry-worker.mjs` the worker's entry, `registry.mjs` the page's client with a promise in front of everything, `providers.mjs` Monaco's language providers answered over it — the abap2UI5 linter wrapper (`abap2ui5-lint.mjs`), the file set, and the sample catalogue in two halves - `sample-list.mjs`, which is what the built-in samples are and which files they are made of, and `samples.mjs`, which pairs that with the ABAP it imports out of `src/samples/` |
 | `src/runtime/` | The ABAP side of the page: the framework entry (`index.mjs`, `roundtrip()` and `defineClasses()`), `worker.mjs` around it, which is the bundle's entry and answers those over `postMessage` when it runs as the worker the page starts, the sql.js database (`db-setup.mjs`), and the browser shims for Node modules |
 | `src/abap/` | The playground's own ABAP (`zcl_pg_bridge`, `zcl_pg_hello`); it travels through the same downport and transpile as the framework |
@@ -353,6 +353,43 @@ forward on a phone the way pressing Run does: it fires while somebody is
 typing, and taking the editor off the screen mid-word is not what they asked
 for.
 
+## Format
+
+The `{ }` in the bar and Shift+Alt+F are **one** implementation —
+`formatFiles( )` in `src/editor/registry-core.mjs`, run in the worker, reached
+from the button through `format( )` in `src/editor/editor.mjs` and from the key
+through the document-formatting provider in `src/editor/providers.mjs`. Two
+ways in with two ideas of what formatting means is a bug somebody finds by
+pressing the other one.
+
+It is abaplint's pretty printer with abaplint's **layout fixes in front of
+it**. The printer is two things and only two — keyword case and indentation —
+so Format used to leave a tab, a trailing space, a double space, a `.` with a
+space in front of it and two statements sharing a line exactly where they were.
+The rules that repair those are ordinary abaplint rules with fixes, and
+`FORMAT_RULES` there is the list: layout only, and separate from the rule set
+the Config tab decides — somebody who turned a rule off to stop being nagged
+did not thereby ask for their code to keep its tabs. Fixes, then print, then
+round again, in a registry of its own holding the user's files and nothing
+else: these rules need no corpus, and reconfiguring the registry that holds one
+would be several seconds of reparse on a press of Format.
+
+What is left OFF the list is the load-bearing half. `keyword_case` and
+`indentation` are the printer's own job, and applied as edits beside it they
+corrupt the source — both are computed against the same offsets and applied one
+after the other. `align_parameters`, `line_break_multiple_parameters` and
+`keep_single_parameter_on_one_line` each take an abap2UI5 builder chain and
+break every `)->a( n = … v = … )` line into two; a formatter that reformats the
+house style is one nobody presses twice. And nothing on the list changes what
+the code does: obsolete-statement rewrites, `prefer_inline` and the rest stay
+behind **Fix them** in the Problems tab, which says how many and why.
+
+Format runs over **every open file**, not the one on screen — a class and its
+test include are one piece of work — one edit per file, so Ctrl+Z takes the
+whole thing back; the status line says how many files changed, or *already
+formatted*. `tests/format.spec.js` holds all of it, the chain that has to come
+back byte for byte included.
+
 ## The two checkers, and the Fix-them contract
 
 - **abaplint** (`src/editor/registry.mjs`) answers *does this compile*, against
@@ -487,7 +524,11 @@ deploy — readers get the published playground, never your checkout.
   screen button opens; the bar returns while the status line reports an error,
   because it is the only channel that mode has left.
 - **The Samples button** (`src/shell/examples.mjs` — the ids and the module
-  keep the older name): lists the reader's own **named drafts** first
+  keep the older name). A **big modal**: near enough the whole viewport, the
+  page behind it dimmed and blurred, the filters in a side of their own and the
+  rows in as many columns as the width allows. It is a list of 770-odd samples
+  and it used to be a 44rem column of one-line rows, which is a keyhole onto
+  one. It lists the reader's own **named drafts** first
   (`src/shell/drafts.mjs`, `tests/drafts.spec.js` — a name and Save keep
   what is open under it in localStorage, fifty at most, opened and deleted
   where they are listed; the one unnamed draft `remember()` keeps is
@@ -502,11 +543,26 @@ deploy — readers get the published playground, never your checkout.
   generating their views from one scan. Every row links to its **ABAP** on
   GitHub, and a built-in to its file under `src/samples/`; it used to link to
   `src/editor/samples.mjs`, so a reader asking where the code lives landed in
-  the JavaScript that quoted it. Beside the search are filters, kept
+  the JavaScript that quoted it. Down the side are the filters, kept
   between visits: the three repositories as one tinted group (Learn, Controls,
-  Stack — on), "OpenUI5 only" (off; on, it drops what needs SAPUI5) and "newer
-  than 1.71" (on; off, it drops what needs a UI5 above the floor) — and a link
-  to the catalogue page, which is where a search that is worth keeping goes.
+  Stack — on), "Only what runs here" (off; on, it drops what needs a system or
+  a library this build has not got), "OpenUI5 only" (off; on, it drops what
+  needs SAPUI5) and "newer than 1.71" (on; off, it drops what needs a UI5 above
+  the floor) — and, at the foot of it, the link to the catalogue page, which is
+  where a search that is worth keeping goes. Under the boxes are the catalogue
+  page's own three **facets** — *uses control*, *library*, *runs on UI5* —
+  filled from the index and kept the same way. They are the two questions the
+  sample repositories' catalogues cannot answer and the reason the index
+  carries the linter's derived half at all, so the dialog asks them rather than
+  sending the reader to the page for them; the built-ins and the drafts drop
+  out under a facet, because a row the index knows nothing about is not a match
+  for one, where under a box they stay — every box is about the repositories.
+  The **search** takes several words, in any order, and matches a row's
+  controls, libraries and group as well as its title and summary. A row is two
+  lines: what it is called, with the group, the release where it is above the
+  floor and what it needs where it cannot run (the long form as the badge's
+  tooltip), then what it does and the class it is — beside it the link to its
+  ABAP and, where the repository has one, to its documentation page.
   A chosen entry becomes the raw URL of its class and goes through the `?src=`
   loading path above — there is one loader, and this is a menu in front of it.
   Nothing is fetched before the button is clicked; no index means the built-ins

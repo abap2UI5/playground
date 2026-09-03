@@ -8,7 +8,7 @@
 // snippet provider needs no registry at all and is taken from the package.
 import * as monaco from "monaco-editor/editor/editor.api.js";
 import { ABAPSnippetProvider } from "@abaplint/monaco/build/abap_snippet_provider.js";
-import { languageServer, semanticTokensLegend } from "./registry.mjs";
+import { formatFiles, languageServer, semanticTokensLegend } from "./registry.mjs";
 
 const uriOf = (model) => model.uri.toString();
 const positionOf = (position) => ({ line: position.lineNumber - 1, character: position.column - 1 });
@@ -16,7 +16,11 @@ const at = (model, position) => ({ textDocument: { uri: uriOf(model) }, position
 const rangeOf = (r) => new monaco.Range(r.start.line + 1, r.start.character + 1, r.end.line + 1, r.end.character + 1);
 const locations = (found) => (found ?? []).map((f) => ({ uri: monaco.Uri.parse(f.uri), range: rangeOf(f.range) }));
 
-export function registerProviders() {
+// `host.files()` is what the editor currently holds - see connectRegistry( )
+// in src/editor/editor.mjs. Only the formatter needs it, and it needs it
+// because a file is formatted in the company of the others: an include is not
+// an object on its own, and abaplint has nothing to print for one.
+export function registerProviders(host) {
   monaco.languages.registerCompletionItemProvider("abap", new ABAPSnippetProvider());
 
   monaco.languages.registerHoverProvider("abap", {
@@ -30,24 +34,23 @@ export function registerProviders() {
     },
   });
 
+  // Shift+Alt+F, Monaco's own binding. It runs the SAME formatter the bar's
+  // Format button runs - abaplint's layout fixes and then its pretty printer,
+  // in the worker (formatFiles( ) in src/editor/registry-core.mjs) - and not,
+  // as it used to, the pretty printer alone through `documentFormatting`.
+  // Two ways in with two ideas of what formatting means is a bug somebody
+  // finds by pressing the other one.
+  //
+  // What comes back is the whole file set, formatted; Monaco can be handed an
+  // edit for the model it asked about and no other, so the rest is dropped
+  // here and the button is the way to format them all.
   monaco.languages.registerDocumentFormattingEditProvider("abap", {
     async provideDocumentFormattingEdits(model) {
-      const edit = await languageServer("documentFormatting", { textDocument: { uri: uriOf(model) } });
-      if (!edit || edit.length !== 1) return undefined;
-      // As @abaplint/monaco maps it: the pretty printer's edit is the whole
-      // document, and its range is already Monaco's one-based one.
-      const r = edit[0].range;
-      return [
-        {
-          range: {
-            startLineNumber: r.start.line,
-            startColumn: r.start.character,
-            endLineNumber: r.end.line,
-            endColumn: r.end.character,
-          },
-          text: edit[0].newText,
-        },
-      ];
+      const name = model.uri.path.replace(/^\//, "");
+      const result = await formatFiles(host?.files?.() ?? []);
+      const formatted = result.files.find((f) => f.name === name);
+      if (!formatted) return undefined;
+      return [{ range: model.getFullModelRange(), text: formatted.source }];
     },
   });
 

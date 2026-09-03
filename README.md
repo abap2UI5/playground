@@ -41,7 +41,12 @@ pipeline and moves the last step into the browser.
   the editor can check your classes against them.
 - **Editing.** Monaco — the editor from VS Code — with abaplint behind it:
   diagnostics against the actual framework, hover, go to definition, rename,
-  references, quick fixes and the pretty printer. Under the editor, a resizable
+  references and quick fixes. **Format** ({ } in the bar, Shift+Alt+F) is
+  abaplint's pretty printer with its layout fixes in front of it — indentation
+  and keyword case, and also the tab, the trailing space, the double space, the
+  space before the full stop and the two statements sharing a line — over every
+  file that is open, as one edit that Ctrl+Z takes back. It never reflows a
+  builder chain and never changes what the code does. Under the editor, a resizable
   panel with five tabs: every problem, an outline of the class, the log, and the
   configuration of each checker — editable, so "why is it not warning here?"
   has an answer you can try rather than only read.
@@ -174,10 +179,17 @@ This replaced three separate GitHub Pages sites, one per sample repository.
 
 ## The examples browser
 
-**Samples** in the bar is the same list without leaving the editor: drafts you
-saved, the built-in samples, and everything the catalogue holds — searchable,
-filterable by repository, "OpenUI5 only" and "newer than 1.71". Every row links
-to its ABAP on GitHub — the built-in samples too, which live as ordinary
+**Samples** in the bar is the same list without leaving the editor, and it
+takes the screen while it is open: a full-size window over the playground, the
+filters down its side, the rows in as many columns as fit. Drafts you saved,
+the built-in samples, and everything the catalogue holds — searched by several
+words in any order, over titles, summaries, class names and the controls a
+sample builds, and narrowed by the same facets the catalogue page has: the
+control it uses, the library, the release your system runs, plus repository,
+"only what runs here", "OpenUI5 only" and "newer than 1.71". Every row says
+what it is, what group it belongs to, what release it needs and — where it
+cannot run here — what it needs instead, and links to its ABAP on GitHub and to
+its documentation page. The built-in samples too, which live as ordinary
 `.clas.abap` files under `src/samples/`. A chosen entry opens through the same
 path a `?src=` link takes — the raw URL of its class, fetched, checked and run
 — so it arrives with the **Source** link back to where it lives.

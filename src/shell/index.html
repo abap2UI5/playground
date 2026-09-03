@@ -307,37 +307,72 @@
 
 <!-- The examples browser: the built-in samples plus everything the sample
      catalogue holds, read from this site's own samples/apps.json when this
-     opens - see src/shell/examples.mjs. The search sits outside the
-     method="dialog" form on purpose: inside it, Enter in the input would close
-     the dialog. -->
+     opens - see src/shell/examples.mjs. It is a big modal on purpose: the
+     catalogue is 770-odd samples and a 44rem column of one-line rows was a
+     keyhole onto it. Over the editor rather than beside it, so the page it
+     covers is out of the way while somebody is looking for something.
+     The search sits outside the method="dialog" form on purpose: inside it,
+     Enter in the input would close the dialog. -->
 <dialog id="examples-dialog" class="about examples">
   <header class="about-head examples-head">
     <h2>Samples</h2>
-    <input id="examples-search" type="search" placeholder="Search title, control, class…"
+    <input id="examples-search" type="search" placeholder="Search title, summary, control, class…"
            autocomplete="off" spellcheck="false" aria-label="Search the samples">
+    <span id="examples-count" class="examples-count" aria-live="polite"></span>
     <form method="dialog"><button class="ghost" aria-label="Close">✕</button></form>
   </header>
-  <!-- The filters: the three repositories as one tinted group (all on),
-       "OpenUI5 only" (off: it narrows the list to what an OpenUI5 runtime
-       carries) and "newer than 1.71" (on: off, it hides what needs a UI5
-       newer than the floor abap2UI5 holds its shipped apps to).
-       src/shell/examples.mjs reads them by data-filter and keeps them
-       between visits. -->
-  <div class="examples-filters" role="group" aria-label="Filter the samples">
-    <span class="examples-filter-group is-sources" role="group" aria-label="Repositories">
-      <label><input type="checkbox" data-filter="learn" checked> Learn</label>
-      <label><input type="checkbox" data-filter="controls" checked> Controls</label>
-      <label><input type="checkbox" data-filter="stack" checked> Stack</label>
-    </span>
-    <label class="examples-filter"><input type="checkbox" data-filter="openui5only"> OpenUI5 only</label>
-    <label class="examples-filter"><input type="checkbox" data-filter="newer" checked> newer than 1.71</label>
-    <span id="examples-count" class="examples-count" aria-live="polite"></span>
-    <!-- The same list with an address: filters in the URL, so a search can be
-         linked or sent to somebody. This dialog is the quick way in; the page
-         is the one to bookmark. -->
-    <a class="examples-all" href="samples/">Open the full catalogue ↗</a>
+  <div class="examples-main">
+    <!-- Everything that narrows the list, down the side: the boxes that pick
+         a repository, the boxes that narrow to what runs, and the three
+         facets the index carries the facts for. src/shell/examples.mjs reads
+         the boxes by data-filter and the facets by id, and keeps all of them
+         between visits. -->
+    <aside class="examples-side">
+      <p class="examples-intro">
+        Three repositories, one catalogue. <b>Learn</b> is the path through
+        abap2UI5 itself, <b>Controls</b> the UI5 demo kit rebuilt in ABAP, and
+        <b>Stack</b> abap2UI5 with OData, RAP or a launchpad behind it.
+      </p>
+      <div class="examples-filters" role="group" aria-label="Filter the samples">
+        <span class="examples-filter-group is-sources" role="group" aria-label="Repositories">
+          <label><input type="checkbox" data-filter="learn" checked> Learn</label>
+          <label><input type="checkbox" data-filter="controls" checked> Controls</label>
+          <label><input type="checkbox" data-filter="stack" checked> Stack</label>
+        </span>
+        <!-- "Only what runs here" drops what needs a system or a library this
+             build has not got; "OpenUI5 only" drops what needs SAPUI5; "newer
+             than 1.71" off drops what needs a UI5 above the floor abap2UI5
+             holds its shipped apps to. -->
+        <label class="examples-filter"><input type="checkbox" data-filter="runsonly"> Only what runs here</label>
+        <label class="examples-filter"><input type="checkbox" data-filter="openui5only"> OpenUI5 only</label>
+        <label class="examples-filter"><input type="checkbox" data-filter="newer" checked> newer than 1.71</label>
+      </div>
+      <!-- The two questions the sample repositories' own catalogues cannot
+           answer, which is why the index carries the linter's derived facts:
+           which samples BUILD a control, and what renders on a given release.
+           Filled from the index when it lands; empty and disabled until then. -->
+      <div class="examples-facets">
+        <label class="examples-facet">
+          <span>Uses control</span>
+          <select id="examples-control"><option value="">any control</option></select>
+        </label>
+        <label class="examples-facet">
+          <span>Library</span>
+          <select id="examples-library"><option value="">any library</option></select>
+        </label>
+        <label class="examples-facet">
+          <span>Runs on UI5</span>
+          <select id="examples-release"><option value="">any release</option></select>
+        </label>
+      </div>
+      <button type="button" id="examples-clear" class="ghost examples-clear" hidden>Clear the search and filters</button>
+      <!-- The same list with an address: filters in the URL, so a search can be
+           linked or sent to somebody. This dialog is the quick way in; the page
+           is the one to bookmark. -->
+      <a class="examples-all" href="samples/">Open the full catalogue ↗</a>
+    </aside>
+    <div class="about-body examples-body" id="examples-body"></div>
   </div>
-  <div class="about-body examples-body" id="examples-body"></div>
 </dialog>
 
 <main class="panes" id="panes">

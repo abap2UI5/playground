@@ -69,6 +69,9 @@ const OPS = {
   applyFixes(files) {
     return core.applyAbaplintFixes(files);
   },
+  format(files) {
+    return core.formatFiles(files);
+  },
   symbols(name) {
     return core.documentSymbols(name);
   },
