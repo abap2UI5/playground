@@ -408,7 +408,11 @@ deploy — readers get the published playground, never your checkout.
   screen button opens; the bar returns while the status line reports an error,
   because it is the only channel that mode has left.
 - **The Samples button** (`src/shell/examples.mjs` — the ids and the module
-  keep the older name): fetches the
+  keep the older name): lists the reader's own **named drafts** first
+  (`src/shell/drafts.mjs`, `tests/drafts.spec.js` — a name and Save keep
+  what is open under it in localStorage, fifty at most, opened and deleted
+  where they are listed; the one unnamed draft `remember()` keeps is
+  unchanged), then the built-ins, then fetches the
   `catalogue.json` that **abap2UI5/samples** and **abap2UI5/samples-controls**
   commit at their roots (from `raw.githubusercontent.com` — a host `?src=`
   already trusts) and lists the entries next to the built-in samples, grouped

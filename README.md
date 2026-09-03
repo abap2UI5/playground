@@ -162,6 +162,11 @@ the Problems list, which is the designed behaviour.
 
 ## Linking a playground
 
+**Drafts.** The playground keeps whatever was last in the editor on its own.
+For more than one piece of work, the samples browser has **Your drafts** at
+the top: name what is open, save it, and it is listed there — in this
+browser — to open or delete another day.
+
 **Share** puts every open file in the URL fragment, deflated: a 2500-character
 class becomes a link of about 700 characters. Being a fragment, it never leaves
 the browser — it is not sent to the server and does not appear in any log. The

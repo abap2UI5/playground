@@ -724,6 +724,16 @@ button.insight-row {
 .view-xml { flex: none; }
 .view-notes { padding: .3rem .6rem .5rem; }
 
+/* The drafts' save row in the samples browser, and the delete beside a draft. */
+.drafts-save { display: flex; align-items: center; gap: .5rem; margin: 0 .4rem .5rem; flex-wrap: wrap; }
+.drafts-name {
+  font: inherit; padding: .3rem .6rem; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); color: var(--fg); min-width: 12rem; flex: 1;
+}
+.drafts-name:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+.example-delete { font-size: 12px; padding: .3rem .5rem; }
+.example-delete:hover { color: var(--danger); }
+
 /* ------------------------------------------------------------- roundtrips */
 
 .roundtrip-item { flex-direction: column; align-items: stretch; }

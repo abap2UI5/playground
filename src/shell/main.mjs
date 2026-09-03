@@ -258,6 +258,10 @@ async function boot() {
   setUpExamples({
     openSample: (id) => loadSample(id, tabs),
     openLinked: (url) => loadLinked(url, tabs),
+    // The reader's own drafts (src/shell/drafts.mjs): what is open, to save,
+    // and a saved one to open - which runs, the way a sample does.
+    currentFiles: () => getFiles(),
+    openDraft: (files) => loadDraft(files, tabs),
   });
 
   try {
@@ -524,6 +528,24 @@ function loadSample(id, tabs) {
   if (!sample) return;
   const hadDraft = replaceWith(sample.files);
   // Picking a sample is a request to see it, so it runs without a second click.
+  run().then((started) => {
+    if (started) tabs.show("right");
+    if (hadDraft) sayDraftIsKept();
+  });
+}
+
+// A named draft, chosen in the samples browser - the same move as a sample,
+// with the same word about the draft it replaced.
+function loadDraft(files, tabs) {
+  let checked;
+  try {
+    checked = checkFileSet(files);
+  } catch (e) {
+    setStatus("the draft could not be opened", true);
+    showOutput("Drafts", String(e.message || e));
+    return;
+  }
+  const hadDraft = replaceWith(checked);
   run().then((started) => {
     if (started) tabs.show("right");
     if (hadDraft) sayDraftIsKept();
