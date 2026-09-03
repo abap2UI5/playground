@@ -184,7 +184,19 @@ code:
   moment), what it deliberately leaves live (the app frame's document, linked
   ABAP, the catalogues), and why it neither calls `skipWaiting()` nor claims
   the page that registered it. `main.mjs` registers it last thing in
-  `boot()`, after the first run.
+  `boot()`, after the first run. **A core asset goes into the cache only if
+  it hashes to the build** — `build-site.mjs` writes the SHA-256 of each
+  unhashed core file into the worker beside the build id, and install and
+  the on-miss path both check it, fetching past the HTTP cache at install.
+  Without that, the minutes after a deploy — when GitHub Pages' CDN and the
+  browser's HTTP cache answer some files from the old build and some from
+  the new — filled a cache with the new shell beside the old framework,
+  permanently and under the new build's name; the page then waited forever
+  on a runtime that had loaded and had nothing to say. The page side of the
+  same lesson is in `runtime-client.mjs`: a runtime that answers the HEAD
+  probe with 200 and then stays silent for a minute is failed with a named
+  error, and `boot()` answers that one by discarding every cache the site
+  wrote and unregistering the worker before asking for a reload.
 
 The registry parse is the processor half, and it is
 [yielded on a clock](src/editor/registry-core.mjs) rather than on a count of

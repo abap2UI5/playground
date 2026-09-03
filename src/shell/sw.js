@@ -21,7 +21,9 @@
 //     frame's own document, which Run gives a different query every time;
 //   - named after the build, because the file names are not hashed. One cache
 //     holds one build's assets and no other, so nothing can serve a shell from
-//     one deploy beside a framework from the next.
+//     one deploy beside a framework from the next - and because the names are
+//     not hashed, the name of the cache is not enough to make that true: what
+//     goes into it is checked against the build as well, see CORE below.
 //
 // It deliberately does not call skipWaiting() or clients.claim(). A worker
 // published by a later deploy installs quietly and takes over the next time
@@ -59,16 +61,36 @@ const CHUNKS = __CHUNKS__;
 const APP_FIRST_LOAD = __APP_FIRST_LOAD__;
 
 // The heavy, unchanging assets - the ones check-size.mjs budgets, plus the
-// stylesheet that comes with the bundle. These are what a visitor waits for.
-const CORE = [
-  "assets/shell.mjs",
-  "assets/shell.css",
-  ...CHUNKS,
-  "editor/registry.mjs",
-  "editor/corpus.json",
-  "runtime/framework.mjs",
-  "runtime/sql-wasm.wasm",
-];
+// stylesheet that comes with the bundle. These are what a visitor waits for,
+// and none of them carries a hash in its name - so each is listed with the
+// SHA-256 of the bytes this build wrote, and nothing goes into the cache
+// under one of these names that does not hash to it. Written in by
+// tools/build-site.mjs, which hashes the same files for the build id.
+//
+// That check is what actually keeps one build's assets in one cache. Right
+// after a deploy the site is not one build from where a browser stands:
+// GitHub Pages' CDN can answer index.html and the shell bundle from the new
+// deploy and runtime/framework.mjs from the old one for a few minutes, and
+// the browser's own HTTP cache can do the same with whatever it still holds
+// under its max-age. This worker used to precache whatever it got, and a
+// cache filled in that window was a shell from one build beside a framework
+// from another - permanently, under the new build's name, and served
+// cache-first on every visit from then on. The page then waited on a runtime
+// that never spoke: the earlier framework was a page module, not a worker,
+// and had nothing to say. A copy that does not hash to the build is simply
+// not kept; the page runs on it once, and the next visit asks again.
+const CORE_HASHES = __CORE__;
+const CORE = [...Object.keys(CORE_HASHES), ...CHUNKS];
+
+async function matchesBuild(rel, response) {
+  const expected = CORE_HASHES[rel];
+  // A chunk, or the frame's assets: named by a hash or pinned by version,
+  // nothing to check them against here.
+  if (expected === undefined) return true;
+  const digest = await crypto.subtle.digest("SHA-256", await response.arrayBuffer());
+  const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return hex === expected;
+}
 
 // Filled while the page that registered this worker is still open, rather than
 // on the next visit. The page has just downloaded every one of these, so they
@@ -76,6 +98,11 @@ const CORE = [
 // the cache to fill itself on the next visit would make the visit after that
 // the first fast one. A failure here is not worth refusing to install over -
 // the assets that did land still serve, and the rest are fetched on use.
+//
+// Fetched past the browser's HTTP cache (`cache: "reload"`): what is being
+// written down here is this build, and the HTTP cache is where the previous
+// one is still fresh for ten minutes after a deploy. It costs the bytes once
+// more for the core assets, at the moment the page has finished with them.
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
@@ -83,8 +110,10 @@ self.addEventListener("install", (event) => {
       await Promise.allSettled(
         [...CORE, ...APP_FIRST_LOAD].map(async (rel) => {
           const url = new URL(rel, BASE);
-          const response = await fetch(url, { credentials: "same-origin" });
-          if (response.status === 200) await cache.put(url, response);
+          const response = await fetch(url, { credentials: "same-origin", cache: "reload" });
+          if (response.status !== 200) return;
+          if (!(await matchesBuild(rel, response.clone()))) return;
+          await cache.put(url, response);
         }),
       );
     })(),
@@ -160,11 +189,19 @@ async function serve(event) {
   const response = await fetch(event.request);
   // Only a clean answer is worth keeping. A 404 or a redirect written in here
   // would outlive whatever produced it and be served back as though it were the
-  // asset. The copy is taken before the response is handed on, because reading
-  // the body is what consumes it - and the write is handed to waitUntil so the
-  // browser does not stop the worker half way through it.
+  // asset - and so would a core asset from another build, which is checked
+  // the same way install checks it. The copies are taken before the response
+  // is handed on, because reading the body is what consumes it - and the
+  // write is handed to waitUntil so the browser does not stop the worker
+  // half way through it.
   if (response.status === 200) {
-    event.waitUntil(cache.put(event.request, response.clone()).catch(() => {}));
+    const rel = new URL(event.request.url).pathname.slice(BASE.pathname.length);
+    const kept = response.clone();
+    event.waitUntil(
+      matchesBuild(rel, response.clone())
+        .then((ok) => (ok ? cache.put(event.request, kept) : undefined))
+        .catch(() => {}),
+    );
   }
   return response;
 }

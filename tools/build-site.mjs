@@ -235,23 +235,36 @@ writeServiceWorker();
 //
 // The chunks are written into the worker as well, so it can precache them:
 // their names carry a hash, so no list in sw.js could name them in advance.
+// And the core assets that do NOT carry one - the bundle, its stylesheet, the
+// registry worker, the corpus, the framework, SQLite - go in with the hash
+// of their bytes each, so the worker can refuse a copy from another build:
+// the CDN and the HTTP cache both hand those out for a while after a deploy,
+// and a cache filled from them was half of one build and half of the next.
 function writeServiceWorker() {
   const id = crypto.createHash("sha256");
-  const core = [
-    ...fs.readdirSync(ASSETS).sort().map((name) => `assets/${name}`),
+  const unhashed = [
+    "assets/shell.mjs",
+    "assets/shell.css",
     "editor/registry.mjs",
     "editor/corpus.json",
     "runtime/framework.mjs",
     "runtime/sql-wasm.wasm",
   ];
+  const core = [
+    ...fs.readdirSync(ASSETS).sort().map((name) => `assets/${name}`),
+    ...unhashed.filter((rel) => !rel.startsWith("assets/")),
+  ];
+  const hashes = {};
   for (const rel of core) {
+    const bytes = fs.readFileSync(path.join(DIST, rel));
     id.update(rel);
-    id.update(fs.readFileSync(path.join(DIST, rel)));
+    id.update(bytes);
+    if (unhashed.includes(rel)) hashes[rel] = crypto.createHash("sha256").update(bytes).digest("hex");
   }
   for (const entry of listing(path.join(DIST, "app")).sort()) id.update(entry);
 
   const source = fs.readFileSync(path.join(SHELL, "sw.js"), "utf8");
-  for (const marker of ["__BUILD_ID__", "__CHUNKS__", "__APP_FIRST_LOAD__"]) {
+  for (const marker of ["__BUILD_ID__", "__CHUNKS__", "__APP_FIRST_LOAD__", "__CORE__"]) {
     if (!source.includes(marker)) {
       console.error(`build-site: ERROR src/shell/sw.js no longer has a ${marker} to substitute`);
       process.exit(1);
@@ -266,7 +279,8 @@ function writeServiceWorker() {
     source
       .replaceAll("__BUILD_ID__", build)
       .replace("__CHUNKS__", JSON.stringify(chunks()))
-      .replace("__APP_FIRST_LOAD__", JSON.stringify(firstLoad)),
+      .replace("__APP_FIRST_LOAD__", JSON.stringify(firstLoad))
+      .replace("__CORE__", JSON.stringify(hashes)),
   );
   log(`sw.js (build ${build})`);
 }

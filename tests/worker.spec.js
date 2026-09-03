@@ -169,3 +169,76 @@ test("the worker is served under a project path as well as at the root", async (
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
   expect([...served]).toContain("/under-a-subpath/assets/shell.mjs");
 });
+
+test("a cached runtime from another build is thrown away, not waited on forever", async ({ page }) => {
+  // The failure a deploy used to leave behind: a service worker cache holding
+  // the new shell beside an old framework - the old one a page module that,
+  // started as a worker, loads cleanly and never says a word. Put that shape
+  // into the cache by hand, then visit again.
+  await open(page);
+  expect(await workerReady(page)).toBe(true);
+  await page.evaluate(async () => {
+    const [name] = await caches.keys();
+    const cache = await caches.open(name);
+    await cache.put(
+      new URL("runtime/framework.mjs", document.baseURI),
+      new Response("// a framework from another build: loads, says nothing\n", {
+        headers: { "content-type": "text/javascript" },
+      }),
+    );
+  });
+
+  // Seconds of patience rather than the minute a visitor gets, so the test
+  // does not wait a minute to prove it.
+  await page.addInitScript(() => {
+    window.__abap2ui5RuntimePatience = 3000;
+  });
+  await page.goto("/");
+  await expect(page.locator("#status")).toHaveText(/did not start.*please reload/, { timeout: 120000 });
+  await expect(page.locator(".log-body")).toContainText("never reported ready");
+
+  // The remedy: the cache and the worker are gone, so the reload is a first
+  // visit - and it runs.
+  expect(
+    await page.evaluate(async () => ({
+      caches: (await caches.keys()).filter((n) => n.startsWith("abap2ui5-playground-")),
+      worker: (await navigator.serviceWorker.getRegistration()) !== undefined,
+    })),
+  ).toEqual({ caches: [], worker: false });
+  await open(page);
+});
+
+test("a core asset the worker fetches on a miss is hashed against the build, and kept when it matches", async ({ page }) => {
+  // What install and serve( ) put in the cache under a core asset's name is
+  // checked against the hash the build wrote into the worker: a copy the
+  // CDN or the HTTP cache still had from the previous deploy is not kept.
+  // A stranger's bytes cannot be handed to the worker from here - a route
+  // answers the page's requests, not a service worker's - so this holds the
+  // half that can be driven: the cache emptied of the framework, the worker
+  // asked for it again through a fetch it answers, and the real bytes back
+  // in the cache, which they only are if the hash agreed.
+  await open(page);
+  expect(await workerReady(page)).toBe(true);
+  // The page that registered the worker is not served by it - it claims
+  // nothing - so a second visit, which is.
+  await open(page);
+
+  const cachedFramework = () =>
+    page.evaluate(async () => {
+      const [name] = await caches.keys();
+      const cache = await caches.open(name);
+      const hit = await cache.match(new URL("runtime/framework.mjs", document.baseURI));
+      return hit ? (await hit.text()).length : null;
+    });
+  const before = await cachedFramework();
+  expect(before).toBeGreaterThan(1000);
+
+  // Emptied, then asked for again: the worker misses, fetches the real bytes
+  // and keeps them, because they hash to the build.
+  await page.evaluate(async () => {
+    const [name] = await caches.keys();
+    await (await caches.open(name)).delete(new URL("runtime/framework.mjs", document.baseURI));
+    await (await fetch(new URL("runtime/framework.mjs", document.baseURI))).text();
+  });
+  await expect.poll(cachedFramework, { timeout: 20000 }).toBe(before);
+});

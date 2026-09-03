@@ -47,7 +47,7 @@ import { setUpSplitter, setUpTabs } from "./layout.mjs";
 import { announceAppHeight, announceReady, announceStatus, startEmbedMessages } from "./embed.mjs";
 import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
 import { state } from "./state.mjs";
-import { startRuntime } from "./runtime-client.mjs";
+import { STALLED, startRuntime } from "./runtime-client.mjs";
 import { readStoredJson, removeStored, writeStoredJson } from "./storage.mjs";
 import { isDark, onThemeChange, setUpTheme } from "./theme.mjs";
 import { describeError, hideOutput, setStatus, showOutput } from "./ui.mjs";
@@ -289,6 +289,18 @@ async function boot() {
       })
       .catch((e) => showOutput("abap2UI5 lint", `The abap2UI5 linter could not be loaded: ${String(e?.message ?? e)}`));
   } catch (e) {
+    if (e?.name === STALLED) {
+      // A runtime that loaded and never spoke is a copy from another build,
+      // and the copy lives in this browser: the service worker's cache, or
+      // the worker itself, which would serve the same bytes again on every
+      // visit. Both are thrown away here, so that the reload asked for is a
+      // first visit again - see src/shell/sw.js for how the mix came about,
+      // and why the worker no longer keeps one.
+      await discardCachedSite();
+      setStatus("the ABAP runtime did not start - the site's cached copy was discarded, please reload", true);
+      showOutput("Startup", describeError(e));
+      return;
+    }
     setStatus("the playground could not start", true);
     showOutput("Startup", describeError(e));
     return;
@@ -374,6 +386,26 @@ function keepAssetsForNextTime() {
     // that is not secure - loses the second visit's head start and nothing
     // else. There is nothing here to tell anybody about.
   });
+}
+
+// The opposite of keepAssetsForNextTime( ): every cache this site wrote and
+// the worker that serves from them, gone, so the next load fetches the site
+// as it is now. Nothing here can fail in a way worth reporting - a browser
+// without either has nothing to discard.
+async function discardCachedSite() {
+  try {
+    const registration = await navigator.serviceWorker?.getRegistration();
+    await registration?.unregister();
+  } catch {
+    // No worker, or no permission to ask - nothing to throw away.
+  }
+  try {
+    for (const name of await caches.keys()) {
+      if (name.startsWith("abap2ui5-playground-")) await caches.delete(name);
+    }
+  } catch {
+    // No Cache API, or a storage that refuses - the reload fetches fresh anyway.
+  }
 }
 
 // The credits, and what this is. Wired outside boot()'s try/catch and before
