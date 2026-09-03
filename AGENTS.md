@@ -18,24 +18,25 @@ them before touching `tools/` or `src/runtime`.
 
 | Path | Purpose |
 | --- | --- |
-| `src/shell/` | The page: boot and Run (`main.mjs`, which also owns the **Auto** switch beside Run - the debounce, the stored setting and the three reasons Run may be inactive), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the examples browser over the sample repositories' catalogues (`examples.mjs`, filtering by the closed library list in `ui5-libraries.mjs`), the bottom panel (`insight.mjs`), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch at the bar's right-hand end, applied as `data-theme` on `<html>` and handed to the editor and the app frame), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
+| `src/shell/` | The page: boot and Run (`main.mjs`, which also owns the **Auto** switch beside Run - the debounce, the stored setting and the three reasons Run may be inactive), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the examples browser over the sample catalogue (`examples.mjs`, reading the built index), which UI5 library a control ships in (`ui5-libs.mjs`) beside the closed list of the ones this site carries (`ui5-libraries.mjs`), the bottom panel (`insight.mjs`), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch at the bar's right-hand end, applied as `data-theme` on `<html>` and handed to the editor and the app frame), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
 | `src/editor/` | Monaco plus the abaplint registry — in a worker: `registry-core.mjs` and `transpile-core.mjs` are abaplint and the single-object transpile as they run there, `registry-worker.mjs` the worker's entry, `registry.mjs` the page's client with a promise in front of everything, `providers.mjs` Monaco's language providers answered over it — the abap2UI5 linter wrapper (`abap2ui5-lint.mjs`), the file set, and the sample catalogue in two halves - `sample-list.mjs`, which is what the built-in samples are and which files they are made of, and `samples.mjs`, which pairs that with the ABAP it imports out of `src/samples/` |
 | `src/runtime/` | The ABAP side of the page: the framework entry (`index.mjs`, `roundtrip()` and `defineClasses()`), `worker.mjs` around it, which is the bundle's entry and answers those over `postMessage` when it runs as the worker the page starts, the sql.js database (`db-setup.mjs`), and the browser shims for Node modules |
 | `src/abap/` | The playground's own ABAP (`zcl_pg_bridge`, `zcl_pg_hello`); it travels through the same downport and transpile as the framework |
 | `src/samples/` | The built-in samples' ABAP, one real `.clas.abap` file per object under a directory per sample - so every one of them can be `zcl_playground.clas.abap` and still be a file named after its class. Inlined into the page bundle by the `.abap` text loader in `tools/build-site.mjs`; listed by `src/editor/sample-list.mjs` |
 | `src/examples/` | ABAP served as static files, so `?src=` has same-origin targets and the link tests depend on no foreign host |
 | `src/embed/` | The embed loader (`abap2ui5-embed.js`) and a worked example page; copied verbatim to `dist/embed/` |
-| `tools/` | The build (`build.mjs`, which drives `fetch-deps`, `build-framework`, `build-ui5`, `build-site`), the size budget (`check-size`) and the dev server (`serve`) |
+| `src/catalogue/` | The sample catalogue at `/samples/`: one page, one stylesheet, one module, over the index `tools/build-catalogue.mjs` writes. Its own document and its own bundle - see "The sample catalogue" below |
+| `tools/` | The build (`build.mjs`, which drives `fetch-deps`, `build-framework`, `build-ui5`, `build-catalogue`, `build-site`), the size budget (`check-size`) and the dev server (`serve`) |
 | `tests/` | Playwright specs — the only test layer; everything is tested through a real browser against the built `dist/` |
 
 `deps/`, `build/` and `dist/` are generated and gitignored. Never commit them.
 
 ## The build pipeline
 
-`npm run build` is `tools/build.mjs`, which runs four steps, each cached by a
+`npm run build` is `tools/build.mjs`, which runs five steps, each cached by a
 hash of its inputs, so only the first build costs minutes. Steps 2 and 3 run
 **together** — they read different sources and write to different places, and
-only step 4 reads what either produced — so a cold build costs the longer of
+only steps 4 and 5 read what either produced — so a cold build costs the longer of
 them rather than both. Their output is streamed with the step's name in front
 of each line. Each step is still its own script and still runnable by name
 (`npm run build:framework`):
@@ -74,7 +75,13 @@ of each line. Each step is still its own script and still runnable by name
    rewrite. `UI5_LIBRARIES` (`src/shell/ui5-libraries.mjs` — shared with the
    examples browser, which filters catalogue entries by it) is the closed set
    of libraries the site carries.
-4. **`tools/build-site.mjs`** bundles the page and, as a bundle of its own,
+4. **`tools/build-catalogue.mjs`** fetches the six committed catalogues of the
+   three sample repositories and joins them into `dist/samples/apps.json`, the
+   index behind the catalogue page and the examples dialog. The one step that
+   talks to the network at build time, and the one whose failure is survivable
+   by design - see "The sample catalogue" below for what degrades and why the
+   index is built rather than fetched by the page.
+5. **`tools/build-site.mjs`** bundles the page and, as a bundle of its own,
    the registry worker (`dist/editor/registry.mjs`: abaplint, the corpus
    parse and the transpiler, from `src/editor/registry-worker.mjs`), writes
    the editor's source corpus (`dist/editor/corpus.json`), copies examples and the embed kit, and
@@ -484,34 +491,31 @@ deploy — readers get the published playground, never your checkout.
   (`src/shell/drafts.mjs`, `tests/drafts.spec.js` — a name and Save keep
   what is open under it in localStorage, fifty at most, opened and deleted
   where they are listed; the one unnamed draft `remember()` keeps is
-  unchanged), then the built-ins, then fetches the
-  `catalogue.json` that **abap2UI5/samples** and **abap2UI5/samples-controls**
-  commit at their roots (from `raw.githubusercontent.com` — a host `?src=`
-  already trusts) and lists the entries next to the built-in samples, grouped
-  by learning-path stage and by library, searchable — and **abap2UI5/samples-stack**'s,
-  grouped by technology, whose samples all need a real system: listed and
-  saying so, their rows disabled. Every row links to its **ABAP** on GitHub —
-  the repositories' own pages are gone, and this list is where a sample is
-  looked up now. A built-in links to its file under `src/samples/`; it used to
-  link to `src/editor/samples.mjs`, so a reader asking where the code lives
-  landed in the JavaScript that quoted it. Beside the search are filters, kept between visits: the
-  three repositories as one tinted group (Learn, Controls, Stack — on),
-  "OpenUI5 only" (off; on, it drops the src/03 collection, a library only
-  SAPUI5 carries, a stack sample that names SAPUI5) and "newer than 1.71"
-  (on; off, it drops the controls repository's src/02). A chosen entry becomes the
-  raw URL of its class and goes through the `?src=` loading path above — there
-  is one loader, and this is a menu in front of it. The catalogue shapes
-  (`samples[]` with `stage`, `ports[]` with `library`/`category`) are a
-  contract with those repositories. Nothing is fetched before the button is
-  clicked (a missing catalogue answers 404, and the browser logs that on its
-  own — a page nobody asked for examples loads clean); the answer, hit or
-  miss, is kept in localStorage for a day. No catalogue means the built-ins
-  alone, silently. Two kinds of controls entries are listed but disabled,
-  saying what they need: the SAPUI5-only `src/03` collection, and ports
-  whose library is not in `UI5_LIBRARIES` — everything else is run and
-  judged by the two checkers and Run, exactly like typed code; a catalogued
-  sample the transpiler cannot compile fails visibly there, and that is the
-  designed behaviour, not a bug.
+  unchanged), then the built-ins, then everything the sample catalogue holds:
+  the learning path in its own reading order, the ports grouped by library,
+  the stack samples by technology. It reads **one file, and it is this site's
+  own** — `samples/apps.json`, written at build time by
+  `tools/build-catalogue.mjs` (below). It used to fetch the three
+  repositories' catalogues itself from `raw.githubusercontent.com` and shape
+  them here; the catalogue page needs the same list in the same shape, and two
+  implementations of one list is exactly the drift those repositories avoid by
+  generating their views from one scan. Every row links to its **ABAP** on
+  GitHub, and a built-in to its file under `src/samples/`; it used to link to
+  `src/editor/samples.mjs`, so a reader asking where the code lives landed in
+  the JavaScript that quoted it. Beside the search are filters, kept
+  between visits: the three repositories as one tinted group (Learn, Controls,
+  Stack — on), "OpenUI5 only" (off; on, it drops what needs SAPUI5) and "newer
+  than 1.71" (on; off, it drops what needs a UI5 above the floor) — and a link
+  to the catalogue page, which is where a search that is worth keeping goes.
+  A chosen entry becomes the raw URL of its class and goes through the `?src=`
+  loading path above — there is one loader, and this is a menu in front of it.
+  Nothing is fetched before the button is clicked; no index means the built-ins
+  and the drafts alone, silently. Rows that cannot run here are listed and say
+  why, their buttons disabled — a sample somebody cannot find is worse than one
+  they cannot run — and *which* rows those are is decided once, at build time,
+  not judged here. Everything else is run and judged by the two checkers and
+  Run, exactly like typed code; a catalogued sample the transpiler cannot
+  compile fails visibly there, and that is the designed behaviour, not a bug.
 - **`embed/abap2ui5-embed.js`**: turns an element into a click-to-load demo —
   `data-src` (one URL or several, first is the app), `data-code` (inline ABAP;
   the file is named after the class in it), `data-view`, `data-height`,
@@ -519,6 +523,76 @@ deploy — readers get the published playground, never your checkout.
   content without reloading. The frame posts `ready`, `status` and `height` to
   its parent. Click-to-load is deliberate: every demo boots its own runtime and
   parses the whole corpus.
+
+## The sample catalogue — `src/catalogue/`, at `/samples/`
+
+**<https://abap2ui5.github.io/playground/samples/>** — every sample of
+`abap2UI5/samples`, `abap2UI5/samples-controls` and `abap2UI5/samples-stack`,
+searchable. It is a **second document** on this site, with its own small bundle
+(~7 KB): a reader who came to look something up must not download Monaco and
+abaplint to do it, and a reader in the editor must not carry a page they may
+never open. The two share `src/shell/ui5-libs.mjs` and the theme key, and that
+sharing is why the page is bundled at all rather than copied.
+
+It replaced three GitHub Pages sites, one per sample repository, retired
+2026-09-03. Three pages that each had to explain that the other two existed
+were the reason for a shared navigation block, its three copies and a check
+policing the copies; one page needs none of it.
+
+**What it has that the dialog cannot.** Its filters live in the URL
+(`?q=table&lib=sap.m&rel=1.84`), so a search can be linked, sent or bookmarked
+— and the page is a document with real text in it, so it can be found at all. A
+list that arrives from another host after a click is invisible to a search
+engine and has nothing to link to, which is why the index is built rather than
+fetched (below). Its facets are the two questions the sidecars cannot answer:
+*which samples BUILD `sap.m.Table`* — not the one filed under it — and *what
+renders on the release my system runs*.
+
+**`tools/build-catalogue.mjs`** writes `dist/samples/apps.json` before
+`build-site` runs. It fetches **six committed files**, two per repository, and
+joins each pair on `class`:
+
+| | |
+|---|---|
+| `catalogue.json` | what that repository's tree holds |
+| `catalogue-derived.json` | what the abap2UI5 linter knows: every control the class BUILDS, and the minimum UI5 release that implies |
+
+Those files are the contract with the three repositories. The **library** a
+control ships in is in neither of them and is decided here
+(`src/shell/ui5-libs.mjs`): it is one UI5 taxonomy question, three repositories
+each answering it would be three prefix tables that drift, and this is where
+the question is actually asked — `UI5_LIBRARIES` beside it is the closed set
+this site carries, so "does this render here" is that set against this mapping.
+`runs` and `needs` are computed once, at build time, from that plus
+`UI5_VERSION`; the page and the dialog only display them.
+
+**It degrades per repository and per half.** No `catalogue.json` and that
+repository contributes nothing and says so in `sources`; no
+`catalogue-derived.json` and its samples are listed with the tree's facts and
+without the derived ones. Neither is a failed build, and both are states that
+really occur — the second is exactly the window between merging the playground
+change and merging the three repository changes. A build with no catalogue at
+all still publishes: the page says the catalogue could not be loaded, which is
+the honest thing for it to say, and nothing else on this site depends on it.
+
+**The deploy runs nightly** (`.github/workflows/pages.yml`), which a static
+site would not otherwise need: the six files change when a sample is merged in
+another repository, and that is no reason for anything to be pushed here.
+
+**The round trip is the point.** A row that runs links to
+`../?src=<raw>&from=catalogue&back=<this page's query>`, and `showSourceLink()`
+in `src/shell/main.mjs` turns that into *Back to the catalogue* in the bar —
+pointing at the reader's own search, in the same tab, instead of at the file on
+GitHub. Find it here, run it there, come back and keep looking. A `?src=` link
+from anywhere else still offers the GitHub page, which is what that reader
+wants.
+
+The service worker keeps the page and its index **on use, not in the precache**
+(`src/shell/sw.js`): `apps.json` alone is most of a megabyte, and somebody who
+came to write ABAP must not download 770 samples to do it. Caching it is right
+where caching the old fetched-at-runtime catalogues would have been wrong — it
+is written by the deploy that wrote the bundle beside it, so it is exactly as
+current as the build.
 
 ## Build, run, test
 

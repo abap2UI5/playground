@@ -865,3 +865,15 @@ button.insight-row {
   .is-app-only .panes { padding-top: 0; }
   .is-app-only .pane { inset: 0; }
 }
+
+/* The link out of the examples dialog to the catalogue page. It sits at the
+   right-hand end of the filter row, past the count, because it is where one
+   goes when the dialog is not enough - not a filter, and not a first move.
+   The count already carries the margin-left:auto that pushes the pair over. */
+.examples-all {
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--accent);
+  text-decoration: none;
+}
+.examples-all:hover { text-decoration: underline; }

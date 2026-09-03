@@ -84,6 +84,18 @@ const embedded = params.get("embed") === "1";
 // screenshot - a tab has the browser's own reload and the editor it came from
 // one click away.
 const bare = params.get("view") === "full";
+/* Opened from the sample catalogue - see showSourceLink( ). `back` is that
+ * page's own query string, passed through so the reader lands on the search
+ * they had narrowed the list to. It is rebuilt through URLSearchParams rather
+ * than pasted into the href, so nothing a link carries escapes into the
+ * markup: what comes back out is a query string and only ever that. */
+const cameFromCatalogue = params.get("from") === "catalogue";
+const catalogueQuery = (() => {
+  const back = params.get("back") || "";
+  if (back === "") return "";
+  const clean = new URLSearchParams(back).toString();
+  return clean === "" ? "" : `?${clean}`;
+})();
 
 // `?view=app` drops the editor as well, leaving the running app on its own -
 // for the paragraph in a documentation page that wants to show the result
@@ -482,11 +494,21 @@ function reflectHistory() {
   redoButton.disabled = !canRedo();
 }
 
-// The way back to where linked code lives, following whichever file is open.
+// Where this code came from - and the whole point of the button is that there
+// is somewhere to go back TO.
+//
+// Two origins, and they want different destinations. A link somebody pasted
+// leads to the file on GitHub: the repository around it, the neighbouring
+// files, the history. A row on the sample catalogue leads back to the
+// CATALOGUE, because somebody who came from a list of 770 samples to run one
+// of them is not done with the list - and `back` carries the filters they had
+// narrowed it to, so they land on their search rather than at the top of it.
+// The catalogue sets both parameters (src/catalogue/catalogue.mjs).
+//
 // Live only for files that actually came from a link: over a draft or a
-// sample it would be a link to somebody else's page with no relation to what
-// is on screen - so there it stays in the bar, inactive, rather than
-// disappearing and having the controls beside it shift.
+// sample of this page's own it would be a link to somebody else's page with no
+// relation to what is on screen - so there it stays in the bar, inactive,
+// rather than disappearing and having the controls beside it shift.
 export function showSourceLink() {
   const link = document.getElementById("source-link");
   const origin = originOf(currentFile());
@@ -494,10 +516,22 @@ export function showSourceLink() {
     link.removeAttribute("href");
     link.setAttribute("aria-disabled", "true");
     link.title = "Only code that came from GitHub has a page to go to";
+    link.textContent = "Source";
+    return;
+  }
+  link.removeAttribute("aria-disabled");
+  if (cameFromCatalogue) {
+    /* Same origin and same tab: this is a way back, not a second window to
+     * end up with. */
+    link.href = `samples/${catalogueQuery}`;
+    link.removeAttribute("target");
+    link.textContent = "Back to the catalogue";
+    link.title = "Back to the sample catalogue, with the search you came from";
     return;
   }
   link.href = humanUrl(origin);
-  link.removeAttribute("aria-disabled");
+  link.target = "_blank";
+  link.textContent = "Source";
   link.title = `Open ${currentFile()} where it lives`;
 }
 
