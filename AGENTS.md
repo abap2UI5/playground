@@ -341,6 +341,15 @@ element per line by `xml-pretty.mjs`. It is a second reconstruction beside
 the analysis pass, run only while that tab is open; the tab says so when the
 linter has not loaded yet and when the file builds no view.
 
+The **Roundtrips tab** (`src/shell/roundtrips.mjs`, `roundtripView()` in
+`insight.mjs`, `tests/roundtrips.spec.js`) lists every request the app frame
+sends and every answer it gets — the bridge in `main.mjs` records them on
+the way through, timed around the worker's answer — with the event, what the
+answer did (a view for a slot, a popup, a model update, a dump) and the
+bodies as they travelled, the view XML one element per line. Cleared by
+every Run, bounded at 200. The shapes it reads are the wire format
+`app/webapp/core/Server.js` documents in the framework.
+
 The **draft** follows the middle rule for the same reason: a file set identical
 to one of the built-in samples is forgotten rather than stored (`isSample()` in
 `src/editor/samples.mjs`, applied in `remember()`). Reading a sample is not work

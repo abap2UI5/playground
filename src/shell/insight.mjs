@@ -25,6 +25,7 @@ import {
 } from "../editor/registry.mjs";
 import { applyLinterSettings, linterDefaults, linterSettings, viewsFor } from "../editor/abap2ui5-lint.mjs";
 import { copyToClipboard } from "./share.mjs";
+import { onRoundtrip, roundtripList } from "./roundtrips.mjs";
 import { prettyXml } from "./xml-pretty.mjs";
 import { keepAbaplintSettings, keepLinterSettings } from "./checker-settings.mjs";
 import { readStored, writeStored } from "./storage.mjs";
@@ -140,6 +141,13 @@ export function setUpInsight() {
     focusProblem(row.dataset.file, Number(row.dataset.line), Number(row.dataset.column));
   });
 
+  // A roundtrip landing while its tab is open is listed as it lands; the
+  // badge counts them whichever tab is open.
+  onRoundtrip(() => {
+    paintRoundtripCount();
+    if (view === "roundtrips") render();
+  });
+
   render();
 }
 
@@ -234,6 +242,7 @@ const VIEWS = {
   problems: problemList,
   outline: outlineList,
   view: viewPreview,
+  roundtrips: roundtripView,
   log: logView,
   abaplint: abaplintConfig,
   abap2ui5: linterConfig,
@@ -674,6 +683,104 @@ function appended(...nodes) {
   box.append(...nodes);
   return box;
 }
+
+// ------------------------------------------------------------- roundtrips
+
+function paintRoundtripCount() {
+  const badge = document.getElementById("roundtrip-count");
+  if (!badge) return;
+  const list = roundtripList();
+  const failed = list.some((r) => r.status >= 400);
+  badge.textContent = list.length === 0 ? "" : String(list.length);
+  badge.className = `insight-badge${failed ? " is-error" : ""}`;
+}
+
+// Which roundtrip is opened up in the list, by its number; a new Run starts
+// the numbering over, so a stale selection simply matches nothing.
+let openedRoundtrip;
+
+// The conversation between the frontend and the app, one row per roundtrip:
+// the event, how long the ABAP took, and what the answer did - a view, a
+// popup, a model update, a dump. A row opens up into the request and the
+// response as they travelled, and the view XML the answer carried, one
+// element per line.
+function roundtripView() {
+  const list = roundtripList();
+  if (list.length === 0) {
+    return empty("Nothing yet. Every request the app sends and every answer it gets lands here, with the time the ABAP took.");
+  }
+
+  const wrap = document.createElement("div");
+  wrap.className = "roundtrips";
+
+  const rows = document.createElement("ul");
+  rows.className = "insight-list";
+  for (const entry of list) {
+    const item = document.createElement("li");
+    item.className = "roundtrip-item";
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = `insight-row roundtrip-row${entry.status >= 400 ? " is-error" : ""}${entry.n === openedRoundtrip ? " is-open" : ""}`;
+    row.setAttribute("aria-expanded", String(entry.n === openedRoundtrip));
+
+    const n = document.createElement("span");
+    n.className = "insight-where";
+    n.textContent = `#${entry.n}`;
+
+    const what = document.createElement("span");
+    what.className = "insight-what";
+    what.textContent = entry.args.length > 0 ? `${entry.event} (${entry.args.join(", ")})` : entry.event;
+
+    const did = document.createElement("span");
+    did.className = "roundtrip-did";
+    did.textContent = entry.did.join(" · ");
+
+    const ms = document.createElement("span");
+    ms.className = "insight-who";
+    ms.textContent = `${entry.ms} ms`;
+
+    row.append(n, what, did, ms);
+    row.addEventListener("click", () => {
+      openedRoundtrip = openedRoundtrip === entry.n ? undefined : entry.n;
+      render();
+    });
+    item.append(row);
+    if (entry.n === openedRoundtrip) item.append(roundtripDetail(entry));
+    rows.append(item);
+  }
+  wrap.append(rows);
+  return wrap;
+}
+
+function roundtripDetail(entry) {
+  const detail = document.createElement("div");
+  detail.className = "roundtrip-detail";
+  const block = (title, text) => {
+    const head = document.createElement("div");
+    head.className = "log-head";
+    const label = document.createElement("span");
+    label.className = "log-title";
+    label.textContent = title;
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "ghost";
+    copy.textContent = "Copy";
+    copy.addEventListener("click", async () => {
+      copy.textContent = (await copyToClipboard(text)) ? "copied" : "Copy";
+    });
+    head.append(label, copy);
+    const pre = document.createElement("pre");
+    pre.className = "log-body roundtrip-body";
+    pre.textContent = text;
+    detail.append(head, pre);
+  };
+  for (const view of entry.views) block(`View for slot ${view.slot}`, prettyXml(view.xml));
+  block("Request", asText(entry.request));
+  block(entry.status >= 400 ? `Response (${entry.status})` : "Response", asText(entry.response));
+  return detail;
+}
+
+const asText = (value) => (typeof value === "string" ? value : JSON.stringify(value, null, 2));
 
 // ------------------------------------------------------------------- log
 

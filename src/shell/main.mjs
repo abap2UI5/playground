@@ -47,6 +47,7 @@ import { setUpSplitter, setUpTabs } from "./layout.mjs";
 import { announceAppHeight, announceReady, announceStatus, startEmbedMessages } from "./embed.mjs";
 import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
 import { openShare, setUpShareDialog } from "./share-dialog.mjs";
+import { clearRoundtrips, recordRoundtrip } from "./roundtrips.mjs";
 import { state } from "./state.mjs";
 import { STALLED, startRuntime } from "./runtime-client.mjs";
 import { readStoredJson, removeStored, writeStoredJson } from "./storage.mjs";
@@ -272,7 +273,15 @@ async function boot() {
     // otherwise POST to a backend, and whether the shell has a dialog open -
     // see src/shell/frontend-bridge.js for what the frame does with that.
     window.__z2ui5Playground = {
-      roundtrip: (body) => state.runtime.roundtrip(body),
+      // Every roundtrip is kept for the Roundtrips tab on its way through -
+      // see src/shell/roundtrips.mjs. Timed around the worker's answer, so
+      // the number is the ABAP plus the message hops and not the render.
+      roundtrip: async (body) => {
+        const started = performance.now();
+        const response = await state.runtime.roundtrip(body);
+        recordRoundtrip({ request: body, response, ms: performance.now() - started });
+        return response;
+      },
       dialogOpen: () => document.querySelector("dialog[open]") !== null,
     };
     const version = `abap2UI5 ${state.runtime.abapVersion()}`;
@@ -677,6 +686,8 @@ export async function run() {
 
     setStatus("starting the app…");
     await state.runtime.resetDatabase();
+    // A run is a fresh app; what the last one said to its frontend is over.
+    clearRoundtrips();
 
     state.runCounter += 1;
     const src = new URL("app/index.html", document.baseURI);
