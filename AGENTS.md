@@ -18,7 +18,7 @@ them before touching `tools/` or `src/runtime`.
 
 | Path | Purpose |
 | --- | --- |
-| `src/shell/` | The page: boot and Run (`main.mjs`), layout and splitter, toolbar, share links (`share.mjs`), `?src=` deep links (`deep-link.mjs`), the examples browser over the sample repositories' catalogues (`examples.mjs`, filtering by the closed library list in `ui5-libraries.mjs`), the bottom panel (`insight.mjs`), embed messaging (`embed.mjs`), every `localStorage` touch (`storage.mjs`) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
+| `src/shell/` | The page: boot and Run (`main.mjs`), layout and splitter, toolbar, share links (`share.mjs`), `?src=` deep links (`deep-link.mjs`), the examples browser over the sample repositories' catalogues (`examples.mjs`, filtering by the closed library list in `ui5-libraries.mjs`), the bottom panel (`insight.mjs`), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch at the bar's right-hand end, applied as `data-theme` on `<html>` and handed to the editor and the app frame), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
 | `src/editor/` | Monaco plus the abaplint registry — in a worker: `registry-core.mjs` and `transpile-core.mjs` are abaplint and the single-object transpile as they run there, `registry-worker.mjs` the worker's entry, `registry.mjs` the page's client with a promise in front of everything, `providers.mjs` Monaco's language providers answered over it — the abap2UI5 linter wrapper (`abap2ui5-lint.mjs`), the file set and the sample catalogue (`samples.mjs`) |
 | `src/runtime/` | The ABAP side of the page: the framework entry (`index.mjs`, `roundtrip()` and `defineClasses()`), `worker.mjs` around it, which is the bundle's entry and answers those over `postMessage` when it runs as the worker the page starts, the sql.js database (`db-setup.mjs`), and the browser shims for Node modules |
 | `src/abap/` | The playground's own ABAP (`zcl_pg_bridge`, `zcl_pg_hello`); it travels through the same downport and transpile as the framework |
@@ -184,7 +184,19 @@ code:
   moment), what it deliberately leaves live (the app frame's document, linked
   ABAP, the catalogues), and why it neither calls `skipWaiting()` nor claims
   the page that registered it. `main.mjs` registers it last thing in
-  `boot()`, after the first run.
+  `boot()`, after the first run. **A core asset goes into the cache only if
+  it hashes to the build** — `build-site.mjs` writes the SHA-256 of each
+  unhashed core file into the worker beside the build id, and install and
+  the on-miss path both check it, fetching past the HTTP cache at install.
+  Without that, the minutes after a deploy — when GitHub Pages' CDN and the
+  browser's HTTP cache answer some files from the old build and some from
+  the new — filled a cache with the new shell beside the old framework,
+  permanently and under the new build's name; the page then waited forever
+  on a runtime that had loaded and had nothing to say. The page side of the
+  same lesson is in `runtime-client.mjs`: a runtime that answers the HEAD
+  probe with 200 and then stays silent for a minute is failed with a named
+  error, and `boot()` answers that one by discarding every cache the site
+  wrote and unregistering the worker before asking for a reload.
 
 The registry parse is the processor half, and it is
 [yielded on a clock](src/editor/registry-core.mjs) rather than on a count of
@@ -242,9 +254,11 @@ both are easy to undo by tidying up:
   the app got any of it. What repeats itself goes (the brand and the version
   line, which the About dialog carries as well), the paddings shrink,
   and the `.spacer` that holds the right-hand group at the edge is dropped so
-  it stops pushing the last control onto a row of its own. Nothing is *removed*:
-  every control is still there and still reachable, which is what
-  `tests/shell.spec.js` holds it to, along with the height.
+  it stops pushing the last control onto a row of its own. The three links at
+  the far end go as well (the docs hide theirs on a phone too); the theme
+  switch stays. Nothing else is *removed*: every control is still there and
+  still reachable, which is what `tests/shell.spec.js` holds it to, along with
+  the height.
 - **The panel starts folded away** (`setUpInsight()` in `src/shell/insight.mjs`).
   It is a fixed 11rem under an editor that has about 25 to give, so on a narrow
   screen it opens collapsed to its tab strip — where the Problems badge still
@@ -304,6 +318,12 @@ so the curated lists can move between deploys and reach somebody who pressed
 Reset; and an embedded playground never restores either — a demo in somebody's
 documentation has to read the same to every reader, the same reason it never
 restores a draft.
+
+The **theme** follows the middle rule too (`src/shell/theme.mjs`): the switch
+at the bar's right-hand end — the documentation site's switch, beside the same
+three marks, LinkedIn, GitHub and the docs — stores a choice only while it
+differs from what the system says, so a page switched back follows the system
+again, and an embedded playground never restores one.
 
 The **draft** follows the middle rule for the same reason: a file set identical
 to one of the built-in samples is forgotten rather than stored (`isSample()` in

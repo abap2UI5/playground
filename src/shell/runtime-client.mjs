@@ -92,6 +92,15 @@ export function startRuntime() {
   // earlier, because a runtime that is merely slower than the parse is the
   // normal case on a phone, and a probe there would be one more request in
   // the way of the assets the page is waiting for.
+  //
+  // And a 200 that is followed by nothing is not waited on forever either. A
+  // worker script that loads, evaluates cleanly and never says "ready" is a
+  // framework from another build - one that was a page module rather than a
+  // worker, served by a service worker cache or an HTTP cache that had half
+  // of one deploy and half of the next (see src/shell/sw.js) - and it will
+  // not speak in a minute any more than it has so far. The failure is named
+  // so boot( ) can tell it from a runtime that failed, because the remedy is
+  // different: this one is cured by throwing the cached site away.
   const whenReady = async () => {
     if (!settled) {
       try {
@@ -100,6 +109,15 @@ export function startRuntime() {
       } catch (e) {
         if (!settled) fail(new Error(`${SCRIPT}: ${String(e?.message ?? e)}`));
       }
+    }
+    if (!settled) {
+      const timer = setTimeout(() => {
+        if (settled) return;
+        const error = new Error(`${SCRIPT} loaded but never reported ready`);
+        error.name = STALLED;
+        fail(error);
+      }, patience());
+      ready.finally(() => clearTimeout(timer)).catch(() => {});
     }
     return ready;
   };
@@ -128,6 +146,14 @@ export function startRuntime() {
     abapVersion: () => version ?? "unknown",
   };
 }
+
+// The name on the error whenReady( ) gives up with, for boot( ) to test.
+export const STALLED = "RuntimeStalled";
+
+// How long a runtime that has loaded is given to say "ready" once the page
+// is waiting on it: a minute, where a phone under a 4x throttle needs seconds.
+// tests/worker.spec.js sets the hook to make the wait affordable.
+const patience = () => window.__abap2ui5RuntimePatience ?? 60000;
 
 // An error as the worker described it, as an Error again - name, message and
 // stack, which is what describeError( ) in ui.mjs reads.

@@ -63,10 +63,10 @@ let modelGeneration = 0;
 // editor edits and highlights but says nothing about the code.
 let connected = false;
 
-const prefersDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
-
 const modelFor = (name) => monaco.editor.getModel(monaco.Uri.parse(uriFor(name)));
 
+// options.dark says which theme to start in; the shell decides that (see
+// src/shell/theme.mjs) and calls setEditorTheme( ) when it changes.
 export function createEditor(container, files, options = {}) {
   onChange = options.onChange;
 
@@ -83,14 +83,14 @@ export function createEditor(container, files, options = {}) {
     fontSize: 13,
     tabSize: 2,
     renderWhitespace: "selection",
-    theme: prefersDark() ? THEME_DARK : THEME_LIGHT,
-  });
-
-  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
-    monaco.editor.setTheme(e.matches ? THEME_DARK : THEME_LIGHT);
+    theme: options.dark ? THEME_DARK : THEME_LIGHT,
   });
 
   return editor;
+}
+
+export function setEditorTheme(dark) {
+  monaco.editor.setTheme(dark ? THEME_DARK : THEME_LIGHT);
 }
 
 function createModel(file) {

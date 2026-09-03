@@ -28,6 +28,11 @@ test("?view=app shows the app without the editor, and Run still works", async ({
   // Full screen is what opens a view like this one. Offering it here would be
   // offering a tab that already is what the reader is looking at.
   await expect(page.locator("#fullscreen")).toBeHidden();
+  // And no theme switch or links out of it: furniture in somebody else's
+  // page keeps to what it was given.
+  await expect(page.locator("#theme")).toBeHidden();
+  await expect(page.locator(".social")).toHaveCount(3);
+  await expect(page.locator(".social").first()).toBeHidden();
 
   // The editor is gone from the screen, not from the playground - what runs is
   // still compiled from it, so Run has to still do something.
@@ -77,6 +82,20 @@ test("an embedded playground reports ready, status and height to the page around
       { timeout: 30000 },
     )
     .toBe(true);
+});
+
+test("an embedded playground follows its reader's system theme, not a choice made elsewhere", async ({ page }) => {
+  // A dark theme chosen in a playground of one's own - and the embedded one
+  // in a documentation page does not pick it up, the same as it never picks
+  // up the draft: a demo has to read the same to every reader.
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.goto("/");
+  await page.evaluate(() => localStorage.setItem("abap2ui5-playground:theme", "dark"));
+  await page.goto("/?embed=1");
+  expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBeNull();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBeNull();
+  await expect(page.locator("#app")).toHaveAttribute("src", /sap-ui-theme=sap_horizon(&|$)/);
 });
 
 test("a playground that is not embedded stays silent", async ({ page }) => {

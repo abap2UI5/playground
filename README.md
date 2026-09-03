@@ -150,7 +150,7 @@ stack sample, which needs a system; a SAPUI5-only port - is listed all the
 same, says what it needs, and is disabled; every row links to its file on
 GitHub. A chosen entry opens through the same path a `?src=` link takes —
 the raw URL of its class, fetched, checked and run — so it arrives with the
-**on GitHub** link back to where it lives.
+**Source** link back to where it lives.
 
 Nothing is fetched until the button is clicked, and the answer — including "no
 catalogue there" — is kept in the browser for a day. Where no catalogue can be
@@ -165,6 +165,14 @@ the Problems list, which is the designed behaviour.
 **Share** puts every open file in the URL fragment, deflated: a 2500-character
 class becomes a link of about 700 characters. Being a fragment, it never leaves
 the browser — it is not sent to the server and does not appear in any log.
+
+**Light or dark.** The page follows the system until the switch at the
+right-hand end of the bar says otherwise — the same switch the documentation
+site's bar carries, beside the same three marks: LinkedIn, GitHub and, where
+the docs put the playground, the docs. A choice is kept between visits; a
+choice that agrees with the system is forgotten rather than stored, so a page
+switched back follows the system again from then on. The switch reaches the
+editor and the running app as well, without restarting it.
 
 **Full screen** opens the app on its own in a new tab — the whole window for the
 app, nothing around it: no editor, and no bar over it either. It is the same URL
@@ -186,20 +194,23 @@ classes that app needs are looked for beside it and opened too, so a link to an
 app that calls another app opens both. Only siblings in the same directory, only
 from the hosts above, at most six files two levels deep; a name that is not
 there is skipped in silence, because most of them are in the framework corpus
-rather than in the repository. Code opened this way carries an **on GitHub**
-link in the bar, following whichever file is
-open — the raw URL the playground was given translated back into the page a
-human would want, with the repository and the history around it. Sources are
+rather than in the repository. Code opened this way carries a **Source**
+link in the bar (its GitHub page — the bar's GitHub mark, at the far end, is
+the framework's repository), following whichever file is open — the raw URL
+the playground was given translated back into the page a human would want,
+with the repository and the history around it. Sources are
 limited to this site and GitHub's raw hosts — the playground fetches on behalf
 of whoever opened the link, and should not be a general-purpose reader for
 arbitrary URLs.
 
-**`?embed=1`** drops the brand, the examples browser and the share button, leaving
-the editor, Run and the app — for embedding in a documentation page. An
-embedded playground never touches the stored draft, so it cannot overwrite what
-a reader has open in a normal one. **`?view=app`** drops the editor too, for a
-paragraph about what an app does rather than how it is written; the ABAP still
-compiles and runs, it is simply not on screen. **`?view=full`** is that view
+**`?embed=1`** drops the brand, the examples browser, the share button and the
+right-hand end of the bar, leaving the editor, Run and the app — for embedding
+in a documentation page. An embedded playground never touches the stored draft,
+so it cannot overwrite what a reader has open in a normal one, and follows its
+reader's system theme rather than a choice made in some other tab.
+**`?view=app`** drops the editor too, for a paragraph about what an app does
+rather than how it is written; the ABAP still compiles and runs, it is simply
+not on screen. **`?view=full`** is that view
 with the bar gone as well — the app and nothing else, which is what Full screen
 opens. The bar comes back if something goes wrong, because the status line it
 carries is the only channel either view has left.
