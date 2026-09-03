@@ -718,6 +718,12 @@ button.insight-row {
    is its reader's system, not something to switch from inside a frame. */
 .is-embedded .trailer { display: none; }
 
+/* ------------------------------------------------------------------ view */
+
+.view-preview { display: flex; flex-direction: column; min-height: 100%; }
+.view-xml { flex: none; }
+.view-notes { padding: .3rem .6rem .5rem; }
+
 /* ------------------------------------------------------------------- log */
 
 .log { display: flex; flex-direction: column; height: 100%; }

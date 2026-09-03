@@ -106,6 +106,22 @@ export function findingsFor(source) {
   }
 }
 
+// The view itself, as the linter reconstructed it - what the View tab shows.
+// The same reconstruction the findings come from, so what is shown is what
+// was checked; the notes are the linter's own remarks about how sure it is
+// of the shape (a level left open at stringify( ), a helper it could not
+// follow). Empty until the linter has loaded, and for a class that builds no
+// view - the tab says so in both cases.
+export function viewsFor(source) {
+  if (lib === undefined) return { docs: [], notes: [], loaded: false };
+  try {
+    const result = lib.checkAbapSource(source, settingsFor(settings));
+    if (!result.usesBuilder) return { docs: [], notes: [], loaded: true };
+    return { docs: result.docs ?? [], notes: result.notes ?? [], loaded: true };
+  } catch {
+    return { docs: [], notes: [], loaded: true };
+  }
+}
 
 // Which of a set of findings this linter can repair itself. Not all of them:
 // an icon that does not exist has no correct replacement to guess at, while a

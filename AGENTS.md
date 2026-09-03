@@ -334,6 +334,13 @@ three marks, LinkedIn, GitHub and the docs — stores a choice only while it
 differs from what the system says, so a page switched back follows the system
 again, and an embedded playground never restores one.
 
+The **View tab** (`viewPreview()` in `src/shell/insight.mjs`) shows the XML
+the linter reconstructs from the open file's builder chain — `viewsFor()` in
+`abap2ui5-lint.mjs`, the same reconstruction the findings come from, put one
+element per line by `xml-pretty.mjs`. It is a second reconstruction beside
+the analysis pass, run only while that tab is open; the tab says so when the
+linter has not loaded yet and when the file builds no view.
+
 The **draft** follows the middle rule for the same reason: a file set identical
 to one of the built-in samples is forgotten rather than stored (`isSample()` in
 `src/editor/samples.mjs`, applied in `remember()`). Reading a sample is not work

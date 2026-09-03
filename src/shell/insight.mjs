@@ -12,6 +12,7 @@ import {
   fixableNow,
   focusProblem,
   getFiles,
+  getSource,
   invalidateAnalysis,
   refresh,
 } from "../editor/editor.mjs";
@@ -22,7 +23,9 @@ import {
   applyAbaplintSettings,
   documentSymbols,
 } from "../editor/registry.mjs";
-import { applyLinterSettings, linterDefaults, linterSettings } from "../editor/abap2ui5-lint.mjs";
+import { applyLinterSettings, linterDefaults, linterSettings, viewsFor } from "../editor/abap2ui5-lint.mjs";
+import { copyToClipboard } from "./share.mjs";
+import { prettyXml } from "./xml-pretty.mjs";
 import { keepAbaplintSettings, keepLinterSettings } from "./checker-settings.mjs";
 import { readStored, writeStored } from "./storage.mjs";
 import { currentLog, hideOutput, onLogChange, setStatus } from "./ui.mjs";
@@ -205,7 +208,7 @@ export function updateInsight(problems) {
   paintCount();
   // The config views hold half-typed text somebody is in the middle of - a
   // rerender under their hands would throw it away on every keystroke.
-  if (view === "problems" || view === "outline") render();
+  if (view === "problems" || view === "outline" || view === "view") render();
 }
 
 // A dot on the Log tab while there is something unread in it, so switching
@@ -230,6 +233,7 @@ function paintCount() {
 const VIEWS = {
   problems: problemList,
   outline: outlineList,
+  view: viewPreview,
   log: logView,
   abaplint: abaplintConfig,
   abap2ui5: linterConfig,
@@ -461,6 +465,54 @@ function empty(text) {
   p.className = "insight-empty";
   p.textContent = text;
   return p;
+}
+
+// ------------------------------------------------------------------- view
+
+// The XML the builder chain in the open file produces, as the abap2UI5
+// linter reconstructs it - without running a line of ABAP, so it follows
+// the typing. Not the view the app rendered: that one is in the Roundtrips
+// tab, where it arrived. This is the answer to "what does this chain make",
+// one element per line, which is the fastest way to learn the builder.
+function viewPreview() {
+  const file = currentFile();
+  const source = file ? getSource(file) : undefined;
+  if (source === undefined) return empty("Nothing to show yet.");
+  const { docs, notes, loaded } = viewsFor(source);
+  if (!loaded) return empty("The abap2UI5 linter is still loading - the view appears when it has.");
+  if (docs.length === 0) {
+    return empty("This file builds no view with z2ui5_cl_ui5_view_builder - nothing to reconstruct.");
+  }
+
+  const wrap = document.createElement("div");
+  wrap.className = "view-preview";
+  docs.forEach((doc, i) => {
+    const pretty = prettyXml(doc);
+    const head = document.createElement("div");
+    head.className = "log-head";
+    const title = document.createElement("span");
+    title.className = "log-title";
+    title.textContent = docs.length === 1 ? "The view this file builds" : `View ${i + 1} of ${docs.length}`;
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "ghost";
+    copy.textContent = "Copy";
+    copy.addEventListener("click", async () => {
+      copy.textContent = (await copyToClipboard(pretty)) ? "copied" : "Copy";
+    });
+    head.append(title, copy);
+    const body = document.createElement("pre");
+    body.className = "log-body view-xml";
+    body.textContent = pretty;
+    wrap.append(head, body);
+  });
+  if (notes.length > 0) {
+    const said = document.createElement("p");
+    said.className = "config-blurb view-notes";
+    said.textContent = notes.join(" · ");
+    wrap.append(said);
+  }
+  return wrap;
 }
 
 // ------------------------------------------------------------------ config
