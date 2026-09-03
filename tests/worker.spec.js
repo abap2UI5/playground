@@ -29,19 +29,25 @@ test("the heavy assets come out of the worker's cache on a second visit", async 
   await open(page);
   expect(await workerReady(page)).toBe(true);
 
-  const { served } = watch(page);
+  const { served, fetched } = watch(page);
   await open(page);
 
   // The four the size budget is written around - every byte a visitor waits on
   // before the playground can do anything.
   for (const asset of [
     "/assets/shell.mjs",
+    "/editor/registry.mjs",
     "/editor/corpus.json",
     "/runtime/framework.mjs",
     "/runtime/sql-wasm.wasm",
   ]) {
     expect([...served], `${asset} should have been served by the worker`).toContain(asset);
   }
+  // And the chunks split off the bundle - the transpiler, the linter - whose
+  // hashed names the build writes into the worker so it can precache them.
+  const chunks = [...served, ...fetched].filter((p) => /^\/assets\/[\w.-]+\.mjs$/.test(p) && p !== "/assets/shell.mjs");
+  expect(chunks.length, "the bundle has chunks").toBeGreaterThan(0);
+  expect([...fetched].filter((p) => chunks.includes(p)), "every chunk came out of the worker's cache").toEqual([]);
 });
 
 test("what has to stay live is not cached", async ({ page }) => {
@@ -75,13 +81,59 @@ test("what has to stay live is not cached", async ({ page }) => {
       entry === "/assets/shell.mjs" ||
         entry === "/assets/shell.css" ||
         entry === "/editor/corpus.json" ||
+        entry === "/editor/registry.mjs" ||
         entry === "/runtime/framework.mjs" ||
         entry === "/runtime/sql-wasm.wasm" ||
-        /^\/assets\/[\w.-]+\.ttf$/.test(entry) ||
-        entry.startsWith("/app/resources/"),
+        /^\/assets\/[\w.-]+\.(ttf|mjs)$/.test(entry) ||
+        (entry.startsWith("/app/") && entry !== "/app/index.html"),
       `${entry} is in the cache and is not on the allow list`,
     ).toBe(true);
   }
+});
+
+test("the app frame's first load is precached, in the theme the page has not used", async ({ page }) => {
+  await open(page);
+  expect(await workerReady(page)).toBe(true);
+
+  // The light theme the page just ran in would be in the cache through use;
+  // the dark one it never asked for is only there because install put it
+  // there - and so, on a second visit, is a first Run that needs no network.
+  const cached = await page.evaluate(async () => {
+    const names = await caches.keys();
+    const cache = await caches.open(names[0]);
+    return (await cache.keys()).map((r) => new URL(r.url).pathname + new URL(r.url).search);
+  });
+  expect(cached.some((p) => /^\/app\/resources\/sap\/m\/themes\/sap_horizon_dark\/library\.css\?/.test(p))).toBe(true);
+  expect(cached).toContain("/app/resources/sap-ui-core.js");
+  expect(cached).toContain("/app/Component-preload.js");
+});
+
+test("the app frame's stylesheets and component come out of the cache as well", async ({ page }) => {
+  await open(page);
+  expect(await workerReady(page)).toBe(true);
+  // The first visit's app is still fetching its fonts when the status line
+  // says running, and this page is not the worker's yet - so the watch would
+  // count those against the second visit. Let it finish first.
+  await page.waitForLoadState("networkidle");
+
+  const { served, fetched } = watch(page);
+  await open(page);
+  await expect(control(page, "btnGreet")).toBeVisible();
+
+  // The two theme stylesheets carry a query (?sap-ui-dist-version=...) that
+  // names the build rather than a moment, and the frontend's own bundle and
+  // manifest sit beside app/resources rather than under it. Every one of them
+  // went to the network on every Run until the allow list said otherwise -
+  // and the stylesheets are what the app's first paint waits on.
+  const kept = [...served];
+  expect(kept.some((p) => /^\/app\/resources\/sap\/m\/themes\/[^/]+\/library\.css\?/.test(p))).toBe(true);
+  expect(kept.some((p) => /^\/app\/resources\/sap\/ui\/core\/themes\/[^/]+\/library\.css\?/.test(p))).toBe(true);
+  expect(kept).toContain("/app/Component-preload.js");
+  expect(kept).toContain("/app/frontend-bridge.js");
+  expect(kept.some((p) => p.startsWith("/app/manifest.json"))).toBe(true);
+
+  // The document itself is the one thing under app/ that stays live.
+  expect([...fetched].filter((p) => p.startsWith("/app/")).map((p) => p.split("?")[0])).toEqual(["/app/index.html"]);
 });
 
 test("a ?src= link is still read from where it lives, and still runs", async ({ page }) => {

@@ -3,7 +3,8 @@
 // - which files are open, what is in them, which one is showing - is the
 // editor's, and a second copy of it would only ever be the stale one.
 export const state = {
-  // The transpiled framework, once it has loaded (src/runtime/index.mjs).
+  // The transpiled framework, once it is up: the page's handle on the worker
+  // it runs in (src/shell/runtime-client.mjs).
   runtime: undefined,
 
   // Bumped on every run so each frame load is its own document, which is what

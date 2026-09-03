@@ -40,6 +40,15 @@ export async function openFiles(page) {
   );
 }
 
+// Picks a built-in sample in the samples browser and waits for the dialog to
+// close - and for nothing else, because a sample that starts broken on
+// purpose never reaches "running" (see tests/samples.spec.js).
+export async function pickSample(page, id) {
+  await page.locator("#examples").click();
+  await page.locator(`.example-row[data-sample="${id}"]`).click();
+  await expect(page.locator("#examples-dialog")).toBeHidden();
+}
+
 // Adds a file: press "+", type the name into the strip, press Enter.
 //
 // This was a window.prompt( ) driven with page.once("dialog", ...) until it
@@ -70,7 +79,8 @@ export async function run(page) {
 
 export const outputText = (page) => page.locator(".log-body").textContent();
 
-// Picks a sample and waits for the app that came out of it.
+// Picks a built-in sample in the examples browser - the one way to one, now
+// that there is no sample menu - and waits for the app that came out of it.
 //
 // Waiting on the status line alone is a race: it still says "running" from the
 // previous app while the new one compiles, so an assertion can pass against the
@@ -78,7 +88,9 @@ export const outputText = (page) => page.locator(".log-body").textContent();
 // up once per run, which is unambiguous.
 export async function runSample(page, id) {
   const before = await page.locator("#app").getAttribute("src");
-  await page.locator("#samples").selectOption(id);
+  await pickSample(page, id);
   await expect(page.locator("#app")).not.toHaveAttribute("src", before ?? "", { timeout: 60000 });
-  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+  // "running", or "running - your draft is one Undo away" when the sample
+  // went in over somebody's own work.
+  await expect(page.locator("#status")).toHaveText(/^running/, { timeout: 60000 });
 }

@@ -8,6 +8,7 @@
 import {
   applyFixes,
   currentFile,
+  fileVersion,
   fixableNow,
   focusProblem,
   getFiles,
@@ -344,12 +345,12 @@ function fixBar(count) {
   button.type = "button";
   button.className = "primary";
   button.textContent = "Fix them";
-  button.addEventListener("click", () => {
+  button.addEventListener("click", async () => {
     button.disabled = true;
     // Both checkers rewrite the source, so this is somebody's code being
     // changed under them. It goes in as one edit per file, which is what makes
     // Ctrl+Z take the whole thing back rather than unpicking it fix by fix.
-    const fixed = applyFixes();
+    const fixed = await applyFixes();
     updateInsight(refresh());
     // The outcome goes to the status line, not into this bar: the line above
     // was written by a render that the updateInsight( ) on the line before just
@@ -412,13 +413,31 @@ const KIND = {
   14: "const",
 };
 
+// The outline comes from the registry worker, so it is a round trip: what is
+// rendered is the last answer for this file at this version, and a newer one
+// is asked for and rendered when it lands. A file mid-edit can be
+// unparseable, and an outline is not worth an exception - the underlines
+// already say what is wrong - so a failed answer is an empty one.
+let outline = { key: undefined, symbols: [] };
+let outlineAsked;
+
 function outlineOf(file) {
   if (!file) return [];
+  const key = `${file}@${fileVersion(file)}`;
+  if (outline.key === key) return outline.symbols;
+  if (outlineAsked !== key) {
+    outlineAsked = key;
+    documentSymbols(file)
+      .then((symbols) => flatten(symbols, 0))
+      .catch(() => [])
+      .then((symbols) => {
+        outline = { key, symbols };
+        if (view === "outline" && `${currentFile()}@${fileVersion(currentFile())}` === key) render();
+      });
+  }
   try {
-    return flatten(documentSymbols(file), 0);
+    return outline.symbols;
   } catch {
-    // A file mid-edit can be unparseable, and an outline is not worth an
-    // exception - the underlines already say what is wrong.
     return [];
   }
 }

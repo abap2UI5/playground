@@ -140,10 +140,15 @@ it back to the curated list of the day.
 
 The sample repositories — [abap2UI5/samples](https://github.com/abap2UI5/samples)
 and [abap2UI5/samples-controls](https://github.com/abap2UI5/samples-controls) —
-commit a machine-readable `catalogue.json` at their roots. **Examples** in the
-bar fetches those catalogues and lists what they hold next to the built-in
-samples: the learning path by stage, the demo kit ports by library, all of it
-searchable. A chosen entry opens through the same path a `?src=` link takes —
+commit a machine-readable `catalogue.json` at their roots, and so does
+[abap2UI5/samples-stack](https://github.com/abap2UI5/samples-stack). **Samples**
+in the bar fetches those catalogues and lists what they hold next to the
+built-in samples: the learning path by stage, the demo kit ports by library,
+the stack samples by technology, all of it searchable and filterable by
+repository, "OpenUI5 only" and "newer than 1.71". What cannot run here - a
+stack sample, which needs a system; a SAPUI5-only port - is listed all the
+same, says what it needs, and is disabled; every row links to its file on
+GitHub. A chosen entry opens through the same path a `?src=` link takes —
 the raw URL of its class, fetched, checked and run — so it arrives with the
 **on GitHub** link back to where it lives.
 
@@ -175,7 +180,8 @@ page links when it wants to show its example running rather than only printed:
 ?src=https://raw.githubusercontent.com/abap2UI5/samples/main/src/z2ui5_cl_demo.clas.abap
 ```
 
-Several `src` parameters open several files; the first is the app — and the
+A `github.com/…/blob/…` page URL works as well — it is read as the raw file
+behind it. Several `src` parameters open several files; the first is the app — and the
 classes that app needs are looked for beside it and opened too, so a link to an
 app that calls another app opens both. Only siblings in the same directory, only
 from the hosts above, at most six files two levels deep; a name that is not
@@ -188,7 +194,7 @@ limited to this site and GitHub's raw hosts — the playground fetches on behalf
 of whoever opened the link, and should not be a general-purpose reader for
 arbitrary URLs.
 
-**`?embed=1`** drops the brand, the sample menu and the share button, leaving
+**`?embed=1`** drops the brand, the examples browser and the share button, leaving
 the editor, Run and the app — for embedding in a documentation page. An
 embedded playground never touches the stored draft, so it cannot overwrite what
 a reader has open in a normal one. **`?view=app`** drops the editor too, for a
@@ -272,15 +278,16 @@ seconds.
 |---|---|
 | `tools/build.mjs` | what `npm run build` runs: the four below, the middle two together |
 | `tools/fetch-deps.mjs` | pins abap2UI5 and open-abap-core by commit under `deps/` |
-| `tools/build-framework.mjs` | downport → transpile → `dist/runtime/framework.mjs` |
+| `tools/build-framework.mjs` | downport → transpile → `dist/runtime/framework.mjs`, the worker the page runs the framework in |
 | `tools/build-ui5.mjs` | the abap2UI5 frontend built against OpenUI5 → `dist/app/` |
-| `tools/build-site.mjs` | the page bundle, the ABAP corpus the editor uses, and the service worker |
+| `tools/build-site.mjs` | the page bundle and its chunks, the ABAP corpus the editor uses, and the service worker |
 | `tools/check-size.mjs` | the budget for what a visitor downloads |
 
 `PG_DEBUG=1` builds the page and framework bundles unminified and with source
 maps; without it neither ships one.
 
-`src/runtime` is the ABAP side of the page, `src/editor` is Monaco and abaplint,
+`src/runtime` is the ABAP side of the page (run in a worker), `src/editor` is
+Monaco and abaplint (the registry in a worker of its own),
 `src/shell` is the page around them, `src/abap` is the handful of ABAP the
 playground adds to the framework, and `src/examples` is ABAP served as static
 files so `?src=` has something to point at.
@@ -289,7 +296,7 @@ files so `?src=` has something to point at.
 
 ```sh
 node tools/fetch-deps.mjs --print-latest   # what upstream has today
-# edit the sha in tools/fetch-deps.mjs (or UI5_VERSION in tools/build-ui5.mjs)
+# edit the sha in tools/fetch-deps.mjs (or UI5_VERSION in src/shell/ui5-libraries.mjs)
 npm run build && npm test
 ```
 

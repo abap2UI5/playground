@@ -8,9 +8,10 @@
 // import that drags a second copy of abaplint into the page bundle, a corpus
 // that stopped being filtered, a UI5 build that stopped being trimmed.
 //
-// The numbers are the measured sizes with room above them, not aspirations.
-// Raising one is fine - it is a line in a commit that says the cost was
-// accepted, which is the whole point.
+// The numbers are the measured sizes with a little room above them, not
+// aspirations - close enough that a stray import shows up as red rather than
+// as a number nobody looks at. Raising one is fine - it is a line in a commit
+// that says the cost was accepted, which is the whole point.
 //
 // The second budget is not a size. Starting the playground parses nine hundred
 // ABAP objects with abaplint, whose statement parser is a tree of recursive
@@ -30,11 +31,17 @@ const MB = 1024 * 1024;
 
 // Everything a visitor downloads before the playground is usable. These are the
 // ones measured compressed, because that is what travels.
+//
+// The page bundle is several files - assets/shell.mjs and the chunks esbuild
+// split off it, whose names carry a hash - so that entry is a pattern, and
+// the budget is over their sum: a chunk is still a download, and a module
+// that moved from the entry into a chunk has not gotten any smaller.
 const TRANSFERRED = [
-  { file: "assets/shell.mjs", limit: 3.5 * MB, note: "Monaco, abaplint, the transpiler and the abap2UI5 linter" },
-  { file: "runtime/framework.mjs", limit: 1.5 * MB, note: "abap2UI5 and open-abap, transpiled" },
-  { file: "editor/corpus.json", limit: 1.5 * MB, note: "the ABAP sources the editor checks against" },
-  { file: "runtime/sql-wasm.wasm", limit: 0.5 * MB, note: "SQLite" },
+  { file: "assets/*.mjs", limit: 1.3 * MB, note: "Monaco and the abap2UI5 linter" },
+  { file: "editor/registry.mjs", limit: 0.7 * MB, note: "abaplint and the transpiler, in the registry worker" },
+  { file: "runtime/framework.mjs", limit: 0.8 * MB, note: "abap2UI5 and open-abap, transpiled" },
+  { file: "editor/corpus.json", limit: 0.6 * MB, note: "the ABAP sources the editor checks against" },
+  { file: "runtime/sql-wasm.wasm", limit: 0.4 * MB, note: "SQLite" },
 ];
 
 // The whole site. Most of it is UI5, which is fetched a bundle at a time and
@@ -54,7 +61,7 @@ const STACK_BUDGET_KB = 256;
 // the same rules, out of the same dist/ the tests run against - so what is
 // measured is the playground rather than a model of it.
 if (process.argv[2] === "--parse-corpus") {
-  const { buildRegistry } = await import(new URL("../src/editor/registry.mjs", import.meta.url));
+  const { buildRegistry } = await import(new URL("../src/editor/registry-core.mjs", import.meta.url));
   const corpus = JSON.parse(fs.readFileSync(path.join(DIST, "editor", "corpus.json"), "utf8"));
   await buildRegistry(corpus, Promise.resolve([]), () => {});
   process.exit(0);
@@ -66,21 +73,39 @@ const mb = (n) => `${(n / MB).toFixed(2)} MB`;
 
 let failed = false;
 
+// The files a TRANSFERRED entry names: the one file, or - for a pattern with
+// a `*` in its base name - every file in that directory the pattern matches.
+function expand(file) {
+  if (!file.includes("*")) return fs.existsSync(path.join(DIST, file)) ? [file] : [];
+  const dir = path.dirname(file);
+  const pattern = new RegExp(`^${path.basename(file).split("*").map((s) => s.replace(/[.]/g, "\\.")).join(".*")}$`);
+  if (!fs.existsSync(path.join(DIST, dir))) return [];
+  return fs
+    .readdirSync(path.join(DIST, dir))
+    .filter((name) => pattern.test(name))
+    .sort()
+    .map((name) => `${dir}/${name}`);
+}
+
 console.log("what a visitor downloads (compressed, as it is served):");
 for (const { file, limit, note } of TRANSFERRED) {
-  const full = path.join(DIST, file);
-  if (!fs.existsSync(full)) {
+  const files = expand(file);
+  if (files.length === 0) {
     console.error(`  MISSING  ${file} - the build did not produce it`);
     failed = true;
     continue;
   }
-  const actual = gzipped(full);
+  const actual = files.reduce((n, f) => n + gzipped(path.join(DIST, f)), 0);
+  const raw = files.reduce((n, f) => n + size(path.join(DIST, f)), 0);
   const over = actual > limit;
   if (over) failed = true;
   console.log(
     `  ${over ? "OVER   " : "ok     "} ${file.padEnd(26)} ${mb(actual).padStart(9)} of ${mb(limit).padStart(9)}` +
-      `   (${mb(size(full))} uncompressed, ${note})`,
+      `   (${mb(raw)} uncompressed, ${note})`,
   );
+  if (files.length > 1) {
+    for (const f of files) console.log(`           ${f.padEnd(26)} ${mb(gzipped(path.join(DIST, f))).padStart(9)}`);
+  }
 }
 
 console.log("\nwhat it asks of the browser:");

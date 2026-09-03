@@ -17,7 +17,12 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { browserConsolePlugin, nodeStubPlugin, percentEncodedPlugin } from "./esbuild-plugins.mjs";
+import {
+  browserConsolePlugin,
+  generatedFrontendStubPlugin,
+  nodeStubPlugin,
+  percentEncodedPlugin,
+} from "./esbuild-plugins.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DEPS = path.join(ROOT, "deps");
@@ -287,7 +292,10 @@ async function bundle() {
   const outfile = FRAMEWORK_BUNDLE;
 
   const result = await esbuild.build({
-    entryPoints: [path.join(ROOT, "src", "runtime", "index.mjs")],
+    // worker.mjs rather than index.mjs: the same exports, plus the message
+    // handling the page talks to when this runs as a worker - which is how
+    // index.html starts it.
+    entryPoints: [path.join(ROOT, "src", "runtime", "worker.mjs")],
     outfile,
     bundle: true,
     format: "esm",
@@ -302,7 +310,10 @@ async function bundle() {
     // the wrong type and the framework fails while building its type cache.
     keepNames: true,
     sourcemap: false,
-    plugins: [nodeStubPlugin(ROOT), percentEncodedPlugin, browserConsolePlugin(ROOT)],
+    // The stub plugin goes first: it has to claim the generated frontend's
+    // modules before the percent-decoding resolver gets a look at the same
+    // specifiers.
+    plugins: [generatedFrontendStubPlugin, nodeStubPlugin(ROOT), percentEncodedPlugin, browserConsolePlugin(ROOT)],
     inject: [path.join(ROOT, "src", "runtime", "buffer-shim.mjs")],
     logLevel: "warning",
     metafile: true,

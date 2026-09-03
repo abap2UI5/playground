@@ -3,21 +3,31 @@
 // It owns three things the rest of the code reaches through: the ABAP runtime
 // that answers roundtrips, the abaplint registry the editor thinks with, and the
 // iframe the app renders in. The iframe asks this page for every roundtrip (see
-// frontend-bridge.js), so the framework runs here, in the top window, and the
-// frame is only a screen.
+// frontend-bridge.js); the page hands it to the framework, which runs in a
+// worker of this page's (src/shell/runtime-client.mjs), and the frame is only
+// a screen.
 import "./shell.css";
 
 import {
+  canRedo,
+  canUndo,
   connectRegistry,
   createEditor,
   currentFile,
   focusProblem,
   format,
   getFiles,
+  invalidateAnalysis,
+  redo,
   refresh,
+  refreshNow,
+  reportTranspilerProblems,
   setFiles,
+  undo,
+  whenAnalysed,
 } from "../editor/editor.mjs";
-import { buildRegistry, declaredObjectName, entryClass } from "../editor/registry.mjs";
+import { buildRegistry, corpusLanded, declaredObjectName, entryClass, startRegistry } from "../editor/registry.mjs";
+import { loadLinter } from "../editor/abap2ui5-lint.mjs";
 import { compile } from "../editor/transpile.mjs";
 import { checkFileSet, MAIN_FILE, parseName } from "../editor/files.mjs";
 import {
@@ -27,7 +37,7 @@ import {
   linkedSources,
   originOf,
 } from "./deep-link.mjs";
-import { DEFAULT_FILES, isSample, SAMPLES, sampleById } from "../editor/samples.mjs";
+import { DEFAULT_FILES, isSample, sampleById } from "../editor/samples.mjs";
 import { openExamples, setUpExamples } from "./examples.mjs";
 import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
 import { setUpInsight, showInsight, updateInsight } from "./insight.mjs";
@@ -36,13 +46,13 @@ import { setUpSplitter, setUpTabs } from "./layout.mjs";
 import { announceAppHeight, announceReady, announceStatus, startEmbedMessages } from "./embed.mjs";
 import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
 import { state } from "./state.mjs";
+import { startRuntime } from "./runtime-client.mjs";
 import { readStoredJson, removeStored, writeStoredJson } from "./storage.mjs";
 import { describeError, hideOutput, setStatus, showOutput } from "./ui.mjs";
+import { warmUpAppFrame } from "./warm-up.mjs";
 
-// The framework bundle is 8 MB and built by a separate step, so it is not part
-// of this bundle - it is fetched at run time. The URL is built rather than
-// written as a literal so the bundler leaves the import alone, and so it
-// resolves under a GitHub Pages project path as well as at a site root.
+// Built rather than written as a literal, so it resolves under a GitHub Pages
+// project path as well as at a site root.
 const asset = (p) => new URL(p, document.baseURI).href;
 
 const prefersDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -50,11 +60,12 @@ const prefersDark = () => window.matchMedia("(prefers-color-scheme: dark)").matc
 const STORAGE_KEY = "abap2ui5-playground:files";
 
 const runButton = document.getElementById("run");
+const undoButton = document.getElementById("undo");
+const redoButton = document.getElementById("redo");
 const formatButton = document.getElementById("format");
 const shareButton = document.getElementById("share");
 const fullscreenButton = document.getElementById("fullscreen");
 const examplesButton = document.getElementById("examples");
-const sampleSelect = document.getElementById("samples");
 const frame = document.getElementById("app");
 
 // Embedded in somebody else's page: no chrome, no sample menu, just the code it
@@ -161,29 +172,45 @@ async function boot() {
   // Started before anything at all is awaited, because nothing about them
   // depends on the rest of this function.
   //
-  // Two independent slow starts: the transpiled framework (a download and a
-  // parse) and the ABAP corpus the editor checks against. Neither needs the
-  // other, so they run together - and the corpus half does not stop at its
-  // download. Parsing what arrives is the expensive part of it, several seconds
-  // of processor against a megabyte and a half of network, and it starts the
-  // moment the JSON lands rather than after the framework has finished
-  // arriving. That is the difference between the two costs adding up and the
-  // longer one covering the shorter.
+  // Two independent slow starts: the transpiled framework and the ABAP corpus
+  // the editor checks against. The framework is a worker (src/shell/
+  // runtime-client.mjs), started by index.html before this bundle had even
+  // arrived, and evaluating it - the better part of a second, several on a
+  // phone - happens on that worker's thread; what is picked up here is the
+  // handle. The corpus half does not stop at its download either: parsing
+  // what arrives is the expensive part of it, several seconds of processor
+  // against a megabyte and a half of network, and it starts the moment the
+  // JSON lands. The two used to share this thread, and the framework's
+  // evaluation - one synchronous block - sat in front of the parse: the corpus
+  // had landed at a fifth of a second and abaplint could not start on it
+  // until the framework was done. Now they overlap.
   //
   // And they are started here rather than after startingFiles( ), which is
   // where they used to be. That await is instant for a draft or a sample and
   // is two network round trips to GitHub for a ?src= link - the fetch of the
   // linked class, then the fetch of the classes beside it - which is the path
-  // every Run button in the documentation takes. The preload tags in
-  // index.html had these bytes moving with the document already; what was
-  // still waiting on the link was every bit of processor work behind them.
-  const runtimeReady = heard(import(/* @vite-ignore */ asset("runtime/framework.mjs")));
-  const corpusReady = heard(
-    fetch(asset("editor/corpus.json")).then((r) => {
-      if (!r.ok) throw new Error(`corpus.json: ${r.status}`);
-      return r.json();
-    }),
-  );
+  // every Run button in the documentation takes. The preload tag in
+  // index.html had the corpus moving with the document already; what was
+  // still waiting on the link was every bit of processor work behind it.
+  const runtime = startRuntime();
+  heard(runtime.ready);
+  // The registry's worker, which fetches the corpus itself and has usually
+  // done so by now; picked up here the way the runtime's is.
+  startRegistry();
+  heard(corpusLanded);
+
+  // What the app frame will load first, fetched into the cache while the
+  // corpus parses - see src/shell/warm-up.mjs. After the corpus has landed,
+  // not before: until then the network is busy with what the page cannot
+  // start without, and these can wait for the stretch where it is not.
+  corpusLanded.then(() => warmUpAppFrame(uiTheme())).catch(() => {});
+
+  // The piece of the page bundle that rides in the same stretch: the abap2UI5
+  // linter, which the first analysis needs - split off assets/shell.mjs so
+  // the editor is on screen before it has been downloaded, let alone
+  // evaluated. It is picked up again below, once there is an analysis to
+  // re-run.
+  const linterReady = heard(loadLinter());
 
   setUpSplitter();
   setUpAbout();
@@ -194,10 +221,9 @@ async function boot() {
   const startingReady = heard(startingFiles());
 
   const registryReady = heard(
-    corpusReady.then(async (corpus) => {
+    (async () => {
       setStatus("reading the abap2UI5 sources…");
       await buildRegistry(
-        corpus,
         startingReady.then((s) => s.files),
         (done, total) => {
           setStatus(`checking the sources… ${Math.round((done / total) * 100)}%`);
@@ -207,32 +233,34 @@ async function boot() {
       // so beats leaving the line reading 100% with nothing apparently
       // happening.
       setStatus("loading the ABAP runtime…");
-    }),
+    })(),
   );
 
-  const { files, from } = await startingReady;
+  const { files } = await startingReady;
   createEditor(document.getElementById("editor"), files, { onChange: remember });
   setUpFiles({ onChanged: remember, onOpened: fileOpened });
   setUpInsight();
+  // The registry answers from a worker, so what remember( ) and fileOpened( )
+  // show is what was last known; this is how the fresh answer reaches the
+  // panel, the badge and the fix bar.
+  whenAnalysed((problems) => updateInsight(problems));
   // The examples browser hands back either a built-in sample's id or the raw
   // URL of a catalogued class; the URL goes through the same code a ?src=
-  // link goes through.
+  // link goes through. It is the one way to a sample - there is no sample
+  // menu beside it, and the built-ins are its first group.
   setUpExamples({
-    openSample: (id) => {
-      sampleSelect.value = id;
-      loadSample(id, tabs);
-    },
+    openSample: (id) => loadSample(id, tabs),
     openLinked: (url) => loadLinked(url, tabs),
   });
 
-  fillSampleMenu(from);
-
   try {
     setStatus("loading the ABAP runtime…");
-    // Awaited together rather than one after the other, because both are
-    // already running: awaiting them in sequence would leave whichever failed
-    // second rejecting with nobody listening yet.
-    const [runtime] = await Promise.all([runtimeReady, registryReady]);
+    // The registry first, then the runtime - which is usually up by now, and
+    // if it is not, whenReady( ) is what finds out whether it ever will be.
+    // Both are already running and both are heard( ), so whichever fails
+    // while the other is being awaited still rejects to somebody.
+    await registryReady;
+    await runtime.whenReady();
     state.runtime = runtime;
     // What the frontend in the app frame reaches for: the roundtrip it would
     // otherwise POST to a backend, and whether the shell has a dialog open -
@@ -246,13 +274,23 @@ async function boot() {
     document.getElementById("about-versions").textContent = version;
 
     connectRegistry();
+    // The analysis just run had whatever the linter had to say - which is
+    // nothing if its chunk was still on its way. When it lands, the kept
+    // answer is thrown away and asked for again; if it has landed already,
+    // this runs at once and costs one incremental analysis.
+    linterReady
+      .then(() => {
+        invalidateAnalysis();
+        updateInsight(refresh());
+      })
+      .catch((e) => showOutput("abap2UI5 lint", `The abap2UI5 linter could not be loaded: ${String(e?.message ?? e)}`));
   } catch (e) {
     setStatus("the playground could not start", true);
     showOutput("Startup", describeError(e));
     return;
   }
 
-  for (const control of [runButton, formatButton, shareButton, fullscreenButton, examplesButton, sampleSelect]) {
+  for (const control of [runButton, formatButton, shareButton, fullscreenButton, examplesButton]) {
     control.disabled = false;
   }
   showSourceLink();
@@ -265,11 +303,18 @@ async function boot() {
   const runAndShow = () => run().then((started) => started && tabs.show("right"));
 
   runButton.addEventListener("click", runAndShow);
+  undoButton.addEventListener("click", () => {
+    undo();
+    reflectHistory();
+  });
+  redoButton.addEventListener("click", () => {
+    redo();
+    reflectHistory();
+  });
   formatButton.addEventListener("click", () => format());
   shareButton.addEventListener("click", () => share());
   fullscreenButton.addEventListener("click", () => openFullScreen());
   examplesButton.addEventListener("click", () => openExamples());
-  sampleSelect.addEventListener("change", () => loadSample(sampleSelect.value, tabs));
 
   // A theme change must not restart the app - somebody has a half-filled form
   // open and the sun went down. UI5 can swap its theme at runtime, so the
@@ -277,8 +322,11 @@ async function boot() {
   // keeps the theme it started with until the next Run.
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => applyFrameTheme());
 
+  // Ctrl+S as well as Ctrl+Enter: the hand that has typed in an editor for
+  // twenty years presses it, and a browser answers with a dialog for saving
+  // the page as HTML, which nobody has ever wanted here.
   document.addEventListener("keydown", (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+    if ((e.metaKey || e.ctrlKey) && (e.key === "Enter" || e.key === "s" || e.key === "S")) {
       e.preventDefault();
       runAndShow();
     }
@@ -349,29 +397,44 @@ function applyFrameTheme() {
 }
 
 // A different file is now on screen: the outline is about that file, and so is
-// the link to where it came from.
+// the link to where it came from, and so is what Undo has to take back.
 function fileOpened() {
   showSourceLink();
+  reflectHistory();
   updateInsight(refresh());
 }
 
+// Undo and Redo follow the open file's history: live while there is an edit
+// to take back or to do again, inactive otherwise. Monaco keeps the stack per
+// model, so switching files switches what the buttons mean.
+function reflectHistory() {
+  undoButton.disabled = !canUndo();
+  redoButton.disabled = !canRedo();
+}
+
 // The way back to where linked code lives, following whichever file is open.
-// Only for files that actually came from a link: over a draft or a sample it
-// would be a link to somebody else's page with no relation to what is on
-// screen.
+// Live only for files that actually came from a link: over a draft or a
+// sample it would be a link to somebody else's page with no relation to what
+// is on screen - so there it stays in the bar, inactive, rather than
+// disappearing and having the controls beside it shift.
 export function showSourceLink() {
   const link = document.getElementById("source-link");
   const origin = originOf(currentFile());
-  link.hidden = origin === undefined;
-  if (origin === undefined) return;
+  if (origin === undefined) {
+    link.removeAttribute("href");
+    link.setAttribute("aria-disabled", "true");
+    link.title = "Only code that came from GitHub has a page to go to";
+    return;
+  }
   link.href = humanUrl(origin);
-  link.textContent = "on GitHub";
+  link.removeAttribute("aria-disabled");
   link.title = `Open ${currentFile()} where it lives`;
 }
 
 function remember(files) {
   renderFiles();
   showSourceLink();
+  reflectHistory();
   // The editor has already re-checked by the time this runs (both hang off the
   // same debounce), and the analysis is kept under a key made of the models'
   // version ids - so this reads that result back rather than running a second
@@ -395,28 +458,33 @@ function remember(files) {
   }
 }
 
-// The sample menu. When the editor did not start on a sample, the menu opens on
-// a disabled entry saying where the code did come from - picking a sample then
-// replaces it, and the menu never claims that edited code is still the sample.
-function fillSampleMenu(from) {
-  if (from !== "sample") {
-    const placeholder = new Option(`from ${from}`, "");
-    placeholder.disabled = true;
-    sampleSelect.add(placeholder);
-  }
-  for (const sample of SAMPLES) {
-    sampleSelect.add(new Option(`${sample.title} — ${sample.note}`, sample.id));
-  }
-  sampleSelect.value = from === "sample" ? SAMPLES[0].id : "";
-}
-
+// A built-in sample, chosen in the samples browser.
 function loadSample(id, tabs) {
   const sample = sampleById(id);
   if (!sample) return;
-  setFiles(sample.files.map((f) => ({ ...f })));
-  renderFiles();
+  const hadDraft = replaceWith(sample.files);
   // Picking a sample is a request to see it, so it runs without a second click.
-  run().then((started) => started && tabs.show("right"));
+  run().then((started) => {
+    if (started) tabs.show("right");
+    if (hadDraft) sayDraftIsKept();
+  });
+}
+
+// Puts a set of files in the editor in place of what is there, and answers
+// whether what was there was somebody's own work - a draft rather than a
+// sample as it was opened - which setFiles( ) has kept in the undo stack.
+function replaceWith(files) {
+  const hadDraft = !isSample(getFiles());
+  setFiles(files.map((f) => ({ ...f })));
+  renderFiles();
+  return hadDraft;
+}
+
+// Said after the run, because run( ) ends by writing "running" over the
+// status line - and said at all because a click that replaced an hour's work
+// is the one moment the reader has to be told the work is not gone.
+function sayDraftIsKept() {
+  setStatus("running - your draft is one Undo away");
 }
 
 // A catalogued example, chosen in the examples browser. The URL goes down the
@@ -429,25 +497,15 @@ async function loadLinked(url, tabs) {
     setStatus("fetching the example…");
     const linked = checkFileSet(await fetchLinkedFiles(new URLSearchParams([["src", url]])));
     const alongside = await followNavigation(linked);
-    setFiles(checkFileSet([...linked, ...alongside]).map((f) => ({ ...f })));
-    renderFiles();
-    // The menu stops claiming the editor holds one of its samples - the same
-    // move fillSampleMenu makes when the page opens on somebody's link.
-    let placeholder = [...sampleSelect.options].find((o) => o.value === "");
-    if (!placeholder) {
-      placeholder = new Option("", "");
-      placeholder.disabled = true;
-      sampleSelect.add(placeholder, 0);
-    }
-    placeholder.text = "from the examples browser";
-    sampleSelect.value = "";
+    const hadDraft = replaceWith(checkFileSet([...linked, ...alongside]));
     if (await run()) tabs.show("right");
+    if (hadDraft) sayDraftIsKept();
   } catch (e) {
     // The catalogue said the class is there and it was not, or the fetch
     // failed under way. Somebody clicked expecting particular code, so this
     // failure is said out loud - unlike a catalogue that never loaded.
     setStatus("the example could not be opened", true);
-    showOutput("Examples", String(e.message || e));
+    showOutput("Samples", String(e.message || e));
   }
 }
 
@@ -550,7 +608,9 @@ export async function run() {
     // and is wrong somewhere - and the fastest way to understand one of those
     // is to look at the app it produced. Blocking Run on it would hide the
     // evidence. They are underlined in the editor and listed under Problems.
-    const problems = refresh();
+    // Waited for, not read back: Run decides on the text as it is now, and
+    // the registry answers from a worker.
+    const problems = await refreshNow();
     updateInsight(problems);
     const errors = problems.filter((i) => i.severity === 1 && i.source === "abaplint");
     if (errors.length > 0) {
@@ -607,6 +667,19 @@ export async function run() {
   } catch (e) {
     setStatus("the app could not be started", true);
     showOutput("Run", String(e.message || e));
+    // What the transpiler refused, at the lines it named: underlined and in
+    // the Problems list, the way the checkers' findings are - the Log has
+    // the full text, but a line is where somebody looks.
+    if (e.problems?.length > 0) {
+      reportTranspilerProblems(e.problems);
+      const problems = refresh();
+      updateInsight(problems);
+      const first = problems.find((p) => p.source === "transpiler");
+      if (first) {
+        showInsight("problems");
+        focusProblem(first.file, first.range.start.line + 1, 1);
+      }
+    }
   } finally {
     running = false;
     runButton.disabled = false;

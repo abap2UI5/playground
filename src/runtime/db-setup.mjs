@@ -30,27 +30,32 @@ class BrowserSQLiteClient extends SQLiteDatabaseClient {
   }
 }
 
-// Kept from the first setup so the database can be rebuilt from scratch later
-// without re-running the transpiled init. `schemas` carries one DDL dialect per
-// supported database; `insert` is the seed data (the client row in T000, the
-// TADIR entries the framework's own reflection reads).
-let schemas;
-let insert;
+// The empty database, as bytes. Taken once, right after the transpiled init has
+// created the schema and seeded it (the client row in T000, the TADIR entries
+// the framework's own reflection reads), and every reset after that starts
+// from this image rather than from the DDL.
+//
+// Rebuilding from the DDL is what a reset used to do, and it is what makes a
+// Run slow where it shows: twenty-seven CREATE TABLEs and seven hundred
+// INSERTs, one prepared statement each, about 85 ms per press of Run on a
+// desk and several times that on a phone. Opening SQLite on a 140 KB image is
+// a copy of the bytes into its file system - under a millisecond - and the
+// result is byte-for-byte the database the DDL would have produced, because
+// that is where the image came from. sql.js copies the array on open, so the
+// image is never written to and serves every reset for the life of the page.
+let image;
 
-async function fresh() {
+// Opens a connection and makes it the framework's default one. Assigned before
+// connect(): the client reports itself as the SY-DBSYS of the default
+// connection, and only recognizes itself once it is that connection.
+async function open(data) {
   const db = new BrowserSQLiteClient();
-  // Assigned before connect(): the client reports itself as the SY-DBSYS of the
-  // default connection, and only recognizes itself once it is that connection.
   globalThis.abap.context.databaseConnections["DEFAULT"] = db;
-  await db.connect();
-  await db.execute(schemas.sqlite);
-  await db.execute(insert);
+  await db.connect(data);
   return db;
 }
 
-export async function setup(abap, generatedSchemas, generatedInsert) {
-  schemas = generatedSchemas;
-  insert = generatedInsert;
+export async function setup(abap, schemas, insert) {
   globalThis.abap = abap;
 
   // The runtime defaults to a console that writes to process.stdout, which does
@@ -58,18 +63,24 @@ export async function setup(abap, generatedSchemas, generatedInsert) {
   // in-memory one collects the output instead, where the playground can show it.
   abap.console = new MemoryConsole();
 
-  await fresh();
+  const db = await open();
+  await db.execute(schemas.sqlite);
+  await db.execute(insert);
+  // export( ) closes and reopens the file underneath, which invalidates
+  // prepared statements - there are none yet, nothing has run.
+  image = db.export();
 }
 
-// Drop every table and rebuild it empty. The playground calls this before each
-// run so a new app never sees the drafts of the previous one - a stale draft id
-// in the frontend would otherwise resume an app the editor no longer describes.
+// Drop everything and start from the empty database again. The playground
+// calls this before each run so a new app never sees the drafts of the
+// previous one - a stale draft id in the frontend would otherwise resume an
+// app the editor no longer describes.
 export async function resetDatabase() {
-  if (schemas === undefined) {
+  if (image === undefined) {
     throw new Error("resetDatabase called before setup");
   }
   const previous = globalThis.abap.context.databaseConnections["DEFAULT"];
-  await fresh();
+  await open(image);
   try {
     await previous?.disconnect();
   } catch {

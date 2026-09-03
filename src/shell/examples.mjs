@@ -19,13 +19,28 @@
 //
 // Not every catalogued sample runs in the playground - the transpiler has
 // limits and z2ui5.cc custom controls are not on board. The two checkers and
-// Run are the judge of that, exactly as they are for typed code; the one
-// filter applied here is the cheap, certain one: samples-controls entries
-// whose library the site does not carry (see ui5-libraries.mjs), and its
-// src/03 collection, which is SAPUI5-only by definition.
+// Run are the judge of that, exactly as they are for typed code. What can be
+// known for certain is said on the row instead of hidden: a port whose
+// library the site does not carry (see ui5-libraries.mjs) or from the SAPUI5-
+// only src/03 collection "needs SAPUI5", a sample from abap2UI5/samples-stack
+// "needs a system" - both are listed, because this browser is where the
+// repositories' own pages used to be and a sample somebody cannot find is
+// worse than one they cannot run - and both open for reading rather than
+// running. The filters beside the search (source, runtime, release) are how
+// the list is cut down to what one is looking for; every one starts on.
 import { SAMPLES } from "../editor/samples.mjs";
 import { readStoredJson, writeStoredJson } from "./storage.mjs";
 import { UI5_LIBRARIES } from "./ui5-libraries.mjs";
+
+// The filters, as the checkboxes in the dialog's head name them - see
+// index.html: the three repositories (on), "OpenUI5 only" (off - it narrows,
+// and the list is meant to be everything until somebody says otherwise), and
+// "newer than 1.71" (on - off, it hides what needs a UI5 newer than the
+// floor). Kept between visits: somebody who only ever wants what runs here
+// on OpenUI5 should not have to say so every time.
+const FILTERS_KEY = "abap2ui5-playground:samples-filters";
+const FILTERS = ["learn", "controls", "stack", "openui5only", "newer"];
+let filters = { learn: true, controls: true, stack: true, openui5only: false, newer: true };
 
 // A day: long enough that browsing costs one request per repository and short
 // enough that a merged sample shows up tomorrow.
@@ -35,7 +50,14 @@ const cacheKey = (repo) => `abap2ui5-playground:catalogue:${repo}`;
 const CATALOGUES = [
   { repo: "abap2UI5/samples", read: readSamples },
   { repo: "abap2UI5/samples-controls", read: readControls },
+  { repo: "abap2UI5/samples-stack", read: readStack },
 ];
+
+// Libraries that only SAPUI5 carries - none of them can be in an OpenUI5
+// build, so a port that names one needs SAPUI5 whatever else is true of it.
+// The site's own list (UI5_LIBRARIES) is what decides "runs here"; this is
+// the finer question of why something does not.
+const SAPUI5_ONLY = /^(sap\.suite\.|sap\.ui\.comp|sap\.viz|sap\.gantt|sap\.ndc|sap\.ui\.vbm|sap\.ushell|sap\.fe|sap\.ui\.richtexteditor|sap\.ui\.export)/;
 
 const str = (v) => (typeof v === "string" ? v : "");
 
@@ -43,10 +65,16 @@ const str = (v) => (typeof v === "string" ? v : "");
 // plain, relative one does. deep-link.mjs checks the host and the file name
 // again on its own; this check is about not letting a catalogue point the
 // playground somewhere the catalogue's repository is not.
-function rawUrl(repo, file) {
+function rawUrl(repo, file, branch = "main") {
   if (!/^[\w./-]+\.clas\.abap$/.test(file) || file.startsWith("/") || file.includes("..")) return undefined;
-  return `https://raw.githubusercontent.com/${repo}/main/${file}`;
+  if (!/^[\w.-]+$/.test(branch)) return undefined;
+  return `https://raw.githubusercontent.com/${repo}/${branch}/${file}`;
 }
+
+// The same file as the page a human reads it on - every row links there,
+// because the repositories' own pages are gone and this list is where one
+// looks a sample up now.
+const githubUrl = (repo, file, branch = "main") => `https://github.com/${repo}/blob/${branch}/${file}`;
 
 // abap2UI5/samples: `samples[]`, each with a learning-path `stage`, and
 // `learningPath[]` naming the stages in reading order. The groups here are
@@ -75,6 +103,11 @@ function readSamples(repo, data) {
       note: str(sample.description) || str(sample.summary),
       who: str(sample.class),
       url,
+      github: githubUrl(repo, str(sample.file)),
+      source: "learn",
+      sapui5: false,
+      newer: false,
+      runs: true,
     };
     const keywords = Array.isArray(sample.keywords) ? sample.keywords.join(" ") : str(sample.keywords);
     entry.haystack = `${entry.title} ${entry.note} ${str(sample.summary)} ${entry.who} ${keywords}`.toLowerCase();
@@ -84,24 +117,33 @@ function readSamples(repo, data) {
 }
 
 // abap2UI5/samples-controls: `ports[]`, one per UI5 demo kit sample, grouped
-// here by the library the control lives in. Two kinds are left out rather
-// than offered and watched fail: src/03 is the SAPUI5-only collection, and a
-// port whose library is not built into this site names controls that cannot
-// load - no checker needed to know that.
+// here by the library the control lives in. Its categories say two things
+// the filters ask about: src/02 is the ports that need a UI5 newer than
+// 1.71, src/03 the SAPUI5-only collection. A port whose library is not built
+// into this site names controls that cannot load here, so it is offered for
+// reading and says what it needs.
 function readControls(repo, data) {
   if (!Array.isArray(data?.ports)) return [];
   const carried = new Set(UI5_LIBRARIES);
   const groups = new Map();
   for (const port of data.ports) {
     const library = str(port?.library);
-    if (str(port?.category) === "src/03" || !carried.has(library)) continue;
+    const category = str(port?.category);
     const url = rawUrl(repo, str(port.file));
     if (url === undefined) continue;
+    const sapui5 = category === "src/03" || SAPUI5_ONLY.test(library);
+    const runs = carried.has(library) && category !== "src/03";
     const entry = {
       title: str(port.title) || str(port.entity) || str(port.class),
       note: str(port.summary),
       who: str(port.class),
       url,
+      github: githubUrl(repo, str(port.file)),
+      source: "controls",
+      sapui5,
+      newer: category === "src/02",
+      runs,
+      needs: runs ? undefined : sapui5 ? "needs SAPUI5" : `needs ${library}`,
     };
     entry.haystack =
       `${entry.title} ${entry.note} ${entry.who} ${str(port.entity)} ${str(port.sample)} ${str(port.keywords)}`.toLowerCase();
@@ -112,6 +154,50 @@ function readControls(repo, data) {
     .sort()
     .map((library) => groups.get(library))
     .filter((g) => g.entries.length > 0);
+}
+
+// abap2UI5/samples-stack: `samples[]`, each on a delivery branch of its own
+// (`branch`, with `path` under it) and grouped by `technology` - OData, RAP,
+// WebSockets, the launchpad. None of them runs here: every one needs a real
+// system, which is the whole point of that repository. They are listed so
+// they can be found, and open for reading; `needs` says what a system has
+// to have, and a sample that names SAPUI5 there counts as SAPUI5-only.
+function readStack(repo, data) {
+  if (!Array.isArray(data?.samples)) return [];
+  const groups = new Map();
+  for (const sample of data.samples) {
+    const url = rawUrl(repo, str(sample?.path), str(sample?.branch) || "main");
+    if (url === undefined) continue;
+    const technology = str(sample.technology) || "Stack";
+    const needs = str(sample.needs);
+    const entry = {
+      title: str(sample.title) || str(sample.class),
+      note: str(sample.summary),
+      who: str(sample.class).toLowerCase(),
+      url,
+      github: githubUrl(repo, str(sample.path), str(sample.branch) || "main"),
+      source: "stack",
+      sapui5: /sapui5/i.test(needs),
+      newer: false,
+      runs: false,
+      needs: needs ? `needs a system: ${needs}` : "needs a system",
+    };
+    const keywords = Array.isArray(sample.keywords) ? sample.keywords.join(" ") : str(sample.keywords);
+    entry.haystack = `${entry.title} ${entry.note} ${entry.who} ${technology} ${needs} ${keywords}`.toLowerCase();
+    if (!groups.has(technology)) groups.set(technology, { title: `Stack — ${technology}`, blurb: "", entries: [] });
+    groups.get(technology).entries.push(entry);
+  }
+  return [...groups.values()].filter((g) => g.entries.length > 0);
+}
+
+// Which entries the filters let through. The built-ins are always there:
+// they are the page's own and every filter is about the repositories.
+function passes(entry) {
+  if (entry.sampleId !== undefined) return true;
+  if (!filters[entry.source]) return false;
+  if (filters.openui5only && entry.sapui5) return false;
+  if (entry.newer && !filters.newer) return false;
+  return true;
 }
 
 // The raw catalogue, from localStorage within the day or from the network, and
@@ -143,17 +229,20 @@ let callbacks;
 let started = false;
 let loading = false;
 
-// The always-there group: the same nine the Sample menu offers, so the browser
-// has something to search and to open even when no catalogue can be reached.
+// The always-there group: the built-in samples, which have no other way in -
+// there is no sample menu in the bar - so the browser has something to search
+// and to open even when no catalogue can be reached.
 const builtIn = {
   title: "Built in",
-  blurb: "The Sample menu, searchable. These live in the page and need no network.",
+  blurb: "A handful to start from. These live in the page and need no network.",
   entries: SAMPLES.map((sample) => ({
     title: sample.title,
     note: sample.note,
     who: "built in",
     haystack: `${sample.title} ${sample.note}`.toLowerCase(),
     sampleId: sample.id,
+    runs: true,
+    github: "https://github.com/abap2UI5/playground/blob/main/src/editor/samples.mjs",
   })),
 };
 
@@ -172,6 +261,21 @@ export function setUpExamples(handlers) {
   dialog.addEventListener("click", (e) => {
     if (e.target === dialog) dialog.close();
   });
+
+  // The filters: what was kept from last time, if anything, and every change
+  // both re-renders and is kept. A stored value that is not a boolean is
+  // ignored rather than trusted.
+  const stored = readStoredJson(FILTERS_KEY);
+  for (const f of FILTERS) if (typeof stored?.[f] === "boolean") filters[f] = stored[f];
+  for (const box of dialog.querySelectorAll("input[data-filter]")) {
+    const f = box.dataset.filter;
+    box.checked = filters[f] === true;
+    box.addEventListener("change", () => {
+      filters[f] = box.checked;
+      writeStoredJson(FILTERS_KEY, filters);
+      render();
+    });
+  }
 }
 
 export function openExamples() {
@@ -211,9 +315,11 @@ function render() {
   const needle = search.value.trim().toLowerCase();
   const frag = document.createDocumentFragment();
   let shown = 0;
+  let total = 0;
 
   for (const group of [builtIn, ...loadedGroups.flat()]) {
-    const entries = needle === "" ? group.entries : group.entries.filter((e) => e.haystack.includes(needle));
+    total += group.entries.length;
+    const entries = group.entries.filter((e) => passes(e) && (needle === "" || e.haystack.includes(needle)));
     if (entries.length === 0) continue;
     shown += entries.length;
 
@@ -247,18 +353,32 @@ function render() {
   }
 
   body.replaceChildren(frag);
+  // How much the search and the filters let through, so an empty-looking
+  // list says whether it is the words or the boxes.
+  const count = document.getElementById("examples-count");
+  if (count) count.textContent = loading ? "" : `${shown} of ${total}`;
 }
 
-// One entry. The row is a button inside its list item rather than a list item
-// with a click handler on it: this is the only way into the examples for
-// somebody who is not using a mouse, and a <li> is not focusable, not in the
-// tab order and does not answer Enter or Space.
+// One entry: a button that opens it here, and beside it a link to where it
+// lives on GitHub. The button rather than a click handler on the item,
+// because this is the only way into the examples for somebody who is not
+// using a mouse, and a <li> is not focusable, not in the tab order and does
+// not answer Enter or Space. The link is outside the button, because a link
+// inside a button is not HTML.
+//
+// A sample that cannot run here - one that needs a system, or SAPUI5 - is
+// listed, says so, and its button is disabled: clicking would only have
+// opened code that fails on the first roundtrip. The link beside it is how
+// one still gets to it.
 function row(entry) {
   const item = document.createElement("li");
+  item.className = "example-item";
 
   const button = document.createElement("button");
   button.type = "button";
   button.className = "insight-row example-row";
+  // The built-ins by id, so a test can pick one without matching its title.
+  if (entry.sampleId !== undefined) button.dataset.sample = entry.sampleId;
 
   const title = document.createElement("span");
   title.className = "example-title";
@@ -272,12 +392,33 @@ function row(entry) {
   who.className = "insight-who";
   who.textContent = entry.who;
 
-  button.append(title, note, who);
+  button.append(title, note);
+  if (entry.needs) {
+    const needs = document.createElement("span");
+    needs.className = "example-needs";
+    needs.textContent = entry.needs;
+    button.append(needs);
+    button.disabled = true;
+    button.title = `Does not run in the playground: ${entry.needs}`;
+    item.classList.add("is-unavailable");
+  }
+  button.append(who);
   button.addEventListener("click", () => {
     dialog.close();
     if (entry.sampleId !== undefined) callbacks.openSample(entry.sampleId);
     else callbacks.openLinked(entry.url);
   });
   item.append(button);
+
+  if (entry.github) {
+    const link = document.createElement("a");
+    link.className = "example-github";
+    link.href = entry.github;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = "GitHub";
+    link.title = `Open ${entry.who} on GitHub`;
+    item.append(link);
+  }
   return item;
 }

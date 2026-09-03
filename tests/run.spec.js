@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { addNamedFile, control, open, outputText, setSource } from "./helpers.mjs";
+import { addNamedFile, control, markers, open, outputText, setSource } from "./helpers.mjs";
 
 // The playground's whole point: what is in the editor is what runs. These tests
 // change the ABAP and check that the app on the right changed with it, and that
@@ -69,6 +69,37 @@ test("modern ABAP is compiled without a downport step", async ({ page }) => {
   await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
 
   await expect(control(page, "txtOut")).toContainText("row 2 of 4");
+});
+
+test("what the transpiler refuses is underlined at its line, until the text changes", async ({ page }) => {
+  await open(page);
+
+  // abaplint's curated rules say nothing about the order of WHEN branches;
+  // the transpiler's validation insists on WHEN OTHERS being last. So this
+  // passes the editor and fails Run - with a file and a row in the message.
+  const wrong = app(
+    "Refused",
+    `CASE out.
+      WHEN OTHERS.
+        out = \`other\`.
+      WHEN \`a\`.
+        out = \`a\`.
+      ENDCASE.`,
+  );
+  await setSource(page, wrong);
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toHaveText("the app could not be started", { timeout: 60000 });
+
+  // Underlined where it is, and in the Problems list - which the run opened,
+  // because a line is where somebody looks. The Log still has the full text.
+  await expect.poll(async () => (await markers(page)).filter((m) => m.message.includes("(transpiler)")).length).toBe(1);
+  await expect(page.locator("#insight-body .insight-row", { hasText: /transpiler|WHEN OTHERS/i })).toBeVisible();
+  await page.locator('[data-insight="log"]').click();
+  await expect(page.locator(".log-body")).toContainText("when_others_last");
+
+  // Gone the moment the text changes - the next Run says what is still true.
+  await setSource(page, wrong.replace("WHEN OTHERS.\n        out = `other`.\n      ", "") + "\n");
+  await expect.poll(async () => (await markers(page)).filter((m) => m.message.includes("(transpiler)")).length).toBe(0);
 });
 
 test("a declaration below the first statement is not an error", async ({ page }) => {
