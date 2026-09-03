@@ -118,8 +118,27 @@ function attributeLines(node, column) {
   const names = node.attrs.map((attr) => `n = ${abapLiteral(attr.name)}`);
   const width = Math.max(0, ...names.map((n) => n.length));
   return node.attrs.map(
-    (attr, i) => `${pad})->a( ${names[i].padEnd(width)} ${attr.boolean ? "b" : "v"} = ${attr.raw}`,
+    (attr, i) =>
+      `${pad})->a( ${names[i].padEnd(width)} ${attr.boolean ? "b" : "v"} = ${wrapped(attr.raw, column + STEP)}`,
   );
+}
+
+// A value that runs over several lines - a `&&` concatenation, a wrapped
+// `t_arg` list - carried across with its own shape and re-anchored.
+//
+// The lines after the first come out of the chain that was read, where they
+// were indented for the column that call stood in. The rewrite puts the call
+// somewhere else, so keeping those columns would leave a paragraph of ABAP
+// floating at the indent of a chain that no longer exists. What is kept is
+// their shape RELATIVE to each other; what is replaced is where the block
+// starts, which is one level in from the call, the same as any other content.
+function wrapped(raw, column) {
+  const lines = String(raw).split("\n");
+  if (lines.length === 1) return raw;
+  const rest = lines.slice(1);
+  const common = Math.min(...rest.filter((l) => l.trim() !== "").map((l) => l.length - l.trimStart().length));
+  const pad = " ".repeat(column);
+  return [lines[0], ...rest.map((l) => (l.trim() === "" ? "" : pad + l.slice(common)))].join("\n");
 }
 
 // A value as an ABAP string literal. Backticks rather than quotes throughout -

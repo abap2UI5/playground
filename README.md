@@ -187,16 +187,17 @@ This replaced three separate GitHub Pages sites, one per sample repository.
 ## The examples browser
 
 **Samples** in the bar is the same list without leaving the editor: drafts you
-saved, the built-in samples, and everything the catalogue holds — searchable,
+saved, the samples the page carries, and everything the catalogue holds — searchable,
 filterable by repository, "OpenUI5 only" and "newer than 1.71". Every row links
-to its ABAP on GitHub — the built-in samples too, which live as ordinary
-`.clas.abap` files under `src/samples/`. A chosen entry opens through the same
+to its ABAP on GitHub — the ones the page carries too, which are entries of
+[abap2UI5/samples](https://github.com/abap2UI5/samples) like every other row and
+link to the same files. A chosen entry opens through the same
 path a `?src=` link takes — the raw URL of its class, fetched, checked and run
 — so it arrives with the **Source** link back to where it lives.
 
 It reads the same index the catalogue page does, from this site rather than
 from GitHub, and nothing is fetched until the button is clicked. Where the
-index cannot be had, the browser quietly lists the built-in samples and your
+index cannot be had, the browser quietly lists the samples in the page and your
 drafts alone. Everything offered is judged the way typed code is judged — a
 catalogued sample the transpiler cannot compile says so in the Problems list,
 which is the designed behaviour.
@@ -208,13 +209,15 @@ the `+` in the file strip offers one, with a skeleton that passes — holds its
 local test classes, exactly as abapGit keeps them. Run runs them first,
 through the runner open-abap ships, and starts the app after: a failing test
 is listed in the **Tests** tab with what was expected and what was there, its
-row goes to the assertion, and the status line says how many failed. The
-**Unit tests** sample is the worked example.
+row goes to the assertion, and the status line says how many failed.
 
 **Drafts.** The playground keeps whatever was last in the editor on its own.
-For more than one piece of work, the samples browser has **Your drafts** at
-the top: name what is open, save it, and it is listed there — in this
-browser — to open or delete another day.
+Opening a sample over it never loses it: the status line says which way back
+there is — *one Undo away* when the sample went in under the same file name,
+*comes back if you reload* when it brought its own class name and the editor
+had to close yours. For more than one piece of work, the samples browser has
+**Your drafts** at the top: name what is open, save it, and it is listed there
+— in this browser — to open or delete another day.
 
 **Share** puts every open file in the URL fragment, deflated: a 2500-character
 class becomes a link of about 700 characters. Being a fragment, it never leaves
@@ -316,7 +319,7 @@ const href = await window.abap2ui5Embed.url({ code, view: "app" });
 ```
 
 That matters more than it looks: a fragment the playground cannot read is
-treated as somebody else's link and quietly replaced by the built-in sample, so
+treated as somebody else's link and quietly replaced by the sample the page opens on, so
 an encoder written by hand fails by showing the wrong code rather than by
 failing.
 
@@ -360,11 +363,11 @@ seconds.
 | | |
 |---|---|
 | `tools/build.mjs` | what `npm run build` runs: the five below, the middle two together |
-| `tools/fetch-deps.mjs` | pins abap2UI5 and open-abap-core by commit under `deps/` |
+| `tools/fetch-deps.mjs` | pins abap2UI5, its frontend, open-abap-core and abap2UI5/samples by commit under `deps/` |
 | `tools/build-framework.mjs` | downport → transpile → `dist/runtime/framework.mjs`, the worker the page runs the framework in |
 | `tools/build-ui5.mjs` | the abap2UI5 frontend built against OpenUI5 → `dist/app/` |
 | `tools/build-catalogue.mjs` | the six committed catalogues of the three sample repositories, joined into `dist/samples/apps.json` |
-| `tools/build-site.mjs` | the page bundle and its chunks, the catalogue page, the ABAP corpus the editor uses, and the service worker |
+| `tools/build-site.mjs` | the page bundle and its chunks, the catalogue page, the ABAP corpus the editor uses, the samples the page carries (resolved out of the pinned abap2UI5/samples), and the service worker |
 | `tools/check-size.mjs` | the budget for what a visitor downloads |
 
 `PG_DEBUG=1` builds the page and framework bundles unminified and with source
@@ -375,7 +378,12 @@ Monaco and abaplint (the registry in a worker of its own),
 `src/shell` is the page around them, `src/catalogue` is the sample catalogue at
 `/samples/` (a second document with a bundle of its own), `src/abap` is the
 handful of ABAP the playground adds to the framework, and `src/examples` is
-ABAP served as static files so `?src=` has something to point at.
+ABAP served as static files so `?src=` has something to point at. There are no
+samples here: the ones the page carries are named by class in
+`src/editor/sample-list.mjs` and come out of the pinned
+[abap2UI5/samples](https://github.com/abap2UI5/samples) at build time, so the
+playground holds no copy of a sample that can drift from the one upstream
+maintains.
 
 ### Bumping abap2UI5 or OpenUI5
 

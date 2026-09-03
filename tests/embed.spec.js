@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { MAIN_MARK } from "./helpers.mjs";
 
 // Putting a live demo in somebody else's page: the app-only view, the messages
 // an embedding page listens for, and the loader script that ties them together.
@@ -23,7 +24,7 @@ test("?view=app shows the app and nothing else - no editor and no bar", async ({
   await expect(page.locator("#pane-left")).toBeHidden();
   await expect(page.locator("#splitter")).toBeHidden();
   await expect(page.locator("#pane-right")).toBeVisible();
-  await expect(page.frameLocator("#app").getByText("Hello abap2UI5")).toBeVisible();
+  await expect(page.frameLocator("#app").getByText(MAIN_MARK)).toBeVisible();
 
   // The bar goes with the editor. An embedded demo is furniture in somebody
   // else's page, and Run, the source and undo are all a click away in the
@@ -50,7 +51,7 @@ test("?view=app shows the app and nothing else - no editor and no bar", async ({
   await expect(page.locator("#run")).toBeEnabled();
   await page.keyboard.press("Control+Enter");
   await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
-  await expect(page.frameLocator("#app").getByText("Hello abap2UI5")).toBeVisible();
+  await expect(page.frameLocator("#app").getByText(MAIN_MARK)).toBeVisible();
 });
 
 test("an embedded playground reports ready, status and height to the page around it", async ({ page }) => {
@@ -237,7 +238,7 @@ test("an app-only playground renders in a column narrower than a desk", async ({
   const box = await page.locator("#app").boundingBox();
   expect(box.width, "the app frame has a width").toBeGreaterThan(300);
   expect(box.height, "the app frame has a height").toBeGreaterThan(100);
-  await expect(page.frameLocator("#app").getByText("Hello abap2UI5")).toBeVisible();
+  await expect(page.frameLocator("#app").getByText(MAIN_MARK)).toBeVisible();
 });
 
 test("the app frame lets itself be framed from another origin", async ({ page }) => {

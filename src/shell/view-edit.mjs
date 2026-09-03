@@ -34,8 +34,12 @@ const no = (why) => ({ ok: false, why });
 export function viewEditable(source, xml) {
   const chain = readViewChain(source);
   if (!chain.ok) return chain;
-  if (!alignWithXml(chain.root, xml)) {
-    return no("The view on screen and the chain in the code do not line up, so an edit could not be put back safely.");
+  const mismatch = alignWithXml(chain.root, xml);
+  if (mismatch) {
+    return no(
+      `The view on screen and the chain in the code do not line up at ${mismatch}, ` +
+        "so an edit could not be put back safely.",
+    );
   }
   return { ok: true };
 }
@@ -48,8 +52,12 @@ export function viewEditable(source, xml) {
 export function sourceWithView(source, xml, edited) {
   const chain = readViewChain(source);
   if (!chain.ok) return chain;
-  if (!alignWithXml(chain.root, xml)) {
-    return no("The view on screen and the chain in the code do not line up, so this edit was not written back.");
+  const mismatch = alignWithXml(chain.root, xml);
+  if (mismatch) {
+    return no(
+      `The view on screen and the chain in the code do not line up at ${mismatch}, ` +
+        "so this edit was not written back.",
+    );
   }
 
   const wanted = parse(edited);
@@ -109,6 +117,16 @@ function merge(wanted, was, node) {
         ? { name: attr.name, raw: before.raw, boolean: before.boolean, literal: before.literal }
         : { name: attr.name, raw: abapLiteral(attr.value), boolean: false, literal: attr.value },
     );
+  }
+
+  // And the attributes the reconstruction never showed (see alignNode( ) in
+  // chain-read.mjs): they are in the chain, they were not on screen, so they
+  // cannot have been edited and they cannot have been deleted either. Written
+  // after the ones that were shown, because there is nowhere better to put
+  // them - the document being merged from has no opinion about where they sat.
+  for (const attr of node?.attrs ?? []) {
+    if (!attr.hidden || built.attrs.some((a) => a.name === attr.name)) continue;
+    built.attrs.push({ name: attr.name, raw: attr.raw, boolean: attr.boolean, literal: attr.literal });
   }
 
   const wantedKids = [...wanted.children];

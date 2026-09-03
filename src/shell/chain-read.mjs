@@ -416,17 +416,39 @@ function apply(cursor, method, args) {
  */
 export function alignWithXml(root, xml) {
   const doc = new DOMParser().parseFromString(xml, "application/xml");
-  if (doc.getElementsByTagName("parsererror").length > 0) return false;
+  if (doc.getElementsByTagName("parsererror").length > 0) return "the reconstructed view is not XML";
   return alignNode(root.children[0], doc.documentElement);
 }
 
-function alignNode(node, element) {
-  if (!node || !element || qnameOf(node) !== element.tagName) return false;
+// Where the two disagree, as a path into the view, or undefined when they
+// agree. A path rather than a yes/no: the panel puts it in the sentence beside
+// a disabled Edit, and "at /mvc:View/Shell/Page" is the difference between a
+// reader who can look and one who can only shrug.
+function alignNode(node, element, where = "") {
+  if (!node || !element) return `${where}/?`;
+  const at = `${where}/${element.tagName}`;
+  if (qnameOf(node) !== element.tagName) return `${at} (the chain says ${qnameOf(node)})`;
   for (const attr of node.attrs) {
-    if (!element.hasAttribute(attr.name)) return false;
+    // An attribute the reconstruction left out is not a disagreement. The
+    // linter drops a value it cannot resolve - `client->_event_nav_app_leave( )`
+    // is on the Page of every sample in abap2UI5/samples - and says so in its
+    // notes. It is in the chain, it is simply not on screen, so it is marked
+    // and carried through the rewrite untouched. Failing here instead would
+    // put Edit out of reach of most real views; dropping it would silently
+    // delete the navigation off every one of them.
+    if (!element.hasAttribute(attr.name)) {
+      attr.hidden = true;
+      continue;
+    }
     attr.rendered = element.getAttribute(attr.name);
   }
   const children = [...element.children];
-  if (children.length !== node.children.length) return false;
-  return node.children.every((child, i) => alignNode(child, children[i]));
+  if (children.length !== node.children.length) {
+    return `${at} (${node.children.length} children in the chain, ${children.length} in the view)`;
+  }
+  for (let i = 0; i < children.length; i++) {
+    const why = alignNode(node.children[i], children[i], at);
+    if (why) return why;
+  }
+  return undefined;
 }

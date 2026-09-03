@@ -12,11 +12,13 @@ import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
 import { abap2ui5LinterPlugin, nodeStubPlugin } from "./esbuild-plugins.mjs";
 import { appFirstLoad } from "../src/shell/warm-up.mjs";
+import { SAMPLE_LIST, SAMPLE_REPO } from "../src/editor/sample-list.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "src", "shell");
 const DEPS = path.join(ROOT, "deps");
 const DIST = path.join(ROOT, "dist");
+const BUILD_SAMPLES = path.join(ROOT, "build", "samples");
 const ASSETS = path.join(DIST, "assets");
 
 // The one directory of abap2UI5 that never reaches the editor.
@@ -134,6 +136,109 @@ function writeCorpus() {
   log(`corpus.json: ${Object.keys(files).length} ABAP sources (${mb} MB)`);
 }
 
+// The samples the page carries, materialised out of the pinned
+// abap2UI5/samples (src/editor/sample-list.mjs says which; deps/ holds the
+// commit). Three things come out of `build/samples/`, and none of them is
+// checked in:
+//
+//   <class>.clas.abap  the ABAP itself, under the name abapGit gives it -
+//                      which is the name the editor has to open it under
+//   index.json         id, title, blurb, files, GitHub link; Node reads this
+//                      one (the tests do), which is why it is JSON
+//   sources.mjs        one `import` per file plus the map, because a bundler
+//                      has to see every import statically and the list is not
+//                      static any more
+//
+// Titles and blurbs are read out of that repository's catalogue.json rather
+// than restated here: it is the same catalogue the samples browser lists the
+// other seven hundred entries from, so a sample reads the same whether it came
+// with the page or over the network.
+// The path of a class inside the pinned samples repository, for the classes a
+// sample calls rather than is. Searched rather than configured: their place in
+// that tree (src/01, src/02, …) is that repository's business.
+function findClass(repo, name) {
+  const wanted = `${name.toLowerCase()}.clas.abap`;
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        const found = walk(p);
+        if (found) return found;
+      } else if (e.name.toLowerCase() === wanted) return path.relative(repo, p);
+    }
+    return undefined;
+  };
+  const found = walk(path.join(repo, "src"));
+  if (!found) {
+    throw new Error(
+      `build-site: ${name} is named by src/editor/sample-list.mjs and is not in the pinned ${SAMPLE_REPO}.`,
+    );
+  }
+  return found;
+}
+
+function writeSamples() {
+  const repo = path.join(DEPS, "abap2ui5-samples");
+  const cataloguePath = path.join(repo, "catalogue.json");
+  if (!fs.existsSync(cataloguePath)) {
+    throw new Error("build-site: deps/abap2ui5-samples has no catalogue.json - run `npm run deps` first.");
+  }
+  const catalogue = JSON.parse(fs.readFileSync(cataloguePath, "utf8"));
+  const byClass = new Map((catalogue.samples || []).map((s) => [String(s.class).toLowerCase(), s]));
+
+  fs.rmSync(BUILD_SAMPLES, { recursive: true, force: true });
+  fs.mkdirSync(BUILD_SAMPLES, { recursive: true });
+
+  const index = [];
+  const copied = new Map();
+  for (const wanted of SAMPLE_LIST) {
+    /* The app has to be a catalogued sample - that is where its title and its
+     * blurb come from. A class it calls need not be: an app that only exists to
+     * be navigated INTO is a file in that repository and no row in its
+     * catalogue, which is right, so those are looked up on disk. */
+    const app = byClass.get(wanted.class.toLowerCase());
+    if (!app) {
+      throw new Error(
+        `build-site: ${wanted.class} is in src/editor/sample-list.mjs and not in the pinned ${SAMPLE_REPO} ` +
+          "catalogue - it was renamed or dropped upstream; pick another class or move the pin back.",
+      );
+    }
+    const files = [];
+    for (const name of [app.file, ...(wanted.also ?? []).map((c) => findClass(repo, c))]) {
+      const from = path.join(repo, name);
+      if (!fs.existsSync(from)) throw new Error(`build-site: ${SAMPLE_REPO} lists ${name}, which is not there.`);
+      const base = path.basename(name);
+      if (!copied.has(base)) {
+        fs.writeFileSync(path.join(BUILD_SAMPLES, base), fs.readFileSync(from, "utf8"));
+        copied.set(base, true);
+      }
+      files.push(base);
+    }
+    index.push({
+      id: wanted.id,
+      /* The description is the sentence that names the app ("Hello World, the
+       * Smallest App"); the catalogue's own `title` is its place in a series
+       * ("Basics I"), which says nothing on a row of its own. */
+      title: String(app.description || app.title || wanted.class),
+      note: String(app.summary || ""),
+      files,
+      github: `https://github.com/${SAMPLE_REPO}/blob/main/${app.file}`,
+    });
+  }
+
+  fs.writeFileSync(path.join(BUILD_SAMPLES, "index.json"), JSON.stringify(index, null, 2) + "\n");
+  const imports = [...copied.keys()].map((base, i) => `import S${i} from "./${base}";`).join("\n");
+  const map = [...copied.keys()].map((base, i) => `  ${JSON.stringify(base)}: S${i},`).join("\n");
+  fs.writeFileSync(
+    path.join(BUILD_SAMPLES, "sources.mjs"),
+    `// Written by tools/build-site.mjs - see writeSamples( ). Do not edit.\n` +
+      `${imports}\n\nexport const SOURCES = {\n${map}\n};\n`,
+  );
+  log(`samples: ${index.length} from ${SAMPLE_REPO}, ${copied.size} file(s)`);
+}
+
+writeSamples();
+
 // The page bundle, in pieces: assets/shell.mjs is what the page cannot start
 // without - Monaco - and what it only needs later comes as chunks of its
 // own, which esbuild splits off wherever the source says import( ): the
@@ -171,10 +276,10 @@ const result = await esbuild.build({
   // the CSS lands next to the bundle as assets/shell.css (the shell's own
   // stylesheet is imported by main.mjs so both end up in that one file), and
   // the font is copied out with a hashed name.
-  // Monaco's icon font is copied out beside the bundle; the built-in samples'
-  // ABAP (src/samples/, listed in src/editor/sample-list.mjs) is inlined into
-  // it as text. They are real .clas.abap files so that the samples browser can
-  // link a row to the ABAP rather than to the JavaScript that used to quote it
+  // Monaco's icon font is copied out beside the bundle; the ABAP of the samples
+  // the page carries is inlined into it as text. They are real .clas.abap
+  // files, copied out of the pinned abap2UI5/samples by writeSamples( ) above
+  // into build/samples/, and reached through the import module it writes there
   // - see src/editor/samples.mjs, which is the only importer.
   loader: { ".ttf": "file", ".abap": "text" },
   // The linter plugin goes first: it claims `fs` and `path` for the abap2UI5

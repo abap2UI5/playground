@@ -1,9 +1,8 @@
 import { test, expect } from "@playwright/test";
-import { control, open, openFiles } from "./helpers.mjs";
-import { SAMPLE_LIST } from "../src/editor/sample-list.mjs";
+import { control, open, openFiles, SAMPLES } from "./helpers.mjs";
 
 // The examples browser: the sample catalogue, read when the Examples button is
-// clicked, listed next to the built-in samples, and opened through the same
+// clicked, listed next to the samples the page carries, and opened through the same
 // path a ?src= link takes.
 //
 // It reads ONE file and it is this site's own - samples/apps.json, written at
@@ -238,10 +237,10 @@ test("the index is listed by learning-path stage, and an entry runs through the 
   await openBrowser(page);
 
   // The reader's own drafts first (none yet, but the row that saves one),
-  // then the built-ins, then the samples repository in reading order, then
+  // then the ones the page carries, then the samples repository in reading order, then
   // the controls grouped by library.
   await expect(page.locator(".examples-group").first()).toHaveText("Your drafts");
-  await expect(page.locator(".examples-group").nth(1)).toHaveText("Built in");
+  await expect(page.locator(".examples-group").nth(1)).toHaveText("In the page");
   await expect(page.locator(".examples-group", { hasText: "Start here" })).toBeVisible();
   await expect(page.locator(".examples-group", { hasText: "Show many rows" })).toBeVisible();
   await expect(page.locator(".examples-group", { hasText: "Controls — sap.m" })).toBeVisible();
@@ -273,7 +272,7 @@ test("the search narrows the list across every group", async ({ page }) => {
   await open(page);
   await openBrowser(page);
 
-  // A controls keyword: only that port stays, the samples and built-ins go.
+  // A controls keyword: only that port stays, the other groups go.
   await page.locator("#examples-search").fill("breadcrumbs");
   await expect(page.locator(".example-row")).toHaveCount(1);
   await expect(page.locator(".example-row")).toContainText("Breadcrumbs");
@@ -380,16 +379,12 @@ test("entries the playground cannot run are listed, say why, cannot be clicked, 
     "href",
     "https://github.com/abap2UI5/samples-controls/blob/main/src/01/01/z2ui5_cl_smpc_app_003.clas.abap",
   );
-  // A built-in links to its own ABAP in this repository. It used to link to
-  // src/editor/samples.mjs - the JavaScript that quoted the ABAP - so
-  // "where does this live" answered with a thousand lines of template
-  // literal. Every row, built-in or catalogued, ends at a .clas.abap file.
+  // A sample the page carries links to the same file a catalogued row would:
+  // they ARE catalogue entries, in abap2UI5/samples, and the only thing
+  // different about them is that they travelled with the page.
   await expect(
     page.locator(".example-item", { has: page.locator('[data-sample="hello"]') }).locator(".example-github"),
-  ).toHaveAttribute(
-    "href",
-    "https://github.com/abap2UI5/playground/blob/main/src/samples/hello/zcl_playground.clas.abap",
-  );
+  ).toHaveAttribute("href", SAMPLES[0].github);
   for (const href of await page.locator(".example-github").evaluateAll((as) => as.map((a) => a.href))) {
     expect(href, "every row links to ABAP, not to the code that carries it").toMatch(/\.clas\.abap$/);
   }
@@ -419,13 +414,13 @@ test("the release filter hides what needs a UI5 newer than 1.71", async ({ page 
   await page.locator('input[data-filter="newer"]').uncheck();
   await expect(page.locator(".example-row", { hasText: "z2ui5_cl_smpc_app_003" })).toBeVisible();
   await expect(page.locator(".example-row", { hasText: "z2ui5_cl_smpc_app_901" })).toHaveCount(0);
-  // The built-ins stay whatever the boxes say: they are the page's own.
+  // The carried samples stay whatever the boxes say: they came with the page.
   await expect(page.locator(".example-row[data-sample]").first()).toBeVisible();
   await page.locator('input[data-filter="newer"]').check();
   await expect(page.locator(".example-row", { hasText: "z2ui5_cl_smpc_app_901" })).toBeVisible();
 });
 
-test("without the index the browser degrades to the built-in samples, quietly", async ({ page }) => {
+test("without the index the browser degrades to the samples in the page, quietly", async ({ page }) => {
   // A broken deploy, or a first visit with no network. The browser keeps
   // working on what is always here.
   await page.route(INDEX_URL, (route) =>
@@ -441,18 +436,18 @@ test("without the index the browser degrades to the built-in samples, quietly", 
   await open(page);
   await openBrowser(page);
 
-  // Only the drafts' row and the built-ins - every one of them, searchable -
+  // Only the drafts' row and the carried samples - every one of them, searchable -
   // and not a word about what could not be fetched.
-  await expect(page.locator(".examples-group")).toHaveText(["Your drafts", "Built in"]);
-  await expect(page.locator(".example-row")).toHaveCount(SAMPLE_LIST.length);
+  await expect(page.locator(".examples-group")).toHaveText(["Your drafts", "In the page"]);
+  await expect(page.locator(".example-row")).toHaveCount(SAMPLES.length);
   await expect(page.locator("#examples-body")).not.toContainText("404");
 
   // And they open: the degraded browser is still a browser.
   const before = await page.locator("#app").getAttribute("src");
-  await page.locator(".example-row", { hasText: "Counter" }).click();
+  await page.locator(`.example-row[data-sample="${SAMPLES[1].id}"]`).click();
   await expect(page.locator("#app")).not.toHaveAttribute("src", before ?? "", { timeout: 60000 });
   await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
-  await expect(control(page, "txtCount")).toBeVisible();
+  await expect(page.frameLocator("#app").getByText(SAMPLES[1].title)).toBeVisible({ timeout: 30000 });
 
   // Nothing of ours reached the console. The one line that does appear is the
   // browser's own resource log for the 404 response - Chromium writes it for
@@ -476,7 +471,7 @@ test("an index in a shape the browser does not know is skipped without a sound",
   await open(page);
   await openBrowser(page);
 
-  await expect(page.locator(".examples-group")).toHaveText(["Your drafts", "Built in"]);
+  await expect(page.locator(".examples-group")).toHaveText(["Your drafts", "In the page"]);
   expect(errors).toEqual([]);
 });
 

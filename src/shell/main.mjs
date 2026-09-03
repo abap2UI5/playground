@@ -557,8 +557,13 @@ function remember(files) {
   // they went on being opened on the old one, findings and all, labelled as
   // their own last session. One keystroke makes it a draft again.
   const current = files ?? getFiles();
-  if (isSample(current)) removeStored(STORAGE_KEY);
-  else writeStoredJson(STORAGE_KEY, current);
+  // A sample that was picked and read is not a draft and is not stored. What
+  // was stored BEFORE it is left where it is: a sample brings its own class
+  // name now, so opening one disposes the model the reader's work was in and
+  // Undo cannot reach it any more. The stored copy is then the only way back,
+  // and deleting it here threw away the very thing the status line promises.
+  // One keystroke in the sample makes it a draft and takes its place.
+  if (!isSample(current)) writeStoredJson(STORAGE_KEY, current);
   // A fragment in the address bar is a claim about what the editor holds, and
   // it just stopped being true. Left there, it would also win over this draft
   // on the next reload (a link outranks stored code in startingFiles), quietly
@@ -568,15 +573,15 @@ function remember(files) {
   }
 }
 
-// A built-in sample, chosen in the samples browser.
+// One of the samples the page carries, chosen in the samples browser.
 function loadSample(id, tabs) {
   const sample = sampleById(id);
   if (!sample) return;
-  const hadDraft = replaceWith(sample.files);
+  const keptHow = replaceWith(sample.files);
   // Picking a sample is a request to see it, so it runs without a second click.
   run().then((started) => {
     if (started) tabs.show("right");
-    if (hadDraft) sayDraftIsKept();
+    if (keptHow) sayDraftIsKept(keptHow);
   });
 }
 
@@ -591,28 +596,41 @@ function loadDraft(files, tabs) {
     showOutput("Drafts", String(e.message || e));
     return;
   }
-  const hadDraft = replaceWith(checked);
+  const keptHow = replaceWith(checked);
   run().then((started) => {
     if (started) tabs.show("right");
-    if (hadDraft) sayDraftIsKept();
+    if (keptHow) sayDraftIsKept(keptHow);
   });
 }
 
-// Puts a set of files in the editor in place of what is there, and answers
-// whether what was there was somebody's own work - a draft rather than a
-// sample as it was opened - which setFiles( ) has kept in the undo stack.
+// Puts a set of files in the editor in place of what is there, and answers what
+// happened to what was there: whether it was somebody's own work - a draft
+// rather than a sample as it was opened - and whether Undo can still reach it.
+//
+// It can only reach a file that is still open. setFiles( ) writes the new
+// source into a model whose file it can reuse, which is an undoable edit; a
+// file that is not in the new set is disposed, and its history with it. That
+// used to be the rare case, because every sample the playground carried was
+// called zcl_playground.clas.abap. The samples come out of abap2UI5/samples
+// now and bring their own class names, so it is the ordinary one - which is
+// why the sentence below is chosen rather than fixed, and why remember( )
+// leaves a stored draft alone when a sample goes in over it.
 function replaceWith(files) {
-  const hadDraft = !isSample(getFiles());
+  const before = getFiles();
+  const hadDraft = !isSample(before);
+  const undoable = before.every((f) => files.some((n) => n.name === f.name));
   setFiles(files.map((f) => ({ ...f })));
   renderFiles();
-  return hadDraft;
+  return hadDraft && (undoable ? "undo" : "reload");
 }
 
 // Said after the run, because run( ) ends by writing "running" over the
 // status line - and said at all because a click that replaced an hour's work
 // is the one moment the reader has to be told the work is not gone.
-function sayDraftIsKept() {
-  setStatus("running - your draft is one Undo away");
+function sayDraftIsKept(how) {
+  setStatus(
+    how === "undo" ? "running - your draft is one Undo away" : "running - your draft comes back if you reload",
+  );
 }
 
 // A catalogued example, chosen in the examples browser. The URL goes down the
@@ -625,9 +643,9 @@ async function loadLinked(url, tabs) {
     setStatus("fetching the example…");
     const linked = checkFileSet(await fetchLinkedFiles(new URLSearchParams([["src", url]])));
     const alongside = await followNavigation(linked);
-    const hadDraft = replaceWith(checkFileSet([...linked, ...alongside]));
+    const keptHow = replaceWith(checkFileSet([...linked, ...alongside]));
     if (await run()) tabs.show("right");
-    if (hadDraft) sayDraftIsKept();
+    if (keptHow) sayDraftIsKept(keptHow);
   } catch (e) {
     // The catalogue said the class is there and it was not, or the fetch
     // failed under way. Somebody clicked expecting particular code, so this

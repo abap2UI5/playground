@@ -1,10 +1,10 @@
-"! The tests of zcl_playground. A file named <class>.clas.testclasses.abap
+"! The tests of %CLASS%. A file named <class>.clas.testclasses.abap
 "! beside the class holds its local test classes, exactly as abapGit keeps
 "! them - and Run runs them here, before the app, in this browser.
 CLASS ltcl_with_tax DEFINITION FOR TESTING RISK LEVEL HARMLESS DURATION SHORT.
 
   PRIVATE SECTION.
-    DATA cut TYPE REF TO zcl_playground.
+    DATA cut TYPE REF TO %CLASS%.
 
     METHODS setup.
     METHODS nineteen_percent FOR TESTING.

@@ -1,5 +1,9 @@
 import { test, expect } from "@playwright/test";
-import { getSource, open, runSample, setSource } from "./helpers.mjs";
+import { getSource, MAIN_CLASS, MAIN_FILE, MAIN_MARK, open, runSample, SAMPLES, setSource } from "./helpers.mjs";
+
+// A sample other than the one the page opens on - it brings its own class name,
+// which is what makes replacing a draft with it interesting.
+const OTHER = SAMPLES[1];
 
 // The playground around the editor: sharing a link, keeping a draft, and the
 // two shapes the page takes.
@@ -10,7 +14,7 @@ test("Share puts the code in the address bar and the link brings it back", async
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await open(page);
 
-  const source = (await getSource(page)).replace("Hello abap2UI5", MARKER);
+  const source = (await getSource(page)).replace(MAIN_MARK, MARKER);
   await setSource(page, source);
   await page.locator("#share").click();
   await expect(page.locator("#status")).toContainText("link", { timeout: 15000 });
@@ -37,7 +41,7 @@ test("editing after a share retires the link, and the reload keeps the edits", a
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await open(page);
 
-  await setSource(page, (await getSource(page)).replace("Hello abap2UI5", "the shared version"));
+  await setSource(page, (await getSource(page)).replace(MAIN_MARK, "the shared version"));
   await page.locator("#share").click();
   await expect(page.locator("#status")).toContainText("link", { timeout: 15000 });
   expect(page.url()).toContain("#");
@@ -57,7 +61,7 @@ test("editing after a share retires the link, and the reload keeps the edits", a
 test("Full screen opens the app on its own in a new tab, carrying the code", async ({ page }) => {
   await open(page);
 
-  await setSource(page, (await getSource(page)).replace("Hello abap2UI5", "the full screen version"));
+  await setSource(page, (await getSource(page)).replace(MAIN_MARK, "the full screen version"));
 
   // The new tab shares this browser context, so it also shares the stored
   // draft - which now contains the marker too. Dropping the draft first leaves
@@ -116,7 +120,7 @@ test("the bar comes back in the full screen view when something goes wrong", asy
 test("a link nobody wrote opens on the sample instead of failing", async ({ page }) => {
   await page.goto("/#thisisnotavalidfragment");
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
-  expect(await getSource(page)).toContain("CLASS zcl_playground DEFINITION");
+  expect(await getSource(page)).toContain(`CLASS ${MAIN_CLASS} DEFINITION`);
 });
 
 test("Undo takes the last edit back, Redo brings it again, and both are inactive when they cannot", async ({ page }) => {
@@ -131,7 +135,7 @@ test("Undo takes the last edit back, Redo brings it again, and both are inactive
   await page.evaluate((text) => {
     const model = window.monaco.editor.getModels()[0];
     model.pushEditOperations([], [{ range: model.getFullModelRange(), text }], () => null);
-  }, original.replace("Hello abap2UI5", "about to be undone"));
+  }, original.replace(MAIN_MARK, "about to be undone"));
   await expect(page.locator("#undo")).toBeEnabled();
 
   await page.locator("#undo").click();
@@ -168,7 +172,7 @@ test("Auto runs the edit by itself, and hands Run back when it is switched off",
   // An edit with the switch off changes nothing on the right: that is what
   // Run is for, and it is the behaviour the switch exists to change.
   const before = await page.locator("#app").getAttribute("src");
-  await setSource(page, (await getSource(page)).replace("Hello abap2UI5", "not run yet"));
+  await setSource(page, (await getSource(page)).replace(MAIN_MARK, "not run yet"));
   await page.waitForTimeout(1500);
   await expect(page.locator("#app")).toHaveAttribute("src", before ?? "");
 
@@ -247,53 +251,67 @@ test("a startup failure is said in the bar instead of leaving the page loading",
 
 test("the editor content survives a reload", async ({ page }) => {
   await open(page);
-  await setSource(page, (await getSource(page)).replace("Hello abap2UI5", "kept across a reload"));
+  await setSource(page, (await getSource(page)).replace(MAIN_MARK, "kept across a reload"));
 
   await page.reload();
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
   expect(await getSource(page)).toContain("kept across a reload");
 });
 
-test("picking a sample replaces the draft, and leaves it one Undo away", async ({ page }) => {
+test("picking a sample replaces the draft, and says how to get it back", async ({ page }) => {
   await open(page);
-  await setSource(page, (await getSource(page)).replace("Hello abap2UI5", "about to be replaced"));
+  await setSource(page, (await getSource(page)).replace(MAIN_MARK, "about to be replaced"));
 
-  await runSample(page, "counter");
-  expect(await getSource(page)).not.toContain("about to be replaced");
-  expect(await getSource(page)).toContain("Counter");
-  // Said, because the click just wrote over somebody's work.
+  // A sample under the same file name goes in as an undoable edit, so the
+  // draft is one Undo away and the status line says exactly that.
+  const sameFile = SAMPLES.find((s) => s.files[0] === MAIN_FILE && s.title !== MAIN_MARK) ?? SAMPLES[0];
+  await runSample(page, sameFile.id);
   await expect(page.locator("#status")).toContainText("one Undo away");
-
-  // And it is: the sample went in through the undo stack, not over it.
   await expect(page.locator("#undo")).toBeEnabled();
   await page.locator("#undo").click();
   await expect.poll(() => getSource(page)).toContain("about to be replaced");
+
+  // A sample that brings its own class name cannot go in that way - the model
+  // the work was in is disposed with the file - so the sentence changes with
+  // it, and what it promises is the stored draft rather than the undo stack.
+  await runSample(page, OTHER.id);
+  expect(await getSource(page, OTHER.files[0])).not.toContain("about to be replaced");
+  // Waited for by its whole text: the sentence from the replacement before it
+  // also begins with "running", so a substring match would pass on the old one.
+  await expect(page.locator("#status")).toHaveText("running - your draft comes back if you reload", {
+    timeout: 60000,
+  });
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  expect(await getSource(page)).toContain("about to be replaced");
+
   // A sample opened over a sample says nothing - there was no work to lose.
-  await runSample(page, "hello");
-  await runSample(page, "counter");
+  await runSample(page, SAMPLES[0].id);
+  await runSample(page, OTHER.id);
   await expect(page.locator("#status")).toHaveText("running");
 });
 
 test("a sample that was only read is not kept as a draft", async ({ page }) => {
   await open(page);
-  await runSample(page, "counter");
+  await runSample(page, OTHER.id);
 
   // Reading a sample is not work to continue. Stored as a draft it would pin
   // this visitor to a frozen copy of it - the sample improves in a later deploy
   // and they go on being opened on the old one, findings and all, labelled as
   // their own last session.
-  expect(await page.evaluate(() => localStorage.getItem("abap2ui5-playground:files"))).toBeNull();
+  const stored = () => page.evaluate(() => localStorage.getItem("abap2ui5-playground:files"));
+  expect(await stored()).toBeNull();
 
   await page.reload();
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
-  expect(await getSource(page)).toContain("Hello abap2UI5");
+  expect(await getSource(page)).toContain(MAIN_MARK);
 
   // One keystroke and it is a draft like any other.
-  await runSample(page, "counter");
-  await setSource(page, (await getSource(page)).replace("Counter", "a counter of my own"));
+  await runSample(page, OTHER.id);
+  await setSource(page, (await getSource(page, OTHER.files[0])).replace(OTHER.title, "a sample of my own"), OTHER.files[0]);
   await page.reload();
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
-  expect(await getSource(page)).toContain("a counter of my own");
+  expect(await getSource(page, OTHER.files[0])).toContain("a sample of my own");
 });
 
 test("the splitter moves the divide and remembers it", async ({ page }) => {
@@ -386,6 +404,8 @@ test("both panes stay visible when a wide window gets narrow and wide again", as
 test("the app follows the system theme, and a change does not restart it", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await open(page);
+  // A sample with a field in it, so there is something a restart would lose.
+  await runSample(page, OTHER.id);
 
   // The frame is started in UI5's dark theme, matching the rest of the page.
   await expect(page.locator("#app")).toHaveAttribute("src", /sap-ui-theme=sap_horizon_dark/);
@@ -394,7 +414,8 @@ test("the app follows the system theme, and a change does not restart it", async
   // Type something, then switch the system theme: the app changes colour but
   // keeps what was typed - somebody with a half-filled form is not punished
   // for the sun going down.
-  await page.frameLocator("#app").locator('[id$="--inpName-inner"]').fill("still here");
+  const field = page.frameLocator("#app").getByRole("textbox").first();
+  await field.fill("still here");
   await page.emulateMedia({ colorScheme: "light" });
 
   await expect
@@ -402,7 +423,7 @@ test("the app follows the system theme, and a change does not restart it", async
       page.frameLocator("#app").locator("body").evaluate((b) => getComputedStyle(b).backgroundColor),
     )
     .not.toBe(dark);
-  await expect(page.frameLocator("#app").locator('[id$="--inpName-inner"]')).toHaveValue("still here");
+  await expect(field).toHaveValue("still here");
 });
 
 test("the switch in the bar overrides the system theme, and is forgotten again when it agrees with it", async ({ page }) => {
@@ -493,7 +514,7 @@ test("the Share dialog offers an embed block, a markdown fence and an abapGit zi
   // The markdown fence is the class as a documentation page would print it.
   const markdown = await boxes.nth(2).inputValue();
   expect(markdown.startsWith("```abap\n")).toBe(true);
-  expect(markdown).toContain("CLASS zcl_playground DEFINITION");
+  expect(markdown).toContain(`CLASS ${MAIN_CLASS} DEFINITION`);
   expect(markdown.endsWith("```")).toBe(true);
 
   // The zip: named after the app, laid out as a repository somebody could push
@@ -501,29 +522,29 @@ test("the Share dialog offers an embed block, a markdown fence and an abapGit zi
   // its metadata under src/, the source normalised to LF with a newline at the
   // end.
   const [download] = await Promise.all([page.waitForEvent("download"), page.locator("#share-abapgit").click()]);
-  expect(download.suggestedFilename()).toBe("zcl_playground.zip");
+  expect(download.suggestedFilename()).toBe(`${MAIN_CLASS}.zip`);
   const { readFileSync } = await import("node:fs");
   const entries = zipEntries(new Uint8Array(readFileSync(await download.path())));
   expect(entries.map((e) => e.name)).toEqual([
     ".abapgit.xml",
     "README.md",
-    "src/zcl_playground.clas.abap",
-    "src/zcl_playground.clas.xml",
+    `src/${MAIN_FILE}`,
+    `src/${MAIN_CLASS}.clas.xml`,
   ]);
   // The settings in the shape abap2UI5/app-template carries them, named after
   // the app, and with the byte order mark abapGit writes for this file.
   expect([...entries[0].bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
-  expect(entries[0].text).toContain("<NAME>zcl_playground</NAME>");
+  expect(entries[0].text).toContain(`<NAME>${MAIN_CLASS}</NAME>`);
   expect(entries[0].text).toContain("<STARTING_FOLDER>/src/</STARTING_FOLDER>");
   expect(entries[0].text).toContain("<FOLDER_LOGIC>PREFIX</FOLDER_LOGIC>");
   // The README answers the two questions a folder of ABAP cannot: what it is,
   // and where it came from - the link being the one this dialog just made.
-  expect(entries[1].text).toContain("# ZCL_PLAYGROUND");
-  expect(entries[1].text).toContain("src/zcl_playground.clas.abap");
-  expect(entries[1].text).toContain("?app_start=ZCL_PLAYGROUND");
+  expect(entries[1].text).toContain(`# ${MAIN_CLASS.toUpperCase()}`);
+  expect(entries[1].text).toContain(`src/${MAIN_FILE}`);
+  expect(entries[1].text).toContain(`?app_start=${MAIN_CLASS.toUpperCase()}`);
   expect(entries[1].text).toContain(page.url());
-  expect(entries[2].text).toContain("CLASS zcl_playground DEFINITION");
+  expect(entries[2].text).toContain(`CLASS ${MAIN_CLASS} DEFINITION`);
   expect(entries[2].text).not.toContain("\r");
   expect(entries[2].text.endsWith("\n")).toBe(true);
-  expect(entries[3].text).toContain("<CLSNAME>ZCL_PLAYGROUND</CLSNAME>");
+  expect(entries[3].text).toContain(`<CLSNAME>${MAIN_CLASS.toUpperCase()}</CLSNAME>`);
 });

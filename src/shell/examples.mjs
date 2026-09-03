@@ -26,8 +26,8 @@
 //
 // When the index cannot be had - a broken deploy, an offline first visit
 // before the service worker has it - the browser degrades without a word to
-// what is always here: the built-in samples and the reader's drafts. No error,
-// no console noise of this module's making.
+// what is always here: the samples the page carries and the reader's drafts.
+// No error, no console noise of this module's making.
 import { SAMPLES } from "../editor/samples.mjs";
 import { deleteDraft, draftNameProblem, listDrafts, saveDraft } from "./drafts.mjs";
 import { readStoredJson, writeStoredJson } from "./storage.mjs";
@@ -49,12 +49,6 @@ let floor = "1.71";
 
 const str = (v) => (typeof v === "string" ? v : "");
 
-// The page a human reads a file on. The catalogue's own rows carry their
-// `github` from the index, which builds them the same way; this is for the
-// built-ins, whose ABAP lives in THIS repository under src/samples/ and so is
-// not in any catalogue.
-const githubUrl = (repo, file, branch = "main") => `https://github.com/${repo}/blob/${branch}/${file}`;
-
 /** Compare two dotted UI5 versions numerically ("1.9" < "1.71" < "1.120"). */
 function cmpVersion(a, b) {
   const pa = str(a).split(".").map(Number);
@@ -66,9 +60,9 @@ function cmpVersion(a, b) {
   return 0;
 }
 
-// Which entries the filters let through. The built-ins are always there: they
-// are the page's own and every filter is about the repositories - and so are
-// the reader's own drafts.
+// Which entries the filters let through. The samples the page carries are
+// always there - every filter is about which repository a row came from, and
+// these came with the page - and so are the reader's own drafts.
 function passes(entry) {
   if (entry.sampleId !== undefined || entry.draft !== undefined) return true;
   if (!filters[entry.source]) return false;
@@ -87,7 +81,7 @@ async function loadIndex() {
     return await response.json();
   } catch {
     // Offline, refused, or an answer that is not JSON - all the same: no
-    // catalogue today, and no error either. The built-ins carry the menu.
+    // catalogue today, and no error either. The carried samples are the menu.
     return undefined;
   }
 }
@@ -157,24 +151,24 @@ let callbacks;
 let started = false;
 let loading = false;
 
-// The always-there group: the built-in samples, which have no other way in -
-// there is no sample menu in the bar - so the browser has something to search
-// and to open even when no catalogue can be reached.
+// The always-there group: the samples the page carries, which have no other way
+// in - there is no sample menu in the bar - so the browser has something to
+// search and to open even when no catalogue can be reached. They come out of
+// abap2UI5/samples like every other row; what is different about them is only
+// that they travelled with the page (src/editor/sample-list.mjs).
 const builtIn = {
-  title: "Built in",
-  blurb: "A handful to start from. These live in the page and need no network.",
+  title: "In the page",
+  blurb: "A handful from abap2UI5/samples that the page carries, so it has something to open with no network.",
   entries: SAMPLES.map((sample) => ({
     title: sample.title,
     note: sample.note,
-    who: "built in",
+    who: "in the page",
     haystack: `${sample.title} ${sample.note}`.toLowerCase(),
     sampleId: sample.id,
     runs: true,
-    // The sample's own ABAP, on GitHub - the same kind of file every
-    // catalogued row links to. It used to be src/editor/samples.mjs, the
-    // module that quoted the ABAP inside JavaScript, so a reader following
-    // "where does this live" landed in a thousand lines of template literal.
-    github: githubUrl("abap2UI5/playground", sample.path),
+    // The same file every catalogued row links to, in the same repository:
+    // these ARE catalogue entries, carried with the page rather than fetched.
+    github: sample.github,
   })),
 };
 
@@ -380,7 +374,7 @@ function row(entry) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "insight-row example-row";
-  // The built-ins by id, so a test can pick one without matching its title.
+  // The carried samples by id, so a test can pick one without matching its title.
   if (entry.sampleId !== undefined) button.dataset.sample = entry.sampleId;
   if (entry.draft !== undefined) button.dataset.draft = entry.draft.name;
 
@@ -439,7 +433,7 @@ function row(entry) {
     link.target = "_blank";
     link.rel = "noopener";
     link.textContent = "GitHub";
-    // The file, not the row's label: a built-in's label is "built in", which
+    // The file, not the row's label: a carried sample's label is "in the page", which
     // says nothing about what the link opens.
     link.title = `Open ${entry.github.slice(entry.github.lastIndexOf("/") + 1)} on GitHub`;
     item.append(link);
