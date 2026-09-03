@@ -150,7 +150,7 @@ stack sample, which needs a system; a SAPUI5-only port - is listed all the
 same, says what it needs, and is disabled; every row links to its file on
 GitHub. A chosen entry opens through the same path a `?src=` link takes —
 the raw URL of its class, fetched, checked and run — so it arrives with the
-**on GitHub** link back to where it lives.
+**Source** link back to where it lives.
 
 Nothing is fetched until the button is clicked, and the answer — including "no
 catalogue there" — is kept in the browser for a day. Where no catalogue can be
@@ -194,10 +194,11 @@ classes that app needs are looked for beside it and opened too, so a link to an
 app that calls another app opens both. Only siblings in the same directory, only
 from the hosts above, at most six files two levels deep; a name that is not
 there is skipped in silence, because most of them are in the framework corpus
-rather than in the repository. Code opened this way carries an **on GitHub**
-link in the bar, following whichever file is
-open — the raw URL the playground was given translated back into the page a
-human would want, with the repository and the history around it. Sources are
+rather than in the repository. Code opened this way carries a **Source**
+link in the bar (its GitHub page — the bar's GitHub mark, at the far end, is
+the framework's repository), following whichever file is open — the raw URL
+the playground was given translated back into the page a human would want,
+with the repository and the history around it. Sources are
 limited to this site and GitHub's raw hosts — the playground fetches on behalf
 of whoever opened the link, and should not be a general-purpose reader for
 arbitrary URLs.
