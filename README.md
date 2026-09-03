@@ -86,8 +86,8 @@ Where it stops:
   `sap.ui.core`, `sap.ui.layout`, `sap.ui.table`, `sap.ui.unified`, `sap.tnt`,
   `sap.uxap`, `sap.ui.integration`, `sap.ui.codeeditor`. A control from
   anywhere else will not load — see `UI5_LIBRARIES` in
-  `src/shell/ui5-libraries.mjs`, the one list both the UI5 build and the
-  examples browser read.
+  `src/shell/ui5-libraries.mjs`, the one list the UI5 build, the examples
+  browser and the sample catalogue all read.
 - **State lives in the tab.** Reloading the page starts over, and so does
   pressing Run. Your code is kept in local storage; the app's data is not.
 
@@ -136,29 +136,52 @@ many problems there are now, so a rule can be tried rather than argued about,
 and what you change is still there the next time you open the page — Reset puts
 it back to the curated list of the day.
 
+## The sample catalogue
+
+**<https://abap2ui5.github.io/playground/samples/>** — every abap2UI5 sample in
+one searchable page: the learning path of
+[abap2UI5/samples](https://github.com/abap2UI5/samples), the UI5 demo kit ports
+of [abap2UI5/samples-controls](https://github.com/abap2UI5/samples-controls),
+and the OData/RAP/launchpad samples of
+[abap2UI5/samples-stack](https://github.com/abap2UI5/samples-stack).
+
+It answers two questions the repositories' own catalogues cannot:
+
+> *"which samples use `sap.m.Table` at all?"* — not the one filed under it, but
+> every view that actually builds one
+> *"my system runs UI5 1.84 — which of these will render on it?"*
+
+Both come out of the abap2UI5 linter, which each repository runs over its own
+classes and commits the answer to as `catalogue-derived.json`; this site joins
+those onto the `catalogue.json` beside them and builds one index at deploy
+time. **The filters live in the URL**, so a search is a link you can send:
+`?q=table&lib=sap.ui.table&rel=1.84`.
+
+Most rows open in the playground and run in your browser with nothing
+installed. What cannot — a stack sample, which needs a real system; a port
+whose library only SAPUI5 has — is listed all the same, says what it needs, and
+opens for reading instead: a sample you cannot find is worse than one you
+cannot run. A sample opened from the catalogue carries its way back, so the
+playground's bar offers **Back to the catalogue** — to the search you came
+from, not the top of the list.
+
+This replaced three separate GitHub Pages sites, one per sample repository.
+
 ## The examples browser
 
-The sample repositories — [abap2UI5/samples](https://github.com/abap2UI5/samples)
-and [abap2UI5/samples-controls](https://github.com/abap2UI5/samples-controls) —
-commit a machine-readable `catalogue.json` at their roots, and so does
-[abap2UI5/samples-stack](https://github.com/abap2UI5/samples-stack). **Samples**
-in the bar fetches those catalogues and lists what they hold next to the
-built-in samples: the learning path by stage, the demo kit ports by library,
-the stack samples by technology, all of it searchable and filterable by
-repository, "OpenUI5 only" and "newer than 1.71". What cannot run here - a
-stack sample, which needs a system; a SAPUI5-only port - is listed all the
-same, says what it needs, and is disabled; every row links to its file on
-GitHub. A chosen entry opens through the same path a `?src=` link takes —
-the raw URL of its class, fetched, checked and run — so it arrives with the
-**Source** link back to where it lives.
+**Samples** in the bar is the same list without leaving the editor: drafts you
+saved, the built-in samples, and everything the catalogue holds — searchable,
+filterable by repository, "OpenUI5 only" and "newer than 1.71". A chosen entry
+opens through the same path a `?src=` link takes — the raw URL of its class,
+fetched, checked and run — so it arrives with the **Source** link back to where
+it lives.
 
-Nothing is fetched until the button is clicked, and the answer — including "no
-catalogue there" — is kept in the browser for a day. Where no catalogue can be
-had, the browser quietly lists the built-in samples alone. Entries that could
-never work here are not offered (the SAPUI5-only collection, ports of libraries
-the site does not carry); everything else is offered and judged the way typed
-code is judged — a catalogued sample the transpiler cannot compile says so in
-the Problems list, which is the designed behaviour.
+It reads the same index the catalogue page does, from this site rather than
+from GitHub, and nothing is fetched until the button is clicked. Where the
+index cannot be had, the browser quietly lists the built-in samples and your
+drafts alone. Everything offered is judged the way typed code is judged — a
+catalogued sample the transpiler cannot compile says so in the Problems list,
+which is the designed behaviour.
 
 ## Linking a playground
 
@@ -313,11 +336,12 @@ seconds.
 
 | | |
 |---|---|
-| `tools/build.mjs` | what `npm run build` runs: the four below, the middle two together |
+| `tools/build.mjs` | what `npm run build` runs: the five below, the middle two together |
 | `tools/fetch-deps.mjs` | pins abap2UI5 and open-abap-core by commit under `deps/` |
 | `tools/build-framework.mjs` | downport → transpile → `dist/runtime/framework.mjs`, the worker the page runs the framework in |
 | `tools/build-ui5.mjs` | the abap2UI5 frontend built against OpenUI5 → `dist/app/` |
-| `tools/build-site.mjs` | the page bundle and its chunks, the ABAP corpus the editor uses, and the service worker |
+| `tools/build-catalogue.mjs` | the six committed catalogues of the three sample repositories, joined into `dist/samples/apps.json` |
+| `tools/build-site.mjs` | the page bundle and its chunks, the catalogue page, the ABAP corpus the editor uses, and the service worker |
 | `tools/check-size.mjs` | the budget for what a visitor downloads |
 
 `PG_DEBUG=1` builds the page and framework bundles unminified and with source
@@ -325,9 +349,10 @@ maps; without it neither ships one.
 
 `src/runtime` is the ABAP side of the page (run in a worker), `src/editor` is
 Monaco and abaplint (the registry in a worker of its own),
-`src/shell` is the page around them, `src/abap` is the handful of ABAP the
-playground adds to the framework, and `src/examples` is ABAP served as static
-files so `?src=` has something to point at.
+`src/shell` is the page around them, `src/catalogue` is the sample catalogue at
+`/samples/` (a second document with a bundle of its own), `src/abap` is the
+handful of ABAP the playground adds to the framework, and `src/examples` is
+ABAP served as static files so `?src=` has something to point at.
 
 ### Bumping abap2UI5 or OpenUI5
 
@@ -344,8 +369,12 @@ working — so a bump is a two-line commit rather than an investigation.
 ## Deployment
 
 `.github/workflows/pages.yml` builds and publishes `dist/` to GitHub Pages on
-every push to `main`, after the tests pass. `.github/workflows/check.yml` runs
-the same build and tests on every other branch and pull request.
+every push to `main`, after the tests pass — **and nightly**, which a static
+site would not otherwise need: the sample catalogue is built from files the
+three sample repositories commit, and those change when a sample is merged
+there, which is no reason for anything to be pushed here.
+`.github/workflows/check.yml` runs the same build and tests on every other
+branch and pull request.
 
 > **Setup required once, by a repository admin:** Settings → Pages → Source →
 > "GitHub Actions". Until that is switched on the deploy job fails and the

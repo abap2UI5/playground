@@ -2,20 +2,19 @@ import { test, expect } from "@playwright/test";
 import { control, open, openFiles } from "./helpers.mjs";
 import { SAMPLES } from "../src/editor/samples.mjs";
 
-// The examples browser: the sample repositories' committed catalogues, fetched
-// when the Examples button is clicked, listed next to the built-in samples,
-// and opened through the same path a ?src= link takes.
+// The examples browser: the sample catalogue, read when the Examples button is
+// clicked, listed next to the built-in samples, and opened through the same
+// path a ?src= link takes.
 //
-// The catalogues live on raw.githubusercontent.com, so every test intercepts
-// that host - the success cases because a test must not depend on somebody
-// else's repository state, and the failure cases because failing is exactly
-// what is being staged. Nothing here ever reaches the real host.
+// It reads ONE file and it is this site's own - samples/apps.json, written at
+// build time by tools/build-catalogue.mjs from the six catalogues the three
+// repositories commit. So the fixture below is that index rather than three
+// foreign catalogues, and every test intercepts the one URL: the success cases
+// because a test must not depend on what those repositories currently hold,
+// the failure cases because failing is what is being staged. The raw host is
+// still intercepted for the CLASS a row opens, which does come from there.
 
-const CATALOGUE_URL = {
-  samples: "https://raw.githubusercontent.com/abap2UI5/samples/main/catalogue.json",
-  controls: "https://raw.githubusercontent.com/abap2UI5/samples-controls/main/catalogue.json",
-  stack: "https://raw.githubusercontent.com/abap2UI5/samples-stack/main/catalogue.json",
-};
+const INDEX_URL = "**/samples/apps.json";
 
 // raw.githubusercontent.com answers with CORS `*` - on hits and misses alike -
 // and the fulfilled responses have to say the same or the browser would turn
@@ -29,97 +28,132 @@ const json = (data) => ({
   body: JSON.stringify(data),
 });
 
-// The real catalogues' shapes, cut down: samples[] with a learning-path stage
-// (abap2UI5/samples) and ports[] with entity, library and status
-// (abap2UI5/samples-controls).
-const SAMPLES_CATALOGUE = {
-  repository: "abap2UI5/samples",
-  learningPath: [
-    { id: "start", title: "Start here", blurb: "Five apps in reading order." },
-    { id: "rows", title: "Show many rows", blurb: "Internal tables on screen." },
+const raw = (repo, file, branch = "main") => `https://raw.githubusercontent.com/${repo}/${branch}/${file}`;
+const blob = (repo, file, branch = "main") => `https://github.com/${repo}/blob/${branch}/${file}`;
+
+// The merged index, cut down to what these tests need but in the real shape:
+// a controls dictionary every entry indexes into, the learning path's stages,
+// one source block per repository, and the `runs`/`needs` pair the build
+// computed against this site's UI5 libraries.
+const CONTROLS = ["sap.m.Page", "sap.m.Table", "sap.m.Breadcrumbs", "sap.ui.comp.smarttable.SmartTable"];
+
+const entry = (over) => ({
+  source: "controls",
+  minUi5: "1.71",
+  controls: [0],
+  libraries: ["sap.m"],
+  runs: true,
+  keywords: [],
+  ...over,
+});
+
+const APPS_INDEX = {
+  built: "2026-09-03T00:00:00.000Z",
+  ui5: "1.151.0",
+  minUi5: "1.71",
+  carries: ["sap.ui.core", "sap.m", "sap.f"],
+  sources: [
+    { id: "learn", repo: "abap2UI5/samples", title: "Learn", blurb: "The path through abap2UI5 itself.", ok: true, count: 2 },
+    { id: "controls", repo: "abap2UI5/samples-controls", title: "Controls", blurb: "The UI5 demo kit rebuilt in ABAP.", ok: true, count: 3 },
+    { id: "stack", repo: "abap2UI5/samples-stack", title: "Stack", blurb: "abap2UI5 with a real system behind it.", ok: true, count: 1 },
   ],
-  samples: [
-    {
+  stages: [
+    { id: "start", title: "Start here", blurb: "Five apps in reading order.", source: "learn" },
+    { id: "rows", title: "Show many rows", blurb: "Internal tables on screen.", source: "learn" },
+  ],
+  releases: ["1.71", "1.120"],
+  libraries: ["sap.m", "sap.ui.comp"],
+  controls: CONTROLS,
+  entries: [
+    entry({
+      source: "learn",
       class: "z2ui5_cl_smp_app_493",
-      file: "src/01/z2ui5_cl_smp_app_493.clas.abap",
-      category: "Basics",
-      stage: "start",
       title: "Basics I",
-      description: "Hello World, the Smallest App",
+      note: "Hello World, the Smallest App",
+      summary: "The smallest app that runs.",
+      group: "Basics",
+      stage: "start",
       keywords: ["hello", "world", "smallest"],
-    },
-    {
+      raw: raw("abap2UI5/samples", "src/01/z2ui5_cl_smp_app_493.clas.abap"),
+      github: blob("abap2UI5/samples", "src/01/z2ui5_cl_smp_app_493.clas.abap"),
+    }),
+    entry({
+      source: "learn",
       class: "z2ui5_cl_smp_app_040",
-      file: "src/01/z2ui5_cl_smp_app_040.clas.abap",
-      category: "Table",
-      stage: "rows",
       title: "Responsive Table I",
-      description: "An internal table on screen",
+      note: "An internal table on screen",
+      group: "Table",
+      stage: "rows",
+      controls: [0, 1],
       keywords: ["table", "rows"],
-    },
-  ],
-};
-
-const CONTROLS_CATALOGUE = {
-  repo: "abap2UI5/samples-controls",
-  ports: [
-    {
+      raw: raw("abap2UI5/samples", "src/01/z2ui5_cl_smp_app_040.clas.abap"),
+      github: blob("abap2UI5/samples", "src/01/z2ui5_cl_smp_app_040.clas.abap"),
+    }),
+    entry({
       class: "z2ui5_cl_smpc_app_003",
-      file: "src/01/01/z2ui5_cl_smpc_app_003.clas.abap",
-      category: "src/01",
-      library: "sap.m",
-      sample: "sap.m.sample.Breadcrumbs",
-      entity: "sap.m.Breadcrumbs",
       title: "Breadcrumbs",
-      summary: "A trail of links back to where the user came from",
-      keywords: "breadcrumbs sap.m link trail",
-      status: "checked",
-      deviations: [],
-    },
-    // SAPUI5-only: the src/03 collection must not be offered at all.
-    {
+      note: "A trail of links back to where the user came from",
+      group: "sap.m",
+      entity: "sap.m.Breadcrumbs",
+      sample: "sap.m.sample.Breadcrumbs",
+      controls: [0, 2],
+      keywords: ["breadcrumbs", "sap.m", "link", "trail"],
+      raw: raw("abap2UI5/samples-controls", "src/01/01/z2ui5_cl_smpc_app_003.clas.abap"),
+      github: blob("abap2UI5/samples-controls", "src/01/01/z2ui5_cl_smpc_app_003.clas.abap"),
+    }),
+    // The SAPUI5-only collection: listed, never offered.
+    entry({
       class: "z2ui5_cl_smpc_app_900",
-      file: "src/03/z2ui5_cl_smpc_app_900.clas.abap",
-      category: "src/03",
-      library: "sap.ui.comp",
-      entity: "sap.ui.comp.smarttable.SmartTable",
       title: "Smart Table",
-      summary: "SAPUI5 only",
-      status: "collection",
-      deviations: [],
-    },
-    // A library the site does not carry: the control could never load, so the
-    // entry must not be offered either.
-    {
+      note: "SAPUI5 only",
+      group: "sap.ui.comp",
+      controls: [3],
+      libraries: ["sap.ui.comp"],
+      runs: false,
+      needs: "needs SAPUI5",
+      needsDetail: "sap.ui.comp",
+      raw: raw("abap2UI5/samples-controls", "src/03/z2ui5_cl_smpc_app_900.clas.abap"),
+      github: blob("abap2UI5/samples-controls", "src/03/z2ui5_cl_smpc_app_900.clas.abap"),
+    }),
+    // A library this build does not carry, and not one only SAPUI5 has: the
+    // row names the library rather than the runtime, because that is the
+    // honest answer to why it will not load here.
+    entry({
+      class: "z2ui5_cl_smpc_app_902",
+      title: "Web Component",
+      note: "a library this site does not build in",
+      group: "sap.ui.webc.main",
+      libraries: ["sap.ui.webc.main"],
+      runs: false,
+      needs: "needs sap.ui.webc.main",
+      raw: raw("abap2UI5/samples-controls", "src/02/z2ui5_cl_smpc_app_902.clas.abap"),
+      github: blob("abap2UI5/samples-controls", "src/02/z2ui5_cl_smpc_app_902.clas.abap"),
+    }),
+    // Above the floor: what the "newer than 1.71" box hides.
+    entry({
       class: "z2ui5_cl_smpc_app_901",
-      file: "src/02/z2ui5_cl_smpc_app_901.clas.abap",
-      category: "src/02",
-      library: "sap.viz",
-      entity: "sap.viz.ui5.controls.VizFrame",
-      title: "Viz Chart",
-      summary: "needs sap.viz",
-      status: "reviewed",
-      deviations: [],
-    },
-  ],
-};
-
-// abap2UI5/samples-stack: samples[] on delivery branches of their own, none of
-// which runs without a system - listed for finding, opened for reading.
-const STACK_CATALOGUE = {
-  repo: "abap2UI5/samples-stack",
-  samples: [
-    {
-      class: "Z2UI5_CL_SMPS_APP_314",
-      path: "src/02/z2ui5_cl_smps_app_314.clas.abap",
-      package: "src/02",
-      technology: "Smart Controls",
+      title: "Newer Control",
+      note: "needs a UI5 past the floor",
+      group: "sap.m",
+      minUi5: "1.120",
+      since: [{ name: "sap.m.Something.prop", since: "1.120" }],
+      raw: raw("abap2UI5/samples-controls", "src/02/z2ui5_cl_smpc_app_901.clas.abap"),
+      github: blob("abap2UI5/samples-controls", "src/02/z2ui5_cl_smpc_app_901.clas.abap"),
+    }),
+    // On a delivery branch of its own, and no system here to run it on.
+    entry({
+      source: "stack",
+      class: "z2ui5_cl_smps_app_314",
       title: "Switch Default Model",
-      summary: "device, HTTP and OData model side by side",
+      note: "device, HTTP and OData model side by side",
+      group: "Smart Controls",
+      runs: false,
+      needs: "needs a system",
+      needsDetail: "SAPUI5 + an activated Gateway service",
       keywords: ["odata", "model", "smart"],
-      needs: "SAPUI5 + an activated Gateway service",
-      branch: "02-smart-controls",
-    },
+      raw: raw("abap2UI5/samples-stack", "src/02/z2ui5_cl_smps_app_314.clas.abap", "02-smart-controls"),
+      github: blob("abap2UI5/samples-stack", "src/02/z2ui5_cl_smps_app_314.clas.abap", "02-smart-controls"),
+    }),
   ],
 };
 
@@ -173,9 +207,7 @@ ENDCLASS.
 `;
 
 async function serveCatalogues(page) {
-  await page.route(CATALOGUE_URL.samples, (route) => route.fulfill(json(SAMPLES_CATALOGUE)));
-  await page.route(CATALOGUE_URL.controls, (route) => route.fulfill(json(CONTROLS_CATALOGUE)));
-  await page.route(CATALOGUE_URL.stack, (route) => route.fulfill(json(STACK_CATALOGUE)));
+  await page.route(INDEX_URL, (route) => route.fulfill(json(APPS_INDEX)));
   for (const repo of ["samples", "samples-controls", "samples-stack"]) {
     await page.route(`https://raw.githubusercontent.com/abap2UI5/${repo}/*/src/**`, (route) =>
       route.fulfill({
@@ -188,8 +220,8 @@ async function serveCatalogues(page) {
   }
 }
 
-// Opens the browser and waits until both catalogues have answered - the
-// "looking…" line leaving is the module saying it is done loading.
+// Opens the browser and waits until the index has answered - the "looking…"
+// line leaving is the module saying it is done loading.
 async function openBrowser(page) {
   await page.locator("#examples").click();
   await expect(page.locator("#examples-dialog")).toBeVisible();
@@ -198,7 +230,7 @@ async function openBrowser(page) {
   });
 }
 
-test("the catalogues are listed by learning-path stage, and an entry runs through the ?src= path", async ({
+test("the index is listed by learning-path stage, and an entry runs through the ?src= path", async ({
   page,
 }) => {
   await serveCatalogues(page);
@@ -311,10 +343,15 @@ test("entries the playground cannot run are listed, say why, cannot be clicked, 
   await openBrowser(page);
 
   // The port that runs is there and says nothing; the SAPUI5-only collection
-  // entry, the port whose library is not built into the site and the stack
+  // entry, the port whose library is not built into this site and the stack
   // sample are there too, each saying what it needs and disabled - this
   // browser is where the repositories' own pages used to be, and a sample
   // somebody cannot find is worse than one they cannot run.
+  //
+  // WHICH of them cannot run is decided once, at build time, against
+  // UI5_LIBRARIES and the release this site pins (tools/build-catalogue.mjs);
+  // the dialog only shows what the index computed. That is why the fixture
+  // carries `runs` and `needs` rather than a library for this module to judge.
   const runs = page.locator(".example-row", { hasText: "z2ui5_cl_smpc_app_003" });
   await expect(runs).toBeVisible();
   await expect(runs).toBeEnabled();
@@ -322,11 +359,11 @@ test("entries the playground cannot run are listed, say why, cannot be clicked, 
   const sapui5 = page.locator(".example-row", { hasText: "z2ui5_cl_smpc_app_900" });
   await expect(sapui5.locator(".example-needs")).toHaveText("needs SAPUI5");
   await expect(sapui5).toBeDisabled();
-  // sap.viz is a library only SAPUI5 carries, so that port says SAPUI5 rather
-  // than the library: the reader's question is which runtime, not which jar.
-  const viz = page.locator(".example-row", { hasText: "z2ui5_cl_smpc_app_901" });
-  await expect(viz.locator(".example-needs")).toHaveText("needs SAPUI5");
-  await expect(viz).toBeDisabled();
+  // A library this build does not carry and SAPUI5 does not own either: the
+  // row names the library, because "needs SAPUI5" would be a wrong answer.
+  const webc = page.locator(".example-row", { hasText: "z2ui5_cl_smpc_app_902" });
+  await expect(webc.locator(".example-needs")).toHaveText("needs sap.ui.webc.main");
+  await expect(webc).toBeDisabled();
   const stack = page.locator(".example-row", { hasText: "z2ui5_cl_smps_app_314" });
   await expect(page.locator(".examples-group", { hasText: "Stack — Smart Controls" })).toBeVisible();
   await expect(stack.locator(".example-needs")).toContainText("needs a system");
@@ -345,13 +382,11 @@ test("entries the playground cannot run are listed, say why, cannot be clicked, 
   );
   await expect(page.locator(".example-item[data-sample], .example-item", { has: page.locator("[data-sample]") }).first().locator(".example-github")).toHaveAttribute("href", /playground/);
 
-  // The filters cut them away: "OpenUI5 only" takes the SAPUI5 ones (the
-  // stack sample names SAPUI5 too), the Stack box the stack - and what was
-  // ticked is remembered for the next open.
+  // The filters cut them away: "OpenUI5 only" takes what needs SAPUI5, the
+  // Stack box the stack - and what was ticked is remembered for the next open.
   await page.locator('input[data-filter="openui5only"]').check();
   await expect(sapui5).toHaveCount(0);
-  await expect(viz).toHaveCount(0);
-  await expect(stack).toHaveCount(0);
+  await expect(stack).toBeVisible();
   await expect(runs).toBeVisible();
   await page.locator('input[data-filter="openui5only"]').uncheck();
   await page.locator('input[data-filter="stack"]').uncheck();
@@ -378,14 +413,12 @@ test("the release filter hides what needs a UI5 newer than 1.71", async ({ page 
   await expect(page.locator(".example-row", { hasText: "z2ui5_cl_smpc_app_901" })).toBeVisible();
 });
 
-test("without the catalogues the browser degrades to the built-in samples, quietly", async ({ page }) => {
-  // Today's normal case: the catalogues' pull requests are open, main answers
-  // 404. The browser keeps working on what is always here.
-  for (const url of Object.values(CATALOGUE_URL)) {
-    await page.route(url, (route) =>
-      route.fulfill({ status: 404, contentType: "text/plain", headers: CORS, body: "404: Not Found" }),
-    );
-  }
+test("without the index the browser degrades to the built-in samples, quietly", async ({ page }) => {
+  // A broken deploy, or a first visit with no network. The browser keeps
+  // working on what is always here.
+  await page.route(INDEX_URL, (route) =>
+    route.fulfill({ status: 404, contentType: "text/plain", headers: CORS, body: "404: Not Found" }),
+  );
 
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
@@ -416,15 +449,11 @@ test("without the catalogues the browser degrades to the built-in samples, quiet
   expect(errors.filter((text) => !text.includes("Failed to load resource"))).toEqual([]);
 });
 
-test("a catalogue in a shape the browser does not know is skipped without a sound", async ({ page }) => {
-  // A 200 that is not a catalogue: an HTML error page served as 200, and a
-  // JSON whose entries are missing. Unlike the 404 case there is no resource
-  // log line here, so this is where "zero console errors" is checked whole.
-  await page.route(CATALOGUE_URL.samples, (route) =>
-    route.fulfill({ status: 200, contentType: "text/html", headers: CORS, body: "<!doctype html>not json" }),
-  );
-  await page.route(CATALOGUE_URL.controls, (route) => route.fulfill(json({ ports: "not an array" })));
-  await page.route(CATALOGUE_URL.stack, (route) => route.fulfill(json({ samples: { not: "an array" } })));
+test("an index in a shape the browser does not know is skipped without a sound", async ({ page }) => {
+  // A 200 that is not the index: JSON whose entries are not a list. Unlike the
+  // 404 case there is no resource log line here, so this is where "zero
+  // console errors" is checked whole.
+  await page.route(INDEX_URL, (route) => route.fulfill(json({ entries: "not an array", controls: 7 })));
 
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
@@ -439,44 +468,43 @@ test("a catalogue in a shape the browser does not know is skipped without a soun
   expect(errors).toEqual([]);
 });
 
-test("a fetched catalogue is served from the stored copy for a day", async ({ page }) => {
-  const hits = { samples: 0, controls: 0, stack: 0 };
-  await page.route(CATALOGUE_URL.samples, (route) => {
-    hits.samples += 1;
-    return route.fulfill(json(SAMPLES_CATALOGUE));
-  });
-  await page.route(CATALOGUE_URL.controls, (route) => {
-    hits.controls += 1;
-    return route.fulfill(json(CONTROLS_CATALOGUE));
-  });
-  await page.route(CATALOGUE_URL.stack, (route) => {
-    hits.stack += 1;
-    return route.fulfill(json(STACK_CATALOGUE));
+test("the index is fetched once, however often the browser is opened", async ({ page }) => {
+  // It is most of a megabyte, and nothing about it changes while the page is
+  // open. The stored per-repository cache this replaced is gone with the three
+  // foreign fetches: same origin, so the ordinary HTTP cache and the service
+  // worker are what make the NEXT visit cheap, and neither needs a copy in
+  // localStorage to do it.
+  let hits = 0;
+  await page.route(INDEX_URL, (route) => {
+    hits += 1;
+    return route.fulfill(json(APPS_INDEX));
   });
 
   await open(page);
   await openBrowser(page);
-  expect(hits).toEqual({ samples: 1, controls: 1, stack: 1 });
+  expect(hits).toBe(1);
 
-  // Closing and reopening in the same page costs nothing more...
+  // Closing and reopening costs nothing more.
   await page.keyboard.press("Escape");
-  /* Waited for, not assumed. This test is about the catalogue being FETCHED
-   * once, and the close is only how it gets there - but a dialog that has not
-   * closed yet is discovered by the next click, which Playwright then retries
-   * for the full 120s against a <dialog> intercepting pointer events, and
-   * reports as "click intercepted" with no hint that the Escape is what did
-   * not land. That is not hypothetical: the app frame used to take focus away
-   * from the modal as UI5 finished rendering, so the Escape went to the app's
-   * document and the dialog stayed open (see the inert frame in
+  /* Waited for, not assumed. This test is about the index being FETCHED once,
+   * and the close is only how it gets there - but a dialog that has not closed
+   * yet is discovered by the next click, which Playwright then retries for the
+   * full 120s against a <dialog> intercepting pointer events, and reports as
+   * "click intercepted" with no hint that the Escape is what did not land.
+   * That is not hypothetical: the app frame used to take focus away from the
+   * modal as UI5 finished rendering, so the Escape went to the app's document
+   * and the dialog stayed open (see the inert frame in
    * src/shell/examples.mjs). This line is what names that step when it
    * happens. */
   await expect(page.locator("#examples-dialog")).toBeHidden();
   await openBrowser(page);
-  expect(hits).toEqual({ samples: 1, controls: 1, stack: 1 });
+  expect(hits).toBe(1);
+  await expect(page.locator(".examples-group", { hasText: "Start here" })).toBeVisible();
+});
 
-  // ...and neither does the next visit: the copy in localStorage answers.
+test("the dialog links to the catalogue page, where a search has an address", async ({ page }) => {
+  await serveCatalogues(page);
   await open(page);
   await openBrowser(page);
-  await expect(page.locator(".examples-group", { hasText: "Start here" })).toBeVisible();
-  expect(hits).toEqual({ samples: 1, controls: 1, stack: 1 });
+  await expect(page.locator(".examples-all")).toHaveAttribute("href", "samples/");
 });

@@ -42,6 +42,14 @@ const TRANSFERRED = [
   { file: "runtime/framework.mjs", limit: 0.8 * MB, note: "abap2UI5 and open-abap, transpiled" },
   { file: "editor/corpus.json", limit: 0.6 * MB, note: "the ABAP sources the editor checks against" },
   { file: "runtime/sql-wasm.wasm", limit: 0.4 * MB, note: "SQLite" },
+  /* The sample catalogue at /samples/ is its own document and its own wait:
+   * nobody downloads it to write ABAP, and nobody downloads the playground to
+   * read it. Budgeted because it is the one file here that grows with the
+   * corpus - a sample added in any of the three repositories adds a row - and
+   * it is what stands between opening the page and seeing a list. It
+   * compresses hard: it is 770 near-identical objects. */
+  { file: "samples/apps.json", limit: 0.25 * MB, note: "the sample catalogue's index, 770 samples" },
+  { file: "samples/catalogue.mjs", limit: 0.02 * MB, note: "the catalogue page itself" },
 ];
 
 // The whole site. Most of it is UI5, which is fetched a bundle at a time and

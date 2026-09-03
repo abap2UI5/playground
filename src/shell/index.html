@@ -209,21 +209,22 @@
     <h3>Where the apps come from</h3>
     <p>
       <b>Samples</b> above carries a handful of built-in samples to start
-      from and browses, without leaving this page, the catalogues of the first
-      two of three sibling repositories; every card on their own pages has a
-      button that opens the class right here, and what needs a real system
-      stays where the system is:
+      from and browses, without leaving this page, the samples of all three
+      sibling repositories - the same list the
+      <a href="samples/">sample catalogue</a> holds, which is where to go when
+      a search is worth linking to. What needs a real system is listed there
+      too, and stays where the system is:
     </p>
     <!-- NOT .about-credits: that list is other people's work, and a test holds
          it to naming none of ours. This one names ours on purpose. -->
     <ul class="about-where">
-      <li><a href="https://abap2ui5.github.io/samples/" target="_blank" rel="noopener">Learn</a>
+      <li><a href="https://github.com/abap2UI5/samples" target="_blank" rel="noopener">Learn</a>
         — the path through abap2UI5 itself, one idea per sample: bindings,
         events, popups, navigation, whole apps.</li>
-      <li><a href="https://abap2ui5.github.io/samples-controls/" target="_blank" rel="noopener">Controls</a>
+      <li><a href="https://github.com/abap2UI5/samples-controls" target="_blank" rel="noopener">Controls</a>
         — the UI5 demo kit rebuilt in ABAP, searchable by control, by library
         and by the release a sample needs.</li>
-      <li><a href="https://abap2ui5.github.io/samples-stack/" target="_blank" rel="noopener">Stack</a>
+      <li><a href="https://github.com/abap2UI5/samples-stack" target="_blank" rel="noopener">Stack</a>
         — abap2UI5 with OData, RAP, WebSockets or the launchpad. Those are the
         one set that will <em>not</em> run here: they need a real system, which
         is the whole point of them.</li>
@@ -294,10 +295,11 @@
   <div class="about-body" id="share-body"></div>
 </dialog>
 
-<!-- The examples browser: the built-in samples plus whatever the sample
-     repositories' committed catalogues offer, fetched when this opens - see
-     src/shell/examples.mjs. The search sits outside the method="dialog" form
-     on purpose: inside it, Enter in the input would close the dialog. -->
+<!-- The examples browser: the built-in samples plus everything the sample
+     catalogue holds, read from this site's own samples/apps.json when this
+     opens - see src/shell/examples.mjs. The search sits outside the
+     method="dialog" form on purpose: inside it, Enter in the input would close
+     the dialog. -->
 <dialog id="examples-dialog" class="about examples">
   <header class="about-head examples-head">
     <h2>Samples</h2>
@@ -320,6 +322,10 @@
     <label class="examples-filter"><input type="checkbox" data-filter="openui5only"> OpenUI5 only</label>
     <label class="examples-filter"><input type="checkbox" data-filter="newer" checked> newer than 1.71</label>
     <span id="examples-count" class="examples-count" aria-live="polite"></span>
+    <!-- The same list with an address: filters in the URL, so a search can be
+         linked or sent to somebody. This dialog is the quick way in; the page
+         is the one to bookmark. -->
+    <a class="examples-all" href="samples/">Open the full catalogue ↗</a>
   </div>
   <div class="about-body examples-body" id="examples-body"></div>
 </dialog>

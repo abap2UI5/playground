@@ -1,37 +1,36 @@
 // The examples browser: what the sample repositories hold, listed and
 // searchable, one click from running here.
 //
-// The repositories each commit a machine-readable catalogue.json at their root
-// (abap2UI5/samples lists its learning path, abap2UI5/samples-controls its
-// ports of the UI5 demo kit). This module fetches those catalogues from
-// raw.githubusercontent.com - a host ?src= already trusts (deep-link.mjs) -
-// and turns each entry into the raw URL of its class, which then travels the
-// exact loading path a ?src= link travels. There is one loader in this
-// playground, and this is a menu in front of it, not a second one.
+// It reads ONE file, and it is this site's own: `samples/apps.json`, written
+// at build time by tools/build-catalogue.mjs from the six catalogues the three
+// repositories commit. This module used to fetch those catalogues itself, from
+// raw.githubusercontent.com, and shape them here - three readers, three cache
+// entries, three chances to be wrong about a repository's format. The
+// catalogue PAGE at /samples/ needs the same list in the same shape, and two
+// implementations of one list is exactly the drift the sample repositories
+// avoid by generating their four views from one scan. So there is one index,
+// and this is a menu in front of it.
 //
-// Nothing is fetched until the button is clicked. Partly because a page should
-// not spend requests on a menu nobody opened - but mostly because a catalogue
-// that is not there answers 404, the browser writes its own line to the console
-// for that, and the promise everywhere else is a page that loads clean. When a
-// catalogue cannot be had (not published yet, offline, malformed), the browser
-// degrades without a word to what is always here: the built-in samples,
-// searchable. No error, no console noise of this module's making.
+// What the page has that this does not is an ADDRESS: its filters live in the
+// URL, so a search can be linked. What this has that the page does not is
+// being here, in the bar, one key away from the editor - and the reader's own
+// drafts, which are in this browser and on no page. Neither replaces the
+// other, and the dialog's head links across.
 //
-// Not every catalogued sample runs in the playground - the transpiler has
-// limits and z2ui5.cc custom controls are not on board. The two checkers and
-// Run are the judge of that, exactly as they are for typed code. What can be
-// known for certain is said on the row instead of hidden: a port whose
-// library the site does not carry (see ui5-libraries.mjs) or from the SAPUI5-
-// only src/03 collection "needs SAPUI5", a sample from abap2UI5/samples-stack
-// "needs a system" - both are listed, because this browser is where the
-// repositories' own pages used to be and a sample somebody cannot find is
-// worse than one they cannot run - and both open for reading rather than
-// running. The filters beside the search (source, runtime, release) are how
-// the list is cut down to what one is looking for; every one starts on.
+// Not every sample runs here - the transpiler has limits, a library may not be
+// in this build, and everything in samples-stack needs a real system. The
+// index says which and why (`runs`, `needs`), computed once at build time
+// against UI5_LIBRARIES and the release this site pins. Those rows are still
+// LISTED, because a sample somebody cannot find is worse than one they cannot
+// run, and they open for reading rather than running.
+//
+// When the index cannot be had - a broken deploy, an offline first visit
+// before the service worker has it - the browser degrades without a word to
+// what is always here: the built-in samples and the reader's drafts. No error,
+// no console noise of this module's making.
 import { SAMPLES } from "../editor/samples.mjs";
 import { deleteDraft, draftNameProblem, listDrafts, saveDraft } from "./drafts.mjs";
 import { readStoredJson, writeStoredJson } from "./storage.mjs";
-import { UI5_LIBRARIES } from "./ui5-libraries.mjs";
 
 // The filters, as the checkboxes in the dialog's head name them - see
 // index.html: the three repositories (on), "OpenUI5 only" (off - it narrows,
@@ -43,185 +42,106 @@ const FILTERS_KEY = "abap2ui5-playground:samples-filters";
 const FILTERS = ["learn", "controls", "stack", "openui5only", "newer"];
 let filters = { learn: true, controls: true, stack: true, openui5only: false, newer: true };
 
-// A day: long enough that browsing costs one request per repository and short
-// enough that a merged sample shows up tomorrow.
-const TTL = 24 * 60 * 60 * 1000;
-const cacheKey = (repo) => `abap2ui5-playground:catalogue:${repo}`;
-
-const CATALOGUES = [
-  { repo: "abap2UI5/samples", read: readSamples },
-  { repo: "abap2UI5/samples-controls", read: readControls },
-  { repo: "abap2UI5/samples-stack", read: readStack },
-];
-
-// Libraries that only SAPUI5 carries - none of them can be in an OpenUI5
-// build, so a port that names one needs SAPUI5 whatever else is true of it.
-// The site's own list (UI5_LIBRARIES) is what decides "runs here"; this is
-// the finer question of why something does not.
-const SAPUI5_ONLY = /^(sap\.suite\.|sap\.ui\.comp|sap\.viz|sap\.gantt|sap\.ndc|sap\.ui\.vbm|sap\.ushell|sap\.fe|sap\.ui\.richtexteditor|sap\.ui\.export)/;
+/* The floor every sample is held to, and therefore the release a row has to
+ * exceed to count as "newer than 1.71". The index carries the number so this
+ * does not restate it; the fallback is for an index too old to have it. */
+let floor = "1.71";
 
 const str = (v) => (typeof v === "string" ? v : "");
 
-// A path from a catalogue becomes a URL under its repository - and only a
-// plain, relative one does. deep-link.mjs checks the host and the file name
-// again on its own; this check is about not letting a catalogue point the
-// playground somewhere the catalogue's repository is not.
-function rawUrl(repo, file, branch = "main") {
-  if (!/^[\w./-]+\.clas\.abap$/.test(file) || file.startsWith("/") || file.includes("..")) return undefined;
-  if (!/^[\w.-]+$/.test(branch)) return undefined;
-  return `https://raw.githubusercontent.com/${repo}/${branch}/${file}`;
-}
-
-// The same file as the page a human reads it on - every row links there,
-// because the repositories' own pages are gone and this list is where one
-// looks a sample up now.
-const githubUrl = (repo, file, branch = "main") => `https://github.com/${repo}/blob/${branch}/${file}`;
-
-// abap2UI5/samples: `samples[]`, each with a learning-path `stage`, and
-// `learningPath[]` naming the stages in reading order. The groups here are
-// those stages; a stage the path does not name still gets listed, under its
-// own id, because hiding an entry over its label would be silly.
-function readSamples(repo, data) {
-  if (!Array.isArray(data?.samples)) return [];
-  const path = Array.isArray(data.learningPath) ? data.learningPath : [];
-  const groups = new Map();
-  const groupFor = (stage) => {
-    if (!groups.has(stage)) {
-      const named = path.find((p) => str(p?.id) === stage);
-      groups.set(stage, { title: str(named?.title) || stage, blurb: str(named?.blurb), entries: [] });
-    }
-    return groups.get(stage);
-  };
-  // Seeded in path order, so the groups keep the reading order even though the
-  // entries arrive grouped by whatever order the catalogue lists them in.
-  for (const stage of path) if (str(stage?.id)) groupFor(str(stage.id));
-
-  for (const sample of data.samples) {
-    const url = rawUrl(repo, str(sample?.file));
-    if (url === undefined) continue;
-    const entry = {
-      title: str(sample.title) || str(sample.class),
-      note: str(sample.description) || str(sample.summary),
-      who: str(sample.class),
-      url,
-      github: githubUrl(repo, str(sample.file)),
-      source: "learn",
-      sapui5: false,
-      newer: false,
-      runs: true,
-    };
-    const keywords = Array.isArray(sample.keywords) ? sample.keywords.join(" ") : str(sample.keywords);
-    entry.haystack = `${entry.title} ${entry.note} ${str(sample.summary)} ${entry.who} ${keywords}`.toLowerCase();
-    groupFor(str(sample.stage) || "more").entries.push(entry);
+/** Compare two dotted UI5 versions numerically ("1.9" < "1.71" < "1.120"). */
+function cmpVersion(a, b) {
+  const pa = str(a).split(".").map(Number);
+  const pb = str(b).split(".").map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d;
   }
-  return [...groups.values()].filter((g) => g.entries.length > 0);
+  return 0;
 }
 
-// abap2UI5/samples-controls: `ports[]`, one per UI5 demo kit sample, grouped
-// here by the library the control lives in. Its categories say two things
-// the filters ask about: src/02 is the ports that need a UI5 newer than
-// 1.71, src/03 the SAPUI5-only collection. A port whose library is not built
-// into this site names controls that cannot load here, so it is offered for
-// reading and says what it needs.
-function readControls(repo, data) {
-  if (!Array.isArray(data?.ports)) return [];
-  const carried = new Set(UI5_LIBRARIES);
-  const groups = new Map();
-  for (const port of data.ports) {
-    const library = str(port?.library);
-    const category = str(port?.category);
-    const url = rawUrl(repo, str(port.file));
-    if (url === undefined) continue;
-    const sapui5 = category === "src/03" || SAPUI5_ONLY.test(library);
-    const runs = carried.has(library) && category !== "src/03";
-    const entry = {
-      title: str(port.title) || str(port.entity) || str(port.class),
-      note: str(port.summary),
-      who: str(port.class),
-      url,
-      github: githubUrl(repo, str(port.file)),
-      source: "controls",
-      sapui5,
-      newer: category === "src/02",
-      runs,
-      needs: runs ? undefined : sapui5 ? "needs SAPUI5" : `needs ${library}`,
-    };
-    entry.haystack =
-      `${entry.title} ${entry.note} ${entry.who} ${str(port.entity)} ${str(port.sample)} ${str(port.keywords)}`.toLowerCase();
-    if (!groups.has(library)) groups.set(library, { title: `Controls — ${library}`, blurb: "", entries: [] });
-    groups.get(library).entries.push(entry);
-  }
-  return [...groups.keys()]
-    .sort()
-    .map((library) => groups.get(library))
-    .filter((g) => g.entries.length > 0);
-}
-
-// abap2UI5/samples-stack: `samples[]`, each on a delivery branch of its own
-// (`branch`, with `path` under it) and grouped by `technology` - OData, RAP,
-// WebSockets, the launchpad. None of them runs here: every one needs a real
-// system, which is the whole point of that repository. They are listed so
-// they can be found, and open for reading; `needs` says what a system has
-// to have, and a sample that names SAPUI5 there counts as SAPUI5-only.
-function readStack(repo, data) {
-  if (!Array.isArray(data?.samples)) return [];
-  const groups = new Map();
-  for (const sample of data.samples) {
-    const url = rawUrl(repo, str(sample?.path), str(sample?.branch) || "main");
-    if (url === undefined) continue;
-    const technology = str(sample.technology) || "Stack";
-    const needs = str(sample.needs);
-    const entry = {
-      title: str(sample.title) || str(sample.class),
-      note: str(sample.summary),
-      who: str(sample.class).toLowerCase(),
-      url,
-      github: githubUrl(repo, str(sample.path), str(sample.branch) || "main"),
-      source: "stack",
-      sapui5: /sapui5/i.test(needs),
-      newer: false,
-      runs: false,
-      needs: needs ? `needs a system: ${needs}` : "needs a system",
-    };
-    const keywords = Array.isArray(sample.keywords) ? sample.keywords.join(" ") : str(sample.keywords);
-    entry.haystack = `${entry.title} ${entry.note} ${entry.who} ${technology} ${needs} ${keywords}`.toLowerCase();
-    if (!groups.has(technology)) groups.set(technology, { title: `Stack — ${technology}`, blurb: "", entries: [] });
-    groups.get(technology).entries.push(entry);
-  }
-  return [...groups.values()].filter((g) => g.entries.length > 0);
-}
-
-// Which entries the filters let through. The built-ins are always there:
-// they are the page's own and every filter is about the repositories - and
-// so are the reader's own drafts.
+// Which entries the filters let through. The built-ins are always there: they
+// are the page's own and every filter is about the repositories - and so are
+// the reader's own drafts.
 function passes(entry) {
   if (entry.sampleId !== undefined || entry.draft !== undefined) return true;
   if (!filters[entry.source]) return false;
   if (filters.openui5only && entry.sapui5) return false;
-  if (entry.newer && !filters.newer) return false;
+  if (!filters.newer && cmpVersion(entry.minUi5, floor) > 0) return false;
   return true;
 }
 
-// The raw catalogue, from localStorage within the day or from the network, and
-// undefined where there is none to be had. The misses are cached like the
-// hits: today the catalogues' pull requests are still open and 404 is the
-// normal answer, so without this every open would re-ask a question whose
-// answer is not changing before tomorrow.
-async function loadCatalogue(repo) {
-  const stored = readStoredJson(cacheKey(repo));
-  if (stored && typeof stored.at === "number" && Date.now() - stored.at < TTL) return stored.data;
-
-  let data;
+// The index, or undefined where there is none to be had. Same-origin, so the
+// service worker has it after the first visit and an offline second visit is
+// a cache hit rather than a failure.
+async function loadIndex() {
   try {
-    const response = await fetch(`https://raw.githubusercontent.com/${repo}/main/catalogue.json`);
-    if (response.ok) data = await response.json();
+    const response = await fetch("samples/apps.json");
+    if (!response.ok) return undefined;
+    return await response.json();
   } catch {
     // Offline, refused, or an answer that is not JSON - all the same: no
     // catalogue today, and no error either. The built-ins carry the menu.
+    return undefined;
   }
-  // A cache that cannot be written only makes tomorrow's open slower.
-  writeStoredJson(cacheKey(repo), { at: Date.now(), data });
-  return data;
+}
+
+// The index's flat list of entries, as the groups this dialog draws: the
+// learning path in its own reading order first, then one group per library
+// for the ports, then one per technology for the stack samples. The ORDER
+// within a group is the index's, which is the repositories' own.
+function groupsFrom(data) {
+  floor = str(data.minUi5) || floor;
+  const names = data.controls || [];
+  const sources = new Map((data.sources || []).map((s) => [s.id, s]));
+  const stages = (data.stages || []).filter((s) => s.source === "learn");
+
+  const groups = new Map();
+  const groupFor = (key, title, blurb) => {
+    if (!groups.has(key)) groups.set(key, { title, blurb: blurb || "", entries: [] });
+    return groups.get(key);
+  };
+  /* Seeded in the learning path's own order, so the stages keep it even
+   * though the entries arrive in one flat list. */
+  for (const stage of stages) groupFor(`learn:${stage.id}`, str(stage.title) || stage.id, str(stage.blurb));
+
+  for (const entry of data.entries || []) {
+    const controls = (entry.controls || []).map((i) => names[i]).filter(Boolean);
+    const row = {
+      title: str(entry.title) || str(entry.class),
+      note: str(entry.note),
+      who: str(entry.class),
+      url: str(entry.raw),
+      github: str(entry.github),
+      source: str(entry.source),
+      minUi5: str(entry.minUi5) || floor,
+      sapui5: entry.needs === "needs SAPUI5",
+      runs: entry.runs === true,
+      needs: entry.runs === true ? undefined : str(entry.needs) || undefined,
+      haystack: `${entry.title} ${entry.note} ${entry.summary || ""} ${entry.class} `
+        + `${entry.entity || ""} ${entry.sample || ""} ${(entry.keywords || []).join(" ")} `
+        + `${controls.join(" ")}`.toLowerCase(),
+    };
+    if (row.url === "") continue;
+
+    if (row.source === "learn") {
+      const stage = str(entry.stage);
+      groupFor(`learn:${stage || "more"}`, stage || "More").entries.push(row);
+    } else {
+      const label = sources.get(row.source);
+      const title = `${label ? label.title : row.source} — ${str(entry.group) || "Other"}`;
+      groupFor(`${row.source}:${entry.group}`, title).entries.push(row);
+    }
+  }
+
+  /* Learn first in path order, then the others sorted by their own group
+   * label - the same shape the three repositories' pages had. */
+  const learn = [...groups.entries()].filter(([k]) => k.startsWith("learn:")).map(([, g]) => g);
+  const rest = [...groups.entries()]
+    .filter(([k]) => !k.startsWith("learn:"))
+    .sort((a, b) => a[1].title.localeCompare(b[1].title))
+    .map(([, g]) => g);
+  return [...learn, ...rest].filter((g) => g.entries.length > 0);
 }
 
 let dialog;
@@ -248,9 +168,9 @@ const builtIn = {
   })),
 };
 
-// One slot per catalogue, filled as each answers, so the samples repository
-// keeps its place above the controls even when the answers cross on the wire.
-const loadedGroups = CATALOGUES.map(() => []);
+// The groups the index produced - empty until it has landed, and empty for
+// good when it could not be had.
+let loadedGroups = [];
 
 // The reader's own drafts, first in the list: what one saved is what one
 // is most likely to be looking for. Read on every render, because saving
@@ -353,22 +273,20 @@ export function openExamples() {
   if (!started) {
     started = true;
     loading = true;
-    Promise.all(
-      CATALOGUES.map(async (catalogue, i) => {
-        const data = await loadCatalogue(catalogue.repo);
+    loadIndex()
+      .then((data) => {
         try {
-          loadedGroups[i] = data === undefined ? [] : catalogue.read(catalogue.repo, data);
+          loadedGroups = data === undefined ? [] : groupsFrom(data);
         } catch {
-          // A catalogue in a shape this module does not know is treated like a
-          // missing one - the next deploy of the playground can learn it.
-          loadedGroups[i] = [];
+          // An index in a shape this module does not know is treated like a
+          // missing one - the next deploy of the playground writes both.
+          loadedGroups = [];
         }
+      })
+      .finally(() => {
+        loading = false;
         render();
-      }),
-    ).then(() => {
-      loading = false;
-      render();
-    });
+      });
   }
   render();
   // Nothing here defends the focus this takes, and that is not an oversight:
@@ -387,7 +305,7 @@ function render() {
   let shown = 0;
   let total = 0;
 
-  for (const group of [draftsGroup(), builtIn, ...loadedGroups.flat()]) {
+  for (const group of [draftsGroup(), builtIn, ...loadedGroups]) {
     total += group.entries.length;
     const entries = group.entries.filter((e) => passes(e) && (needle === "" || e.haystack.includes(needle)));
     // The drafts group stays on screen with no drafts in it, because its

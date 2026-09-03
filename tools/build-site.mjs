@@ -45,6 +45,7 @@ const ASSETS = path.join(DIST, "assets");
 const GENERATED_FRONTEND = path.join(DEPS, "abap2ui5", "src", "01", "03");
 
 const log = (m) => console.log(`build-site: ${m}`);
+const kb = (p) => `${Math.round(fs.statSync(p).size / 1024)} KB`;
 
 // Cleared, not merged into: a file this step stops producing has to disappear
 // from the published site, and a stale asset that nothing references any more
@@ -186,6 +187,32 @@ for (const name of ["favicon.png", "apple-touch-icon.png", "icon-192.png", "icon
   fs.copyFileSync(path.join(SHELL, name), path.join(DIST, name));
 }
 
+// The sample catalogue page: its own document at /samples/, its own small
+// bundle. Not part of the shell's entry - a reader who came to look something
+// up must not download Monaco and abaplint to do it, and a reader in the
+// editor must not carry a page they may never open. The two share
+// src/shell/ui5-libs.mjs (which library a control ships in) and the theme key,
+// and that sharing is why this is bundled at all rather than copied.
+//
+// dist/samples/apps.json is written by tools/build-catalogue.mjs, which runs
+// before this and owns that directory's data.
+await esbuild.build({
+  entryPoints: [{ in: path.join(ROOT, "src", "catalogue", "catalogue.mjs"), out: "catalogue" }],
+  outdir: path.join(DIST, "samples"),
+  outExtension: { ".js": ".mjs" },
+  bundle: true,
+  format: "esm",
+  platform: "browser",
+  target: "es2022",
+  minify: true,
+  sourcemap: process.env.PG_DEBUG === "1",
+  logLevel: "warning",
+});
+for (const name of ["index.html", "catalogue.css"]) {
+  fs.copyFileSync(path.join(ROOT, "src", "catalogue", name), path.join(DIST, "samples", name));
+}
+log(`samples/catalogue.mjs (${kb(path.join(DIST, "samples", "catalogue.mjs"))})`);
+
 // A same-origin ABAP file, so ?src= can be exercised without depending on
 // somebody else's host being up. It is also the smallest possible worked
 // example for anyone wondering what a linkable file looks like.
@@ -203,7 +230,6 @@ for (const name of fs.readdirSync(path.join(ROOT, "src", "embed"))) {
   fs.copyFileSync(path.join(ROOT, "src", "embed", name), path.join(DIST, "embed", name));
 }
 
-const kb = (p) => `${Math.round(fs.statSync(p).size / 1024)} KB`;
 log(`shell.mjs (${kb(path.join(ASSETS, "shell.mjs"))})`);
 for (const chunk of chunks()) log(`${path.basename(chunk)} (${kb(path.join(DIST, chunk))})`);
 

@@ -172,6 +172,20 @@ function isCacheable(url) {
   // fills up with things that will never be asked for again.
   if (url.search !== "") return false;
   if (CORE.includes(rel)) return true;
+
+  // The sample catalogue at samples/: its bundle, its stylesheet and its
+  // index. Kept as they are used and deliberately NOT precached - apps.json
+  // alone is most of a megabyte, and somebody who came to write ABAP must not
+  // download a list of 770 samples to do it. One visit to the catalogue is
+  // what puts it in the cache, and from then on an installed playground opens
+  // it offline like everything else.
+  //
+  // Caching this index is right where caching the OLD examples data would have
+  // been wrong: that was fetched from another host at run time, so a cached
+  // copy meant yesterday's catalogue. This one is written by the deploy that
+  // wrote the bundle beside it, so it is exactly as current as the build - and
+  // the network-first path below still prefers a fresh answer.
+  if (rel === "samples/apps.json" || rel === "samples/catalogue.mjs" || rel === "samples/catalogue.css") return true;
   // Monaco's icon font and the bundle's chunks, under the hashed names esbuild
   // gave them - the chunks are in CORE by name as well, this is for a chunk of
   // a build this worker was not written for, which is still worth keeping.
@@ -190,6 +204,11 @@ function documentOf(url, request) {
   if (!url.pathname.startsWith(BASE.pathname)) return undefined;
   if (rel === "" || rel === "index.html") return new URL("index.html", BASE);
   if (rel === "app/index.html") return new URL("app/index.html", BASE);
+  // The catalogue, asked for as the directory or as the file. It registers no
+  // worker of its own - a reader who only wanted to look a sample up must not
+  // be handed the playground's three megabytes of precache - so this only ever
+  // runs for somebody the playground already installed for.
+  if (rel === "samples/" || rel === "samples/index.html") return new URL("samples/index.html", BASE);
   return undefined;
 }
 
