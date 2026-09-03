@@ -77,13 +77,6 @@ const frame = document.getElementById("app");
 const params = new URLSearchParams(window.location.search);
 const embedded = params.get("embed") === "1";
 
-// `?view=full` is the app and nothing else - no editor, and no bar either, so
-// the tab is the app rather than a playground showing one. That is what the
-// Full screen button opens. `?view=app` below keeps its bar on purpose: it is
-// furniture in a documentation page, and a demo that cannot be restarted is a
-// screenshot - a tab has the browser's own reload and the editor it came from
-// one click away.
-const bare = params.get("view") === "full";
 /* Opened from the sample catalogue - see showSourceLink( ). `back` is that
  * page's own query string, passed through so the reader lands on the search
  * they had narrowed the list to. It is rebuilt through URLSearchParams rather
@@ -97,11 +90,24 @@ const catalogueQuery = (() => {
   return clean === "" ? "" : `?${clean}`;
 })();
 
-// `?view=app` drops the editor as well, leaving the running app on its own -
-// for the paragraph in a documentation page that wants to show the result
-// rather than the code that produced it. The code is still what runs; it is
-// just not on screen, so the page stays a playground rather than a screenshot.
-const appOnly = bare || params.get("view") === "app";
+// The app and nothing else - no editor, and no bar over it either, so what is
+// on screen is the app rather than a playground showing one. Two names for it,
+// because they are two different asks with the same answer: `?view=full` is
+// what the Full screen button opens, and `?view=app` is the paragraph in a
+// documentation page that wants to show the result rather than the code that
+// produced it. The code is still what runs; it is just not on screen, so the
+// page stays a playground rather than a screenshot.
+//
+// The bar used to stay in `?view=app` on the theory that a demo which cannot
+// be restarted is a screenshot. It is not: an embedded demo runs by itself,
+// and everything the bar offered next to it - Run again, the source, undo -
+// is a click away in "Open in the playground", which the page around the
+// frame already prints. What it did instead was put a strip of somebody
+// else's furniture across the top of a documentation page. The one thing that
+// still brings it back is trouble (`has-trouble`): in this view the status
+// line is the only channel there is, so a link that could not be followed has
+// to have somewhere to say so.
+const appOnly = params.get("view") === "app" || params.get("view") === "full";
 
 // Set when a ?src= link could not be followed, so boot can say so once the page
 // is far enough along to have somewhere to say it.
@@ -166,7 +172,6 @@ const heard = (promise) => {
 async function boot() {
   if (embedded) document.body.classList.add("is-embedded");
   if (appOnly) document.body.classList.add("is-app-only");
-  if (bare) document.body.classList.add("is-bare");
   // Where the playground is furniture in somebody else's page, the panel stays
   // out of the way - until something is written to the log, which is the one
   // thing that may take the screen unasked.

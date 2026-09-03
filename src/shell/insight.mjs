@@ -27,6 +27,7 @@ import { applyLinterSettings, linterDefaults, linterSettings, viewsFor } from ".
 import { copyToClipboard } from "./share.mjs";
 import { onRoundtrip, roundtripList } from "./roundtrips.mjs";
 import { prettyXml } from "./xml-pretty.mjs";
+import { highlighted } from "./highlight.mjs";
 import { keepAbaplintSettings, keepLinterSettings } from "./checker-settings.mjs";
 import { readStored, writeStored } from "./storage.mjs";
 import { currentLog, hideOutput, onLogChange, setStatus } from "./ui.mjs";
@@ -513,7 +514,7 @@ function viewPreview() {
     head.append(title, copy);
     const body = document.createElement("pre");
     body.className = "log-body view-xml";
-    body.textContent = pretty;
+    body.append(highlighted(pretty, "xml"));
     wrap.append(head, body);
   });
   if (notes.length > 0) {
@@ -848,7 +849,7 @@ function roundtripView() {
 function roundtripDetail(entry) {
   const detail = document.createElement("div");
   detail.className = "roundtrip-detail";
-  const block = (title, text) => {
+  const block = (title, text, kind) => {
     const head = document.createElement("div");
     head.className = "log-head";
     const label = document.createElement("span");
@@ -864,16 +865,24 @@ function roundtripDetail(entry) {
     head.append(label, copy);
     const pre = document.createElement("pre");
     pre.className = "log-body roundtrip-body";
-    pre.textContent = text;
+    pre.append(highlighted(text, kind));
     detail.append(head, pre);
   };
-  for (const view of entry.views) block(`View for slot ${view.slot}`, prettyXml(view.xml));
-  block("Request", asText(entry.request));
-  block(entry.status >= 400 ? `Response (${entry.status})` : "Response", asText(entry.response));
+  for (const view of entry.views) block(`View for slot ${view.slot}`, prettyXml(view.xml), "xml");
+  // A request and a response are objects the runtime hands over, so they are
+  // JSON here - `asText` only stringifies what is not already a string, and a
+  // body that came as a string (a dump) is not JSON and is left grey.
+  block("Request", asText(entry.request), kindOf(entry.request));
+  block(
+    entry.status >= 400 ? `Response (${entry.status})` : "Response",
+    asText(entry.response),
+    kindOf(entry.response),
+  );
   return detail;
 }
 
 const asText = (value) => (typeof value === "string" ? value : JSON.stringify(value, null, 2));
+const kindOf = (value) => (typeof value === "string" ? "text" : "json");
 
 // ------------------------------------------------------------------- log
 

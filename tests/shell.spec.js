@@ -465,7 +465,11 @@ function zipEntries(bytes) {
     const extraLength = view.getUint16(at + 28, true);
     const name = new TextDecoder().decode(bytes.subarray(at + 30, at + 30 + nameLength));
     const start = at + 30 + nameLength + extraLength;
-    entries.push({ name, text: new TextDecoder().decode(bytes.subarray(start, start + size)) });
+    // Both, because one of these files is asserted on at the byte level: a
+    // TextDecoder swallows a byte order mark by default, which is exactly the
+    // thing .abapgit.xml is checked for.
+    const data = bytes.subarray(start, start + size);
+    entries.push({ name, text: new TextDecoder().decode(data), bytes: data });
     at = start + size;
   }
   return entries;
@@ -492,21 +496,34 @@ test("the Share dialog offers an embed block, a markdown fence and an abapGit zi
   expect(markdown).toContain("CLASS zcl_playground DEFINITION");
   expect(markdown.endsWith("```")).toBe(true);
 
-  // The zip: named after the app, laid out as a repository abapGit reads -
-  // the settings file at the root, the source and its metadata under src/,
-  // the source normalised to LF with a newline at the end.
+  // The zip: named after the app, laid out as a repository somebody could push
+  // as it stands - the settings file and a README at the root, the source and
+  // its metadata under src/, the source normalised to LF with a newline at the
+  // end.
   const [download] = await Promise.all([page.waitForEvent("download"), page.locator("#share-abapgit").click()]);
   expect(download.suggestedFilename()).toBe("zcl_playground.zip");
   const { readFileSync } = await import("node:fs");
   const entries = zipEntries(new Uint8Array(readFileSync(await download.path())));
   expect(entries.map((e) => e.name)).toEqual([
     ".abapgit.xml",
+    "README.md",
     "src/zcl_playground.clas.abap",
     "src/zcl_playground.clas.xml",
   ]);
+  // The settings in the shape abap2UI5/app-template carries them, named after
+  // the app, and with the byte order mark abapGit writes for this file.
+  expect([...entries[0].bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+  expect(entries[0].text).toContain("<NAME>zcl_playground</NAME>");
   expect(entries[0].text).toContain("<STARTING_FOLDER>/src/</STARTING_FOLDER>");
-  expect(entries[1].text).toContain("CLASS zcl_playground DEFINITION");
-  expect(entries[1].text).not.toContain("\r");
-  expect(entries[1].text.endsWith("\n")).toBe(true);
-  expect(entries[2].text).toContain("<CLSNAME>ZCL_PLAYGROUND</CLSNAME>");
+  expect(entries[0].text).toContain("<FOLDER_LOGIC>PREFIX</FOLDER_LOGIC>");
+  // The README answers the two questions a folder of ABAP cannot: what it is,
+  // and where it came from - the link being the one this dialog just made.
+  expect(entries[1].text).toContain("# ZCL_PLAYGROUND");
+  expect(entries[1].text).toContain("src/zcl_playground.clas.abap");
+  expect(entries[1].text).toContain("?app_start=ZCL_PLAYGROUND");
+  expect(entries[1].text).toContain(page.url());
+  expect(entries[2].text).toContain("CLASS zcl_playground DEFINITION");
+  expect(entries[2].text).not.toContain("\r");
+  expect(entries[2].text.endsWith("\n")).toBe(true);
+  expect(entries[3].text).toContain("<CLSNAME>ZCL_PLAYGROUND</CLSNAME>");
 });

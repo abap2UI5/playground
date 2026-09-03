@@ -210,9 +210,12 @@ the browser — it is not sent to the server and does not appear in any log. The
 link is copied first; the dialog that opens then has the other ways out: the
 block that embeds this demo in a documentation page (the loader with the class
 inline, or the playground framed when there are several files), the markdown
-fence a docs page prints an example in, and **Download for abapGit** — a zip of
-the files with their metadata, laid out as a repository, for abapGit's offline
-import.
+fence a docs page prints an example in, and **Download for abapGit** — a zip
+laid out as a repository rather than as a bag of files: the sources and their
+metadata under `src/`, the `.abapgit.xml` that says so (the shape
+[app-template](https://github.com/abap2UI5/app-template) carries), and a README
+naming the app, how to start it and the link this code came from. Import it
+offline with abapGit, or push it as it stands.
 
 **Light or dark.** The page follows the system until the switch at the
 right-hand end of the bar says otherwise — the same switch the documentation
@@ -265,10 +268,12 @@ so it cannot overwrite what a reader has open in a normal one, and follows its
 reader's system theme rather than a choice made in some other tab.
 **`?view=app`** drops the editor too, for a paragraph about what an app does
 rather than how it is written; the ABAP still compiles and runs, it is simply
-not on screen. **`?view=full`** is that view
-with the bar gone as well — the app and nothing else, which is what Full screen
-opens. The bar comes back if something goes wrong, because the status line it
-carries is the only channel either view has left.
+not on screen. **`?view=full`** is the same view under the name Full screen
+opens it by. Neither shows the bar — the app and nothing else — because Run,
+the source and undo are all one click away in "Open in the playground" beside
+the frame, and a bar over a demo is this site's furniture in somebody else's
+page. It comes back if something goes wrong, because the status line it carries
+is the only channel either view has left.
 
 ## Live demos in a documentation page
 

@@ -9,6 +9,14 @@
   --danger: #b5253a;
   --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  /* The panel's syntax colours - see src/shell/highlight.mjs. Names in red,
+     XML values in blue and JSON strings in green, which is the scheme the SAP
+     sample pages print their views and manifests in; punctuation is dimmed so
+     the structure reads as structure rather than as more text. */
+  --code-name: #a02222;
+  --code-value: #1c3faa;
+  --code-string: #15713a;
+  --code-atom: #7a3ea8;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -21,6 +29,10 @@
     --accent: #4aa3ff;
     --accent-fg: #0b1620;
     --danger: #ff8092;
+    --code-name: #ef9a95;
+    --code-value: #8ab8ff;
+    --code-string: #7ed49a;
+    --code-atom: #cba6f7;
   }
 }
 
@@ -33,6 +45,10 @@
   --accent: #4aa3ff;
   --accent-fg: #0b1620;
   --danger: #ff8092;
+  --code-name: #ef9a95;
+  --code-value: #8ab8ff;
+  --code-string: #7ed49a;
+  --code-atom: #cba6f7;
 }
 
 * { box-sizing: border-box; }
@@ -313,13 +329,14 @@ iframe {
 .is-app-only #format { display: none; }
 .is-app-only .pane-right { border-left: 0; }
 
-/* ?view=full - the app and nothing else: the bar goes as well, so the whole
-   window is the app. It comes back the moment something goes wrong, because it
-   carries the only channel this mode has left - the log panel sits in the pane
-   ?view=app hides, and a blank tab that explains nothing is worse than a bar
-   nobody asked for. */
-.is-bare .bar { display: none; }
-.is-bare.has-trouble .bar { display: flex; }
+/* App-only (?view=app and ?view=full) - the app and nothing else: the bar goes
+   as well, so the whole box is the app and an embedded demo does not put a
+   strip of the playground's furniture across a documentation page. It comes
+   back the moment something goes wrong, because it carries the only channel
+   this mode has left - the log panel sits in the pane this view hides, and a
+   blank frame that explains nothing is worse than a bar nobody asked for. */
+.is-app-only .bar { display: none; }
+.is-app-only.has-trouble .bar { display: flex; }
 
 /* --------------------------------------------------------------- insight */
 
@@ -798,6 +815,18 @@ button.insight-row {
   font-family: var(--font-mono); font-size: 12px; line-height: 1.5;
   white-space: pre-wrap; word-break: break-word;
 }
+
+/* The tokens highlight.mjs writes. One set for both languages: an element name
+   and a JSON key are the same kind of thing to a reader scanning for one. */
+.code-punct  { color: var(--fg-dim); }
+.code-tag,
+.code-attr,
+.code-key    { color: var(--code-name); }
+.code-value  { color: var(--code-value); }
+.code-string { color: var(--code-string); }
+.code-number,
+.code-atom   { color: var(--code-atom); }
+.code-comment { color: var(--fg-dim); font-style: italic; }
 
 /* Between a phone and a wide desk the bar is one row only without the
    version line, which the About dialog carries as well - the same trade the

@@ -510,3 +510,43 @@ CLASS zcl_playground IMPLEMENTATION.
 ENDCLASS.`);
   await expect(page.locator("#insight-body")).toContainText("builds no view");
 });
+
+test("the panel colours the XML and the JSON it shows", async ({ page }) => {
+  await open(page);
+  await page.locator('[data-insight="view"]').click();
+  const xml = page.locator(".view-xml");
+  await expect(xml).toContainText("<mvc:View", { timeout: 30000 });
+
+  // An element name, an attribute name and a value are three different things
+  // and the panel says which is which - see src/shell/highlight.mjs.
+  await expect(xml.locator("span.code-tag").first()).toHaveText("mvc:View");
+  expect(await xml.locator("span.code-attr").count()).toBeGreaterThan(3);
+  await expect(xml.locator("span.code-value").filter({ hasText: "say hello" })).toHaveCount(1);
+
+  // Measured rather than asserted on the classes: a token with a class and no
+  // colour behind it looks exactly like the grey this replaced, and a palette
+  // variable that never reached the stylesheet is precisely how that happens.
+  const colours = await xml.evaluate((pre) => {
+    const of = (sel) => getComputedStyle(pre.querySelector(sel)).color;
+    return { tag: of("span.code-tag"), attr: of("span.code-attr"), value: of("span.code-value") };
+  });
+  expect(colours.tag).toBe(colours.attr);
+  expect(colours.value).not.toBe(colours.tag);
+
+  // Colouring is painting, not editing: the text is the same text, which is
+  // what keeps Copy copying a view somebody can paste into a UI5 project.
+  const text = await xml.textContent();
+  expect(text).toContain('<Button id="btnGreet" text="say hello"');
+
+  // The same for the JSON a roundtrip carried, where a key and a string are
+  // the two things a reader is looking for in a wall of braces.
+  await page.locator('[data-insight="roundtrips"]').click();
+  await page.locator(".roundtrip-row").first().click();
+  const detail = page.locator(".roundtrip-detail");
+  await expect(detail).toBeVisible();
+  // The view the answer carried is XML and gets the XML colours; the request
+  // and the response beside it are objects and get the JSON ones.
+  await expect(detail.locator(".roundtrip-body").first().locator("span.code-tag").first()).toBeVisible();
+  expect(await detail.locator("span.code-key").count()).toBeGreaterThan(0);
+  expect(await detail.locator("span.code-string").count()).toBeGreaterThan(0);
+});
