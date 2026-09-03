@@ -174,6 +174,13 @@ choice that agrees with the system is forgotten rather than stored, so a page
 switched back follows the system again from then on. The switch reaches the
 editor and the running app as well, without restarting it.
 
+**Installable.** The page carries a web app manifest, so a browser that
+supports it offers to install the playground; opened from a home screen it
+runs with no network at all, on the build the last online visit left in the
+service worker's cache — the two documents included, and whatever UI5 modules
+the apps run so far have loaded. The ABAP runs in the tab either way, so there
+is no server to be away from.
+
 **Full screen** opens the app on its own in a new tab — the whole window for the
 app, nothing around it: no editor, and no bar over it either. It is the same URL
 Share writes plus `?view=full`, so the new tab is a second playground rather

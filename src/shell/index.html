@@ -12,6 +12,16 @@
      phone puts on its home screen. -->
 <link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<!-- Installable: the manifest names the page as an app, the service worker
+     (sw.js) keeps every asset it needs, and a browser that has both offers
+     "install" - after which the playground opens from a home screen and
+     runs with no network at all, on the build the last online visit left
+     in the cache. Every path relative, like everything else here. The
+     theme colour is the bar's, in both palettes, so the window frame an
+     installed app gets is the bar continued. -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f5f7">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1e2024">
 
 <!-- The ABAP runtime, started before anything else on this page.
 

@@ -180,8 +180,10 @@ const result = await esbuild.build({
 });
 
 writeIndex();
-for (const icon of ["favicon.png", "apple-touch-icon.png"]) {
-  fs.copyFileSync(path.join(SHELL, icon), path.join(DIST, icon));
+// The icons and the app manifest - what a tab, a home screen and an install
+// prompt show for this page.
+for (const name of ["favicon.png", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "manifest.webmanifest"]) {
+  fs.copyFileSync(path.join(SHELL, name), path.join(DIST, name));
 }
 
 // A same-origin ABAP file, so ?src= can be exercised without depending on

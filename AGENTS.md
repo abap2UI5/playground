@@ -196,7 +196,16 @@ code:
   same lesson is in `runtime-client.mjs`: a runtime that answers the HEAD
   probe with 200 and then stays silent for a minute is failed with a named
   error, and `boot()` answers that one by discarding every cache the site
-  wrote and unregistering the worker before asking for a reload.
+  wrote and unregistering the worker before asking for a reload. **The two
+  documents** — `index.html` and `app/index.html` — are the one exception to
+  cache-first: network first, so a deploy reaches the next visit, and the
+  cached copy only when the network has nothing to say, which is what lets
+  the installed playground (`manifest.webmanifest`, the 192 and 512 px icons
+  rendered from the docs' logo) open and run offline; `tests/worker.spec.js`
+  holds both halves, the poisoned-cache visit and the offline run. The
+  frontend's own `navigator.onLine` check is answered "yes" by
+  `frontend-bridge.js` for the same reason: the backend is the page around
+  the frame.
 
 The registry parse is the processor half, and it is
 [yielded on a clock](src/editor/registry-core.mjs) rather than on a count of

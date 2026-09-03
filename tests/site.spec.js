@@ -20,11 +20,27 @@ test("the tab wears the abap2UI5 mark", async ({ page, request }) => {
   await page.goto("/");
   const icon = page.locator('link[rel="icon"]');
   await expect(icon).toHaveAttribute("href", "favicon.png");
-  for (const file of ["favicon.png", "apple-touch-icon.png"]) {
+  for (const file of ["favicon.png", "apple-touch-icon.png", "icon-192.png", "icon-512.png"]) {
     const answer = await request.get(`/${file}`);
     expect(answer.status(), `${file} is served`).toBe(200);
     expect(answer.headers()["content-type"]).toContain("image/png");
   }
+});
+
+test("the page is installable: a manifest with icons, relative to wherever the site lives", async ({ page, request }) => {
+  await page.goto("/");
+  await expect(page.locator('link[rel="manifest"]')).toHaveAttribute("href", "manifest.webmanifest");
+  const answer = await request.get("/manifest.webmanifest");
+  expect(answer.status()).toBe(200);
+  const manifest = await answer.json();
+  expect(manifest.name).toBe("abap2UI5 Playground");
+  expect(manifest.display).toBe("standalone");
+  // Relative, not rooted: the site is served under /<repo>/ on GitHub Pages
+  // and at the root here, and one manifest has to be right for both.
+  expect(manifest.start_url).toBe("./");
+  expect(manifest.scope).toBe("./");
+  expect(manifest.icons.map((i) => i.sizes).sort()).toEqual(["192x192", "512x512"]);
+  for (const icon of manifest.icons) expect(icon.src).not.toMatch(/^\//);
 });
 
 test("the bar names the framework version it is running", async ({ page }) => {

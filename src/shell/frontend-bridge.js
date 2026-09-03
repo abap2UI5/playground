@@ -25,6 +25,21 @@
   var nativeFetch = window.fetch.bind(window);
   var self = new URL(window.location.href);
 
+  // The frontend refuses to send a roundtrip while navigator.onLine is false
+  // ("No internet connection! Please reconnect to the server"), which is the
+  // right thing to do in front of a server and the wrong thing here: the
+  // backend is the page around this frame, and it is reachable with the
+  // cable pulled out. Which is exactly the case the installed playground is
+  // for - see the manifest in the shell's index.html and the service worker
+  // that keeps every asset - so the frame is always online, as far as the
+  // one question the frontend asks is concerned.
+  try {
+    Object.defineProperty(navigator, "onLine", { get: function () { return true; }, configurable: true });
+  } catch (e) {
+    // A navigator that will not have the property redefined keeps the
+    // browser's answer, and the frontend's alert with it.
+  }
+
   function isRoundtrip(url, method) {
     return method === "POST" && url.origin === self.origin && url.pathname === self.pathname;
   }

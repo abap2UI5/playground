@@ -17,8 +17,12 @@
 //     is left to save, and a revalidation per asset is most of the wait on a
 //     slow connection;
 //   - an allow list, because everything else has to stay live: the catalogue
-//     the examples browser reads, the ABAP a ?src= link points at, and the app
-//     frame's own document, which Run gives a different query every time;
+//     the examples browser reads, the ABAP a ?src= link points at, and the two
+//     documents - this page's and the app frame's, which Run gives a different
+//     query every time. The documents are the one exception to cache-first:
+//     they go to the network first and fall back to the copy the last online
+//     visit left, which is what makes the installed playground (see the
+//     manifest in index.html) open and run with no network at all;
 //   - named after the build, because the file names are not hashed. One cache
 //     holds one build's assets and no other, so nothing can serve a shell from
 //     one deploy beside a framework from the next - and because the names are
@@ -82,6 +86,12 @@ const APP_FIRST_LOAD = __APP_FIRST_LOAD__;
 const CORE_HASHES = __CORE__;
 const CORE = [...Object.keys(CORE_HASHES), ...CHUNKS];
 
+// The two documents, kept as the fallback the network-first path below
+// reaches for - precached as well, so one online visit is enough for the
+// installed playground to open offline, rather than the second one it would
+// take for a controlled page to pass through serveDocument( ).
+const DOCUMENTS = ["index.html", "app/index.html"];
+
 async function matchesBuild(rel, response) {
   const expected = CORE_HASHES[rel];
   // A chunk, or the frame's assets: named by a hash or pinned by version,
@@ -108,7 +118,7 @@ self.addEventListener("install", (event) => {
     (async () => {
       const cache = await caches.open(CACHE);
       await Promise.allSettled(
-        [...CORE, ...APP_FIRST_LOAD].map(async (rel) => {
+        [...CORE, ...APP_FIRST_LOAD, ...DOCUMENTS].map(async (rel) => {
           const url = new URL(rel, BASE);
           const response = await fetch(url, { credentials: "same-origin", cache: "reload" });
           if (response.status !== 200) return;
@@ -169,6 +179,20 @@ function isCacheable(url) {
   return false;
 }
 
+// The two documents, by the name each is cached under: this page, whether
+// asked for as the directory or as index.html, and the app frame's. A
+// navigation to either carries whatever query and fragment the moment gave
+// it - ?src=, ?embed=1, Run's counter - none of which changes the document,
+// so the cache holds one copy under the bare name.
+function documentOf(url, request) {
+  if (request.mode !== "navigate" || url.origin !== BASE.origin) return undefined;
+  const rel = url.pathname.slice(BASE.pathname.length);
+  if (!url.pathname.startsWith(BASE.pathname)) return undefined;
+  if (rel === "" || rel === "index.html") return new URL("index.html", BASE);
+  if (rel === "app/index.html") return new URL("app/index.html", BASE);
+  return undefined;
+}
+
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   let url;
@@ -177,9 +201,34 @@ self.addEventListener("fetch", (event) => {
   } catch {
     return;
   }
+  const doc = documentOf(url, event.request);
+  if (doc) {
+    event.respondWith(serveDocument(event, doc));
+    return;
+  }
   if (!isCacheable(url)) return;
   event.respondWith(serve(event));
 });
+
+// Network first, so a deploy reaches the next visit the way it always has;
+// the cached copy only when the network has nothing to say - an installed
+// playground opened on a train. The copy kept is the last clean answer, under
+// the bare name, and a 200 is the only thing worth keeping: an error page
+// cached as the document would be an error page forever.
+async function serveDocument(event, doc) {
+  const cache = await caches.open(CACHE);
+  try {
+    const response = await fetch(event.request);
+    if (response.status === 200) {
+      event.waitUntil(cache.put(doc, response.clone()).catch(() => {}));
+    }
+    return response;
+  } catch (e) {
+    const kept = await cache.match(doc);
+    if (kept) return kept;
+    throw e;
+  }
+}
 
 async function serve(event) {
   const cache = await caches.open(CACHE);
