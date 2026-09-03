@@ -11,11 +11,24 @@
 // avoid by generating their four views from one scan. So there is one index,
 // and this is a menu in front of it.
 //
+// It is a BIG modal, and that is the whole shape of it: the catalogue is
+// 770-odd samples, and a narrow column of one-line rows was a keyhole onto a
+// list that size. Full width, the filters down the side, the rows in as many
+// columns as the screen has room for - the page it covers is out of the way
+// while somebody is looking through it, which is what somebody looking for a
+// sample wants of the editor behind it.
+//
+// It carries the same facts the catalogue page does, and the same three
+// facets - the control a sample BUILDS, the library that control ships in,
+// and the release it needs - because those are the two questions the sample
+// repositories' own catalogues cannot answer and the reason the index carries
+// the linter's derived half at all.
+//
 // What the page has that this does not is an ADDRESS: its filters live in the
 // URL, so a search can be linked. What this has that the page does not is
 // being here, in the bar, one key away from the editor - and the reader's own
 // drafts, which are in this browser and on no page. Neither replaces the
-// other, and the dialog's head links across.
+// other, and the dialog's side links across.
 //
 // Not every sample runs here - the transpiler has limits, a library may not be
 // in this build, and everything in samples-stack needs a real system. The
@@ -32,15 +45,21 @@ import { SAMPLES } from "../editor/samples.mjs";
 import { deleteDraft, draftNameProblem, listDrafts, saveDraft } from "./drafts.mjs";
 import { readStoredJson, writeStoredJson } from "./storage.mjs";
 
-// The filters, as the checkboxes in the dialog's head name them - see
-// index.html: the three repositories (on), "OpenUI5 only" (off - it narrows,
-// and the list is meant to be everything until somebody says otherwise), and
-// "newer than 1.71" (on - off, it hides what needs a UI5 newer than the
-// floor). Kept between visits: somebody who only ever wants what runs here
-// on OpenUI5 should not have to say so every time.
+// The boxes, as the dialog's side names them - see index.html: the three
+// repositories (on), "Only what runs here" (off), "OpenUI5 only" (off - it
+// narrows, and the list is meant to be everything until somebody says
+// otherwise), and "newer than 1.71" (on - off, it hides what needs a UI5
+// newer than the floor). Kept between visits, together with the three facets
+// below: somebody who only ever wants what runs here on OpenUI5 should not
+// have to say so every time.
 const FILTERS_KEY = "abap2ui5-playground:samples-filters";
-const FILTERS = ["learn", "controls", "stack", "openui5only", "newer"];
-let filters = { learn: true, controls: true, stack: true, openui5only: false, newer: true };
+const FILTERS = ["learn", "controls", "stack", "runsonly", "openui5only", "newer"];
+const PICKS = ["control", "library", "release"];
+const DEFAULTS = { learn: true, controls: true, stack: true, runsonly: false, openui5only: false, newer: true };
+let filters = { ...DEFAULTS };
+// The three selects: a control something builds, the library it ships in, and
+// the release a system runs. Empty is "any", which is what they start as.
+let picks = { control: "", library: "", release: "" };
 
 /* The floor every sample is held to, and therefore the release a row has to
  * exceed to count as "newer than 1.71". The index carries the number so this
@@ -66,15 +85,33 @@ function cmpVersion(a, b) {
   return 0;
 }
 
-// Which entries the filters let through. The built-ins are always there: they
-// are the page's own and every filter is about the repositories - and so are
-// the reader's own drafts.
+// Which entries the boxes and the facets let through.
+//
+// The built-ins and the reader's own drafts pass the BOXES: every one of them
+// is about the repositories, and these are the page's own. They do not pass a
+// FACET, because a facet asks something only the index can answer - which
+// control a class builds, which library that is, what release it needs - and
+// a row that has no answer is not a match for one.
 function passes(entry) {
-  if (entry.sampleId !== undefined || entry.draft !== undefined) return true;
+  const own = entry.sampleId !== undefined || entry.draft !== undefined;
+  if (own) return picks.control === "" && picks.library === "" && picks.release === "";
   if (!filters[entry.source]) return false;
+  if (filters.runsonly && !entry.runs) return false;
   if (filters.openui5only && entry.sapui5) return false;
   if (!filters.newer && cmpVersion(entry.minUi5, floor) > 0) return false;
+  if (picks.control !== "" && !entry.controlNames.includes(picks.control)) return false;
+  if (picks.library !== "" && !entry.libraries.includes(picks.library)) return false;
+  /* "Runs on 1.84" means "needs 1.84 or less" - the question is what a system
+   * can render, not what a sample was filed under. */
+  if (picks.release !== "" && cmpVersion(entry.minUi5, picks.release) > 0) return false;
   return true;
+}
+
+/** Is anything narrowing the list - so the Clear button is worth offering? */
+function isNarrowed() {
+  if (search && search.value.trim() !== "") return true;
+  if (PICKS.some((p) => picks[p] !== "")) return true;
+  return FILTERS.some((f) => filters[f] !== DEFAULTS[f]);
 }
 
 // The index, or undefined where there is none to be had. Same-origin, so the
@@ -113,20 +150,33 @@ function groupsFrom(data) {
 
   for (const entry of data.entries || []) {
     const controls = (entry.controls || []).map((i) => names[i]).filter(Boolean);
+    const libraries = (entry.libraries || []).filter((l) => typeof l === "string");
     const row = {
       title: str(entry.title) || str(entry.class),
       note: str(entry.note),
       who: str(entry.class),
       url: str(entry.raw),
       github: str(entry.github),
+      docs: (entry.docs || []).filter((d) => typeof d === "string"),
       source: str(entry.source),
+      group: str(entry.group),
       minUi5: str(entry.minUi5) || floor,
       sapui5: entry.needs === "needs SAPUI5",
       runs: entry.runs === true,
       needs: entry.runs === true ? undefined : str(entry.needs) || undefined,
+      /* The long half of "needs": what a stack sample's system must have,
+       * which libraries are missing, or what made it that release. It is the
+       * row's tooltip, the way the catalogue page hangs it off the badge -
+       * a filtered list one can argue with rather than only believe. */
+      why: [
+        str(entry.needsDetail),
+        ...(entry.since || []).map((s) => `${str(s.name)} since ${str(s.since)}`),
+      ].filter(Boolean),
+      controlNames: controls,
+      libraries,
       haystack: `${entry.title} ${entry.note} ${entry.summary || ""} ${entry.class} `
-        + `${entry.entity || ""} ${entry.sample || ""} ${(entry.keywords || []).join(" ")} `
-        + `${controls.join(" ")}`.toLowerCase(),
+        + `${entry.entity || ""} ${entry.sample || ""} ${entry.group || ""} ${entry.runsOn || ""} `
+        + `${(entry.keywords || []).join(" ")} ${libraries.join(" ")} ${controls.join(" ")}`.toLowerCase(),
     };
     if (row.url === "") continue;
 
@@ -153,6 +203,8 @@ function groupsFrom(data) {
 let dialog;
 let body;
 let search;
+let clear;
+const facet = {};
 let callbacks;
 let started = false;
 let loading = false;
@@ -250,11 +302,46 @@ function saveRow() {
   return row;
 }
 
+/** Options onto a facet's select, and the select is only usable once it has any. */
+function fill(select, values, label) {
+  for (const value of values) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label ? label(value) : value;
+    select.append(option);
+  }
+  select.disabled = select.options.length <= 1;
+}
+
+// The three facets, from the index the fetch brought back: the controls the
+// corpus actually BUILDS (the UI5 universe has thousands; this list is of what
+// is in these 770 samples), the libraries those ship in, and the releases they
+// need. A stored pick that is not among them is dropped rather than kept as a
+// filter nothing can match.
+function fillFacets(data) {
+  const names = data.controls || [];
+  const used = new Set();
+  for (const entry of data.entries || []) {
+    for (const i of entry.controls || []) if (names[i]) used.add(names[i]);
+  }
+  fill(facet.control, [...used].sort());
+  fill(facet.library, (data.libraries || []).filter((l) => typeof l === "string"));
+  /* Highest first: somebody on a new system reads down to their release,
+   * somebody on 1.71 is looking at the bottom of a short list either way. */
+  fill(facet.release, [...(data.releases || [])].sort(cmpVersion).reverse(), (r) => `${r} or older`);
+  for (const p of PICKS) {
+    if (picks[p] !== "" && ![...facet[p].options].some((o) => o.value === picks[p])) picks[p] = "";
+    facet[p].value = picks[p];
+  }
+}
+
 export function setUpExamples(handlers) {
   callbacks = handlers;
   dialog = document.getElementById("examples-dialog");
   body = document.getElementById("examples-body");
   search = document.getElementById("examples-search");
+  clear = document.getElementById("examples-clear");
+  for (const p of PICKS) facet[p] = document.getElementById(`examples-${p}`);
 
   search.addEventListener("input", () => render());
   // A click on the backdrop closes it, the way a modal is expected to.
@@ -262,20 +349,52 @@ export function setUpExamples(handlers) {
     if (e.target === dialog) dialog.close();
   });
 
-  // The filters: what was kept from last time, if anything, and every change
-  // both re-renders and is kept. A stored value that is not a boolean is
-  // ignored rather than trusted.
+  // What was kept from last time, if anything, and every change both
+  // re-renders and is kept. A stored value of the wrong type is ignored
+  // rather than trusted.
   const stored = readStoredJson(FILTERS_KEY);
   for (const f of FILTERS) if (typeof stored?.[f] === "boolean") filters[f] = stored[f];
+  for (const p of PICKS) if (typeof stored?.[p] === "string") picks[p] = stored[p];
+
   for (const box of dialog.querySelectorAll("input[data-filter]")) {
     const f = box.dataset.filter;
     box.checked = filters[f] === true;
     box.addEventListener("change", () => {
       filters[f] = box.checked;
-      writeStoredJson(FILTERS_KEY, filters);
+      keep();
       render();
     });
   }
+  for (const p of PICKS) {
+    // Empty until the index lands, and unusable while it is: a select with
+    // nothing in it but "any" is a control that cannot do anything.
+    facet[p].disabled = true;
+    facet[p].addEventListener("change", () => {
+      picks[p] = facet[p].value;
+      keep();
+      render();
+    });
+  }
+  clear.addEventListener("click", () => {
+    filters = { ...DEFAULTS };
+    picks = { control: "", library: "", release: "" };
+    search.value = "";
+    reflect();
+    keep();
+    render();
+    search.focus();
+  });
+}
+
+/** The boxes and the picks, kept between visits. */
+function keep() {
+  writeStoredJson(FILTERS_KEY, { ...filters, ...picks });
+}
+
+/** The controls, from the state - after a Clear. */
+function reflect() {
+  for (const box of dialog.querySelectorAll("input[data-filter]")) box.checked = filters[box.dataset.filter] === true;
+  for (const p of PICKS) facet[p].value = picks[p];
 }
 
 export function openExamples() {
@@ -287,6 +406,7 @@ export function openExamples() {
       .then((data) => {
         try {
           loadedGroups = data === undefined ? [] : groupsFrom(data);
+          if (data !== undefined) fillFacets(data);
         } catch {
           // An index in a shape this module does not know is treated like a
           // missing one - the next deploy of the playground writes both.
@@ -298,6 +418,7 @@ export function openExamples() {
         render();
       });
   }
+  reflect();
   render();
   // Nothing here defends the focus this takes, and that is not an oversight:
   // the app frame is what takes it away - UI5 focuses a control as a render
@@ -310,18 +431,23 @@ export function openExamples() {
 
 function render() {
   if (!body) return;
-  const needle = search.value.trim().toLowerCase();
+  /* Every word has to be somewhere in the row, in any order: "table select"
+   * finds the selection-modes sample whichever way round it was typed, which
+   * one string compared whole would not. */
+  const terms = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const hit = (entry) => terms.every((t) => entry.haystack.includes(t));
   const frag = document.createDocumentFragment();
   let shown = 0;
   let total = 0;
 
   for (const group of [draftsGroup(), builtIn, ...loadedGroups]) {
     total += group.entries.length;
-    const entries = group.entries.filter((e) => passes(e) && (needle === "" || e.haystack.includes(needle)));
+    const entries = group.entries.filter((e) => passes(e) && hit(e));
     // The drafts group stays on screen with no drafts in it, because its
-    // save row is how the first one gets there - but not while a search is
-    // narrowing the list to something else.
-    if (entries.length === 0 && !(group.saveRow && needle === "")) continue;
+    // save row is how the first one gets there - but not while a search or a
+    // facet is narrowing the list to something else.
+    const bare = terms.length === 0 && picks.control === "" && picks.library === "" && picks.release === "";
+    if (entries.length === 0 && !(group.saveRow && bare)) continue;
     shown += entries.length;
 
     const head = document.createElement("h3");
@@ -338,7 +464,7 @@ function render() {
     if (entries.length === 0) continue;
 
     const list = document.createElement("ul");
-    list.className = "insight-list";
+    list.className = "insight-list examples-list";
     for (const entry of entries) list.append(row(entry));
     frag.append(list);
   }
@@ -356,23 +482,34 @@ function render() {
   }
 
   body.replaceChildren(frag);
+  body.scrollTop = 0;
   // How much the search and the filters let through, so an empty-looking
   // list says whether it is the words or the boxes.
   const count = document.getElementById("examples-count");
   if (count) count.textContent = loading ? "" : `${shown} of ${total}`;
+  if (clear) clear.hidden = !isNarrowed();
 }
 
-// One entry: a button that opens it here, and beside it a link to where it
-// lives on GitHub. The button rather than a click handler on the item,
-// because this is the only way into the examples for somebody who is not
-// using a mouse, and a <li> is not focusable, not in the tab order and does
-// not answer Enter or Space. The link is outside the button, because a link
-// inside a button is not HTML.
+/** A badge on a row: what the index knows about it in one or two words. */
+function badge(text, className = "") {
+  const node = document.createElement("span");
+  node.className = `example-badge ${className}`.trim();
+  node.textContent = text;
+  return node;
+}
+
+// One entry: a button that opens it here, and beside it the links to where it
+// lives. The button rather than a click handler on the item, because this is
+// the only way into the examples for somebody who is not using a mouse, and a
+// <li> is not focusable, not in the tab order and does not answer Enter or
+// Space. The links are outside the button, because a link inside a button is
+// not HTML.
 //
-// A sample that cannot run here - one that needs a system, or SAPUI5 - is
-// listed, says so, and its button is disabled: clicking would only have
-// opened code that fails on the first roundtrip. The link beside it is how
-// one still gets to it.
+// Two lines: what it is called and what the index knows about it, then what it
+// does and the class it is. A sample that cannot run here - one that needs a
+// system, or SAPUI5 - is listed, says so, and its button is disabled: clicking
+// would only have opened code that fails on the first roundtrip. The links
+// beside it are how one still gets to it.
 function row(entry) {
   const item = document.createElement("li");
   item.className = "example-item";
@@ -384,9 +521,32 @@ function row(entry) {
   if (entry.sampleId !== undefined) button.dataset.sample = entry.sampleId;
   if (entry.draft !== undefined) button.dataset.draft = entry.draft.name;
 
+  const line = document.createElement("span");
+  line.className = "example-line";
+
   const title = document.createElement("span");
   title.className = "example-title";
   title.textContent = entry.title;
+  line.append(title);
+
+  const badges = document.createElement("span");
+  badges.className = "example-badges";
+  /* The group the repository filed it under - unless that is what the row is
+   * already called, which is most of the learning path: a "Binding" badge on
+   * a row titled Binding is a word twice. */
+  if (entry.group && entry.group.toLowerCase() !== entry.title.toLowerCase()) badges.append(badge(entry.group));
+  // The release, only where it is above the floor - "UI5 1.71" on seven
+  // hundred rows says nothing that the floor does not already say.
+  if (entry.minUi5 && cmpVersion(entry.minUi5, floor) > 0) badges.append(badge(`UI5 ${entry.minUi5}`));
+  if (entry.needs) {
+    const needs = badge(entry.needs, "example-needs");
+    if (entry.why && entry.why.length) needs.title = entry.why.join("\n");
+    badges.append(needs);
+    button.disabled = true;
+    button.title = `Does not run in the playground: ${entry.needs}`;
+    item.classList.add("is-unavailable");
+  }
+  if (badges.childElementCount > 0) line.append(badges);
 
   const note = document.createElement("span");
   note.className = "insight-what example-note";
@@ -396,17 +556,11 @@ function row(entry) {
   who.className = "insight-who";
   who.textContent = entry.who;
 
-  button.append(title, note);
-  if (entry.needs) {
-    const needs = document.createElement("span");
-    needs.className = "example-needs";
-    needs.textContent = entry.needs;
-    button.append(needs);
-    button.disabled = true;
-    button.title = `Does not run in the playground: ${entry.needs}`;
-    item.classList.add("is-unavailable");
-  }
-  button.append(who);
+  const second = document.createElement("span");
+  second.className = "example-line is-second";
+  second.append(note, who);
+
+  button.append(line, second);
   button.addEventListener("click", () => {
     dialog.close();
     if (entry.draft !== undefined) callbacks.openDraft(entry.draft.files);
@@ -443,6 +597,20 @@ function row(entry) {
     // says nothing about what the link opens.
     link.title = `Open ${entry.github.slice(entry.github.lastIndexOf("/") + 1)} on GitHub`;
     item.append(link);
+  }
+
+  // Where the documentation says more about what the sample is showing - the
+  // learning path carries those links, and they are the half of a sample that
+  // is prose rather than ABAP.
+  if (entry.docs && entry.docs.length) {
+    const docs = document.createElement("a");
+    docs.className = "example-docs";
+    docs.href = entry.docs[0];
+    docs.target = "_blank";
+    docs.rel = "noopener";
+    docs.textContent = "Docs";
+    docs.title = `Read the documentation for ${entry.title}`;
+    item.append(docs);
   }
   return item;
 }
