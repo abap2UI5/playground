@@ -22,6 +22,7 @@ import {
   refresh,
   refreshNow,
   reportTranspilerProblems,
+  setEditorTheme,
   setFiles,
   undo,
   whenAnalysed,
@@ -48,14 +49,13 @@ import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mj
 import { state } from "./state.mjs";
 import { startRuntime } from "./runtime-client.mjs";
 import { readStoredJson, removeStored, writeStoredJson } from "./storage.mjs";
+import { isDark, onThemeChange, setUpTheme } from "./theme.mjs";
 import { describeError, hideOutput, setStatus, showOutput } from "./ui.mjs";
 import { warmUpAppFrame } from "./warm-up.mjs";
 
 // Built rather than written as a literal, so it resolves under a GitHub Pages
 // project path as well as at a site root.
 const asset = (p) => new URL(p, document.baseURI).href;
-
-const prefersDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
 
 const STORAGE_KEY = "abap2ui5-playground:files";
 
@@ -212,6 +212,10 @@ async function boot() {
   // re-run.
   const linterReady = heard(loadLinter());
 
+  // Before the editor is created, which asks which theme to start in; an
+  // embedded playground follows its reader's system rather than a choice
+  // made in some other tab (see theme.mjs).
+  setUpTheme({ restore: !embedded });
   setUpSplitter();
   setUpAbout();
   const tabs = setUpTabs(appOnly);
@@ -237,7 +241,7 @@ async function boot() {
   );
 
   const { files } = await startingReady;
-  createEditor(document.getElementById("editor"), files, { onChange: remember });
+  createEditor(document.getElementById("editor"), files, { onChange: remember, dark: isDark() });
   setUpFiles({ onChanged: remember, onOpened: fileOpened });
   setUpInsight();
   // The registry answers from a worker, so what remember( ) and fileOpened( )
@@ -316,11 +320,15 @@ async function boot() {
   fullscreenButton.addEventListener("click", () => openFullScreen());
   examplesButton.addEventListener("click", () => openExamples());
 
-  // A theme change must not restart the app - somebody has a half-filled form
-  // open and the sun went down. UI5 can swap its theme at runtime, so the
-  // running frame is told rather than reloaded; a frame that cannot be told
-  // keeps the theme it started with until the next Run.
-  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => applyFrameTheme());
+  // A theme change - the switch in the bar, or the sun going down on a page
+  // that follows the system - must not restart the app: somebody has a
+  // half-filled form open. UI5 can swap its theme at runtime, so the running
+  // frame is told rather than reloaded; a frame that cannot be told keeps the
+  // theme it started with until the next Run. The editor is told as well.
+  onThemeChange(() => {
+    setEditorTheme(isDark());
+    applyFrameTheme();
+  });
 
   // Ctrl+S as well as Ctrl+Enter: the hand that has typed in an editor for
   // twenty years presses it, and a browser answers with a dialog for saving
@@ -380,7 +388,7 @@ function setUpAbout() {
   });
 }
 
-const uiTheme = () => (prefersDark() ? "sap_horizon_dark" : "sap_horizon");
+const uiTheme = () => (isDark() ? "sap_horizon_dark" : "sap_horizon");
 
 function applyFrameTheme() {
   try {

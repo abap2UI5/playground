@@ -645,6 +645,73 @@ button.insight-row {
 .source-link:hover { border-color: var(--accent); }
 .source-link[aria-disabled="true"] { opacity: .5; pointer-events: none; }
 
+/* --------------------------------------------------------------- trailer */
+
+/* The right-hand end of the bar, as the documentation site's nav bar ends
+   (VitePress's appearance switch and social links, measured rather than
+   imported): a 40 by 22 switch whose thumb slides and swaps a sun for a moon,
+   a hairline, and the marks at the same 20px - here in a box the height of
+   the bar's buttons rather than the 36px a 64px nav bar can give them. The
+   checked look keys off the same media query and data-theme the palette
+   does, so the switch is right before the bundle has run; theme.mjs keeps
+   aria-checked and the label in step for a screen reader. The switch's
+   background is the one colour on this page that is the same in both
+   themes, as it is over there. */
+.trailer { display: flex; align-items: center; gap: 0; }
+
+.switch {
+  position: relative; display: block; flex: none;
+  width: 40px; height: 22px; padding: 0; border-radius: 11px;
+  border: 1px solid var(--line);
+  background: rgb(142 150 170 / .14);
+  transition: border-color .25s;
+}
+.switch:hover { border-color: var(--accent); }
+.switch-check {
+  position: absolute; top: 1px; left: 1px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--bg);
+  box-shadow: 0 1px 2px rgb(0 0 0 / .04), 0 1px 2px rgb(0 0 0 / .06);
+  transition: transform .25s;
+}
+.switch-icon {
+  position: relative; display: block;
+  width: 18px; height: 18px; border-radius: 50%; overflow: hidden;
+  color: var(--fg-dim);
+}
+.switch-icon svg {
+  position: absolute; top: 3px; left: 3px; width: 12px; height: 12px;
+  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.switch .moon { opacity: 0; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .switch-check { transform: translateX(18px); }
+  :root:not([data-theme="light"]) .switch-icon { color: var(--fg); }
+  :root:not([data-theme="light"]) .switch .sun { opacity: 0; }
+  :root:not([data-theme="light"]) .switch .moon { opacity: 1; }
+}
+:root[data-theme="dark"] .switch-check { transform: translateX(18px); }
+:root[data-theme="dark"] .switch-icon { color: var(--fg); }
+:root[data-theme="dark"] .switch .sun { opacity: 0; }
+:root[data-theme="dark"] .switch .moon { opacity: 1; }
+
+.socials { display: flex; align-items: center; margin-right: -6px; }
+.socials::before {
+  content: ""; width: 1px; height: 24px; margin: 0 8px 0 16px;
+  background: var(--line);
+}
+.social {
+  display: flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; color: var(--fg-dim);
+  transition: color .5s;
+}
+.social:hover { color: var(--fg); }
+.social svg { width: 20px; height: 20px; fill: currentColor; }
+
+/* Furniture in somebody else's page keeps no links out of it, and its theme
+   is its reader's system, not something to switch from inside a frame. */
+.is-embedded .trailer { display: none; }
+
 /* ------------------------------------------------------------------- log */
 
 .log { display: flex; flex-direction: column; height: 100%; }
@@ -675,6 +742,9 @@ button.insight-row {
   .brand,
   .versions,
   .spacer { display: none; }
+  /* The links at the far end go the way the docs' do on a phone - into
+     nothing, here, where they had a menu to go into; the switch stays. */
+  .socials { display: none; }
 
   .panes {
     display: block;

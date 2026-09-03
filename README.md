@@ -166,6 +166,14 @@ the Problems list, which is the designed behaviour.
 class becomes a link of about 700 characters. Being a fragment, it never leaves
 the browser — it is not sent to the server and does not appear in any log.
 
+**Light or dark.** The page follows the system until the switch at the
+right-hand end of the bar says otherwise — the same switch the documentation
+site's bar carries, beside the same three marks: LinkedIn, GitHub and, where
+the docs put the playground, the docs. A choice is kept between visits; a
+choice that agrees with the system is forgotten rather than stored, so a page
+switched back follows the system again from then on. The switch reaches the
+editor and the running app as well, without restarting it.
+
 **Full screen** opens the app on its own in a new tab — the whole window for the
 app, nothing around it: no editor, and no bar over it either. It is the same URL
 Share writes plus `?view=full`, so the new tab is a second playground rather
@@ -194,12 +202,14 @@ limited to this site and GitHub's raw hosts — the playground fetches on behalf
 of whoever opened the link, and should not be a general-purpose reader for
 arbitrary URLs.
 
-**`?embed=1`** drops the brand, the examples browser and the share button, leaving
-the editor, Run and the app — for embedding in a documentation page. An
-embedded playground never touches the stored draft, so it cannot overwrite what
-a reader has open in a normal one. **`?view=app`** drops the editor too, for a
-paragraph about what an app does rather than how it is written; the ABAP still
-compiles and runs, it is simply not on screen. **`?view=full`** is that view
+**`?embed=1`** drops the brand, the examples browser, the share button and the
+right-hand end of the bar, leaving the editor, Run and the app — for embedding
+in a documentation page. An embedded playground never touches the stored draft,
+so it cannot overwrite what a reader has open in a normal one, and follows its
+reader's system theme rather than a choice made in some other tab.
+**`?view=app`** drops the editor too, for a paragraph about what an app does
+rather than how it is written; the ABAP still compiles and runs, it is simply
+not on screen. **`?view=full`** is that view
 with the bar gone as well — the app and nothing else, which is what Full screen
 opens. The bar comes back if something goes wrong, because the status line it
 carries is the only channel either view has left.

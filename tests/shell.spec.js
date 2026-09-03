@@ -276,7 +276,7 @@ test("the bar keeps to a few rows on a phone", async ({ page }) => {
   expect(bar.height, "the bar is not a fifth of the phone").toBeLessThan(100);
 
   // And nothing that has to be reachable was compacted away with the rows.
-  for (const id of ["#undo", "#redo", "#format", "#examples", "#run", "#share", "#source-link", "#status", "#about"]) {
+  for (const id of ["#undo", "#redo", "#format", "#examples", "#run", "#share", "#source-link", "#status", "#about", "#theme"]) {
     await expect(page.locator(id)).toBeVisible();
   }
 });
@@ -312,4 +312,51 @@ test("the app follows the system theme, and a change does not restart it", async
     )
     .not.toBe(dark);
   await expect(page.frameLocator("#app").locator('[id$="--inpName-inner"]')).toHaveValue("still here");
+});
+
+test("the switch in the bar overrides the system theme, and is forgotten again when it agrees with it", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await open(page);
+  const html = page.locator("html");
+  const theme = page.locator("#theme");
+  const editor = page.locator(".monaco-editor").first();
+  const stored = () => page.evaluate(() => localStorage.getItem("abap2ui5-playground:theme"));
+  const chosen = () => page.evaluate(() => document.documentElement.getAttribute("data-theme"));
+  const appBackground = () =>
+    page.frameLocator("#app").locator("body").evaluate((b) => getComputedStyle(b).backgroundColor);
+
+  // Following the system: nothing chosen, nothing stored, and the switch
+  // says so.
+  expect(await chosen()).toBeNull();
+  expect(await stored()).toBeNull();
+  await expect(theme).toHaveAttribute("aria-checked", "false");
+  await expect(editor).toHaveClass(/\bvs\b/);
+  const light = await appBackground();
+
+  // One click: the page, the editor and the running app go dark - the app
+  // told rather than restarted, as for a system change - and the choice is
+  // kept for next time.
+  await theme.click();
+  await expect(html).toHaveAttribute("data-theme", "dark");
+  await expect(theme).toHaveAttribute("aria-checked", "true");
+  await expect(editor).toHaveClass(/vs-dark/);
+  expect(await stored()).toBe("dark");
+  await expect.poll(appBackground).not.toBe(light);
+
+  // Next time: dark before the bundle has said anything - the inline script
+  // at the top of the document applies the stored choice - and the app
+  // starts in the dark theme.
+  await page.goto("/");
+  expect(await chosen()).toBe("dark");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await expect(theme).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("#app")).toHaveAttribute("src", /sap-ui-theme=sap_horizon_dark/);
+
+  // Switching back to what the system says is not a choice to keep: the
+  // page follows the system again, and nothing is stored.
+  await theme.click();
+  expect(await chosen()).toBeNull();
+  expect(await stored()).toBeNull();
+  await expect(theme).toHaveAttribute("aria-checked", "false");
+  await expect(editor).toHaveClass(/\bvs\b/);
 });
