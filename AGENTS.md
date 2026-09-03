@@ -282,7 +282,14 @@ both are easy to undo by tidying up:
   looking at it is the fastest way to understand the finding.
 
 Both configurations are live in the panel's **abaplint** and **abap2UI5 lint**
-tabs (`src/shell/insight.mjs`); the defaults stay the curated lists. The two
+tabs (`src/shell/insight.mjs`); the defaults stay the curated lists. Every
+Problems row links the page that explains its rule (`rule ↗`, outside the row's
+button): rules.abaplint.org through the `codeDescription` abaplint's
+diagnostics carry, the linter's rules page through `ruleUrl( )` in
+`src/editor/abap2ui5-lint.mjs` — the finding's own `url` where the pinned
+linter sets one, the page's `#<rule-id>` anchor where it does not. The Monaco
+markers carry the same link as their `code`, which is the shape abaplint's
+already had. The two
 use separate Monaco marker owners — sharing one would have each erase the
 other's underlines.
 

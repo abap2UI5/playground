@@ -309,6 +309,23 @@ function problemList() {
 
     row.append(where, what, who);
     item.append(row);
+
+    // Where the rule is explained - the linter's rules page for an abap2UI5
+    // finding, rules.abaplint.org for abaplint's (its diagnostics carry the
+    // link as codeDescription). Outside the button, because a link cannot
+    // live inside one; the row still goes to the problem, this goes to the
+    // page that says what the problem means and shows the same code fixed.
+    const url = problem.url ?? problem.codeDescription?.href;
+    if (url) {
+      const doc = document.createElement("a");
+      doc.className = "insight-doc";
+      doc.href = url;
+      doc.target = "_blank";
+      doc.rel = "noopener";
+      doc.title = `What ${problem.rule ?? problem.code ?? "this rule"} means, and the same code fixed`;
+      doc.textContent = "rule ↗";
+      item.append(doc);
+    }
     list.append(item);
   }
   return wrap;
