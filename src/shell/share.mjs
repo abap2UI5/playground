@@ -88,10 +88,17 @@ export async function filesFromLocation(mainFile) {
   return decodeFiles(fragment, mainFile);
 }
 
+// Answers whether the text is in the clipboard now. A browser that has no
+// clipboard API, or refuses it - a page that is not focused, a permission
+// not granted, Firefox from a script - answers no rather than throwing: the
+// link is in the address bar and in the dialog either way, and a refused
+// clipboard is not a failure to share.
 export async function copyToClipboard(text) {
-  if (navigator.clipboard?.writeText) {
+  try {
+    if (!navigator.clipboard?.writeText) return false;
     await navigator.clipboard.writeText(text);
     return true;
+  } catch {
+    return false;
   }
-  return false;
 }

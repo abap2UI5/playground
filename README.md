@@ -164,7 +164,13 @@ the Problems list, which is the designed behaviour.
 
 **Share** puts every open file in the URL fragment, deflated: a 2500-character
 class becomes a link of about 700 characters. Being a fragment, it never leaves
-the browser — it is not sent to the server and does not appear in any log.
+the browser — it is not sent to the server and does not appear in any log. The
+link is copied first; the dialog that opens then has the other ways out: the
+block that embeds this demo in a documentation page (the loader with the class
+inline, or the playground framed when there are several files), the markdown
+fence a docs page prints an example in, and **Download for abapGit** — a zip of
+the files with their metadata, laid out as a repository, for abapGit's offline
+import.
 
 **Light or dark.** The page follows the system until the switch at the
 right-hand end of the bar says otherwise — the same switch the documentation

@@ -283,6 +283,17 @@
   </div>
 </dialog>
 
+<!-- Share: the link is in the clipboard before this opens; what it adds is
+     the other ways out - an embed block, a markdown fence, a zip for
+     abapGit. Filled by src/shell/share-dialog.mjs on every open. -->
+<dialog id="share-dialog" class="about share">
+  <form method="dialog" class="about-head">
+    <h2>Share</h2>
+    <button class="ghost" aria-label="Close">✕</button>
+  </form>
+  <div class="about-body" id="share-body"></div>
+</dialog>
+
 <!-- The examples browser: the built-in samples plus whatever the sample
      repositories' committed catalogues offer, fetched when this opens - see
      src/shell/examples.mjs. The search sits outside the method="dialog" form

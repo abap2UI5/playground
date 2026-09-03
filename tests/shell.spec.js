@@ -360,3 +360,62 @@ test("the switch in the bar overrides the system theme, and is forgotten again w
   await expect(theme).toHaveAttribute("aria-checked", "false");
   await expect(editor).toHaveClass(/\bvs\b/);
 });
+
+// The entries of a stored zip, read the way the format is written: a local
+// header per entry, name and bytes right behind it. Enough to check what the
+// Share dialog hands out without a zip library in the tests either.
+function zipEntries(bytes) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const entries = [];
+  let at = 0;
+  while (at + 30 <= bytes.length && view.getUint32(at, true) === 0x04034b50) {
+    const size = view.getUint32(at + 18, true);
+    const nameLength = view.getUint16(at + 26, true);
+    const extraLength = view.getUint16(at + 28, true);
+    const name = new TextDecoder().decode(bytes.subarray(at + 30, at + 30 + nameLength));
+    const start = at + 30 + nameLength + extraLength;
+    entries.push({ name, text: new TextDecoder().decode(bytes.subarray(start, start + size)) });
+    at = start + size;
+  }
+  return entries;
+}
+
+test("the Share dialog offers an embed block, a markdown fence and an abapGit zip", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await open(page);
+  await page.locator("#share").click();
+  const dialog = page.locator("#share-dialog");
+  await expect(dialog).toBeVisible();
+
+  // The link is the first box and is what the address bar now shows.
+  const boxes = dialog.locator("textarea");
+  await expect(boxes.nth(0)).toHaveValue(page.url());
+  // The embed block carries the class inline and the loader from this site.
+  const embed = await boxes.nth(1).inputValue();
+  expect(embed).toContain('class="abap2ui5-demo"');
+  expect(embed).toContain("data-code=");
+  expect(embed).toContain("/embed/abap2ui5-embed.js");
+  // The markdown fence is the class as a documentation page would print it.
+  const markdown = await boxes.nth(2).inputValue();
+  expect(markdown.startsWith("```abap\n")).toBe(true);
+  expect(markdown).toContain("CLASS zcl_playground DEFINITION");
+  expect(markdown.endsWith("```")).toBe(true);
+
+  // The zip: named after the app, laid out as a repository abapGit reads -
+  // the settings file at the root, the source and its metadata under src/,
+  // the source normalised to LF with a newline at the end.
+  const [download] = await Promise.all([page.waitForEvent("download"), page.locator("#share-abapgit").click()]);
+  expect(download.suggestedFilename()).toBe("zcl_playground.zip");
+  const { readFileSync } = await import("node:fs");
+  const entries = zipEntries(new Uint8Array(readFileSync(await download.path())));
+  expect(entries.map((e) => e.name)).toEqual([
+    ".abapgit.xml",
+    "src/zcl_playground.clas.abap",
+    "src/zcl_playground.clas.xml",
+  ]);
+  expect(entries[0].text).toContain("<STARTING_FOLDER>/src/</STARTING_FOLDER>");
+  expect(entries[1].text).toContain("CLASS zcl_playground DEFINITION");
+  expect(entries[1].text).not.toContain("\r");
+  expect(entries[1].text.endsWith("\n")).toBe(true);
+  expect(entries[2].text).toContain("<CLSNAME>ZCL_PLAYGROUND</CLSNAME>");
+});

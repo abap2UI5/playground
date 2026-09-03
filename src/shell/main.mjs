@@ -46,6 +46,7 @@ import { restoreCheckerSettings } from "./checker-settings.mjs";
 import { setUpSplitter, setUpTabs } from "./layout.mjs";
 import { announceAppHeight, announceReady, announceStatus, startEmbedMessages } from "./embed.mjs";
 import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
+import { openShare, setUpShareDialog } from "./share-dialog.mjs";
 import { state } from "./state.mjs";
 import { STALLED, startRuntime } from "./runtime-client.mjs";
 import { readStoredJson, removeStored, writeStoredJson } from "./storage.mjs";
@@ -218,6 +219,7 @@ async function boot() {
   setUpTheme({ restore: !embedded });
   setUpSplitter();
   setUpAbout();
+  setUpShareDialog();
   const tabs = setUpTabs(appOnly);
 
   // The files, as a promise the registry build can hold: the corpus parse does
@@ -580,12 +582,17 @@ async function openFullScreen() {
   }
 }
 
+// The link first - copied and in the address bar before anything else is on
+// screen, because that is what most presses are for - and then the dialog
+// with the other ways out (src/shell/share-dialog.mjs).
 async function share() {
   try {
-    const url = await shareUrl(getFiles());
+    const files = getFiles();
+    const url = await shareUrl(files);
     history.replaceState(null, "", url);
     const copied = await copyToClipboard(url);
     setStatus(copied ? "link copied to the clipboard" : "link is in the address bar");
+    openShare(files, url, copied);
   } catch (e) {
     setStatus("the link could not be built", true);
     showOutput("Share", String(e.message || e));
