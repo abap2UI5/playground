@@ -285,3 +285,31 @@ test("a core asset the worker fetches on a miss is hashed against the build, and
   });
   await expect.poll(cachedFramework, { timeout: 20000 }).toBe(before);
 });
+
+test("a startup failure on a page the worker is serving throws the cached site away", async ({ page }) => {
+  // The first visit is the one that installs the worker and fills its cache.
+  await open(page);
+  expect(await workerReady(page)).toBe(true);
+
+  // The second is served by it, and fails - the shape of a cache holding one
+  // build's bundle under another build's document, which is what a deploy
+  // could leave behind before the build stamp above was checked on every
+  // asset. A page that cannot start and is being served from a cache has one
+  // repair, and it is the reader who has to be asked for it.
+  await page.addInitScript(() => {
+    const real = document.getElementById.bind(document);
+    document.getElementById = (id) => {
+      if (id === "editor") throw new Error("staged: no editor container");
+      return real(id);
+    };
+  });
+  await page.goto("/");
+
+  await expect(page.locator("#status")).toContainText("cached copy was discarded, please reload", {
+    timeout: 60000,
+  });
+  await expect.poll(() => page.evaluate(() => caches.keys())).toEqual(
+    expect.not.arrayContaining([expect.stringContaining("abap2ui5-playground-")]),
+  );
+  expect(await page.evaluate(() => navigator.serviceWorker.getRegistrations().then((r) => r.length))).toBe(0);
+});

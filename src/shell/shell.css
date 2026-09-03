@@ -105,6 +105,26 @@ button.ghost { border: none; background: none; color: var(--fg-dim); padding: 0 
    text so it reads as a symbol rather than as a stray character. */
 button.icon { padding: .2rem .55rem; font-size: 1.15em; line-height: 1.2; }
 
+/* Run, made automatic - the switch beside it (#autorun). Off, it is an
+   ordinary bar button with a hollow dot; on, it takes Run's fill and Run goes
+   inactive beside it, so the button that is live has simply moved one place
+   along. The dot is the state at a glance for anyone who does not read the
+   title, and role="switch" carries the same to a screen reader. */
+button.toggle { display: inline-flex; align-items: center; gap: .4rem; }
+.toggle-dot {
+  width: .5rem;
+  height: .5rem;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+}
+button.toggle[aria-checked="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 600;
+}
+button.toggle[aria-checked="true"] .toggle-dot { background: currentColor; }
+
 /* The shortcuts in the About dialog. */
 .about-keys { display: grid; grid-template-columns: max-content 1fr; gap: .35rem .9rem; margin: .5rem 0; }
 .about-keys dt { white-space: nowrap; }
@@ -289,6 +309,7 @@ iframe {
 .is-app-only .splitter,
 .is-app-only .tabs,
 .is-app-only #fullscreen,
+.is-app-only #autorun,
 .is-app-only #format { display: none; }
 .is-app-only .pane-right { border-left: 0; }
 
