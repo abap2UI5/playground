@@ -229,6 +229,19 @@ discarded and a reload asked for, the way the STALLED runtime is answered,
 because that mix is the prime suspect. A page nothing is serving from a cache
 says nothing about a cache it does not have.
 
+**What that discard actually guarantees is the unregistration**, not an empty
+cache, and the difference cost a CI run. A worker goes on controlling the page
+it is already serving until that page unloads — so where the failure lands
+early, with the page's own requests still in flight, `serve()`'s on-a-miss
+path puts what it fetches back under the same cache name within a second of
+the delete. That is harmless: nothing reads a cache but a worker, there is no
+longer one, and the worker the next visit registers re-fetches every core
+asset past the HTTP cache and checks it against the build. The STALLED failure
+lands late, when the page has stopped asking for anything, and there the
+delete sticks. `tests/worker.spec.js` holds each to the half that is true of
+it, and the early one ends on the reload it asked for: nothing served from a
+cache, and the playground up.
+
 The registry parse is the processor half, and it is
 [yielded on a clock](src/editor/registry-core.mjs) rather than on a count of
 objects — now so the worker can report progress and answer between objects,
