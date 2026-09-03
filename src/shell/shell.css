@@ -759,8 +759,20 @@ button.insight-row {
 /* ------------------------------------------------------------------ view */
 
 .view-preview { display: flex; flex-direction: column; min-height: 100%; }
+.view-preview.is-editing { height: 100%; min-height: 0; }
 .view-xml { flex: none; }
 .view-notes { padding: .3rem .6rem .5rem; }
+
+/* The buttons at the right-hand end of a panel heading. One box rather than
+   two children, so the heading stays a title and a group with the space
+   between them. */
+.log-actions { display: flex; align-items: center; gap: .3rem; }
+
+/* Edit mode: the view itself, as text somebody types into, filling the panel
+   the way the config tabs do - and the sentence under it, which is the only
+   place a refusal ("that is not valid XML yet") has to appear. */
+.view-editor { margin: .5rem .6rem 0; }
+.view-said { padding: .4rem .6rem .5rem; margin: 0; }
 
 /* The drafts' save row in the samples browser, and the delete beside a draft. */
 .drafts-save { display: flex; align-items: center; gap: .5rem; margin: 0 .4rem .5rem; flex-wrap: wrap; }

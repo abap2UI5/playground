@@ -42,15 +42,27 @@ pipeline and moves the last step into the browser.
 - **Editing.** Monaco — the editor from VS Code — with abaplint behind it:
   diagnostics against the actual framework, hover, go to definition, rename,
   references, quick fixes and the pretty printer. Under the editor, a resizable
-  panel with five tabs: every problem, an outline of the class, the log, and the
-  configuration of each checker — editable, so "why is it not warning here?"
-  has an answer you can try rather than only read.
+  panel with the view your chain builds, every problem, an outline of the class,
+  the conversation between the app and the ABAP, the log, and the configuration
+  of each checker — editable, so "why is it not warning here?" has an answer you
+  can try rather than only read.
 - **A second opinion.** The [abap2UI5 linter](https://www.npmjs.com/package/@abap2ui5/linter)
   runs beside abaplint and answers a different question: abaplint says whether
   the ABAP compiles, the linter reconstructs the view your builder chain
   produces and says whether *that* works on UI5 1.71 — a control or property
   that release does not have, an icon that is in no icon font. Those compile,
   and at run time they render nothing and log nothing.
+- **Editing the view instead of the chain.** The **View** tab shows the XML
+  that reconstruction produces, coloured; **Edit** turns it around. Change the
+  XML — move a control, add a property, insert a `Label` — press Save, and the
+  builder chain is written again to build it, in the layout the abap2UI5
+  repositories hold their chains in. An attribute you leave alone keeps the
+  ABAP that produced it, so a `client->_bind( … )` stays a bind rather than
+  freezing into the string it happened to render as. It is the shortest way
+  there is to learn the builder: change the view, read the ABAP that changed
+  with it. What it cannot rewrite — a view filled from a `LOOP`, a control name
+  held in a variable — it says instead of guessing, and the ABAP editor is
+  read-only for as long as the view is the one being typed into.
 - **Run.** Only the classes in the editor are compiled, in about 20 ms, and
   registered with the running runtime. **Auto** beside it presses Run for you,
   shortly after you stop typing: while it is on, Run itself is inactive and

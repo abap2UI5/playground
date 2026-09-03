@@ -18,7 +18,7 @@ them before touching `tools/` or `src/runtime`.
 
 | Path | Purpose |
 | --- | --- |
-| `src/shell/` | The page: boot and Run (`main.mjs`, which also owns the **Auto** switch beside Run - the debounce, the stored setting and the three reasons Run may be inactive), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the examples browser over the sample catalogue (`examples.mjs`, reading the built index), which UI5 library a control ships in (`ui5-libs.mjs`) beside the closed list of the ones this site carries (`ui5-libraries.mjs`), the bottom panel (`insight.mjs`) and the syntax colour it prints XML and JSON in (`highlight.mjs`), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch at the bar's right-hand end, applied as `data-theme` on `<html>` and handed to the editor and the app frame), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
+| `src/shell/` | The page: boot and Run (`main.mjs`, which also owns the **Auto** switch beside Run - the debounce, the stored setting and the three reasons Run may be inactive), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the examples browser over the sample catalogue (`examples.mjs`, reading the built index), which UI5 library a control ships in (`ui5-libs.mjs`) beside the closed list of the ones this site carries (`ui5-libraries.mjs`), the bottom panel (`insight.mjs`), the syntax colour it prints XML and JSON in (`highlight.mjs`) and the View tab's edit mode - the builder chain read back out of the ABAP (`chain-read.mjs`), the edited document matched against the one that was shown (`view-edit.mjs`) and the chain written again in the house layout (`chain-write.mjs`), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch at the bar's right-hand end, applied as `data-theme` on `<html>` and handed to the editor and the app frame), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
 | `src/editor/` | Monaco plus the abaplint registry — in a worker: `registry-core.mjs` and `transpile-core.mjs` are abaplint and the single-object transpile as they run there, `registry-worker.mjs` the worker's entry, `registry.mjs` the page's client with a promise in front of everything, `providers.mjs` Monaco's language providers answered over it — the abap2UI5 linter wrapper (`abap2ui5-lint.mjs`), the file set, and the sample catalogue in two halves - `sample-list.mjs`, which is what the built-in samples are and which files they are made of, and `samples.mjs`, which pairs that with the ABAP it imports out of `src/samples/` |
 | `src/runtime/` | The ABAP side of the page: the framework entry (`index.mjs`, `roundtrip()` and `defineClasses()`), `worker.mjs` around it, which is the bundle's entry and answers those over `postMessage` when it runs as the worker the page starts, the sql.js database (`db-setup.mjs`), and the browser shims for Node modules |
 | `src/abap/` | The playground's own ABAP (`zcl_pg_bridge`, `zcl_pg_hello`); it travels through the same downport and transpile as the framework |
@@ -398,9 +398,39 @@ again, and an embedded playground never restores one.
 The **View tab** (`viewPreview()` in `src/shell/insight.mjs`) shows the XML
 the linter reconstructs from the open file's builder chain — `viewsFor()` in
 `abap2ui5-lint.mjs`, the same reconstruction the findings come from, put one
-element per line by `xml-pretty.mjs`. It is a second reconstruction beside
-the analysis pass, run only while that tab is open; the tab says so when the
-linter has not loaded yet and when the file builds no view.
+element per line by `xml-pretty.mjs` and coloured by `highlight.mjs`. It is a
+second reconstruction beside the analysis pass, run only while that tab is
+open; the tab says so when the linter has not loaded yet and when the file
+builds no view.
+
+**Edit** turns that tab around: change the XML and the chain is written again
+to build it. Three files, and the middle one is the whole design.
+`chain-read.mjs` reads the chain back out of the ABAP by *executing* the four
+builder methods against a tree — `a( )` lands on the last child if there is one
+and on the node itself if there is not, exactly as the class does, which is why
+the split shape (a statement per subtree, held in variables) reads correctly
+without the reader knowing about shapes. Every attribute keeps the ABAP that
+produced it, verbatim. `view-edit.mjs` matches the edited document against the
+one that was shown — by name, longest common subsequence at each level, so an
+inserted control does not shift everything after it onto the wrong original —
+and an attribute whose value still reads as it was shown gets its original ABAP
+back. **That is the point of the whole thing**: the reconstruction renders
+`client->_bind( t_flight )` as `{/T_FLIGHT}` and `client->_event( … )` as
+`.eB()`, so a chain generated from the rendering alone would compile, run, and
+quietly be a different app with every binding frozen. `chain-write.mjs` writes
+the single-chain shape in the house layout, which the linter's
+`chain-house-layout` rule checks (see the `view-chain-layout` skill in the
+framework repository) — `tests/view-edit.spec.js` holds both the layout and the
+surviving binds.
+
+What it will not do it says instead of guessing: a view built with a LOOP or an
+IF, a control name held in a variable, two views in one method, a variable used
+after the chain, text between two tags (the builder sets attributes; it has no
+call for a text node), a value with a line break in it. The button is disabled
+with that sentence as its title. While the editor is open the ABAP editor is
+read-only (`setEditorReadOnly()`) — the ABAP is derived from the XML for as
+long as it is, and two editable copies of one view would mean deciding which is
+the truth on every keystroke.
 
 **Unit tests run before the app** (`tests/unit.spec.js`, the `unit-tests`
 sample). A `<class>.clas.testclasses.abap` file is a class's test include

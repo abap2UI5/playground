@@ -93,6 +93,26 @@ export function setEditorTheme(dark) {
   monaco.editor.setTheme(dark ? THEME_DARK : THEME_LIGHT);
 }
 
+// Whether the editor takes typing.
+//
+// One caller: the View tab's edit mode, which hands the reader the view to
+// change instead of the chain that builds it. While that is open the ABAP is
+// derived from the XML rather than the other way round, and typing into both
+// at once would mean deciding which of the two is the truth on every
+// keystroke. The panel is the one that says when this goes back on, in every
+// path out of edit mode - Save, Cancel, and the file being switched away from.
+export function setEditorReadOnly(readOnly) {
+  editor?.updateOptions({ readOnly });
+}
+
+// Replaces one file's text as an edit somebody can undo, which is what makes
+// a view rewritten out of the View tab a Ctrl+Z away from what it replaced.
+// Same door the fixers use; see writeSource( ) at the bottom of this file.
+export function setSourceOf(name, source) {
+  writeSource(name, source);
+  refresh();
+}
+
 function createModel(file) {
   modelGeneration += 1;
   const model = monaco.editor.createModel(file.source, "abap", monaco.Uri.parse(uriFor(file.name)));

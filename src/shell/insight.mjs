@@ -15,6 +15,8 @@ import {
   getSource,
   invalidateAnalysis,
   refresh,
+  setEditorReadOnly,
+  setSourceOf,
 } from "../editor/editor.mjs";
 import {
   abaplintDefaults,
@@ -28,6 +30,7 @@ import { copyToClipboard } from "./share.mjs";
 import { onRoundtrip, roundtripList } from "./roundtrips.mjs";
 import { prettyXml } from "./xml-pretty.mjs";
 import { highlighted } from "./highlight.mjs";
+import { sourceWithView, viewEditable } from "./view-edit.mjs";
 import { keepAbaplintSettings, keepLinterSettings } from "./checker-settings.mjs";
 import { readStored, writeStored } from "./storage.mjs";
 import { currentLog, hideOutput, onLogChange, setStatus } from "./ui.mjs";
@@ -485,15 +488,29 @@ function empty(text) {
 // the typing. Not the view the app rendered: that one is in the Roundtrips
 // tab, where it arrived. This is the answer to "what does this chain make",
 // one element per line, which is the fastest way to learn the builder.
+//
+// And, with Edit, the other direction: change the XML and the chain is
+// written again to build it (src/shell/view-edit.mjs). It is the shortest way
+// there is to learn the builder - move a control, see the ABAP that moves it -
+// and the fastest way to try a property on a control without looking up which
+// call sets it.
 function viewPreview() {
   const file = currentFile();
   const source = file ? getSource(file) : undefined;
   if (source === undefined) return empty("Nothing to show yet.");
+  // The edit is about one file's chain. Switching to another one ends it
+  // rather than writing this XML into that file.
+  if (editing && editing.file !== file) stopEditing();
+
   const { docs, notes, loaded } = viewsFor(source);
   if (!loaded) return empty("The abap2UI5 linter is still loading - the view appears when it has.");
   if (docs.length === 0) {
     return empty("This file builds no view with z2ui5_cl_ui5_view_builder - nothing to reconstruct.");
   }
+  // The same element, kept across a re-render: half-typed XML and where the
+  // caret is in it are not things to rebuild from the source, which is exactly
+  // what everything else in this panel is.
+  if (editing) return editing.element;
 
   const wrap = document.createElement("div");
   wrap.className = "view-preview";
@@ -504,6 +521,11 @@ function viewPreview() {
     const title = document.createElement("span");
     title.className = "log-title";
     title.textContent = docs.length === 1 ? "The view this file builds" : `View ${i + 1} of ${docs.length}`;
+    const actions = document.createElement("span");
+    actions.className = "log-actions";
+    // One view per file is what can be edited: with two, which chain a change
+    // belongs to is a guess, and the reader is one click from the ABAP anyway.
+    if (docs.length === 1) actions.append(editButton(source, doc, pretty));
     const copy = document.createElement("button");
     copy.type = "button";
     copy.className = "ghost";
@@ -511,7 +533,8 @@ function viewPreview() {
     copy.addEventListener("click", async () => {
       copy.textContent = (await copyToClipboard(pretty)) ? "copied" : "Copy";
     });
-    head.append(title, copy);
+    actions.append(copy);
+    head.append(title, actions);
     const body = document.createElement("pre");
     body.className = "log-body view-xml";
     body.append(highlighted(pretty, "xml"));
@@ -523,6 +546,114 @@ function viewPreview() {
     said.textContent = notes.join(" · ");
     wrap.append(said);
   }
+  return wrap;
+}
+
+// Edit, or the reason it is off. A chain this cannot rewrite is the normal
+// case rather than the exceptional one - a view filled from a LOOP, a control
+// name held in a variable, a second view in the same method - and the button
+// says which of those it is instead of being missing.
+function editButton(source, doc, pretty) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "ghost";
+  button.id = "view-edit";
+  button.textContent = "Edit";
+  const can = viewEditable(source, doc);
+  if (can.ok) {
+    button.title = "Change the view here; the builder chain is written again from it";
+    button.addEventListener("click", () => startEditing(currentFile(), doc, pretty));
+  } else {
+    button.disabled = true;
+    button.title = can.why;
+  }
+  return button;
+}
+
+// What is open in the View tab's editor, or nothing. The draft lives here
+// rather than in the textarea alone so that a re-render - a roundtrip
+// landing, a tab going away and coming back - cannot lose what was typed.
+let editing;
+
+function startEditing(file, xml, pretty) {
+  editing = { file, xml, draft: pretty };
+  editing.element = buildViewEditor();
+  // The ABAP is derived from this XML while it is open, so it stops being
+  // typed into: two editable copies of one view means deciding which of them
+  // is the truth on every keystroke, and neither answer is a good one.
+  setEditorReadOnly(true);
+  render();
+}
+
+function stopEditing() {
+  editing = undefined;
+  setEditorReadOnly(false);
+}
+
+function buildViewEditor() {
+  const wrap = document.createElement("div");
+  wrap.className = "view-preview is-editing";
+
+  const head = document.createElement("div");
+  head.className = "log-head";
+  const title = document.createElement("span");
+  title.className = "log-title";
+  title.textContent = "Editing the view";
+  const actions = document.createElement("span");
+  actions.className = "log-actions";
+  const save = document.createElement("button");
+  save.type = "button";
+  save.className = "primary";
+  save.id = "view-save";
+  save.textContent = "Save";
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "ghost";
+  cancel.id = "view-cancel";
+  cancel.textContent = "Cancel";
+  actions.append(save, cancel);
+  head.append(title, actions);
+
+  const area = document.createElement("textarea");
+  area.className = "config-text view-editor";
+  area.id = "view-editor";
+  area.spellcheck = false;
+  area.value = editing.draft;
+  area.addEventListener("input", () => {
+    editing.draft = area.value;
+  });
+
+  const said = document.createElement("p");
+  said.className = "config-said view-said";
+  said.id = "view-said";
+  const explain = () => {
+    said.classList.remove("is-error");
+    said.textContent =
+      "The ABAP editor is read-only until this is saved or cancelled. A value you leave alone keeps the " +
+      "ABAP that produced it, so a bind stays a bind.";
+  };
+  explain();
+
+  save.addEventListener("click", () => {
+    const file = editing.file;
+    const written = sourceWithView(getSource(file), editing.xml, editing.draft);
+    if (!written.ok) {
+      said.classList.add("is-error");
+      said.textContent = written.why;
+      return;
+    }
+    stopEditing();
+    setSourceOf(file, written.source);
+    setStatus("the builder chain was written again from the view");
+    render();
+  });
+
+  cancel.addEventListener("click", () => {
+    stopEditing();
+    render();
+  });
+
+  wrap.append(head, area, said);
   return wrap;
 }
 
