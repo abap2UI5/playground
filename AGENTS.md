@@ -18,7 +18,7 @@ them before touching `tools/` or `src/runtime`.
 
 | Path | Purpose |
 | --- | --- |
-| `src/shell/` | The page: boot and Run (`main.mjs`, which also owns the **Auto** switch beside Run - the debounce, the stored setting and the three reasons Run may be inactive), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the samples browser over the sample catalogue (`examples.mjs`, reading the built index — a near-full-screen modal with the filters and the catalogue's three facets down its side), which UI5 library a control ships in (`ui5-libs.mjs`) beside the closed list of the ones this site carries (`ui5-libraries.mjs`), the bottom panel (`insight.mjs`), the syntax colour it prints XML and JSON in (`highlight.mjs`) and the View tab's edit mode - the builder chain read back out of the ABAP (`chain-read.mjs`), the edited document matched against the one that was shown (`view-edit.mjs`) and the chain written again in the house layout (`chain-write.mjs`), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch at the bar's right-hand end, applied as `data-theme` on `<html>` and handed to the editor and the app frame), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
+| `src/shell/` | The page: boot and Run (`main.mjs`, which also owns the **Auto** switch beside Run - the debounce, the stored setting and the three reasons Run may be inactive), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the samples browser over the sample catalogue (`examples.mjs`, reading the built index — a near-full-screen modal with the filters and the catalogue's three facets down its side), which UI5 library a control ships in (`ui5-libs.mjs`) beside the closed list of the ones this site carries (`ui5-libraries.mjs`), the bottom panel (`insight.mjs`), the syntax colour it prints XML and JSON in (`highlight.mjs`) and the View tab's edit mode - the builder chain read back out of the ABAP (`chain-read.mjs`), the edited document matched against the one that was shown (`view-edit.mjs`), the change put back as an edit to the ABAP that is there (`chain-patch.mjs`) and, when it cannot be, the chain written again in the house layout (`chain-write.mjs`), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch at the bar's right-hand end, applied as `data-theme` on `<html>` and handed to the editor and the app frame), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
 | `src/editor/` | Monaco plus the abaplint registry — in a worker: `registry-core.mjs` and `transpile-core.mjs` are abaplint and the single-object transpile as they run there, `registry-worker.mjs` the worker's entry, `registry.mjs` the page's client with a promise in front of everything, `providers.mjs` Monaco's language providers answered over it — the abap2UI5 linter wrapper (`abap2ui5-lint.mjs`), the file set, and the samples the page carries - `sample-list.mjs`, which is nothing but the class names of a handful of apps in **abap2UI5/samples**, and `samples.mjs`, which pairs what the build resolved them into (`build/samples/`) with the ABAP itself |
 | `src/runtime/` | The ABAP side of the page: the framework entry (`index.mjs`, `roundtrip()` and `defineClasses()`), `worker.mjs` around it, which is the bundle's entry and answers those over `postMessage` when it runs as the worker the page starts, the sql.js database (`db-setup.mjs`), and the browser shims for Node modules |
 | `src/abap/` | The playground's own ABAP (`zcl_pg_bridge`, `zcl_pg_hello`); it travels through the same downport and transpile as the framework |
@@ -463,7 +463,7 @@ open; the tab says so when the linter has not loaded yet and when the file
 builds no view.
 
 **Edit** turns that tab around: change the XML and the chain is written again
-to build it. Three files, and the middle one is the whole design.
+to build it. Four files, and the middle one is the whole design.
 `chain-read.mjs` reads the chain back out of the ABAP by *executing* the four
 builder methods against a tree — `a( )` lands on the last child if there is one
 and on the node itself if there is not, exactly as the class does, which is why
@@ -482,6 +482,29 @@ the single-chain shape in the house layout, which the linter's
 framework repository) — `tests/view-edit.spec.js` holds both the layout and the
 surviving binds.
 
+`chain-patch.mjs` is the fourth, and it runs **before** the writer: it is the
+answer to a rewrite that was correct and unreadable. A one-word change used to
+come back as a diff over the whole method — the sample's split shape (a
+statement per subtree, held in variables, which is what most of
+abap2UI5/samples is written in) collapsed into one chain, the namespace
+declarations moved to the front, blank lines appeared, every continuation line
+re-anchored. Both chains were in the house layout; they were simply not the
+same chain, because the whole thing had been generated again. So the
+reader-facing rule is now the one the values already had, applied to the ABAP
+as a whole: **what nobody edited is not rewritten.** A changed value is written
+over exactly itself (`chain-read.mjs` keeps a source range per attribute
+alongside its ABAP); a control whose attribute set changed has its attribute
+block written again in its own column — the block rather than the one line,
+because the `v =` column is aligned across it; anything that changes the shape
+of the view, a control added, removed or renamed, falls back to
+`chain-write.mjs` and the full single-chain rewrite, which is what it always
+did. The patch runs only when the two trees are provably the same tree, node
+for node and attribute for attribute, so leaving the surrounding ABAP alone is
+the correct rewrite rather than a cheaper one. `tests/view-edit.spec.js` holds
+the three cases: one value changed and the file otherwise byte for byte what it
+was, Save with nothing changed changing nothing, and an attribute added and
+taken out again arriving back at the file that was there.
+
 What it will not do it says instead of guessing: a view built with a LOOP or an
 IF, a control name held in a variable, two views in one method, a variable used
 after the chain, text between two tags (the builder sets attributes; it has no
@@ -489,7 +512,12 @@ call for a text node), a value with a line break in it. The button is disabled
 with that sentence as its title. While the editor is open the ABAP editor is
 read-only (`setEditorReadOnly()`) — the ABAP is derived from the XML for as
 long as it is, and two editable copies of one view would mean deciding which is
-the truth on every keystroke.
+the truth on every keystroke. It also *looks* read-only: the same call puts
+`is-readonly` on the editor pane and `shell.css` greys the source back and
+takes the caret away, because Monaco's read-only state is otherwise
+indistinguishable from its editable one — same colours, and a caret that still
+lands where it is clicked — and nobody should have to type into it to find out
+that it will not take it.
 
 **Unit tests run before the app** (`tests/unit.spec.js`, the `unit-tests`
 sample). A `<class>.clas.testclasses.abap` file is a class's test include

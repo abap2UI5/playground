@@ -34,7 +34,10 @@
 // split would mean inventing names for its parts.
 import { qnameOf } from "./chain-read.mjs";
 
-const STEP = 4;
+// Four spaces a level - rule 2 of the house layout, and the one number the
+// rest of it is measured in. Exported because chain-patch.mjs indents a block
+// it splices into an existing chain by the same step.
+export const STEP = 4;
 
 /**
  * One ABAP statement building `element`.
@@ -113,7 +116,12 @@ function nameArguments(node) {
 // block - so a control's attributes read as a table rather than as a ragged
 // edge. The width is the block's own, not a number fixed here: an `id` beside
 // a `noDataText` would otherwise push every view's values into column forty.
-function attributeLines(node, column) {
+//
+// Exported for chain-patch.mjs, which writes one control's block back into a
+// chain it is otherwise leaving alone: the alignment is a property of the
+// block, so the block is the smallest thing that can be rewritten and still
+// be right.
+export function attributeLines(node, column) {
   const pad = " ".repeat(column);
   const names = node.attrs.map((attr) => `n = ${abapLiteral(attr.name)}`);
   const width = Math.max(0, ...names.map((n) => n.length));

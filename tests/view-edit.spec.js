@@ -93,6 +93,76 @@ test("a change to the view is written back as a builder chain, and the binds sur
   await expect(page.frameLocator("#app").getByRole("button", { name: "Say hello" })).toBeVisible();
 });
 
+// What the reader sees in the ABAP editor after a small edit, which is the
+// other half of "a bind stays a bind": an edit that is correct but arrives as
+// a rewrite of the whole method is one nobody can check. The chain is not
+// generated again for a change that can be made in place - see
+// src/shell/chain-patch.mjs - so the sample's own shape survives it. This
+// sample is in the split shape (a statement per subtree, held in variables),
+// which a regenerated chain would have collapsed into one.
+test("a changed value is the only thing in the file that changes", async ({ page }) => {
+  await open(page);
+  const area = await openEditor(page);
+  const before = await getSource(page, APP);
+
+  const xml = await area.inputValue();
+  await area.fill(xml.replace('text="Greet"', 'text="Say hello"'));
+  await page.locator("#view-save").click();
+  await expect(page.locator("#view-editor")).toHaveCount(0);
+
+  // Byte for byte the file it was, with one literal replaced where it stood.
+  const after = await getSource(page, APP);
+  expect(after).toBe(before.replace("v = `Greet`", "v = `Say hello`"));
+  // Which means, in particular, that the shape the sample is written in is
+  // still there rather than flattened into a single chain.
+  expect(after).toContain("DATA(page) = view->ele( `Shell`");
+});
+
+test("saving without changing anything changes nothing", async ({ page }) => {
+  await open(page);
+  await openEditor(page);
+  const before = await getSource(page, APP);
+  await page.locator("#view-save").click();
+  await expect(page.locator("#view-editor")).toHaveCount(0);
+  expect(await getSource(page, APP)).toBe(before);
+});
+
+test("an added attribute rewrites that control's block and nothing else", async ({ page }) => {
+  await open(page);
+  const area = await openEditor(page);
+  const before = await getSource(page, APP);
+
+  const xml = await area.inputValue();
+  await area.fill(xml.replace('text="Greet"', 'text="Greet" icon="sap-icon://email"'));
+  await page.locator("#view-save").click();
+  await expect(page.locator("#view-editor")).toHaveCount(0);
+
+  // The attribute block is written again as a block - the `v =` column is
+  // aligned across it, so a line spliced into it would leave the others
+  // pointing at nothing - and the block is all that moves.
+  const after = await getSource(page, APP);
+  expect(after).toBe(
+    before.replace(
+      "                )->a( n = `press` v = client->_event( `GREET` )\n" +
+        "                )->a( n = `text`  v = `Greet` ).",
+      "                )->a( n = `press` v = client->_event( `GREET` )\n" +
+        "                )->a( n = `text`  v = `Greet`\n" +
+        "                )->a( n = `icon`  v = `sap-icon://email` ).",
+    ),
+  );
+
+  // And the same the other way: taking it out again gives back exactly the
+  // file that was there before it went in.
+  await expect(page.locator("#view-edit")).toBeEnabled();
+  await page.locator("#view-edit").click();
+  const grown = page.locator("#view-editor");
+  await expect(grown).toBeVisible();
+  await grown.fill((await grown.inputValue()).replace(' icon="sap-icon://email"', ""));
+  await page.locator("#view-save").click();
+  await expect(page.locator("#view-editor")).toHaveCount(0);
+  expect(await getSource(page, APP)).toBe(before);
+});
+
 test("a control added in the view becomes a call in the chain", async ({ page }) => {
   await open(page);
   const area = await openEditor(page);
@@ -126,11 +196,17 @@ test("the ABAP editor is read-only while the view is open, and writable again af
   await page.keyboard.type("ZZZ");
   expect(await getSource(page, APP)).toBe(before);
 
+  // And it looks refused before it is tried: the pane greys the source back,
+  // which is the only thing on screen that says so - Monaco's read-only is
+  // otherwise indistinguishable from its editable state.
+  await expect(page.locator("#editor")).toHaveClass(/is-readonly/);
+
   await page.locator("#view-cancel").click();
   await expect(page.locator("#view-editor")).toHaveCount(0);
   // Cancel leaves the ABAP as it was...
   expect(await getSource(page, APP)).toBe(before);
-  // ...and hands typing back.
+  // ...and hands typing back, colour and all.
+  await expect(page.locator("#editor")).not.toHaveClass(/is-readonly/);
   await clickEditor(page);
   await page.keyboard.type("*");
   await page.waitForTimeout(400);

@@ -294,6 +294,24 @@ select:disabled { opacity: .5; }
 }
 
 .editor { flex: 1; min-height: 0; }
+
+/* Read-only, which is only ever the View tab's edit mode: while the XML is the
+   truth the ABAP is derived from it, so the editor stops taking typing
+   (setEditorReadOnly in src/editor/editor.mjs). Monaco refuses the keystroke
+   but shows nothing for it - same colours, and a caret that still lands where
+   it is clicked - so the pane greys the source back and takes the caret away.
+   Muted rather than faint: it is still there to be read while the view above
+   it is edited, it simply is not the thing being written. */
+.editor.is-readonly { filter: grayscale(1); }
+/* The text rather than the pane: fading the whole editor lightens the dark
+   theme's background by as much as it dims the code on it, and the two cancel
+   out. Fading the lines and the gutter alone fades them towards whatever
+   background is behind them, which reads the same in both themes. */
+.editor.is-readonly .view-lines,
+.editor.is-readonly .margin-view-overlays { opacity: .5; }
+.editor.is-readonly .cursors-layer { display: none; }
+.editor.is-readonly .monaco-editor,
+.editor.is-readonly .monaco-editor textarea { cursor: default; }
 /* Matches the UI5 theme the frame is started with, so the moment before it
    paints is not a flash of the opposite colour. */
 .app-frame { flex: 1; min-height: 0; background: var(--bg); }
