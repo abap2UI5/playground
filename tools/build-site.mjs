@@ -221,6 +221,12 @@ function writeSamples() {
        * ("Basics I"), which says nothing on a row of its own. */
       title: String(app.description || app.title || wanted.class),
       note: String(app.summary || ""),
+      /* The two facts a catalogued row shows beside its title. They are in the
+       * catalogue for these samples like for any other, and leaving them out
+       * was the one thing that still made a carried row look like a different
+       * kind of thing from the rows under it. */
+      group: String(app.category || ""),
+      docs: (app.docs || []).filter((d) => typeof d === "string"),
       files,
       github: `https://github.com/${SAMPLE_REPO}/blob/main/${app.file}`,
     });

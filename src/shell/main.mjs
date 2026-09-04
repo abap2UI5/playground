@@ -374,7 +374,18 @@ async function boot() {
     redo();
     reflectHistory();
   });
-  formatButton.addEventListener("click", () => format());
+  // Format says what it did, the way "Fix them" does: it rewrites somebody's
+  // source, across every file that is open, and a button that silently
+  // changes three files is a button people stop pressing.
+  formatButton.addEventListener("click", async () => {
+    const { formatted } = await format();
+    reflectHistory();
+    setStatus(
+      formatted === 0
+        ? "already formatted"
+        : `formatted ${formatted} file${formatted === 1 ? "" : "s"} - Ctrl+Z takes it back`,
+    );
+  });
   shareButton.addEventListener("click", () => share());
   fullscreenButton.addEventListener("click", () => openFullScreen());
   examplesButton.addEventListener("click", () => openExamples());

@@ -41,11 +41,16 @@ pipeline and moves the last step into the browser.
   the editor can check your classes against them.
 - **Editing.** Monaco — the editor from VS Code — with abaplint behind it:
   diagnostics against the actual framework, hover, go to definition, rename,
-  references, quick fixes and the pretty printer. Under the editor, a resizable
-  panel with the view your chain builds, every problem, an outline of the class,
-  the conversation between the app and the ABAP, the log, and the configuration
-  of each checker — editable, so "why is it not warning here?" has an answer you
-  can try rather than only read.
+  references and quick fixes. **Format** ({ } in the bar, Shift+Alt+F) is
+  abaplint's pretty printer with its layout fixes in front of it — indentation
+  and keyword case, and also the tab, the trailing space, the double space, the
+  space before the full stop and the two statements sharing a line — over every
+  file that is open, as one edit that Ctrl+Z takes back. It never reflows a
+  builder chain and never changes what the code does. Under the editor, a
+  resizable panel with the view your chain builds, every problem, an outline of
+  the class, the conversation between the app and the ABAP, the log, and the
+  configuration of each checker — editable, so "why is it not warning here?"
+  has an answer you can try rather than only read.
 - **A second opinion.** The [abap2UI5 linter](https://www.npmjs.com/package/@abap2ui5/linter)
   runs beside abaplint and answers a different question: abaplint says whether
   the ABAP compiles, the linter reconstructs the view your builder chain
@@ -186,10 +191,17 @@ This replaced three separate GitHub Pages sites, one per sample repository.
 
 ## The examples browser
 
-**Samples** in the bar is the same list without leaving the editor: drafts you
-saved, the samples the page carries, and everything the catalogue holds — searchable,
-filterable by repository, "OpenUI5 only" and "newer than 1.71". Every row links
-to its ABAP on GitHub — the ones the page carries too, which are entries of
+**Samples** in the bar is the same list without leaving the editor, and it
+takes the screen while it is open: a full-size window over the playground, the
+filters down its side, the rows in as many columns as fit. Drafts you saved,
+the samples the page carries, and everything the catalogue holds — searched by
+several words in any order, over titles, summaries, class names and the controls
+a sample builds, and narrowed by the same facets the catalogue page has: the
+control it uses, the library, the release your system runs, plus repository,
+"only what runs here", "OpenUI5 only" and "newer than 1.71". Every row says
+what it is, what group it belongs to, what release it needs and — where it
+cannot run here — what it needs instead, and links to its ABAP on GitHub and to
+its documentation page. The ones the page carries too, which are entries of
 [abap2UI5/samples](https://github.com/abap2UI5/samples) like every other row and
 link to the same files. A chosen entry opens through the same
 path a `?src=` link takes — the raw URL of its class, fetched, checked and run

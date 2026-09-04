@@ -25,7 +25,7 @@ import { applyLinterFixes, fixableAmong, findingsFor, ruleUrl } from "./abap2ui5
 
 import { uriFor } from "./files.mjs";
 import { registerProviders } from "./providers.mjs";
-import { analyse as analyseInWorker, applyAbaplintFixes, knownObjectNames } from "./registry.mjs";
+import { analyse as analyseInWorker, applyAbaplintFixes, formatFiles, knownObjectNames } from "./registry.mjs";
 
 // @abaplint/monaco's snippet provider reaches for a global `monaco`, the way a
 // script tag would have provided it. It is a library written for a page that
@@ -131,7 +131,10 @@ function createModel(file) {
 }
 
 export function connectRegistry() {
-  registerProviders();
+  // The formatting provider - Shift+Alt+F, which is Monaco's own binding -
+  // formats through the same worker call the bar's button does, and needs the
+  // whole file set to do it: an include is not an object on its own.
+  registerProviders({ files: () => getFiles() });
   monaco.languages.registerCompletionItemProvider("abap", abapNameCompletion());
   connected = true;
   refresh();
@@ -509,11 +512,27 @@ export function focusProblem(file, line, column = 1) {
   editor.focus();
 }
 
-// abaplint's pretty printer, through the editor's own format action so the
-// change lands in the undo stack like any other edit.
+// Format: every file that is open, laid out.
+//
+// It is abaplint's pretty printer - indentation and keyword case - with
+// abaplint's layout fixes in front of it, which is a good deal more than the
+// printer does alone: trailing whitespace, tabs, double spaces, a space before
+// the full stop, two statements on one line, blank lines by the half dozen.
+// registry-core.mjs's formatFiles( ) is the whole of it, and the list of rules
+// there says what is deliberately NOT on it.
+//
+// Every file, not just the one on screen: a class and its test include are one
+// piece of work, and formatting the half somebody happens to be looking at is
+// the kind of half-done that has to be noticed to be finished. Written back
+// through pushEditOperations, one edit per file, so Ctrl+Z takes the whole
+// thing back the way it takes an autofix back.
 export async function format() {
-  await editor.getAction("editor.action.formatDocument")?.run();
+  if (!connected) return { formatted: 0, files: [] };
+  const result = await formatFiles(getFiles());
+  for (const file of result.files) writeSource(file.name, file.source);
+  if (result.formatted > 0) refresh();
   editor.focus();
+  return result;
 }
 
 // One step back in the open file, through Monaco's own undo - the same one

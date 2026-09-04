@@ -322,6 +322,114 @@ export function abaplintFixable() {
     .filter((i) => held.has(nameOf(i.getFilename())) && i.getDefaultFix() !== undefined).length;
 }
 
+// ------------------------------------------------------------------ format
+
+// What Format does beyond indenting.
+//
+// abaplint's pretty printer is two things and only two: keyword case, and
+// indentation. Everything else it can repair - a statement that ended in
+// " .", two spaces where one was meant, a tab, a line of trailing whitespace,
+// two statements sharing a line, six blank lines between methods - is a RULE
+// with a fix, and Format used to leave every one of them alone. So the
+// formatter runs these first and prints after, which is the whole of what
+// makes it stronger than the pretty printer it used to be.
+//
+// The list is layout and nothing else. What is left out is left out on
+// purpose: `keyword_case` and `indentation` are the pretty printer's own job
+// (and applied as EDITS beside it they corrupt the source - the case fix and
+// the indent fix are computed against the same offsets and applied one after
+// the other), and the three rules that would reflow a call - `align_parameters`,
+// `line_break_multiple_parameters`, `keep_single_parameter_on_one_line` - take
+// the abap2UI5 builder chain, which is what most code here is, and break every
+// `)->a( n = ... v = ... )` line into two. A formatter that reformats the house
+// style is a formatter nobody presses twice.
+//
+// Nothing on this list is a semantic change: no `MOVE` to `=`, no `prefer_inline`,
+// no obsolete-statement rewrite. Format moves whitespace; what changes code is
+// behind "Fix them" in the Problems tab, where it says how many and why.
+const FORMAT_RULES = {
+  align_type_expressions: true,
+  align_pseudo_comments: true,
+  colon_missing_space: true,
+  contains_tab: true,
+  double_space: true,
+  empty_line_in_statement: true,
+  line_only_punc: true,
+  max_one_statement: true,
+  sequential_blank: true,
+  space_before_colon: true,
+  space_before_dot: true,
+  whitespace_end: true,
+};
+
+/* The formatter's own configuration: the release the editor is set to, and
+ * these rules INSTEAD of the ones the Config tab decides. What the editor
+ * complains about and what Format rewrites are two different questions, and
+ * somebody who turned a rule off to stop being nagged did not thereby ask for
+ * their code to keep its tabs. */
+function formatConfig() {
+  const conf = JSON.parse(JSON.stringify(abaplint.Config.getDefault().get()));
+  conf.syntax.version = settings.version;
+  conf.syntax.errorNamespace = ".";
+  for (const rule of Object.keys(conf.rules)) conf.rules[rule] = false;
+  Object.assign(conf.rules, FORMAT_RULES);
+  return new abaplint.Config(JSON.stringify(conf));
+}
+
+// Formats every file it is given and answers with the ones that came back
+// different. In a registry of its own, holding the user's files and nothing
+// else: these rules are about tokens and whitespace, so they need no corpus -
+// and reconfiguring the registry that holds one would be the whole corpus
+// reparsed, several seconds, on a press of Format.
+//
+// Fixes, then print, and round again - because the print re-indents what the
+// fixes moved (a statement split off its neighbour lands in the previous
+// statement's column), and because a fix can uncover the next. Three rounds
+// is one more than any file has needed; a rule whose fix does not settle
+// would otherwise spin here.
+export function formatFiles(files) {
+  const reg = new abaplint.Registry(formatConfig());
+  for (const file of files) addFile(reg, file);
+  reg.parse();
+
+  for (let round = 0; round < 3; round++) {
+    let touched = false;
+    for (let pass = 0; pass < 10; pass++) {
+      const edits = reg.findIssues().map((i) => i.getDefaultFix()).filter(Boolean);
+      if (edits.length === 0) break;
+      abaplint.Edits.applyEditList(reg, edits);
+      reg.parse();
+      touched = true;
+    }
+    if (!printAll(reg, files) && !touched) break;
+  }
+
+  const out = [];
+  for (const file of files) {
+    const source = reg.getFileByName(uriFor(file.name))?.getRaw();
+    if (source !== undefined && source !== file.source) out.push({ name: file.name, source });
+  }
+  return { formatted: out.length, files: out };
+}
+
+/** The pretty printer over every file in a registry. True where one changed. */
+function printAll(reg, files) {
+  let changed = false;
+  const ls = new abaplint.LanguageServer(reg);
+  for (const file of files) {
+    const uri = uriFor(file.name);
+    /* The whole document as one edit, or nothing where it is already printed -
+     * which is what abaplint answers with, and a file that is not ABAP at all
+     * (a .clas.xml sidecar) answers the same way. */
+    const edits = ls.documentFormatting({ textDocument: { uri } });
+    if (edits.length !== 1) continue;
+    reg.updateFile(new abaplint.MemoryFile(uri, edits[0].newText));
+    changed = true;
+  }
+  if (changed) reg.parse();
+  return changed;
+}
+
 // abaplint reports a file by its uri; the playground knows it by its name.
 const nameOf = (uri) => String(uri).replace(/^file:\/\/\//, "");
 

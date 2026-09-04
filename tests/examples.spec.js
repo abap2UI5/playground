@@ -406,6 +406,144 @@ test("entries the playground cannot run are listed, say why, cannot be clicked, 
   await page.locator('input[data-filter="stack"]').check();
 });
 
+test("the browser is a big modal over the page, with the filters down its side", async ({ page }) => {
+  // What the dialog is FOR: 770-odd samples wanted the screen, not a 44rem
+  // column of one-line rows beside the editor. So it takes near enough all of
+  // the viewport and the page behind it goes dark - and the filters live in a
+  // side of their own, which is what the width bought.
+  await serveCatalogues(page);
+  await open(page);
+  await openBrowser(page);
+
+  const viewport = page.viewportSize();
+  const box = await page.locator("#examples-dialog").boundingBox();
+  expect(box.width).toBeGreaterThan(viewport.width * 0.9);
+  expect(box.height).toBeGreaterThan(viewport.height * 0.9);
+
+  // The side carries the boxes, the facets and the way across to the page;
+  // the list is beside it, not under them.
+  const side = page.locator(".examples-side");
+  await expect(side.locator('input[data-filter="learn"]')).toBeVisible();
+  await expect(side.locator("#examples-control")).toBeVisible();
+  await expect(side.locator(".examples-all")).toBeVisible();
+  const sideBox = await side.boundingBox();
+  const listBox = await page.locator("#examples-body").boundingBox();
+  expect(listBox.x).toBeGreaterThanOrEqual(sideBox.x + sideBox.width - 1);
+  // And the width is spent on the rows: more than one column of them.
+  const rows = await page.locator(".example-row").evaluateAll((els) =>
+    els.slice(0, 6).map((e) => e.getBoundingClientRect().left));
+  expect(new Set(rows).size).toBeGreaterThan(1);
+});
+
+test("the facets ask what only the index can answer: control, library, release", async ({ page }) => {
+  // The two questions the sample repositories' own catalogues cannot answer -
+  // which samples BUILD a control, and what renders on a given release - are
+  // why the index carries the linter's derived half at all. The catalogue page
+  // has had them since it replaced the three repository pages; the dialog now
+  // asks them too, off the same index.
+  await serveCatalogues(page);
+  await open(page);
+  await openBrowser(page);
+
+  // Uses control: the port that builds a Breadcrumbs, and nothing else.
+  await page.locator("#examples-control").selectOption("sap.m.Breadcrumbs");
+  await expect(page.locator(".example-row")).toHaveCount(1);
+  await expect(page.locator(".example-row")).toContainText("z2ui5_cl_smpc_app_003");
+  // The built-ins and the drafts go with it, unlike under the boxes: a facet
+  // asks something they have no answer to, and a row with no answer is not a
+  // match for one.
+  await expect(page.locator(".example-row[data-sample]")).toHaveCount(0);
+  await page.locator("#examples-control").selectOption("");
+
+  // Library: the SAPUI5-only collection is this fixture's one sap.ui.comp row.
+  await page.locator("#examples-library").selectOption("sap.ui.comp");
+  await expect(page.locator(".example-row")).toHaveCount(1);
+  await expect(page.locator(".example-row")).toContainText("z2ui5_cl_smpc_app_900");
+
+  // Kept between opens, the way the boxes are.
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#examples-dialog")).toBeHidden();
+  await page.locator("#examples").click();
+  await expect(page.locator("#examples-library")).toHaveValue("sap.ui.comp");
+  await page.locator("#examples-library").selectOption("");
+
+  // Runs on UI5 1.71 means "needs 1.71 or less" - the question is what a
+  // system can render, not what a sample was filed under.
+  await page.locator("#examples-release").selectOption("1.71");
+  await expect(page.locator(".example-row", { hasText: "z2ui5_cl_smpc_app_901" })).toHaveCount(0);
+  await expect(page.locator(".example-row", { hasText: "z2ui5_cl_smpc_app_003" })).toBeVisible();
+
+  // Clear puts every box, every facet and the search back, and then has
+  // nothing left to offer, so it hides itself.
+  await page.locator("#examples-search").fill("breadcrumbs");
+  await page.locator("#examples-clear").click();
+  await expect(page.locator("#examples-search")).toHaveValue("");
+  await expect(page.locator("#examples-release")).toHaveValue("");
+  await expect(page.locator("#examples-clear")).toBeHidden();
+  await expect(page.locator(".example-row[data-sample]").first()).toBeVisible();
+});
+
+test("\"Only what runs here\" drops the rows that cannot be clicked anyway", async ({ page }) => {
+  await serveCatalogues(page);
+  await open(page);
+  await openBrowser(page);
+
+  await page.locator('input[data-filter="runsonly"]').check();
+  await expect(page.locator(".example-row:disabled")).toHaveCount(0);
+  await expect(page.locator(".example-row", { hasText: "z2ui5_cl_smpc_app_003" })).toBeVisible();
+  // The built-ins run here and stay - they are the page's own.
+  await expect(page.locator(".example-row[data-sample]").first()).toBeVisible();
+  await page.locator('input[data-filter="runsonly"]').uncheck();
+  await expect(page.locator(".example-row", { hasText: "z2ui5_cl_smps_app_314" })).toBeVisible();
+});
+
+test("a row carries what the index knows: its group, its release, and why it will not run", async ({ page }) => {
+  await serveCatalogues(page);
+  await open(page);
+  await openBrowser(page);
+
+  // The group the repository filed it under, on every catalogued row.
+  const port = page.locator(".example-row", { hasText: "z2ui5_cl_smpc_app_003" });
+  await expect(port.locator(".example-badge", { hasText: "sap.m" })).toBeVisible();
+
+  // The release, only where it is above the floor: "UI5 1.71" on seven hundred
+  // rows would say nothing the floor does not already say.
+  const newer = page.locator(".example-row", { hasText: "z2ui5_cl_smpc_app_901" });
+  await expect(newer.locator(".example-badge", { hasText: "UI5 1.120" })).toBeVisible();
+  await expect(port.locator(".example-badge", { hasText: "UI5 " })).toHaveCount(0);
+
+  // The long half of "needs" is the badge's tooltip - a stack sample's
+  // prerequisite is a sentence, and a sentence in a badge is not a row.
+  const stack = page.locator(".example-row", { hasText: "z2ui5_cl_smps_app_314" });
+  await expect(stack.locator(".example-needs")).toHaveAttribute(
+    "title",
+    "SAPUI5 + an activated Gateway service",
+  );
+  // And what made a row that release, where the linter said so.
+  await expect(newer.locator(".example-needs")).toHaveCount(0);
+  await expect(page.locator(".example-row", { hasText: "z2ui5_cl_smpc_app_900" }).locator(".example-needs"))
+    .toHaveAttribute("title", "sap.ui.comp");
+});
+
+test("the search takes several words, in any order", async ({ page }) => {
+  // One string compared whole found nothing for "table rows"; every word
+  // somewhere in the row finds the sample either way round.
+  await serveCatalogues(page);
+  await open(page);
+  await openBrowser(page);
+
+  const row = page.locator(".example-row", { hasText: "z2ui5_cl_smp_app_040" });
+  await page.locator("#examples-search").fill("table rows");
+  await expect(row).toBeVisible();
+  const oneWay = await page.locator(".example-row").allTextContents();
+  await page.locator("#examples-search").fill("rows table");
+  await expect(row).toBeVisible();
+  // The same rows either way round, whatever else happens to match both words -
+  // the samples the page carries are abap2UI5/samples' own and a pin may bring
+  // one that does, which is a correct match and not a reason to count here.
+  expect(await page.locator(".example-row").allTextContents()).toEqual(oneWay);
+});
+
 test("the release filter hides what needs a UI5 newer than 1.71", async ({ page }) => {
   await serveCatalogues(page);
   await open(page);

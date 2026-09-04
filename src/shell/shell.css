@@ -542,60 +542,165 @@ iframe {
 
 /* -------------------------------------------------------------- examples */
 
-/* The examples browser borrows the About dialog's frame; what is its own is
-   the search in the head and the grouped, clickable list. */
-.examples-head { gap: .6rem; }
+/* The examples browser is the one dialog on this page that is a PLACE rather
+   than a message: 770-odd samples, three repositories, filters down the side.
+   So it takes the screen - near enough all of it - and the editor behind it
+   goes dark. A 44rem column of one-line rows was a keyhole onto a list this
+   size; the width buys two things, the filters a side of their own and the
+   rows as many columns as there is room for. */
+.about.examples {
+  max-width: none;
+  width: min(100rem, calc(100vw - 2.5rem));
+  height: min(58rem, calc(100vh - 2.5rem));
+  max-height: none;
+  overflow: hidden;
+}
+/* Only while it is open: `display` on the dialog itself would beat the
+   browser's own `dialog:not([open]) { display: none }`, and a closed dialog
+   that is merely invisible still swallows every click on the page under it. */
+.about.examples[open] { display: flex; flex-direction: column; }
+/* Darker than the other dialogs' backdrop, and blurred: what is behind this
+   one is not being read while it is open. */
+.examples::backdrop {
+  background: rgb(0 0 0 / .62);
+  backdrop-filter: blur(3px);
+}
+
+.examples-head { gap: .6rem; flex: none; }
 .examples-head h2 { flex: none; }
 .examples-head input {
   flex: 1;
   min-width: 0;
   font: inherit;
-  padding: .3rem .55rem;
+  padding: .35rem .6rem;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--bg);
   color: var(--fg);
 }
 .examples-head input:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+.examples-count { flex: none; color: var(--fg-dim); font-family: var(--font-mono); font-size: 12px; }
 
-.examples-body { padding: .4rem .6rem 1rem; }
-.examples-group { font-size: .95rem; margin: 1rem .4rem .1rem; }
-.examples-group:first-child { margin-top: .4rem; }
-.examples-blurb { color: var(--fg-dim); font-size: 12px; margin: 0 .4rem .3rem; }
-
-.example-item { display: flex; align-items: center; gap: .4rem; }
-.example-item .example-row { flex: 1; min-width: 0; }
-.example-row { padding: .3rem .6rem; }
-/* A sample that cannot run here: the reason is on the row, the row is
-   disabled and dimmed, and the link beside it is the way to it. */
-.example-needs { color: var(--fg-dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
-.example-row { overflow: hidden; }
-.example-row .insight-who { flex: none; }
-.example-row:disabled { opacity: .55; cursor: not-allowed; }
-.example-row:disabled .example-title { text-decoration: line-through; text-decoration-color: var(--fg-dim); }
-.example-github {
-  flex: none; font-size: 12px; color: var(--accent); text-decoration: none;
-  border: 1px solid var(--line); border-radius: 6px; padding: .1rem .45rem; white-space: nowrap;
+/* The two halves below the head: what narrows the list, and the list. */
+.examples-main {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 15.5rem 1fr;
 }
-.example-github:hover { border-color: var(--accent); }
 
-.examples-filters {
-  display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .9rem;
-  padding: .4rem .9rem; border-bottom: 1px solid var(--line); font-size: 12px;
+.examples-side {
+  display: flex;
+  flex-direction: column;
+  gap: .9rem;
+  padding: .8rem .9rem 1rem;
+  overflow: auto;
+  border-right: 1px solid var(--line);
+  background: var(--bg-sunken);
+  font-size: 12px;
 }
-.examples-filters label { display: inline-flex; align-items: center; gap: .25rem; white-space: nowrap; cursor: pointer; }
-/* The repositories belong together and look it: one tinted pill around the
-   three, in the accent, apart from the two boxes that narrow rather than pick. */
+/* What the three repositories are, said once, where somebody deciding which
+   boxes to tick is looking. The catalogue page says the same in its masthead. */
+.examples-intro { margin: 0; color: var(--fg-dim); line-height: 1.55; }
+.examples-intro b { color: var(--fg); }
+
+.examples-filters { display: flex; flex-direction: column; gap: .35rem; }
+.examples-filters label { display: inline-flex; align-items: center; gap: .35rem; cursor: pointer; }
+/* The repositories belong together and look it: one tinted block around the
+   three, in the accent, apart from the boxes that narrow rather than pick. */
 .examples-filter-group.is-sources {
-  display: inline-flex; gap: .7rem; padding: .15rem .6rem; border-radius: 999px;
+  display: flex; flex-direction: column; gap: .3rem;
+  padding: .4rem .6rem; margin-bottom: .3rem; border-radius: 8px;
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
   color: var(--accent); font-weight: 600;
 }
-.examples-count { margin-left: auto; color: var(--fg-dim); font-family: var(--font-mono); }
-.example-title { white-space: nowrap; }
+
+/* The three facets: what the index knows and no other listing of these
+   samples does - the control a class BUILDS, the library it comes from, and
+   the release it needs. */
+.examples-facets { display: flex; flex-direction: column; gap: .5rem; }
+.examples-facet { display: flex; flex-direction: column; gap: .2rem; }
+.examples-facet > span { color: var(--fg-dim); }
+.examples-facet select {
+  font: inherit; font-size: 12px;
+  padding: .25rem .3rem;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); color: var(--fg);
+  max-width: 100%;
+}
+.examples-facet select:disabled { opacity: .55; }
+
+.examples-clear { align-self: flex-start; font-size: 12px; }
+/* The link across to the catalogue page - where a search has an address, and
+   so the last thing in the side rather than a filter among them. */
+.examples-all {
+  margin-top: auto;
+  padding-top: .6rem;
+  border-top: 1px solid var(--line);
+  white-space: nowrap;
+  color: var(--accent);
+  text-decoration: none;
+}
+.examples-all:hover { text-decoration: underline; }
+
+.examples-body { padding: .4rem .8rem 1.4rem; max-height: none; flex: none; overflow: auto; }
+.examples-group { font-size: .95rem; margin: 1.1rem .2rem .1rem; }
+.examples-group:first-child { margin-top: .4rem; }
+.examples-blurb { color: var(--fg-dim); font-size: 12px; margin: 0 .2rem .4rem; }
+
+/* As many columns as the dialog is wide enough for. A row is two lines and
+   about as wide as its longest class name; below ~23rem the second line
+   starts eliding what it is there to say. */
+.examples-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(23rem, 1fr));
+  gap: .3rem;
+}
+
+.example-item {
+  display: flex; align-items: center; gap: .3rem;
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: .1rem .35rem .1rem .1rem;
+  background: var(--bg);
+}
+.example-item:has(.example-row:hover) { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.example-item.is-unavailable { background: none; }
+.example-item .example-row { flex: 1; min-width: 0; }
+/* The row is a button and a two-line one: what it is called, with what the
+   index knows about it, then what it does and the class it is. */
+.example-row {
+  display: flex; flex-direction: column; align-items: stretch; gap: .1rem;
+  padding: .3rem .5rem; border-radius: 6px; border-left: none;
+}
+button.example-row { border-left: none; }
+.example-line { display: flex; align-items: baseline; gap: .4rem; min-width: 0; }
+.example-line.is-second { color: var(--fg-dim); }
+.example-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .example-note { color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.example-row .insight-who { font-family: var(--font-mono); }
+.example-row .insight-who { flex: none; font-family: var(--font-mono); }
+
+/* What the index knows, in one or two words each: the group the repository
+   filed it under, the release it needs where that is above the floor, and -
+   for a sample that cannot run here - what it needs instead. The long form of
+   that last one is the badge's tooltip, so a card stays a card. */
+.example-badges { display: flex; align-items: baseline; gap: .25rem; margin-left: auto; flex: none; }
+.example-badge {
+  font-size: 10px; line-height: 1.6; white-space: nowrap;
+  padding: 0 .35rem; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--fg-dim);
+}
+/* A sample that cannot run here: the reason is on the row, the row is
+   disabled and dimmed, and the links beside it are the way to it. */
+.example-needs { border-color: color-mix(in srgb, var(--danger) 40%, var(--line)); }
+.example-row:disabled { opacity: .6; cursor: not-allowed; }
+.example-row:disabled .example-title { text-decoration: line-through; text-decoration-color: var(--fg-dim); }
+
+.example-github, .example-docs {
+  flex: none; font-size: 11px; color: var(--accent); text-decoration: none;
+  border: 1px solid var(--line); border-radius: 6px; padding: .1rem .4rem; white-space: nowrap;
+}
+.example-github:hover, .example-docs:hover { border-color: var(--accent); }
 
 .insight-list { list-style: none; margin: 0; padding: .2rem 0; }
 /* a row and, beside it, the link to the rule's page - the row keeps the
@@ -907,14 +1012,27 @@ button.insight-row {
   .is-app-only .pane { inset: 0; }
 }
 
-/* The link out of the examples dialog to the catalogue page. It sits at the
-   right-hand end of the filter row, past the count, because it is where one
-   goes when the dialog is not enough - not a filter, and not a first move.
-   The count already carries the margin-left:auto that pushes the pair over. */
-.examples-all {
-  font-size: 12px;
-  white-space: nowrap;
-  color: var(--accent);
-  text-decoration: none;
+
+/* The samples browser on a narrow screen: the whole viewport, the filters
+   above the list rather than beside it (a 15rem side of a 390px phone is
+   nothing left for the rows), and the boxes back in a row that wraps. The
+   list is one column there, which the auto-fill grid does on its own. */
+@media (max-width: 900px) {
+  .about.examples { width: 100vw; height: 100dvh; max-height: none; border-radius: 0; border: none; }
+  .examples-main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .examples-side {
+    border-right: none; border-bottom: 1px solid var(--line);
+    flex-direction: row; flex-wrap: wrap; align-items: center; gap: .5rem .9rem;
+    padding: .5rem .7rem;
+  }
+  .examples-intro { display: none; }
+  .examples-filters { flex-direction: row; flex-wrap: wrap; align-items: center; gap: .3rem .8rem; }
+  .examples-filter-group.is-sources { flex-direction: row; gap: .7rem; margin: 0; padding: .15rem .6rem; border-radius: 999px; }
+  .examples-facets { flex-direction: row; flex-wrap: wrap; gap: .5rem; }
+  .examples-facet { flex-direction: row; align-items: center; gap: .3rem; }
+  .examples-all { margin: 0 0 0 auto; padding: 0; border-top: none; }
+  /* The head is title, search, count and close, and on a phone the count is
+     the one of the four that fits nowhere - the list under it is the count. */
+  .examples-head { flex-wrap: wrap; }
+  .examples-count { display: none; }
 }
-.examples-all:hover { text-decoration: underline; }
