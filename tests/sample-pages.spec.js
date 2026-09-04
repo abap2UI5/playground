@@ -12,6 +12,11 @@ import path from "node:path";
 // has to be IN the HTML, the links have to be real links, and every page has
 // to be reachable from a page that is itself reachable.
 //
+// The one thing on a page that is not static is the demo box above the class:
+// the embed loader mounts a playground in the page when a reader presses it,
+// and never before. That is also where Run went - the page used to open with a
+// row of buttons, and the links that were in it are facts in the facts now.
+//
 // Unlike tests/catalogue.spec.js these run against the REAL index - the pages
 // are built from it, so a fixture would be testing a page that was never
 // written. They therefore assert shapes and invariants over whatever the three
@@ -54,18 +59,79 @@ test("a sample's page carries what the catalogue knows, in the HTML itself", asy
   // indexing rather than being 770 copies of a title.
   for (const i of entry.controls) expect(html).toContain(controlName(i));
 
-  // The three ways out: run it here, read the ABAP, back to the search.
+  // The ways out: the sample running in this page, the whole playground on it,
+  // the class on GitHub, back to the search. The first two are the demo box,
+  // the third is a fact in the facts, and none of them is a button above the
+  // page any more.
+  expect(html).toContain(`<div class="abap2ui5-demo" data-src="${entry.raw}"`);
+  expect(html).toContain('<script src="../../embed/abap2ui5-embed.js" defer></script>');
   expect(html).toContain(`href="../../?src=${encodeURIComponent(entry.raw)}`);
   expect(html).toContain(`back=${encodeURIComponent(`q=${entry.class}`)}`);
   expect(html).toContain(entry.github);
   expect(html).toContain('<a href="../">Sample catalogue</a>');
+  expect(html).not.toContain('<div class="actions">');
+});
+
+test("a port's facts carry SAP's own sample, in SAP's own repository", async ({ page }) => {
+  // The demo kit shows a sample; the folder behind it is the whole of one, and
+  // "what did the original do" is the first question a port raises. The link
+  // is built out of the sample id alone - a UI5 namespace is a path in that
+  // repository - so this asserts the shape rather than a particular port.
+  const entry = paged.find((e) => e.sample && e.runs);
+  expect(entry, "the index has a port of a demo kit sample that runs here").toBeTruthy();
+
+  const html = await (await page.request.get(`/samples/${entry.page}`)).text();
+  const [library, name] = entry.sample.split(".sample.");
+  expect(html).toContain("<dt>SAP's own sample</dt>");
+  expect(html).toContain(
+    `https://github.com/SAP/openui5/tree/master/src/${library}/test/`
+    + `${library.replace(/\./g, "/")}/demokit/sample/${name.replace(/\./g, "/")}`,
+  );
+
+  // And the class itself is a fact too, not a button: the file, in the
+  // repository the row came from.
+  expect(html).toContain("<dt>Source file</dt>");
+  expect(html).toContain(`<code>${entry.raw.split("/").pop()}</code> ↗</a>`);
+});
+
+test("the demo box mounts a playground in the page, and not before it is pressed", async ({ page }) => {
+  // A second playground, booted inside this one's page: the frame does the
+  // whole thing - the runtime, the registry, the app - so this one is given
+  // room beyond the file's default.
+  test.setTimeout(300000);
+  // A playground is a whole ABAP runtime plus an abaplint parse of nine
+  // hundred sources. 770 pages that booted one on sight would be 770 pages
+  // nobody waits for, so the box is a button until somebody presses it - the
+  // rule the embed loader holds for every page that uses it.
+  const entry = paged.find((e) => e.runs && e.source === "learn") || paged.find((e) => e.runs);
+  await page.route(`**/${entry.raw.split("/").pop()}`, (route) =>
+    route.fulfill({
+      status: 200, contentType: "text/plain", headers: CORS,
+      body: `CLASS ${entry.class} DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    INTERFACES z2ui5_if_app.\nENDCLASS.\n`
+        + `CLASS ${entry.class} IMPLEMENTATION.\n  METHOD z2ui5_if_app~main.\n  ENDMETHOD.\nENDCLASS.\n`,
+    }),
+  );
+  await page.goto(`/samples/${entry.page}`);
+
+  await expect(page.locator(".demo iframe")).toHaveCount(0);
+  await page.locator(".abap2ui5-demo-start").click();
+
+  // What it mounts is this site's own playground, embedded, on this sample -
+  // the loader builds the URL, so the page cannot disagree with the frame.
+  const frame = page.locator(".demo iframe");
+  await expect(frame).toHaveCount(1);
+  const src = new URL(await frame.getAttribute("src"));
+  expect(src.searchParams.get("embed")).toBe("1");
+  expect(src.searchParams.getAll("src")).toEqual([entry.raw]);
+  await expect(page.frameLocator(".demo iframe").locator("#status"))
+    .toHaveText("running", { timeout: 180000 });
 });
 
 test("a sample page prints the class itself, coloured and escaped", async ({ page }) => {
   // The class IS the sample, so it is on the page rather than one click away
   // on GitHub - fetched at build time (tools/sample-sources.mjs) and coloured
-  // there too (tools/abap-highlight.mjs), because these pages run no
-  // JavaScript. A reader who wanted to know how it does what it does has the
+  // there too (tools/abap-highlight.mjs), because these pages carry no
+  // highlighter. A reader who wanted to know how it does what it does has the
   // answer in front of them, and a search for a call nobody wrote a sentence
   // about has something to match.
   const entry = paged.find((e) => e.runs && e.source === "learn") || paged.find((e) => e.runs);
@@ -100,9 +166,10 @@ test("the pages carry the ABAP, not just the sample that was looked at", async (
   expect(printed.length).toBeGreaterThan(paged.length * 0.9);
 });
 
-test("Run on a sample page opens it in the playground, and the playground offers the way back", async ({ page }) => {
+test("the full playground opens on the sample, and offers the way back", async ({ page }) => {
   // The round trip that used to start on a card in the catalogue starts here
-  // now: the card is a link to this page, and this page is where Run is.
+  // now: the card is a link to this page, and this page is where Run is - in
+  // the page as a demo box, and on the box as the link to the whole thing.
   const entry = paged.find((e) => e.runs && e.source === "learn") || paged.find((e) => e.runs);
   expect(entry, "the index has a sample that runs here").toBeTruthy();
   await page.route(`**/${entry.raw.split("/").pop()}`, (route) =>
@@ -130,8 +197,11 @@ test("a sample that cannot run here says what it needs, and offers no Run", asyn
   const html = await (await page.request.get(`/samples/${entry.page}`)).text();
   expect(html).toContain(entry.needs);
   // Listed, explained, and still linked to its source - a sample somebody
-  // cannot find is worse than one they cannot run.
+  // cannot find is worse than one they cannot run. What it does not get is a
+  // demo box: a start button that could only ever fail is not an offer.
   expect(html).not.toContain('class="run"');
+  expect(html).not.toContain('class="abap2ui5-demo"');
+  expect(html).not.toContain("abap2ui5-embed.js");
   expect(html).toContain(entry.github);
 });
 
@@ -173,8 +243,16 @@ test("a page renders as the catalogue's own, and its links work", async ({ page 
   await page.goto(`/samples/${entry.page}`);
 
   await expect(page.locator("h1")).toHaveText(entry.title);
-  // The bar is the catalogue's, so the stylesheet beside it is loading.
-  await expect(page.locator(".bar-nav a", { hasText: "Samples" })).toBeVisible();
+  // The bar is the catalogue's, so the stylesheet beside it is loading - and
+  // it names the part of the site this page is in rather than its neighbour:
+  // the brand says samples, and Samples is the current one, which is what
+  // makes it the bold item and what a screen reader announces.
+  await expect(page.locator(".brand")).toHaveText("abap2UI5 samples");
+  await expect(page.locator(".brand")).toHaveAttribute("href", "../../samples/");
+  const here = page.locator(".bar-nav a", { hasText: "Samples" });
+  await expect(here).toBeVisible();
+  await expect(here).toHaveAttribute("aria-current", "page");
+  expect(await here.evaluate((el) => getComputedStyle(el).fontWeight)).toBe("600");
   // And it ends where the playground's own bar ends: LinkedIn, then GitHub.
   await expect(page.locator(".bar .social")).toHaveCount(2);
   await expect(page.locator('.bar .social[href*="linkedin.com"]')).toBeVisible();

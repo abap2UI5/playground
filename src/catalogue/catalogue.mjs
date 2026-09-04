@@ -184,9 +184,10 @@ function card(row) {
    * left the site before the reader had seen what the sample was, and they
    * made the card look like the destination it is not, so the page underneath
    * (the facts, the controls, the ABAP itself) read as something that did not
-   * exist. Run, GitHub and the documentation are all still one click away -
-   * they are the actions AT THE TOP of that page, where a reader who has
-   * decided is standing.
+   * exist. Run, GitHub and the documentation are all still one click away on
+   * that page, in the place each of them belongs: running it is a demo box
+   * above the class, which runs it IN that page, and GitHub and the
+   * documentation are facts, in its list of facts.
    *
    * The line below is the affordance; the link that carries it is the title's,
    * stretched over the whole card in the stylesheet, so a card is one target

@@ -16,10 +16,11 @@ import { test, expect } from "@playwright/test";
 //   listed and says so, because a sample somebody cannot find is worse than
 //   one they cannot run.
 //   ONE WAY ON. A card is a link to the sample's own page and nothing else.
-//   Run, GitHub and the documentation are the actions on that page - a list
-//   whose rows each offered three ways off the site made the page underneath
-//   them look like something that did not exist. The round trip that starts at
-//   Run is held in tests/sample-pages.spec.js, where Run now is.
+//   Run, GitHub and the documentation are on that page - a demo box that runs
+//   the sample in it, and two facts in its facts - because a list whose rows
+//   each offered three ways off the site made the page underneath them look
+//   like something that did not exist. The round trip that starts at Run is
+//   held in tests/sample-pages.spec.js, where Run now is.
 //
 // It reads one same-origin file, samples/apps.json, so the fixture is that
 // index. Nothing here reaches a foreign host.
@@ -205,9 +206,9 @@ test("a card is one link, and it goes to the sample's own page", async ({ page }
   await openCatalogue(page);
 
   // Six cards, six links, and every one of them stays on this site. The three
-  // that used to leave it - Run, Source, Docs - are the actions at the top of
-  // the page each of these opens, which is where a reader who has decided is
-  // standing.
+  // that used to leave it - Run, Source, Docs - are on the page each of these
+  // opens, where a reader who has decided is standing: Run as a demo box that
+  // runs the sample in that page, the other two as facts.
   await expect(page.locator(".card a")).toHaveCount(6);
   await expect(page.locator(".card .run")).toHaveCount(0);
   await expect(page.locator('.card a[target="_blank"]')).toHaveCount(0);

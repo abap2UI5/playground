@@ -736,21 +736,29 @@ the row look like the destination, so the page underneath it read as something
 that did not exist. A card now carries the title (the link, stretched over the
 whole card by `.card h3 a::after`, so a row is aimed at as a row), the badges,
 the class, and one line saying what opening it gets — *Open the sample ›* and
-whether it runs in this browser. Run, GitHub and the documentation are the
-actions at the top of the page it opens, which is where a reader who has
-decided is standing. The one row that keeps a link of its own is one with no
-page written for it: it links to the class on GitHub, because that is all there
-is.
+whether it runs in this browser. Run, GitHub and the documentation are on the
+page it opens, where a reader who has decided is standing — running it is a
+demo box above the class that runs it *in* that page, and GitHub and the
+documentation are facts in its list of facts. The one row that keeps a link of
+its own is one with no page written for it: it links to the class on GitHub,
+because that is all there is.
 
-**The round trip is the point.** The Run on a sample's page goes to
-`../../?src=<raw>&from=catalogue&back=q=<class>`, and `showSourceLink()` in
-`src/shell/main.mjs` turns that into *Back to the catalogue* in the bar — in the
-same tab, narrowed to the sample they came from, instead of pointing at the
-file on GitHub. Find it here, read it there, run it, come back and keep
+**The round trip is the point.** *Open the full playground* on a sample's demo
+box goes to `../../?src=<raw>&from=catalogue&back=q=<class>`, and
+`showSourceLink()` in `src/shell/main.mjs` turns that into *Back to the
+catalogue* in the bar — in the same tab, narrowed to the sample they came from,
+instead of pointing at the file on GitHub. Find it here, read it there, run it, come back and keep
 looking. A static page cannot know the search a reader had, which is the one
 thing this lost when Run moved off the card; `q=<class>` is the search with
 exactly one hit. A `?src=` link from anywhere else still offers the GitHub
 page, which is what that reader wants.
+
+**The bar names the part of the site you are in.** On `/samples/` and on every
+per-sample page the brand reads *abap2UI5 **samples***, links to the catalogue
+rather than to the playground, and the nav's Samples carries `aria-current`,
+which is what makes it the bold item (`catalogue.css`) and what a screen reader
+announces. The playground is one nav item away; a bar that called these pages
+"playground" was naming the neighbour rather than the room.
 
 **The bar ends as the playground's does** — the theme switch, a hairline, then
 LinkedIn and GitHub. Three documents carry those two marks by hand
@@ -769,15 +777,30 @@ the same shape — a masthead and an empty `<section id="results">` — so nothi
 was lost in the move; nothing was ever there.
 
 So every entry in the index also gets a **static page**: title, the demo kit's
-own sentence, the class, the facts as a `<dl>`, every control the class BUILDS
-(the linter's answer, each one a link into the catalogue's control facet), its
-libraries, what it needs where it cannot run, **the class itself**, the
-neighbours around it in its group, and the three ways out — run it here, read
-the ABAP, back to the search. Real text in the HTML and **no JavaScript at
-all**; the only script on the page is the two-line theme read the other two
-documents also carry. `sample.css` is written beside them and loaded next to
-`catalogue.css`, which is the frame: these are the catalogue's pages, and a
-second palette would drift from it on the first change to either.
+own sentence, the class, the facts as a `<dl>` — which is also where the links
+out live: the class on GitHub, SAP's own sample for a port of one, the
+documentation —, every control the class BUILDS (the linter's answer, each one
+a link into the catalogue's control facet), its libraries, what it needs where
+it cannot run, **the sample running**, **the class itself**, the neighbours
+around it in its group, and back to the search. Real text in the HTML, and
+nothing a crawler has to run to see any of it: the two scripts on a page are
+the two-line theme read the other two documents also carry and the demo loader
+below, and neither writes a word of it. `sample.css` is written beside them and
+loaded next to `catalogue.css`, which is the frame: these are the catalogue's
+pages, and a second palette would drift from it on the first change to either.
+
+**And the sample runs on it.** Above the class is a demo box: press it and
+`src/embed/abap2ui5-embed.js` — the same loader any documentation page embeds,
+so these pages are the first reader of the kit this site ships — mounts the
+playground in an iframe, in the page, on this sample's `raw` URL. Nothing loads
+until it is pressed, which is that loader's own rule and the only one that
+scales: a playground is a whole ABAP runtime plus an abaplint parse of nine
+hundred sources, and 770 pages that booted one on sight would be 770 pages
+nobody waits for. Only samples that `run` here get a box — a start button that
+could only ever fail is not an offer — and the box carries *Open the full
+playground ↗* for a reader who wants the whole window. It is also why the page
+no longer opens with a row of buttons: Run runs it here now, and the two links
+beside it were links in front of the answer.
 
 **The ABAP is on the page, not behind a link.** The class *is* the sample, and
 a page that described one and did not show it sent the reader to GitHub for the
@@ -785,9 +808,10 @@ answer and a search engine nothing but a description. `tools/sample-sources.mjs`
 fetches it — **one tarball per ref** from codeload, so 770 classes cost about a
 dozen requests instead of 770, cached on disk for a day and re-fetched by every
 CI runner — and `tools/abap-highlight.mjs` colours it *here*, because these
-pages run no JavaScript: a scanner over comments, literals, numbers and
-keywords, emitting the same token classes the bottom panel's own highlighter
-does (`src/shell/highlight.mjs`), with every character escaped on the way in.
+pages carry no highlighter of their own: a scanner over comments, literals,
+numbers and keywords, emitting the same token classes the bottom panel's own
+highlighter does (`src/shell/highlight.mjs`), with every character escaped on
+the way in.
 Classes are printed whole up to **900 lines or 60 KB**, after which the page
 says what it cut and links to the rest — the tail of samples-controls is table
 data around a chain, and one of them is two megabytes. A class that could not
