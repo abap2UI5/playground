@@ -4,7 +4,12 @@ import { test, expect } from "@playwright/test";
 // and the app on the page is still blank, the problem is in the frontend
 // plumbing and not in the ABAP.
 
-const APP = "ZCL_PG_HELLO";
+// The framework's own Hello World, not one of this repository's: there is no
+// playground-owned app any more, and an app that ships with abap2UI5 is the
+// one a reader actually starts first. It arrives with the pinned framework,
+// so a rename upstream surfaces here at the bump rather than in a page that
+// silently opens on nothing.
+const APP = "Z2UI5_CL_UI5_APP_HI_WORLD";
 
 // What the frontend POSTs when it boots: no draft id yet, and the app class
 // taken from the page's query string (see z2ui5_cl_ui5_handler=>request_app_start).
@@ -33,7 +38,7 @@ test("the framework boots and answers an app start", async ({ page }) => {
   expect(data.S_FRONT?.ID, "the response must carry a draft id").toBeTruthy();
   // The view is the XML the view builder produced - the app's own title proves
   // it was this app that ran, not an error page.
-  expect(JSON.stringify(data)).toContain("abap2UI5 Playground");
+  expect(JSON.stringify(data)).toContain("abap2UI5 - Hello World");
 });
 
 test("an event roundtrip sees the state of the previous one", async ({ page }) => {
@@ -47,15 +52,15 @@ test("an event roundtrip sees the state of the previous one", async ({ page }) =
   const event = JSON.stringify({
     value: {
       MODEL: { NAME: "abap2UI5" },
-      S_FRONT: { ID: id, EVENT: "GREET" },
+      S_FRONT: { ID: id, EVENT: "BUTTON_POST" },
     },
   });
   const res = await call(page, event);
   expect(res.status).toBe(200);
 
-  // The greeting was computed in ABAP from state that only survived because
-  // the draft of the first roundtrip was read back out of sql.js.
-  expect(res.body).toContain("Hello abap2UI5!");
+  // The message was computed in ABAP by an app instance that only exists
+  // because the draft of the first roundtrip was read back out of sql.js.
+  expect(res.body).toContain("Your name is abap2UI5");
 });
 
 test("a run against an unknown app class fails with a readable 500", async ({ page }) => {
@@ -74,6 +79,6 @@ test("resetDatabase makes an existing draft id unusable", async ({ page }) => {
 
   await page.evaluate(() => window.pg.resetDatabase());
 
-  const res = await call(page, JSON.stringify({ value: { S_FRONT: { ID: id, EVENT: "GREET" } } }));
+  const res = await call(page, JSON.stringify({ value: { S_FRONT: { ID: id, EVENT: "BUTTON_POST" } } }));
   expect(res.status, "the draft is gone, so the framework cannot continue that session").toBe(500);
 });

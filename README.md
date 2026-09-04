@@ -403,11 +403,11 @@ maps; without it neither ships one.
 `src/runtime` is the ABAP side of the page (run in a worker), `src/editor` is
 Monaco and abaplint (the registry in a worker of its own),
 `src/shell` is the page around them, `src/catalogue` is the sample catalogue at
-`/samples/` (a second document with a bundle of its own), `src/abap` is the
-handful of ABAP the playground adds to the framework, and `src/examples` is
-ABAP served as static files so `?src=` has something to point at. There are no
-samples here: the ones the page carries are named by class in
-`src/editor/sample-list.mjs` and come out of the pinned
+`/samples/` (a second document with a bundle of its own), `src/abap` is the one
+class of ABAP the playground adds to the framework - the bridge into the request
+handler - and `src/examples` is ABAP served as static files so `?src=` has
+something to point at. There are no samples here: the ones the page carries are
+named by class in `src/editor/sample-list.mjs` and come out of the pinned
 [abap2UI5/samples](https://github.com/abap2UI5/samples) at build time, so the
 playground holds no copy of a sample that can drift from the one upstream
 maintains.
