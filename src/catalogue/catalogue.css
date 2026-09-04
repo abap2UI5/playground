@@ -125,6 +125,11 @@ a:hover { text-decoration: none; }
   border: 1px solid var(--line);
   background: var(--bg);
   color: var(--fg-dim);
+  /* Said rather than left to the browser's own button font: the playground's
+     bar carries this same button (src/shell/shell.css), and a glyph drawn in
+     Arial here and in the UI font there is the one thing about the two bars
+     that did not match. */
+  font-family: var(--font-ui);
   border-radius: 5px;
   width: 30px;
   height: 26px;

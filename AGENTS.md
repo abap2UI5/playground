@@ -327,11 +327,16 @@ both are easy to undo by tidying up:
   the app got any of it. What repeats itself goes (the brand and the version
   line, which the About dialog carries as well), the paddings shrink,
   and the `.spacer` that holds the right-hand group at the edge is dropped so
-  it stops pushing the last control onto a row of its own. The three links at
-  the far end go as well (the docs hide theirs on a phone too); the theme
-  switch stays. Nothing else is *removed*: every control is still there and
-  still reachable, which is what `tests/shell.spec.js` holds it to, along with
-  the height.
+  it stops pushing the last control onto a row of its own. The nav and the two
+  marks at the far end go as well (the catalogue drops its own below 620px);
+  the theme button stays. Nothing else is *removed*: every control is still
+  there and still reachable, which is what `tests/shell.spec.js` holds it to,
+  along with the height. **Above that width the bar sheds the same kind of
+  thing one at a time** rather than all at once, at the three widths where the
+  row would otherwise wrap — measured, not chosen: the version line at 1560,
+  the brand's word at 1440 (the mark stays, and the nav's bold item says
+  "playground" anyway), the nav at 1280. So it is one row from 989px up, where
+  before the nav arrived it was one row from 1143px.
 - **The panel starts folded away** (`setUpInsight()` in `src/shell/insight.mjs`).
   It is a fixed 11rem under an editor that has about 25 to give, so on a narrow
   screen it opens collapsed to its tab strip — where the Problems badge still
@@ -448,11 +453,11 @@ Reset; and an embedded playground never restores either — a demo in somebody's
 documentation has to read the same to every reader, the same reason it never
 restores a draft.
 
-The **theme** follows the middle rule too (`src/shell/theme.mjs`): the switch
-at the bar's right-hand end — the documentation site's switch, beside the same
-three marks, LinkedIn, GitHub and the docs — stores a choice only while it
-differs from what the system says, so a page switched back follows the system
-again, and an embedded playground never restores one.
+The **theme** follows the middle rule too (`src/shell/theme.mjs`): the button
+at the bar's right-hand end — the sample catalogue's button, in the catalogue's
+own end group (the nav, the button, a hairline, LinkedIn and GitHub) — stores a
+choice only while it differs from what the system says, so a page switched back
+follows the system again, and an embedded playground never restores one.
 
 The **View tab** (`viewPreview()` in `src/shell/insight.mjs`) shows the XML
 the linter reconstructs from the open file's builder chain — `viewsFor()` in
@@ -760,12 +765,21 @@ which is what makes it the bold item (`catalogue.css`) and what a screen reader
 announces. The playground is one nav item away; a bar that called these pages
 "playground" was naming the neighbour rather than the room.
 
-**The bar ends as the playground's does** — the theme switch, a hairline, then
-LinkedIn and GitHub. Three documents carry those two marks by hand
-(`src/shell/index.html`, `src/catalogue/index.html`, `tools/sample-pages.mjs`):
-inline SVG, because a mark that is an empty square until a stylesheet arrives
-is worse than one that never needed it, and a shared partial would be a build
-step in front of a page whose whole point is that it is a file.
+**The bar begins and ends the same way in all three documents** — at one end
+the mark, then *abap2UI5* and the part of the site you are in in bold; at the
+other the nav, the theme button, a hairline, then LinkedIn and GitHub. The
+playground's own bar carries that group too (`src/shell/index.html`,
+`src/shell/shell.css`), down to the catalogue's numbers, with *playground* as
+the current item — a span rather than a link, because it is the page you are
+on and a stray click on it would throw away a page that costs seconds to load.
+The documentation, which used to be a third mark over there, is the nav's
+third item instead. Three documents carry the two marks by hand
+(`src/shell/index.html`, `src/catalogue/index.html`,
+`tools/sample-pages.mjs`): inline SVG, because a mark that is an empty square
+until a stylesheet arrives is worse than one that never needed it, and a
+shared partial would be a build step in front of a page whose whole point is
+that it is a file. `tests/shell.spec.js` and `tests/catalogue.spec.js` hold
+each bar to the other's ends.
 
 ### A page per sample — `tools/sample-pages.mjs`, at `/samples/<class>/`
 

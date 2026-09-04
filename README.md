@@ -261,13 +261,14 @@ metadata under `src/`, the `.abapgit.xml` that says so (the shape
 naming the app, how to start it and the link this code came from. Import it
 offline with abapGit, or push it as it stands.
 
-**Light or dark.** The page follows the system until the switch at the
-right-hand end of the bar says otherwise — the same switch the documentation
-site's bar carries, beside the same three marks: LinkedIn, GitHub and, where
-the docs put the playground, the docs. A choice is kept between visits; a
-choice that agrees with the system is forgotten rather than stored, so a page
-switched back follows the system again from then on. The switch reaches the
-editor and the running app as well, without restarting it.
+**Light or dark.** The page follows the system until the button at the
+right-hand end of the bar says otherwise — the same button the
+[sample catalogue](https://abap2ui5.github.io/playground/samples/) carries, in
+the same end group: Playground, Samples and Docs, then the button, LinkedIn and
+GitHub. A choice is kept between visits; a choice that agrees with the system
+is forgotten rather than stored, so a page switched back follows the system
+again from then on. The button reaches the editor and the running app as well,
+without restarting it.
 
 **Installable.** The page carries a web app manifest, so a browser that
 supports it offers to install the playground; opened from a home screen it
