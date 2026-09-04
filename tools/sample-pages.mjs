@@ -139,6 +139,36 @@ const THEME_SCRIPT = `<script>
   } catch (e) { /* a browser that refuses storage still gets the system theme */ }
 </script>`;
 
+/* Where the reader is, and where the documentation was left - the hand copy of
+ * src/shell/site-memory.mjs, which the playground and the catalogue import and
+ * these pages cannot: they carry no bundle, which is most of what makes them
+ * what they are. Same keys, same checks, kept in step with that file by hand
+ * as THEME_SCRIPT above is kept in step with its two.
+ *
+ * At the end of the body rather than in the head: this one needs the bar to
+ * exist, and nothing is painted differently by it. */
+const MEMORY_SCRIPT = `<script>
+  try {
+    localStorage.setItem("abap2ui5-playground:last-samples",
+      location.pathname + location.search + location.hash);
+  } catch (e) { /* a browser that refuses storage simply forgets where you were */ }
+  for (var a of document.querySelectorAll("a[data-site]")) {
+    try {
+      var last = localStorage.getItem("abap2ui5-playground:last-" + a.dataset.site);
+      if (!last) continue;
+      /* Checked, not assigned: a stored value is whatever anything on this
+         origin put there. Resolved against this origin, then kept only if it
+         is still inside the path the link already points at - which is what
+         leaves "//elsewhere/x", "/docs/../x" and "javascript:…" alone. */
+      var base = new URL(a.getAttribute("href"), location.href);
+      var target = new URL(last, location.origin);
+      if (base.origin !== location.origin || target.origin !== location.origin) continue;
+      if (!target.pathname.startsWith(base.pathname)) continue;
+      a.href = target.pathname + target.search + target.hash;
+    } catch (e) { /* the link keeps the href it was written with */ }
+  }
+</script>`;
+
 /* The two marks the playground's own bar ends in (src/shell/index.html) and
  * the catalogue's carries beside its theme switch, inline for the same reason
  * they are inline there: an icon that is an empty square until a stylesheet
@@ -169,7 +199,7 @@ const bar = (up) => `<header class="bar">
   <nav class="bar-nav">
     <a href="${up}" title="Write ABAP and run it in the browser">Playground</a>
     <a href="${up}samples/" aria-current="page">Samples</a>
-    <a href="https://abap2ui5.github.io/docs/" target="_blank" rel="noopener">Docs</a>
+    <a href="https://abap2ui5.github.io/docs/" data-site="docs" target="_blank" rel="noopener">Docs</a>
   </nav>
   ${SOCIALS}
 </header>`;
@@ -558,6 +588,7 @@ ${bar("../../")}
 </main>
 
 ${foot("../../")}
+${MEMORY_SCRIPT}
 </body>
 </html>
 `;
@@ -620,6 +651,7 @@ ${bar("../../")}
 </main>
 
 ${foot("../../")}
+${MEMORY_SCRIPT}
 </body>
 </html>
 `;

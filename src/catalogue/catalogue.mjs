@@ -23,6 +23,7 @@
 // The round trip is still the point: find it here, read it there, run it, come
 // back and keep looking.
 import { cmpVersion } from "../shell/ui5-libs.mjs";
+import { rememberHere, upgradeSiteLinks } from "../shell/site-memory.mjs";
 
 const $ = (id) => document.getElementById(id);
 
@@ -62,6 +63,11 @@ function writeUrl() {
   if (state.runs) p.set(PARAMS.runs, "1");
   const query = p.toString();
   history.replaceState(null, "", query ? `?${query}` : location.pathname);
+  /* The filters are the page here, so the URL they were just written into is
+   * what "where you were in the samples" means - a reader who came from the
+   * documentation, narrowed to sap.m tables and went back gets the narrowed
+   * list, not the front of the catalogue. */
+  rememberHere("samples");
 }
 
 const isFiltered = () =>
@@ -342,6 +348,12 @@ async function start() {
   ]) el[key] = $(id);
 
   setUpTheme();
+  /* The bar, before the catalogue itself: where the reader is right now - this
+   * URL, filters and all - and where the documentation was last left. Both
+   * belong to the bar rather than to the list, so neither waits on the fetch
+   * below and neither is lost when it fails. */
+  rememberHere("samples");
+  upgradeSiteLinks();
 
   let data;
   try {

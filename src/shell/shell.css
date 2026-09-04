@@ -64,7 +64,14 @@ body {
   background: var(--bg);
   color: var(--fg);
   font-family: var(--font-ui);
+  /* The catalogue's body measure (`font: 14px/1.55`, src/catalogue/catalogue.css)
+     rather than 14px and whatever `normal` resolves to. The line height was
+     the one number of that file this one did not take, and it was restated by
+     hand where the difference showed - on the bar's nav items, which sit a
+     click away from the same items over there, and on the samples browser's
+     lead paragraph. Both restatements are gone with it. */
   font-size: 14px;
+  line-height: 1.55;
   overflow: hidden;
 }
 
@@ -75,8 +82,15 @@ body {
   align-items: center;
   gap: .6rem;
   /* 20px at the ends, which is the catalogue's bar padding: the mark and the
-     two marks opposite it sit exactly where they sit over there. */
-  padding: .45rem 1.25rem;
+     two marks opposite it sit exactly where they sit over there. The height is
+     that bar's too, 46px, and min-height is what sets it: the padding is a
+     little under what a row of ordinary bar buttons needs (33.28px of button,
+     11.2px of padding and the border comes to 45.5), so the floor decides and
+     the flex centring spends the half pixel either side. Not `height`, which
+     is what the catalogue can afford: this bar wraps, and a row that has
+     wrapped has to be allowed to grow. */
+  padding: .35rem 1.25rem;
+  min-height: 46px;
   border-bottom: 1px solid var(--line);
   background: var(--bg-sunken);
   flex: none;
@@ -109,9 +123,14 @@ body {
 
 .versions { color: var(--fg-dim); font-size: 12px; font-family: var(--font-mono); }
 
+/* 5px, which is what the catalogue rounds a small control with - its nav
+   items, its theme button, its facet selects, the actions on a card. This bar
+   drew its buttons at 6px and its nav items and theme button at 5px, so it
+   carried both radii in one row; 6px stays on the things the catalogue also
+   draws at 6px, the text inputs and the panels. */
 button {
   font: inherit;
-  border-radius: 6px;
+  border-radius: 5px;
   border: 1px solid var(--line);
   background: var(--bg);
   color: var(--fg);
@@ -179,7 +198,7 @@ button.invite:hover:not(:disabled) { background: var(--accent); color: var(--acc
 
 select {
   font: inherit;
-  border-radius: 6px;
+  border-radius: 5px;
   border: 1px solid var(--line);
   background: var(--bg);
   color: var(--fg);
@@ -632,7 +651,7 @@ iframe {
 }
 /* What the three repositories are, said once, where somebody deciding which
    boxes to tick is looking. The catalogue page says the same in its masthead. */
-.examples-intro { margin: 0; color: var(--fg-dim); line-height: 1.55; }
+.examples-intro { margin: 0; color: var(--fg-dim); }
 .examples-intro b { color: var(--fg); }
 
 .examples-filters { display: flex; flex-direction: column; gap: .35rem; }
@@ -819,7 +838,7 @@ button.insight-row {
    not clickable - over code that did not come from anywhere. */
 .source-link {
   color: var(--fg); font-size: inherit; text-decoration: none;
-  border: 1px solid var(--line); border-radius: 6px; padding: .3rem .8rem;
+  border: 1px solid var(--line); border-radius: 5px; padding: .3rem .8rem;
   background: var(--bg);
 }
 .source-link:hover { border-color: var(--accent); }
@@ -839,10 +858,7 @@ button.insight-row {
    label in step for a screen reader. */
 .trailer { display: flex; align-items: center; gap: 18px; }
 
-/* The line height is the catalogue body's (14px/1.55), which this page does
-   not set - without it the item is the same text in a shorter box, and the
-   hover pill is visibly the wrong height beside the one over there. */
-.bar-nav { display: flex; gap: 4px; line-height: 1.55; }
+.bar-nav { display: flex; gap: 4px; }
 .bar-nav a,
 .bar-nav .here {
   padding: 5px 10px;
