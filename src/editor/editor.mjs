@@ -21,22 +21,16 @@ import "monaco-editor/editor/contrib/wordHighlighter/browser/wordHighlighter.js"
 import "monaco-editor/editor/contrib/comment/browser/comment.js";
 import "monaco-editor/editor/contrib/contextmenu/browser/contextmenu.js";
 import "monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching.js";
-import { registerABAP } from "@abaplint/monaco";
-import { applyLinterFixes, fixableAmong, findingsFor } from "./abap2ui5-lint.mjs";
+import { applyLinterFixes, fixableAmong, findingsFor, ruleUrl } from "./abap2ui5-lint.mjs";
 
 import { uriFor } from "./files.mjs";
-import {
-  abaplintFixable,
-  applyAbaplintFixes,
-  diagnostics,
-  getRegistry,
-  knownObjectNames,
-  updateFiles,
-} from "./registry.mjs";
+import { registerProviders } from "./providers.mjs";
+import { analyse as analyseInWorker, applyAbaplintFixes, formatFiles, knownObjectNames } from "./registry.mjs";
 
-// @abaplint/monaco reaches for a global `monaco`, the way a script tag would
-// have provided it. It is a library written for a page that loads Monaco from a
-// CDN; here it is bundled, so the global has to be put there.
+// @abaplint/monaco's snippet provider reaches for a global `monaco`, the way a
+// script tag would have provided it. It is a library written for a page that
+// loads Monaco from a CDN; here it is bundled, so the global has to be put
+// there.
 globalThis.monaco = monaco;
 
 // Monaco's own workers do word-based suggestions and diff computation. Neither
@@ -69,16 +63,17 @@ let modelGeneration = 0;
 // editor edits and highlights but says nothing about the code.
 let connected = false;
 
-const prefersDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
-
 const modelFor = (name) => monaco.editor.getModel(monaco.Uri.parse(uriFor(name)));
 
+// options.dark says which theme to start in; the shell decides that (see
+// src/shell/theme.mjs) and calls setEditorTheme( ) when it changes.
 export function createEditor(container, files, options = {}) {
   onChange = options.onChange;
 
   monaco.editor.defineTheme(THEME_LIGHT, { base: "vs", inherit: true, rules: [], colors: {} });
   monaco.editor.defineTheme(THEME_DARK, { base: "vs-dark", inherit: true, rules: [], colors: {} });
 
+  fileOrder = files.map((f) => f.name);
   for (const file of files) createModel(file);
 
   editor = monaco.editor.create(container, {
@@ -89,14 +84,34 @@ export function createEditor(container, files, options = {}) {
     fontSize: 13,
     tabSize: 2,
     renderWhitespace: "selection",
-    theme: prefersDark() ? THEME_DARK : THEME_LIGHT,
-  });
-
-  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
-    monaco.editor.setTheme(e.matches ? THEME_DARK : THEME_LIGHT);
+    theme: options.dark ? THEME_DARK : THEME_LIGHT,
   });
 
   return editor;
+}
+
+export function setEditorTheme(dark) {
+  monaco.editor.setTheme(dark ? THEME_DARK : THEME_LIGHT);
+}
+
+// Whether the editor takes typing.
+//
+// One caller: the View tab's edit mode, which hands the reader the view to
+// change instead of the chain that builds it. While that is open the ABAP is
+// derived from the XML rather than the other way round, and typing into both
+// at once would mean deciding which of the two is the truth on every
+// keystroke. The panel is the one that says when this goes back on, in every
+// path out of edit mode - Save, Cancel, and the file being switched away from.
+export function setEditorReadOnly(readOnly) {
+  editor?.updateOptions({ readOnly });
+}
+
+// Replaces one file's text as an edit somebody can undo, which is what makes
+// a view rewritten out of the View tab a Ctrl+Z away from what it replaced.
+// Same door the fixers use; see writeSource( ) at the bottom of this file.
+export function setSourceOf(name, source) {
+  writeSource(name, source);
+  refresh();
 }
 
 function createModel(file) {
@@ -116,18 +131,59 @@ function createModel(file) {
 }
 
 export function connectRegistry() {
-  registerABAP(getRegistry());
+  // The formatting provider - Shift+Alt+F, which is Monaco's own binding -
+  // formats through the same worker call the bar's button does, and needs the
+  // whole file set to do it: an include is not an object on its own.
+  registerProviders({ files: () => getFiles() });
   monaco.languages.registerCompletionItemProvider("abap", abapNameCompletion());
   connected = true;
   refresh();
 }
 
+// The names of the open files, without reading their text - which getFiles( )
+// does, and which a completion on every keystroke should not.
+const openNames = () => orderedModels().map(nameOf);
+
+// The version Monaco keeps per model, bumped on every edit - for a reader
+// that caches something about a file and has to know when it went stale.
+export const fileVersion = (name) => modelFor(name)?.getVersionId();
+
+// Told whenever a fresh analysis has landed, with everything wrong with
+// everything open. The registry answers from a worker now, so an analysis is
+// a round trip: refresh( ) hands back what was last known and starts the
+// next one, and this is how the page hears the next one.
+let onAnalysed;
+export const whenAnalysed = (fn) => {
+  onAnalysed = fn;
+};
+
 // Everything currently open, in the order it was opened.
 export function getFiles() {
-  return monaco.editor
-    .getModels()
-    .filter((m) => m.uri.scheme === "file")
-    .map((m) => ({ name: m.uri.path.replace(/^\//, ""), source: m.getValue() }));
+  return orderedModels().map((m) => ({ name: m.uri.path.replace(/^\//, ""), source: m.getValue() }));
+}
+
+// The open files in the order they were OPENED IN, not the order Monaco
+// happens to hold their models in.
+//
+// The first file is the app - it is what Run starts - so this order decides
+// what runs, and Monaco's is the order models were created in. setFiles( )
+// reuses a model whose file is already open (that is what keeps a loaded
+// sample one Ctrl+Z away from the draft it replaced), so a sample whose second
+// file is another sample's first one came out with its files the wrong way
+// round and started the wrong class. Nothing said so: both classes were there,
+// both compiled, and the app on screen was simply not the one that had been
+// picked.
+let fileOrder = [];
+const nameOf = (model) => model.uri.path.replace(/^\//, "");
+function orderedModels() {
+  const open = monaco.editor.getModels().filter((m) => m.uri.scheme === "file");
+  const at = (m) => {
+    const i = fileOrder.indexOf(nameOf(m));
+    // A model nobody ordered - there is none today - goes last rather than
+    // first, where it would silently become the app.
+    return i === -1 ? fileOrder.length : i;
+  };
+  return open.sort((a, b) => at(a) - at(b));
 }
 
 export const getSource = (name) => modelFor(name)?.getValue();
@@ -137,9 +193,21 @@ export function openFile(name) {
   if (model) editor.setModel(model);
 }
 
-export const currentFile = () => editor.getModel().uri.path.replace(/^\//, "");
+// Called whenever a different file is on screen, whoever put it there - the
+// strip, a problem row in another file, a failing test's row - so the strip
+// and everything that follows the open file are told once, here, rather than
+// by each caller that remembers to.
+export function onFileShown(fn) {
+  editor.onDidChangeModel(() => fn());
+}
+
+// Which file the editor is showing, or nothing at all - there is a moment in
+// setFiles( ) below where it holds no model, and a reader that asks then is
+// asking a fair question with no answer.
+export const currentFile = () => editor.getModel()?.uri.path.replace(/^\//, "");
 
 export function addFile(file) {
+  fileOrder = [...fileOrder.filter((n) => n !== file.name), file.name];
   createModel(file);
   openFile(file.name);
   if (connected) refresh();
@@ -156,18 +224,40 @@ export function closeFile(name) {
   const remaining = files.filter((f) => f.name !== name);
   if (remaining.length === 0) return;
   if (currentFile() === name) openFile(remaining[0].name);
+  fileOrder = fileOrder.filter((n) => n !== name);
   model.dispose();
   modelGeneration += 1;
   if (connected) refresh();
   onChange?.(getFiles());
 }
 
-// Replaces everything - what loading a sample or a shared link does.
+// Replaces everything - what loading a sample or a catalogued example does.
+//
+// Through the undo stack where it can: a file that is open under the same
+// name is rewritten in place rather than disposed and recreated, so what was
+// there - a draft somebody had been typing for an hour and then clicked a
+// sample over - is one Ctrl+Z away instead of gone. Files the new set does
+// not have are closed; files it adds are created. Every sample starts in
+// the same main file, so the draft's main file is always kept this way.
 export function setFiles(files) {
-  for (const model of monaco.editor.getModels()) model.dispose();
+  fileOrder = files.map((f) => f.name);
   modelGeneration += 1;
-  for (const file of files) createModel(file);
+  for (const file of files) {
+    if (modelFor(file.name)) writeSource(file.name, file.source);
+    else createModel(file);
+  }
   editor.setModel(modelFor(files[0].name));
+  // The leftovers go only once the editor is showing one of the new models.
+  // Disposing the model the editor holds leaves the editor with NO model, and
+  // everything that asks which file is open reads `uri` off null in that
+  // window - the panel does, on the change the disposal itself fires. It was
+  // unreachable while every sample was called zcl_playground.clas.abap: the
+  // shown model was always one of the ones being written over rather than one
+  // being disposed.
+  const wanted = new Set(files.map((f) => f.name));
+  for (const model of monaco.editor.getModels()) {
+    if (model.uri.scheme === "file" && !wanted.has(model.uri.path.replace(/^\//, ""))) model.dispose();
+  }
   if (connected) refresh();
   onChange?.(getFiles());
 }
@@ -209,7 +299,11 @@ export function invalidateAnalysis() {
 // match. The two sources are kept apart by their marker owner: Monaco replaces
 // all markers of one owner at a time, so a shared owner would have whichever
 // checker ran second erase the other's underlines.
-function analyse() {
+// The analysis under way, if one is, so two readers asking during the same
+// round trip share it rather than sending the worker the same text twice.
+let inFlight;
+
+async function analyse() {
   // Nothing to check against, and nothing to check with. The registry does not
   // exist until the corpus has been parsed, and the editor is typeable for the
   // whole of that - a moment on a fast connection, several seconds on a slow
@@ -222,24 +316,39 @@ function analyse() {
 
   const key = analysisKey();
   if (key === analysis.key) return analysis;
+  if (inFlight?.key === key) return inFlight.promise;
+  if (key !== transpilerKey) forgetTranspilerProblems();
 
+  const promise = analyseKey(key).finally(() => {
+    if (inFlight?.key === key) inFlight = undefined;
+  });
+  inFlight = { key, promise };
+  return promise;
+}
+
+async function analyseKey(key) {
   const files = getFiles();
-  updateFiles(files);
+  // One round trip: the registry brought in line with the editor, then
+  // abaplint's diagnostics per file and its count of what it could fix.
+  const told = await analyseInWorker(files);
+  // The text moved on while the worker was answering: this answer is about a
+  // key nobody holds any more, so it is thrown away and the question asked
+  // again about the text that is there now.
+  if (analysisKey() !== key) return analyse();
 
   const problems = [];
-  // abaplint's own count, over the whole registry, is one call rather than one
-  // per file - so it is asked here rather than inside the loop.
-  let fixable = abaplintFixable();
+  let fixable = told.fixable;
 
   for (const file of files) {
     const model = modelFor(file.name);
+    if (!model) continue;
 
     // @abaplint/monaco's updateMarkers( ) written out, because it asked the
     // language server for these diagnostics and then this function asked for
     // them a second time to build the Problems list from. The marker shape is
     // theirs, code and all - what is gone is the duplicate parse and the
     // duplicate analysis.
-    const found = diagnostics(file.name);
+    const found = told.diagnostics[file.name] ?? [];
     monaco.editor.setModelMarkers(
       model,
       ABAPLINT_OWNER,
@@ -269,7 +378,12 @@ function analyse() {
       LINT_OWNER,
       findings.map((f) => ({
         severity: MONACO_SEVERITY[f.severity] ?? monaco.MarkerSeverity.Warning,
-        message: `${f.message}  (abap2UI5: ${f.type})`,
+        message: f.message,
+        // the same shape abaplint's markers have above: Monaco shows the
+        // source and the code behind the message, and the code is a link -
+        // here to the rule's card, which is where "what does this mean" is
+        source: "abap2UI5",
+        code: { value: f.type, target: monaco.Uri.parse(ruleUrl(f)) },
         startLineNumber: f.line,
         startColumn: f.column,
         endLineNumber: f.line,
@@ -285,23 +399,95 @@ function analyse() {
         severity: f.severity === "error" ? 1 : f.severity === "warning" ? 2 : 3,
         message: f.message,
         rule: f.type,
+        url: ruleUrl(f),
         range: { start: { line: f.line - 1, character: f.column - 1 } },
       });
     }
   }
 
   analysis = { key, problems, fixable };
+  onAnalysed?.(currentProblems());
   return analysis;
 }
 
-// Pushes the editor's state into the registry and the registry's opinion back
-// into the gutters. Returns everything wrong with everything open, so the
-// caller can decide whether a run is worth attempting.
+const currentProblems = () =>
+  transpilerProblems.length === 0 ? analysis.problems : [...analysis.problems, ...transpilerProblems];
+
+// Pushes the editor's state towards the registry and answers with what was
+// last known about everything open. The fresh answer arrives through
+// whenAnalysed( ), because the registry is a worker and an analysis is a
+// round trip - so a caller that has to decide on the current text, Run,
+// uses refreshNow( ) and waits for it.
 export function refresh() {
-  return analyse().problems;
+  analyse().catch(() => {});
+  return currentProblems();
+}
+
+export async function refreshNow() {
+  await analyse();
+  return currentProblems();
 }
 
 const ABAPLINT_OWNER = "abaplint";
+
+// What the transpiler refused, at the line it named. A third source beside
+// the two checkers, with a life of its own: it is not part of the analysis,
+// because it is not computed from the text but reported by a Run - and it
+// goes away the moment the text changes, because the next Run will say again
+// whatever is still true. Until then it is underlined and listed, so "the
+// transpiler cannot compile this" points at a line rather than at the Log.
+const TRANSPILER_OWNER = "transpiler";
+let transpilerProblems = [];
+let transpilerKey;
+
+//
+// The same path reports what a Run found at run time - the ABAP line a dump
+// was raised at (src/runtime/index.mjs traces it) - under the source name
+// "runtime": also not part of the analysis, also true until the text
+// changes, also one line somebody has to look at.
+export function reportTranspilerProblems(found, source = "transpiler") {
+  transpilerKey = analysisKey();
+  transpilerProblems = [];
+  const byFile = new Map();
+  for (const { file, line, message } of found) {
+    if (!modelFor(file)) continue;
+    transpilerProblems.push({
+      file,
+      source,
+      severity: 1,
+      message,
+      range: { start: { line: line - 1, character: 0 } },
+    });
+    if (!byFile.has(file)) byFile.set(file, []);
+    byFile.get(file).push({ line, message });
+  }
+  for (const [file, list] of byFile) {
+    const model = modelFor(file);
+    monaco.editor.setModelMarkers(
+      model,
+      TRANSPILER_OWNER,
+      list.map(({ line, message }) => ({
+        severity: monaco.MarkerSeverity.Error,
+        message: `${message}  (${source})`,
+        startLineNumber: line,
+        startColumn: 1,
+        endLineNumber: line,
+        endColumn: model.getLineMaxColumn(line),
+      })),
+    );
+  }
+}
+
+// Dropped as soon as the text they were about has changed. Called from
+// analyse( ) on every fresh key, which is exactly that moment.
+function forgetTranspilerProblems() {
+  if (transpilerProblems.length === 0) return;
+  transpilerProblems = [];
+  transpilerKey = undefined;
+  for (const model of monaco.editor.getModels()) {
+    if (model.uri.scheme === "file") monaco.editor.setModelMarkers(model, TRANSPILER_OWNER, []);
+  }
+}
 
 // The language server speaks LSP severities; Monaco has its own numbers. Only
 // the two @abaplint/monaco mapped are mapped here, and for the same reason:
@@ -326,12 +512,48 @@ export function focusProblem(file, line, column = 1) {
   editor.focus();
 }
 
-// abaplint's pretty printer, through the editor's own format action so the
-// change lands in the undo stack like any other edit.
+// Format: every file that is open, laid out.
+//
+// It is abaplint's pretty printer - indentation and keyword case - with
+// abaplint's layout fixes in front of it, which is a good deal more than the
+// printer does alone: trailing whitespace, tabs, double spaces, a space before
+// the full stop, two statements on one line, blank lines by the half dozen.
+// registry-core.mjs's formatFiles( ) is the whole of it, and the list of rules
+// there says what is deliberately NOT on it.
+//
+// Every file, not just the one on screen: a class and its test include are one
+// piece of work, and formatting the half somebody happens to be looking at is
+// the kind of half-done that has to be noticed to be finished. Written back
+// through pushEditOperations, one edit per file, so Ctrl+Z takes the whole
+// thing back the way it takes an autofix back.
 export async function format() {
-  await editor.getAction("editor.action.formatDocument")?.run();
+  if (!connected) return { formatted: 0, files: [] };
+  const result = await formatFiles(getFiles());
+  for (const file of result.files) writeSource(file.name, file.source);
+  if (result.formatted > 0) refresh();
+  editor.focus();
+  return result;
+}
+
+// One step back in the open file, through Monaco's own undo - the same one
+// Ctrl+Z is bound to, so a Format or a Fix them comes back the way it went:
+// as one edit. For the bar's button, which is there for the reader on a
+// phone, where there is no Ctrl+Z to press.
+export function undo() {
+  editor.trigger("bar", "undo", null);
   editor.focus();
 }
+
+export function redo() {
+  editor.trigger("bar", "redo", null);
+  editor.focus();
+}
+
+// Whether those buttons have anything to do. Asked after every change and
+// every file switch; a button that does nothing when pressed is worse than
+// none.
+export const canUndo = () => editor?.getModel()?.canUndo() ?? false;
+export const canRedo = () => editor?.getModel()?.canRedo() ?? false;
 
 // Completion over the names of the classes and interfaces the registry knows -
 // the framework's and the user's own.
@@ -375,7 +597,7 @@ function abapNameCompletion() {
       // between them used to ask for.
       const leading = [];
       const anywhere = [];
-      for (const object of knownObjectNames()) {
+      for (const object of knownObjectNames(openNames())) {
         const name = object.name.toLowerCase();
         if (!name.includes(lower)) continue;
         (name.startsWith(lower) ? leading : anywhere).push({ name, type: object.type });
@@ -410,7 +632,8 @@ function abapNameCompletion() {
 // is still parsing, and asking abaplint anything at that point reaches a
 // registry that is not there yet.
 export function fixableNow() {
-  return analyse().fixable;
+  analyse().catch(() => {});
+  return analysis.fixable;
 }
 
 // Applies both checkers' fixes to everything open.
@@ -423,11 +646,11 @@ export function fixableNow() {
 // abaplint first: its fixes are structural (a missing ENDMETHOD, a statement in
 // the wrong place) and the abap2UI5 linter reads the builder chain, which is
 // easier to read correctly once the ABAP around it parses.
-export function applyFixes() {
+export async function applyFixes() {
   if (!connected) return 0;
   let fixed = 0;
 
-  const afterAbaplint = applyAbaplintFixes(getFiles());
+  const afterAbaplint = await applyAbaplintFixes(getFiles());
   fixed += afterAbaplint.fixed;
   for (const file of afterAbaplint.files) writeSource(file.name, file.source);
 

@@ -40,6 +40,26 @@ export function showOutput(title, body) {
   announce();
 }
 
+// An error as text somebody can act on: what went wrong, then where.
+//
+// `String(e.stack)` looks like it says both and only says both in Chrome. V8
+// begins a stack with "RangeError: message" and everything else - WebKit, Gecko
+// - puts frames in `stack` and nothing else. So the startup failure this page
+// reports read as a wall of minified frames on an iPhone with no message
+// anywhere in it, and "RangeError: Maximum call stack size exceeded" - the
+// whole of what had gone wrong, and the only part worth reading - never reached
+// the screen. The report has to carry the message itself rather than trust the
+// stack to have brought it.
+export function describeError(e) {
+  const message = String(e?.message ?? e);
+  const name = typeof e?.name === "string" && e.name !== "" ? e.name : "";
+  const headline = name && !message.startsWith(name) ? `${name}: ${message}` : message;
+  const stack = typeof e?.stack === "string" ? e.stack : "";
+  if (stack === "") return headline;
+  // Where the browser did put the message at the top, this would repeat it.
+  return stack.split("\n", 1)[0].includes(message) ? stack : `${headline}\n${stack}`;
+}
+
 export function hideOutput() {
   if (log.title === "" && log.body === "") return;
   log = { title: "", body: "" };

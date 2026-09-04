@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { control, getSource, openFiles } from "./helpers.mjs";
+import { control, getSource, MAIN_CLASS, openFiles, setSource } from "./helpers.mjs";
 
 // Two ways of arriving at the playground that are not "somebody opened it":
 // a link that names ABAP living somewhere else, and an embed in another page.
@@ -86,7 +86,7 @@ test("a fragment that decodes to nonsense opens the sample instead of wedging", 
 
   await page.goto(`/#${fragment}`);
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
-  expect(await getSource(page)).toContain("CLASS zcl_playground DEFINITION");
+  expect(await getSource(page)).toContain(`CLASS ${MAIN_CLASS} DEFINITION`);
 });
 
 test("a link to somewhere the playground will not fetch from says so", async ({ page }) => {
@@ -101,7 +101,27 @@ test("a link to somewhere the playground will not fetch from says so", async ({ 
   await expect(page.locator(".log-body")).toContainText("raw.githubusercontent.com");
 
   // And it falls back to the sample rather than showing nothing.
-  expect(await getSource(page)).toContain("CLASS zcl_playground DEFINITION");
+  expect(await getSource(page)).toContain(`CLASS ${MAIN_CLASS} DEFINITION`);
+});
+
+test("a github.com page URL is read as the raw file behind it", async ({ page }) => {
+  // What a reader copies out of the address bar, not what a machine builds.
+  const blob = "https://github.com/abap2UI5/samples/blob/main/src/zcl_blob_example.clas.abap";
+  const raw = "https://raw.githubusercontent.com/abap2UI5/samples/main/src/zcl_blob_example.clas.abap";
+  const asked = [];
+  await page.route("https://raw.githubusercontent.com/**", async (route) => {
+    asked.push(route.request().url());
+    const source = (await page.request.get("/examples/zcl_linked_example.clas.abap").then((r) => r.text()))
+      .replaceAll("zcl_linked_example", "zcl_blob_example");
+    await route.fulfill({ status: 200, contentType: "text/plain", body: source });
+  });
+
+  await page.goto(`/?src=${encodeURIComponent(blob)}`);
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  expect(asked).toContain(raw);
+  expect(await getSource(page, "zcl_blob_example.clas.abap")).toContain("CLASS zcl_blob_example DEFINITION");
+  // And the way back is the page the reader started from.
+  await expect(page.locator("#source-link")).toHaveAttribute("href", blob);
 });
 
 test("a link to a file that is not an ABAP object says so", async ({ page }) => {
@@ -115,7 +135,6 @@ test("the embedded playground drops the chrome and keeps the code", async ({ pag
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
 
   await expect(page.locator(".brand")).toBeHidden();
-  await expect(page.locator("#samples")).toBeHidden();
   await expect(page.locator("#share")).toBeHidden();
 
   // Still a playground: the editor is there and Run works.
@@ -127,13 +146,10 @@ test("the embedded playground drops the chrome and keeps the code", async ({ pag
 test("an embedded playground does not write over the draft of a normal one", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
-  await page.evaluate(() =>
-    window.monaco.editor
-      .getModel(window.monaco.Uri.parse("file:///zcl_playground.clas.abap"))
-      .setValue("CLASS zcl_playground DEFINITION PUBLIC CREATE PUBLIC.\n\" my own work\nENDCLASS.\nCLASS zcl_playground IMPLEMENTATION.\nENDCLASS."),
+  await setSource(
+    page,
+    `CLASS ${MAIN_CLASS} DEFINITION PUBLIC CREATE PUBLIC.\n" my own work\nENDCLASS.\nCLASS ${MAIN_CLASS} IMPLEMENTATION.\nENDCLASS.`,
   );
-  await page.waitForTimeout(500);
-
   await page.goto("/?embed=1&src=examples/zcl_linked_example.clas.abap");
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
 

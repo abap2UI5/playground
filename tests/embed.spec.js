@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { MAIN_MARK } from "./helpers.mjs";
 
 // Putting a live demo in somebody else's page: the app-only view, the messages
 // an embedding page listens for, and the loader script that ties them together.
@@ -16,25 +17,41 @@ async function collectMessages(page) {
   });
 }
 
-test("?view=app shows the app without the editor, and Run still works", async ({ page }) => {
+test("?view=app shows the app and nothing else - no editor and no bar", async ({ page }) => {
   await page.goto("/?embed=1&view=app");
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
 
   await expect(page.locator("#pane-left")).toBeHidden();
   await expect(page.locator("#splitter")).toBeHidden();
   await expect(page.locator("#pane-right")).toBeVisible();
-  await expect(page.frameLocator("#app").getByText("Hello abap2UI5")).toBeVisible();
+  await expect(page.frameLocator("#app").getByText(MAIN_MARK)).toBeVisible();
 
-  // Full screen is what opens a view like this one. Offering it here would be
-  // offering a tab that already is what the reader is looking at.
-  await expect(page.locator("#fullscreen")).toBeHidden();
+  // The bar goes with the editor. An embedded demo is furniture in somebody
+  // else's page, and Run, the source and undo are all a click away in the
+  // "open this in the playground" link that page prints beside the frame -
+  // so what is left here is a strip of our chrome across their paragraph.
+  // Measured rather than asserted on the class, for the same reason the full
+  // screen test measures: a bar that is merely transparent would pass a class
+  // check and still take the top of the box.
+  await expect(page.locator(".bar")).toBeHidden();
+  const app = await page.locator("#app").boundingBox();
+  expect(Math.round(app.y), "the app starts at the top of the frame").toBe(0);
+
+  // And no theme switch or links out of it: furniture in somebody else's
+  // page keeps to what it was given.
+  await expect(page.locator("#theme")).toBeHidden();
+  await expect(page.locator(".social")).toHaveCount(3);
+  await expect(page.locator(".social").first()).toBeHidden();
 
   // The editor is gone from the screen, not from the playground - what runs is
-  // still compiled from it, so Run has to still do something.
+  // still compiled from it, and Run still runs. There is no button to press for
+  // it here, which is the point of the view; Ctrl+Enter is the same command and
+  // is bound on the document rather than on the editor, so it works in a view
+  // that has neither on screen.
   await expect(page.locator("#run")).toBeEnabled();
-  await page.locator("#run").click();
+  await page.keyboard.press("Control+Enter");
   await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
-  await expect(page.frameLocator("#app").getByText("Hello abap2UI5")).toBeVisible();
+  await expect(page.frameLocator("#app").getByText(MAIN_MARK)).toBeVisible();
 });
 
 test("an embedded playground reports ready, status and height to the page around it", async ({ page }) => {
@@ -77,6 +94,20 @@ test("an embedded playground reports ready, status and height to the page around
       { timeout: 30000 },
     )
     .toBe(true);
+});
+
+test("an embedded playground follows its reader's system theme, not a choice made elsewhere", async ({ page }) => {
+  // A dark theme chosen in a playground of one's own - and the embedded one
+  // in a documentation page does not pick it up, the same as it never picks
+  // up the draft: a demo has to read the same to every reader.
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.goto("/");
+  await page.evaluate(() => localStorage.setItem("abap2ui5-playground:theme", "dark"));
+  await page.goto("/?embed=1");
+  expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBeNull();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBeNull();
+  await expect(page.locator("#app")).toHaveAttribute("src", /sap-ui-theme=sap_horizon(&|$)/);
 });
 
 test("a playground that is not embedded stays silent", async ({ page }) => {
@@ -207,7 +238,7 @@ test("an app-only playground renders in a column narrower than a desk", async ({
   const box = await page.locator("#app").boundingBox();
   expect(box.width, "the app frame has a width").toBeGreaterThan(300);
   expect(box.height, "the app frame has a height").toBeGreaterThan(100);
-  await expect(page.frameLocator("#app").getByText("Hello abap2UI5")).toBeVisible();
+  await expect(page.frameLocator("#app").getByText(MAIN_MARK)).toBeVisible();
 });
 
 test("the app frame lets itself be framed from another origin", async ({ page }) => {

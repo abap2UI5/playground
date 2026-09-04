@@ -25,3 +25,13 @@ export const UI5_LIBRARIES = [
   "sap.ui.codeeditor",
   "themelib_sap_horizon",
 ];
+
+// Which OpenUI5 the playground runs. One place decides it, and bumping it is a
+// deliberate commit: run the build, run the tests, look at the app.
+//
+// Here rather than in tools/build-ui5.mjs, which used to hold it, because the
+// page needs it too: UI5 puts the version on the query of every stylesheet it
+// loads (?sap-ui-dist-version=1.151.0), and src/shell/warm-up.mjs asks for
+// those stylesheets while the corpus is still parsing so the app frame finds
+// them in the cache. A URL with the wrong version would warm nothing.
+export const UI5_VERSION = "1.151.0";

@@ -22,7 +22,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { UI5_LIBRARIES } from "../src/shell/ui5-libraries.mjs";
+import { UI5_LIBRARIES, UI5_VERSION } from "../src/shell/ui5-libraries.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DEPS = path.join(ROOT, "deps");
@@ -37,9 +37,11 @@ const WORK = path.join(BUILD, "ui5app");
 const UI5_DIST = path.join(BUILD, "ui5dist");
 const OUT = path.join(ROOT, "dist", "app");
 
-// One place decides which UI5 the playground runs. Bumping it is a deliberate
-// commit: run the build, run the tests, look at the app.
-export const UI5_VERSION = "1.151.0";
+// Which UI5 the playground runs - UI5_VERSION - lives in
+// src/shell/ui5-libraries.mjs beside the library list, because the page reads
+// it too (the warm-up of the app frame needs the exact stylesheet URLs).
+// Re-exported so this script stays the place a reader looks for it.
+export { UI5_VERSION };
 
 // The linter judges views against ITS UI5 snapshot (data/properties.json,
 // bundled into the editor), and this build decides which UI5 actually runs on

@@ -31,6 +31,7 @@ const STEPS = {
   framework: "tools/build-framework.mjs",
   ui5: "tools/build-ui5.mjs",
   site: "tools/build-site.mjs",
+  catalogue: "tools/build-catalogue.mjs",
 };
 
 // `label` is what turns a step's output into something readable next to another
@@ -82,6 +83,11 @@ try {
     process.exit(1);
   }
 
+  // The sample catalogue's index, before the site that copies its page in.
+  // It is the one step that talks to the network at build time and the one
+  // whose failure is survivable by design: no catalogue means a page that says
+  // so, not a broken build (tools/build-catalogue.mjs says why at length).
+  await run("catalogue");
   await run("site");
 } catch (e) {
   console.error(`build: ${e.message}`);

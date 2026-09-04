@@ -11,14 +11,43 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
 import { abap2ui5LinterPlugin, nodeStubPlugin } from "./esbuild-plugins.mjs";
+import { appFirstLoad } from "../src/shell/warm-up.mjs";
+import { SAMPLE_LIST, SAMPLE_REPO } from "../src/editor/sample-list.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "src", "shell");
 const DEPS = path.join(ROOT, "deps");
 const DIST = path.join(ROOT, "dist");
+const BUILD_SAMPLES = path.join(ROOT, "build", "samples");
 const ASSETS = path.join(DIST, "assets");
 
+// The one directory of abap2UI5 that never reaches the editor.
+//
+// abap2UI5 ships its UI5 frontend a second time, as ABAP: src/01/03 is
+// app/webapp/ generated into `z2ui5_cl_ui5f_*` classes whose whole content is
+// the frontend's JavaScript, XML, CSS and HTML held as string constants, so a
+// real system can serve it over ICF. The playground serves none of that - the
+// frontend it runs is built from source into dist/app - so in the editor's
+// corpus these are payload and nothing else. Nobody control-clicks into a
+// comment-stripped copy of a UI5 module to find out how abap2UI5 works, which
+// is the argument that keeps the rest of the corpus whole (AGENTS.md, "the
+// corpus ships whole").
+//
+// They are also what made the playground unusable on a phone. Generated ABAP
+// puts a whole frontend module into ONE statement - the largest is 1600 tokens
+// of `&& ... &&` - and abaplint parses an expression with recursive
+// combinators, so that single statement drives the parser some 800 levels deep.
+// With src/01/03 in it the boot parse needs more than 610 KB of JavaScript
+// stack; without it, a little over 130 KB. Node and Chrome give a little under
+// a megabyte, which is why this worked on every desk and on no iPhone: mobile
+// Safari's stack is smaller, and the corpus parse threw RangeError: Maximum
+// call stack size exceeded before the playground had finished starting.
+// tools/check-size.mjs holds the parse to a budget so this cannot come back
+// unnoticed.
+const GENERATED_FRONTEND = path.join(DEPS, "abap2ui5", "src", "01", "03");
+
 const log = (m) => console.log(`build-site: ${m}`);
+const kb = (p) => `${Math.round(fs.statSync(p).size / 1024)} KB`;
 
 // Cleared, not merged into: a file this step stops producing has to disappear
 // from the published site, and a stale asset that nothing references any more
@@ -29,6 +58,30 @@ for (const owned of [ASSETS, path.join(DIST, "editor"), path.join(DIST, "example
 }
 fs.mkdirSync(ASSETS, { recursive: true });
 writeCorpus();
+
+// The registry worker: abaplint, the corpus parse and the transpiler, as one
+// bundle beside the corpus it fetches (src/editor/registry-worker.mjs). Its
+// own bundle rather than a chunk of the page's, because a worker's script
+// is a top-level fetch of its own - started by index.html before the page
+// bundle has arrived - and because nothing in it is shared with the page:
+// abaplint left the page bundle when the registry left the page's thread.
+await esbuild.build({
+  entryPoints: [path.join(ROOT, "src", "editor", "registry-worker.mjs")],
+  outfile: path.join(DIST, "editor", "registry.mjs"),
+  bundle: true,
+  format: "esm",
+  platform: "browser",
+  target: "es2022",
+  minify: true,
+  // abaplint identifies some of its own node types by class name - see the
+  // page bundle below, which needed this for the same library.
+  keepNames: true,
+  sourcemap: process.env.PG_DEBUG === "1",
+  logLevel: "warning",
+  plugins: [nodeStubPlugin(ROOT)],
+  inject: [path.join(ROOT, "src", "runtime", "buffer-shim.mjs")],
+});
+log(`editor/registry.mjs (${Math.round(fs.statSync(path.join(DIST, "editor", "registry.mjs")).size / 1024)} KB)`);
 
 // --------------------------------------------------------------- ABAP corpus
 
@@ -42,13 +95,17 @@ writeCorpus();
 // object by the file's base name, so the tree is flattened; package files are
 // left out because they are the one base name that repeats and the editor has
 // no use for them.
+//
+// And one directory is left out for a reason that has nothing to do with size.
+// See GENERATED_FRONTEND above - it is the difference between a playground that
+// starts on a phone and one that does not.
 function writeCorpus() {
   const files = {};
   const add = (dir) => {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       const p = path.join(dir, e.name);
       if (e.isDirectory()) {
-        add(p);
+        if (p !== GENERATED_FRONTEND) add(p);
         continue;
       }
       if (!/\.(abap|xml)$/.test(e.name)) continue;
@@ -59,6 +116,16 @@ function writeCorpus() {
       files[e.name] = fs.readFileSync(p, "utf8");
     }
   };
+  // A filter that quietly stops matching is the failure this cannot have: the
+  // corpus would grow by a megabyte, the size budget would still pass it, and
+  // the only report would be a phone somewhere that no longer starts.
+  if (!fs.existsSync(GENERATED_FRONTEND)) {
+    throw new Error(
+      `build-site: ${path.relative(ROOT, GENERATED_FRONTEND)} is not there any more. ` +
+        "That is where abap2UI5 keeps its generated frontend, which the corpus leaves out on " +
+        "purpose - find where it moved to and point GENERATED_FRONTEND at it.",
+    );
+  }
   add(path.join(DEPS, "abap2ui5", "src"));
   add(path.join(DEPS, "open-abap-core", "src"));
 
@@ -69,9 +136,132 @@ function writeCorpus() {
   log(`corpus.json: ${Object.keys(files).length} ABAP sources (${mb} MB)`);
 }
 
+// The samples the page carries, materialised out of the pinned
+// abap2UI5/samples (src/editor/sample-list.mjs says which; deps/ holds the
+// commit). Three things come out of `build/samples/`, and none of them is
+// checked in:
+//
+//   <class>.clas.abap  the ABAP itself, under the name abapGit gives it -
+//                      which is the name the editor has to open it under
+//   index.json         id, title, blurb, files, GitHub link; Node reads this
+//                      one (the tests do), which is why it is JSON
+//   sources.mjs        one `import` per file plus the map, because a bundler
+//                      has to see every import statically and the list is not
+//                      static any more
+//
+// Titles and blurbs are read out of that repository's catalogue.json rather
+// than restated here: it is the same catalogue the samples browser lists the
+// other seven hundred entries from, so a sample reads the same whether it came
+// with the page or over the network.
+// The path of a class inside the pinned samples repository, for the classes a
+// sample calls rather than is. Searched rather than configured: their place in
+// that tree (src/01, src/02, …) is that repository's business.
+function findClass(repo, name) {
+  const wanted = `${name.toLowerCase()}.clas.abap`;
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        const found = walk(p);
+        if (found) return found;
+      } else if (e.name.toLowerCase() === wanted) return path.relative(repo, p);
+    }
+    return undefined;
+  };
+  const found = walk(path.join(repo, "src"));
+  if (!found) {
+    throw new Error(
+      `build-site: ${name} is named by src/editor/sample-list.mjs and is not in the pinned ${SAMPLE_REPO}.`,
+    );
+  }
+  return found;
+}
+
+function writeSamples() {
+  const repo = path.join(DEPS, "abap2ui5-samples");
+  const cataloguePath = path.join(repo, "catalogue.json");
+  if (!fs.existsSync(cataloguePath)) {
+    throw new Error("build-site: deps/abap2ui5-samples has no catalogue.json - run `npm run deps` first.");
+  }
+  const catalogue = JSON.parse(fs.readFileSync(cataloguePath, "utf8"));
+  const byClass = new Map((catalogue.samples || []).map((s) => [String(s.class).toLowerCase(), s]));
+
+  fs.rmSync(BUILD_SAMPLES, { recursive: true, force: true });
+  fs.mkdirSync(BUILD_SAMPLES, { recursive: true });
+
+  const index = [];
+  const copied = new Map();
+  for (const wanted of SAMPLE_LIST) {
+    /* The app has to be a catalogued sample - that is where its title and its
+     * blurb come from. A class it calls need not be: an app that only exists to
+     * be navigated INTO is a file in that repository and no row in its
+     * catalogue, which is right, so those are looked up on disk. */
+    const app = byClass.get(wanted.class.toLowerCase());
+    if (!app) {
+      throw new Error(
+        `build-site: ${wanted.class} is in src/editor/sample-list.mjs and not in the pinned ${SAMPLE_REPO} ` +
+          "catalogue - it was renamed or dropped upstream; pick another class or move the pin back.",
+      );
+    }
+    const files = [];
+    for (const name of [app.file, ...(wanted.also ?? []).map((c) => findClass(repo, c))]) {
+      const from = path.join(repo, name);
+      if (!fs.existsSync(from)) throw new Error(`build-site: ${SAMPLE_REPO} lists ${name}, which is not there.`);
+      const base = path.basename(name);
+      if (!copied.has(base)) {
+        fs.writeFileSync(path.join(BUILD_SAMPLES, base), fs.readFileSync(from, "utf8"));
+        copied.set(base, true);
+      }
+      files.push(base);
+    }
+    index.push({
+      id: wanted.id,
+      /* The description is the sentence that names the app ("Hello World, the
+       * Smallest App"); the catalogue's own `title` is its place in a series
+       * ("Basics I"), which says nothing on a row of its own. */
+      title: String(app.description || app.title || wanted.class),
+      note: String(app.summary || ""),
+      /* The two facts a catalogued row shows beside its title. They are in the
+       * catalogue for these samples like for any other, and leaving them out
+       * was the one thing that still made a carried row look like a different
+       * kind of thing from the rows under it. */
+      group: String(app.category || ""),
+      docs: (app.docs || []).filter((d) => typeof d === "string"),
+      files,
+      github: `https://github.com/${SAMPLE_REPO}/blob/main/${app.file}`,
+    });
+  }
+
+  fs.writeFileSync(path.join(BUILD_SAMPLES, "index.json"), JSON.stringify(index, null, 2) + "\n");
+  const imports = [...copied.keys()].map((base, i) => `import S${i} from "./${base}";`).join("\n");
+  const map = [...copied.keys()].map((base, i) => `  ${JSON.stringify(base)}: S${i},`).join("\n");
+  fs.writeFileSync(
+    path.join(BUILD_SAMPLES, "sources.mjs"),
+    `// Written by tools/build-site.mjs - see writeSamples( ). Do not edit.\n` +
+      `${imports}\n\nexport const SOURCES = {\n${map}\n};\n`,
+  );
+  log(`samples: ${index.length} from ${SAMPLE_REPO}, ${copied.size} file(s)`);
+}
+
+writeSamples();
+
+// The page bundle, in pieces: assets/shell.mjs is what the page cannot start
+// without - Monaco - and what it only needs later comes as chunks of its
+// own, which esbuild splits off wherever the source says import( ): the
+// abap2UI5 linter with its half-megabyte of UI5 metadata
+// (src/editor/abap2ui5-lint.mjs), which nothing needs before the corpus has
+// parsed, and Monaco's own ABAP grammar. abaplint and the transpiler are in
+// the registry worker's bundle above. What is split off downloads during
+// the parse, where the network is idle, and is evaluated when it lands. The chunks
+// carry a hash in their name, so the service worker's precache list and the
+// build id are written from the directory rather than from a fixed list -
+// see writeServiceWorker( ) below.
 const result = await esbuild.build({
-  entryPoints: [path.join(SHELL, "main.mjs")],
-  outfile: path.join(ASSETS, "shell.mjs"),
+  entryPoints: [{ in: path.join(SHELL, "main.mjs"), out: "shell" }],
+  outdir: ASSETS,
+  outExtension: { ".js": ".mjs" },
+  splitting: true,
+  chunkNames: "[name]-[hash]",
   bundle: true,
   format: "esm",
   platform: "browser",
@@ -92,7 +282,12 @@ const result = await esbuild.build({
   // the CSS lands next to the bundle as assets/shell.css (the shell's own
   // stylesheet is imported by main.mjs so both end up in that one file), and
   // the font is copied out with a hashed name.
-  loader: { ".ttf": "file" },
+  // Monaco's icon font is copied out beside the bundle; the ABAP of the samples
+  // the page carries is inlined into it as text. They are real .clas.abap
+  // files, copied out of the pinned abap2UI5/samples by writeSamples( ) above
+  // into build/samples/, and reached through the import module it writes there
+  // - see src/editor/samples.mjs, which is the only importer.
+  loader: { ".ttf": "file", ".abap": "text" },
   // The linter plugin goes first: it claims `fs` and `path` for the abap2UI5
   // linter alone, and leaves every other importer to the ordinary stubs.
   plugins: [abap2ui5LinterPlugin(ROOT), nodeStubPlugin(ROOT)],
@@ -101,7 +296,38 @@ const result = await esbuild.build({
   inject: [path.join(ROOT, "src", "runtime", "buffer-shim.mjs")],
 });
 
-fs.copyFileSync(path.join(SHELL, "index.html"), path.join(DIST, "index.html"));
+writeIndex();
+// The icons and the app manifest - what a tab, a home screen and an install
+// prompt show for this page.
+for (const name of ["favicon.png", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "manifest.webmanifest"]) {
+  fs.copyFileSync(path.join(SHELL, name), path.join(DIST, name));
+}
+
+// The sample catalogue page: its own document at /samples/, its own small
+// bundle. Not part of the shell's entry - a reader who came to look something
+// up must not download Monaco and abaplint to do it, and a reader in the
+// editor must not carry a page they may never open. The two share
+// src/shell/ui5-libs.mjs (which library a control ships in) and the theme key,
+// and that sharing is why this is bundled at all rather than copied.
+//
+// dist/samples/apps.json is written by tools/build-catalogue.mjs, which runs
+// before this and owns that directory's data.
+await esbuild.build({
+  entryPoints: [{ in: path.join(ROOT, "src", "catalogue", "catalogue.mjs"), out: "catalogue" }],
+  outdir: path.join(DIST, "samples"),
+  outExtension: { ".js": ".mjs" },
+  bundle: true,
+  format: "esm",
+  platform: "browser",
+  target: "es2022",
+  minify: true,
+  sourcemap: process.env.PG_DEBUG === "1",
+  logLevel: "warning",
+});
+for (const name of ["index.html", "catalogue.css"]) {
+  fs.copyFileSync(path.join(ROOT, "src", "catalogue", name), path.join(DIST, "samples", name));
+}
+log(`samples/catalogue.mjs (${kb(path.join(DIST, "samples", "catalogue.mjs"))})`);
 
 // A same-origin ABAP file, so ?src= can be exercised without depending on
 // somebody else's host being up. It is also the smallest possible worked
@@ -120,8 +346,8 @@ for (const name of fs.readdirSync(path.join(ROOT, "src", "embed"))) {
   fs.copyFileSync(path.join(ROOT, "src", "embed", name), path.join(DIST, "embed", name));
 }
 
-const kb = (p) => `${Math.round(fs.statSync(p).size / 1024)} KB`;
 log(`shell.mjs (${kb(path.join(ASSETS, "shell.mjs"))})`);
+for (const chunk of chunks()) log(`${path.basename(chunk)} (${kb(path.join(DIST, chunk))})`);
 
 // Fail loudly rather than publish a page whose two halves are missing - the
 // symptom would otherwise be a blank frame and a 404 in the console.
@@ -143,33 +369,99 @@ writeServiceWorker();
 // build that produced identical output produces an identical worker, which the
 // browser then correctly declines to reinstall.
 //
-// Everything the worker may cache goes into the id. The five core assets go in
-// by content. dist/app - the UI5 build, thousands of files and most of the site
-// by weight - goes in as a listing of paths and sizes: reading it whole to hash
-// it would cost more than the rest of this step put together, and a UI5 build
-// that changed without a single file changing size is not a thing that happens.
+// Everything the worker may cache goes into the id. The core assets go in by
+// content - everything under assets/, which is the bundle, its chunks, its
+// stylesheet and Monaco's font, plus the corpus and the runtime. dist/app -
+// the UI5 build, thousands of files and most of the site by weight - goes in
+// as a listing of paths and sizes: reading it whole to hash it would cost
+// more than the rest of this step put together, and a UI5 build that changed
+// without a single file changing size is not a thing that happens.
+//
+// The chunks are written into the worker as well, so it can precache them:
+// their names carry a hash, so no list in sw.js could name them in advance.
+// And the core assets that do NOT carry one - the bundle, its stylesheet, the
+// registry worker, the corpus, the framework, SQLite - go in with the hash
+// of their bytes each, so the worker can refuse a copy from another build:
+// the CDN and the HTTP cache both hand those out for a while after a deploy,
+// and a cache filled from them was half of one build and half of the next.
 function writeServiceWorker() {
   const id = crypto.createHash("sha256");
-  for (const rel of [
+  const unhashed = [
     "assets/shell.mjs",
     "assets/shell.css",
+    "editor/registry.mjs",
     "editor/corpus.json",
     "runtime/framework.mjs",
     "runtime/sql-wasm.wasm",
-  ]) {
+  ];
+  const core = [
+    ...fs.readdirSync(ASSETS).sort().map((name) => `assets/${name}`),
+    ...unhashed.filter((rel) => !rel.startsWith("assets/")),
+  ];
+  const hashes = {};
+  for (const rel of core) {
+    const bytes = fs.readFileSync(path.join(DIST, rel));
     id.update(rel);
-    id.update(fs.readFileSync(path.join(DIST, rel)));
+    id.update(bytes);
+    if (unhashed.includes(rel)) hashes[rel] = crypto.createHash("sha256").update(bytes).digest("hex");
   }
   for (const entry of listing(path.join(DIST, "app")).sort()) id.update(entry);
 
   const source = fs.readFileSync(path.join(SHELL, "sw.js"), "utf8");
-  if (!source.includes("__BUILD_ID__")) {
-    console.error("build-site: ERROR src/shell/sw.js no longer has a __BUILD_ID__ to substitute");
-    process.exit(1);
+  for (const marker of ["__BUILD_ID__", "__CHUNKS__", "__APP_FIRST_LOAD__", "__CORE__"]) {
+    if (!source.includes(marker)) {
+      console.error(`build-site: ERROR src/shell/sw.js no longer has a ${marker} to substitute`);
+      process.exit(1);
+    }
   }
   const build = id.digest("hex").slice(0, 16);
-  fs.writeFileSync(path.join(DIST, "sw.js"), source.replaceAll("__BUILD_ID__", build));
+  // The frame's first load in both themes, for the worker to precache - the
+  // list the page warms the HTTP cache with, so the two cannot drift apart.
+  const firstLoad = [...new Set([...appFirstLoad("sap_horizon"), ...appFirstLoad("sap_horizon_dark")])];
+  fs.writeFileSync(
+    path.join(DIST, "sw.js"),
+    source
+      .replaceAll("__BUILD_ID__", build)
+      .replace("__CHUNKS__", JSON.stringify(chunks()))
+      .replace("__APP_FIRST_LOAD__", JSON.stringify(firstLoad))
+      .replace("__CORE__", JSON.stringify(hashes)),
+  );
   log(`sw.js (build ${build})`);
+}
+
+// index.html, with a modulepreload for every chunk assets/shell.mjs imports
+// statically. Splitting the bundle put the code the entry shares with its
+// chunks - most of abaplint, which the transpiler needs too - into a chunk of
+// its own that shell.mjs imports at its top, and a static import is only
+// discovered once the importing file has arrived: without the preload the
+// chunk would be fetched after the bundle instead of beside it, a round trip
+// and a serialized download on the path to the first editor frame. The names
+// carry a hash, so the tags are written here rather than by hand. Only the
+// static imports: the dynamic ones are wanted during the parse and fetched
+// then, where the network is idle.
+function writeIndex() {
+  const entry = result.metafile.outputs[path.relative(ROOT, path.join(ASSETS, "shell.mjs"))];
+  const tags = entry.imports
+    .filter((i) => i.kind === "import-statement")
+    .map((i) => `<link rel="modulepreload" href="${path.relative(DIST, path.join(ROOT, i.path))}">`);
+  const source = fs.readFileSync(path.join(SHELL, "index.html"), "utf8");
+  const marker = "<!-- __MODULEPRELOADS__ -->";
+  if (!source.includes(marker)) {
+    console.error(`build-site: ERROR src/shell/index.html no longer has a ${marker} to substitute`);
+    process.exit(1);
+  }
+  fs.writeFileSync(path.join(DIST, "index.html"), source.replace(marker, tags.join("\n")));
+  log(`index.html (${tags.length} chunk${tags.length === 1 ? "" : "s"} preloaded)`);
+}
+
+// The bundle's chunks, as paths relative to dist/: every module under assets/
+// that is not the entry itself.
+function chunks() {
+  return fs
+    .readdirSync(ASSETS)
+    .filter((name) => name.endsWith(".mjs") && name !== "shell.mjs")
+    .sort()
+    .map((name) => `assets/${name}`);
 }
 
 function listing(dir, prefix = "") {
