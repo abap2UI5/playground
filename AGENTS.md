@@ -679,6 +679,24 @@ deploy — readers get the published playground, never your checkout.
   its parent. Click-to-load is deliberate: every demo boots its own runtime and
   parses the whole corpus.
 
+**And one measurement that runs the other way.** abap2UI5/docs decides which of
+its examples carry a Run button and gates the bookkeeping around it, but says
+plainly in its own AGENTS.md that whether a buttoned example *starts* is the one
+question its CI cannot answer — only a playground can, and a playground is a
+build of this repository. `tests/docs-examples.spec.js` is that half: hand it
+the worklist (`npm run runnable -- --json` in a docs checkout) and it opens
+every example here and checks the status line and the app frame.
+
+```sh
+RUNNABLE_JSON=/tmp/runnable.json npm test -- docs-examples
+```
+
+It is **not part of `npm test`** — no worklist, no tests — because it is a
+measurement rather than a gate: the input lives in another repository and the
+run takes minutes. A failure is not automatically the documentation's, either.
+An example may name framework API newer than the commit `tools/fetch-deps.mjs`
+pins, and then the playground is right to refuse it and the pin is what moves.
+
 ## The sample catalogue — `src/catalogue/`, at `/samples/`
 
 **<https://abap2ui5.github.io/playground/samples/>** — every sample of
