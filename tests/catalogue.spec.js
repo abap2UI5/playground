@@ -15,8 +15,11 @@ import { test, expect } from "@playwright/test";
 //   HONEST ABOUT WHAT CANNOT RUN. A sample that needs a system or SAPUI5 is
 //   listed and says so, because a sample somebody cannot find is worse than
 //   one they cannot run.
-//   A ROUND TRIP. Run opens the class in the playground; the playground's bar
-//   offers the way back to the SEARCH, not to the top of the list.
+//   ONE WAY ON. A card is a link to the sample's own page and nothing else.
+//   Run, GitHub and the documentation are the actions on that page - a list
+//   whose rows each offered three ways off the site made the page underneath
+//   them look like something that did not exist. The round trip that starts at
+//   Run is held in tests/sample-pages.spec.js, where Run now is.
 //
 // It reads one same-origin file, samples/apps.json, so the fixture is that
 // index. Nothing here reaches a foreign host.
@@ -37,6 +40,10 @@ const row = (over) => ({
   runs: true,
   keywords: [],
   ...over,
+  /* Stamped on every entry by the writer of the per-sample pages
+   * (tools/sample-pages.mjs), and the only thing a card links to - so the
+   * fixture carries it exactly as the real index does. */
+  page: `${over.class}/`,
 });
 
 const INDEX = {
@@ -171,17 +178,14 @@ test("what cannot run here is listed, says why, and opens for reading", async ({
   await expect(smart.locator(".badge.needs")).toHaveText("needs SAPUI5");
   // The long half is the tooltip, so a card stays the height of its neighbours.
   await expect(smart.locator(".badge.needs")).toHaveAttribute("title", "sap.ui.comp");
-  await expect(smart.locator(".run")).toHaveCount(0);
-  await expect(smart.locator("a", { hasText: "Read the source" })).toHaveAttribute(
-    "href", blob("abap2UI5/samples-controls", "src/03/z2ui5_cl_smpc_app_900.clas.abap"),
-  );
+  // The line that says what a reader gets by opening it - here, not a Run.
+  await expect(smart.locator(".more-why")).toHaveText("needs SAPUI5");
+  await expect(smart.locator("a")).toHaveAttribute("href", "z2ui5_cl_smpc_app_900/");
 
-  // A stack sample links to the branch that delivers it, not to main.
   const stack = page.locator(".card", { hasText: "Switch Default Model" });
   await expect(stack.locator(".badge.needs")).toHaveText("needs a system");
-  await expect(stack.locator("a", { hasText: "Read the source" })).toHaveAttribute(
-    "href", blob("abap2UI5/samples-stack", "src/02/z2ui5_cl_smps_app_314.clas.abap", "02-smart-controls"),
-  );
+  await expect(stack.locator(".more-why")).toHaveText("needs a system");
+  await expect(stack.locator("a")).toHaveAttribute("href", "z2ui5_cl_smps_app_314/");
 
   // The box that hides them both.
   await page.check("#f-runs");
@@ -194,37 +198,27 @@ test("what cannot run here is listed, says why, and opens for reading", async ({
   await page.uncheck("#f-runs");
   const newer = page.locator(".card", { hasText: "Newer Control" });
   await expect(newer.locator(".badge", { hasText: "UI5 1.120" })).toBeVisible();
-  await expect(newer.locator(".run")).toHaveCount(1);
+  await expect(newer.locator(".more-why")).toHaveText("runs in this browser");
 });
 
-test("Run opens the class in the playground, and the playground offers the way back to the search", async ({ page }) => {
-  await openCatalogue(page, "?q=breadcrumbs");
+test("a card is one link, and it goes to the sample's own page", async ({ page }) => {
+  await openCatalogue(page);
 
-  const run = page.locator(".card", { hasText: "Breadcrumbs" }).locator(".run");
-  const href = await run.getAttribute("href");
-  const url = new URL(href, page.url());
-  expect(url.searchParams.get("src")).toBe(
-    raw("abap2UI5/samples-controls", "src/01/01/z2ui5_cl_smpc_app_003.clas.abap"),
-  );
-  expect(url.searchParams.get("from")).toBe("catalogue");
-  // The reader's own search travels with them, so the way back is to the list
-  // they had narrowed rather than to the top of 770 samples.
-  expect(url.searchParams.get("back")).toBe("q=breadcrumbs");
+  // Six cards, six links, and every one of them stays on this site. The three
+  // that used to leave it - Run, Source, Docs - are the actions at the top of
+  // the page each of these opens, which is where a reader who has decided is
+  // standing.
+  await expect(page.locator(".card a")).toHaveCount(6);
+  await expect(page.locator(".card .run")).toHaveCount(0);
+  await expect(page.locator('.card a[target="_blank"]')).toHaveCount(0);
+  await expect(page.locator(".card .more-go").first()).toHaveText("Open the sample ›");
 
-  // The playground, opened on that link, offers exactly that way back.
-  await page.route("**/src/01/01/z2ui5_cl_smpc_app_003.clas.abap", (route) =>
-    route.fulfill({
-      status: 200, contentType: "text/plain", headers: CORS,
-      body: "CLASS z2ui5_cl_smpc_app_003 DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    INTERFACES z2ui5_if_app.\nENDCLASS.\n"
-        + "CLASS z2ui5_cl_smpc_app_003 IMPLEMENTATION.\n  METHOD z2ui5_if_app~main.\n  ENDMETHOD.\nENDCLASS.\n",
-    }),
-  );
-  await page.goto(href.replace(/^\.\.\//, "/"));
-  const back = page.locator("#source-link");
-  await expect(back).toHaveText("Back to the catalogue", { timeout: 120000 });
-  await expect(back).toHaveAttribute("href", "samples/?q=breadcrumbs");
-  // Same tab: this is a way back, not a second window to end up with.
-  await expect(back).not.toHaveAttribute("target", "_blank");
+  // And the link is the whole card, not the line of text at the top of it: a
+  // click in the middle of a row opens the row.
+  const card = page.locator(".card", { hasText: "Breadcrumbs" });
+  const box = await card.boundingBox();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height - 6);
+  await expect(page).toHaveURL(/\/samples\/z2ui5_cl_smpc_app_003\/$/);
 });
 
 test("a link that did not come from the catalogue still points at GitHub", async ({ page }) => {
@@ -241,6 +235,19 @@ test("a link that did not come from the catalogue still points at GitHub", async
   await expect(link).toHaveAttribute(
     "href", blob("abap2UI5/samples", "src/01/z2ui5_cl_smp_app_493.clas.abap"),
   );
+});
+
+test("the bar ends where the playground's own bar ends", async ({ page }) => {
+  // The way off this site is two marks at the end of the bar, the same two the
+  // playground and the per-sample pages carry - so a reader moving between the
+  // three documents reads them as one bar.
+  await openCatalogue(page);
+  await expect(page.locator(".bar .social")).toHaveCount(2);
+  await expect(page.locator('.bar .social[href*="linkedin.com/company/abap2ui5"]')).toBeVisible();
+  await expect(page.locator('.bar .social[href*="github.com/abap2UI5"]')).toBeVisible();
+  // Inline SVG, not an icon font: it is drawn before any stylesheet has to
+  // arrive, which is why it is repeated in three documents by hand.
+  await expect(page.locator(".bar .social svg").first()).toBeVisible();
 });
 
 test("a broken index says so rather than showing an empty page", async ({ page }) => {
