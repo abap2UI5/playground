@@ -21,8 +21,15 @@
 // middle of a page does not shift every control after it onto the wrong
 // original. An element with no counterpart is new and is written from its own
 // text; everything under it is too.
+//
+// And the chain is only *written* again when it has to be. A value changed or
+// an attribute added is put back as an edit to the ABAP that is there
+// (chain-patch.mjs), so the method keeps the shape somebody wrote it in and
+// the diff is the change. Writing the whole chain is what an added or removed
+// control falls back to.
 import { abapLiteral, unwritable, writeViewChain } from "./chain-write.mjs";
 import { alignWithXml, readViewChain } from "./chain-read.mjs";
+import { patchChain } from "./chain-patch.mjs";
 
 const no = (why) => ({ ok: false, why });
 
@@ -72,6 +79,18 @@ export function sourceWithView(source, xml, edited) {
   const why = unwritable(built.element);
   if (why) return no(why);
 
+  // The edit in place, when the change is one that can be made in place: a
+  // value rewritten where it stands, a control's attribute block written
+  // again, and not one character touched anywhere else. That is the normal
+  // edit, and generating the chain again for it turned one changed word into
+  // a diff over the whole method - the split shape collapsed into a single
+  // chain, every line re-anchored. See chain-patch.mjs.
+  const patched = patchChain(source, built.element, chain.root.children[0]);
+  if (patched) return patched;
+
+  // A view whose shape changed: a control added, removed or renamed. There is
+  // no edit to make here - the chain is written again, in the house layout,
+  // out of a tree that still carries the ABAP of every value nobody touched.
   const text = writeViewChain({ indent: chain.indent, assignment: chain.assignment, element: built.element });
   return { ok: true, source: source.slice(0, chain.start) + text + source.slice(chain.end) };
 }
@@ -95,7 +114,11 @@ function parse(text) {
 // editor added, which is then written entirely from its own text.
 function merge(wanted, was, node) {
   const [ns, name] = splitName(wanted.tagName);
-  const built = { name, ns, attrs: [], children: [] };
+  // `from` is the chain node this element came from, undefined for one the
+  // editor added. Every attribute below carries the same. It is what lets
+  // chain-patch.mjs work out that a control is the control it was and rewrite
+  // only what changed inside it, instead of the chain being written again.
+  const built = { name, ns, attrs: [], children: [], from: node };
 
   // The builder sets attributes; it has no call that puts text between two
   // tags. A view that wants text says `<Text text="…"/>`, which is also what
@@ -114,8 +137,8 @@ function merge(wanted, was, node) {
     const untouched = before !== undefined && was?.getAttribute(attr.name) === attr.value;
     built.attrs.push(
       untouched
-        ? { name: attr.name, raw: before.raw, boolean: before.boolean, literal: before.literal }
-        : { name: attr.name, raw: abapLiteral(attr.value), boolean: false, literal: attr.value },
+        ? { name: attr.name, raw: before.raw, boolean: before.boolean, literal: before.literal, from: before }
+        : { name: attr.name, raw: abapLiteral(attr.value), boolean: false, literal: attr.value, from: before },
     );
   }
 
@@ -126,7 +149,7 @@ function merge(wanted, was, node) {
   // them - the document being merged from has no opinion about where they sat.
   for (const attr of node?.attrs ?? []) {
     if (!attr.hidden || built.attrs.some((a) => a.name === attr.name)) continue;
-    built.attrs.push({ name: attr.name, raw: attr.raw, boolean: attr.boolean, literal: attr.literal });
+    built.attrs.push({ name: attr.name, raw: attr.raw, boolean: attr.boolean, literal: attr.literal, from: attr });
   }
 
   const wantedKids = [...wanted.children];

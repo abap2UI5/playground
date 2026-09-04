@@ -63,11 +63,14 @@ pipeline and moves the last step into the browser.
   builder chain is written again to build it, in the layout the abap2UI5
   repositories hold their chains in. An attribute you leave alone keeps the
   ABAP that produced it, so a `client->_bind( … )` stays a bind rather than
-  freezing into the string it happened to render as. It is the shortest way
-  there is to learn the builder: change the view, read the ABAP that changed
-  with it. What it cannot rewrite — a view filled from a `LOOP`, a control name
-  held in a variable — it says instead of guessing, and the ABAP editor is
-  read-only for as long as the view is the one being typed into.
+  freezing into the string it happened to render as — and so does the code
+  around it: change one word and one word changes, in the shape the method was
+  written in, rather than the whole chain coming back reformatted. It is the
+  shortest way there is to learn the builder: change the view, read the ABAP
+  that changed with it. What it cannot rewrite — a view filled from a `LOOP`, a control name
+  held in a variable — it says instead of guessing, and the ABAP editor greys
+  out and stops taking typing for as long as the view is the one being typed
+  into.
 - **Run.** Only the classes in the editor are compiled, in about 20 ms, and
   registered with the running runtime. **Auto** beside it presses Run for you,
   shortly after you stop typing: while it is on, Run itself is inactive and

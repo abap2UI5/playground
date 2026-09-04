@@ -148,7 +148,7 @@ function closingParen(mask, from) {
 
 // ------------------------------------------------------------------- nodes
 
-const newNode = (name = "", ns = "") => ({ name, ns, attrs: [], children: [], parent: undefined });
+const newNode = (name = "", ns = "") => ({ name, ns, attrs: [], children: [], parent: undefined, span: undefined });
 
 export const qnameOf = (node) => (node.ns === "" ? node.name : `${node.ns}:${node.name}`);
 
@@ -304,12 +304,22 @@ function walkCalls({ mask, source, literalAt, from, to, cursor }) {
     while (at < to && /\s/.test(mask[at])) at += 1;
   };
 
+  // Where the segment being read begins: the `)` that closed the call before
+  // it, which in this chain shape is the character every `)->` line opens
+  // with. A call's own text runs from there to its closing parenthesis, and
+  // that is the range chain-patch.mjs rewrites when one call has to change.
+  // It is undefined for the first call of a continuation statement
+  // (`page->tag( … )`), where no such parenthesis stands in front - a call
+  // there is not one this can cut out on its own.
+  let segment;
+
   // A `factory( )` whose parenthesis opens the chain rather than a call.
   skip();
   if (mask[at] === "(") {
     const close = closingParen(mask, at);
     if (close === -1 || close > to) return fail("A parenthesis in the chain is never closed.");
     if (mask.slice(at + 1, close).trim() !== "") return fail("factory( ) takes no arguments.");
+    segment = close;
     at = close + 1;
   }
 
@@ -323,9 +333,10 @@ function walkCalls({ mask, source, literalAt, from, to, cursor }) {
     const close = closingParen(mask, open);
     if (close === -1 || close > to) return fail("A parenthesis in the chain is never closed.");
     const args = readArgs(mask, source, literalAt, open + 1, close);
-    const applied = apply(cursor, call[1].toLowerCase(), args);
+    const applied = apply(cursor, call[1].toLowerCase(), args, { start: segment, end: close });
     if (!applied.ok) return applied;
     cursor = applied.cursor;
+    segment = close;
     at = close + 1;
   }
 }
@@ -358,7 +369,16 @@ function readArgs(mask, source, literalAt, from, to) {
   }
   marks.forEach((mark, i) => {
     const end = i + 1 < marks.length ? marks[i + 1].from : to;
-    args[mark.key] = { raw: source.slice(mark.valueAt, end).trim(), literal: literalAt(mark.valueAt, end) };
+    const text = source.slice(mark.valueAt, end);
+    args[mark.key] = {
+      raw: text.trim(),
+      literal: literalAt(mark.valueAt, end),
+      // Where the `v = …` / `b = …` starts and where its value ends. It is
+      // what lets a changed value be written back over exactly itself instead
+      // of the chain being generated again around it - see chain-patch.mjs.
+      keyAt: mark.from,
+      valueEnd: end - (text.length - text.trimEnd().length),
+    };
   });
   return args;
 }
@@ -367,7 +387,7 @@ function readArgs(mask, source, literalAt, from, to) {
 // the reason this is an interpreter: `a( )` lands on the last child when there
 // is one and on the node itself when there is not, which is what makes `tag( )`
 // and `ele( )` both work with the attributes written after them.
-function apply(cursor, method, args) {
+function apply(cursor, method, args, span) {
   if (method === "ele" || method === "tag") {
     const name = args.n?.literal ?? args.positional?.literal;
     if (name === undefined) return fail("An element is added under a name this cannot read as a literal.");
@@ -375,6 +395,7 @@ function apply(cursor, method, args) {
       return fail("A namespace prefix is not a literal, so the view cannot be rewritten.");
     }
     const node = newNode(name, args.ns?.literal ?? "");
+    node.span = span;
     node.parent = cursor;
     cursor.children.push(node);
     return { ok: true, cursor: method === "ele" ? node : cursor };
@@ -391,6 +412,10 @@ function apply(cursor, method, args) {
       raw: value.raw,
       literal: args.v ? args.v.literal : undefined,
       boolean: args.b !== undefined,
+      // The call's own range, and the value's inside it.
+      span,
+      keyAt: value.keyAt,
+      valueEnd: value.valueEnd,
     });
     return { ok: true, cursor };
   }

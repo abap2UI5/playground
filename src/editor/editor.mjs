@@ -52,6 +52,9 @@ const THEME_DARK = "abap-dark";
 const THEME_LIGHT = "abap-light";
 
 let editor;
+// The element the editor was created in, kept because the pane says out loud
+// when it is read-only and Monaco's own DOM node is not where that belongs.
+let editorContainer;
 let onChange;
 // Bumped whenever a model is created or disposed. It is half of the key the
 // analysis below is cached under, and it is there for one case a version id
@@ -69,6 +72,7 @@ const modelFor = (name) => monaco.editor.getModel(monaco.Uri.parse(uriFor(name))
 // src/shell/theme.mjs) and calls setEditorTheme( ) when it changes.
 export function createEditor(container, files, options = {}) {
   onChange = options.onChange;
+  editorContainer = container;
 
   monaco.editor.defineTheme(THEME_LIGHT, { base: "vs", inherit: true, rules: [], colors: {} });
   monaco.editor.defineTheme(THEME_DARK, { base: "vs-dark", inherit: true, rules: [], colors: {} });
@@ -102,8 +106,15 @@ export function setEditorTheme(dark) {
 // at once would mean deciding which of the two is the truth on every
 // keystroke. The panel is the one that says when this goes back on, in every
 // path out of edit mode - Save, Cancel, and the file being switched away from.
+//
+// Monaco's read-only state looks exactly like its editable one - same colours,
+// and a caret that still lands where the reader clicks - so the class is what
+// makes it visible: `.editor.is-readonly` in src/shell/shell.css greys the
+// source back and takes the caret away, the way a disabled control reads.
+// Typing was already refused; this is so nobody has to try it to find out.
 export function setEditorReadOnly(readOnly) {
   editor?.updateOptions({ readOnly });
+  editorContainer?.classList.toggle("is-readonly", readOnly);
 }
 
 // Replaces one file's text as an edit somebody can undo, which is what makes
