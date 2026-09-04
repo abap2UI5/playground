@@ -79,6 +79,29 @@ export async function getSource(page, file = MAIN_FILE) {
 // the editor. The pane is the thing that is always where it looks.
 export async function clickEditor(page) {
   await page.locator("#editor").click();
+  /* And then make sure the click actually landed the caret, because twice now
+   * it has not. The first time was geometry (see above). The second is the
+   * INPUT MODEL: Monaco moved to the EditContext API, so what holds the caret
+   * is a `<div class="native-edit-context">` rather than a textarea, and on a
+   * Chromium where that path is taken a synthetic click leaves
+   * document.activeElement on BODY - the keystrokes after it go nowhere and
+   * the test fails somewhere else entirely ("the suggest widget never
+   * appeared"), which is the worst kind of red.
+   *
+   * The click stays: it is the gesture a user makes and the thing under test
+   * in files.spec.js. This only refuses to continue without the caret, and
+   * asks the editor for it when the click did not give it. */
+  const focused = await page.evaluate(() => {
+    // the one INSIDE #editor - the View tab's edit mode puts a second Monaco
+    // on the page, and "the first editor" would be a coin toss there
+    const pane = document.querySelector("#editor");
+    const editor = (window.monaco?.editor?.getEditors?.() ?? [])
+      .find((e) => pane?.contains(e.getDomNode?.() ?? null));
+    if (!editor) return false;
+    if (!editor.hasTextFocus()) editor.focus();
+    return editor.hasTextFocus();
+  });
+  expect(focused, "the caret is in the ABAP editor").toBe(true);
 }
 
 export async function openFiles(page) {
