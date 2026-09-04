@@ -40,7 +40,8 @@ test("?view=app shows the app and nothing else - no editor and no bar", async ({
   // And no theme switch or links out of it: furniture in somebody else's
   // page keeps to what it was given.
   await expect(page.locator("#theme")).toBeHidden();
-  await expect(page.locator(".social")).toHaveCount(3);
+  await expect(page.locator(".bar-nav")).toBeHidden();
+  await expect(page.locator(".social")).toHaveCount(2);
   await expect(page.locator(".social").first()).toBeHidden();
 
   // The editor is gone from the screen, not from the playground - what runs is
