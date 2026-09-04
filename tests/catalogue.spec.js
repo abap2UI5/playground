@@ -214,10 +214,14 @@ test("a card is one link, and it goes to the sample's own page", async ({ page }
   await expect(page.locator(".card .more-go").first()).toHaveText("Open the sample ›");
 
   // And the link is the whole card, not the line of text at the top of it: a
-  // click in the middle of a row opens the row.
+  // click in the middle of a row opens the row. This one is the third stage
+  // down a page that scrolls, so it is scrolled to first: boundingBox() reads
+  // the viewport and does not move it, and a coordinate below the fold is a
+  // click on nothing at all.
   const card = page.locator(".card", { hasText: "Breadcrumbs" });
+  await card.scrollIntoViewIfNeeded();
   const box = await card.boundingBox();
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height - 6);
+  await card.click({ position: { x: box.width / 2, y: box.height - 6 } });
   await expect(page).toHaveURL(/\/samples\/z2ui5_cl_smpc_app_003\/$/);
 });
 
