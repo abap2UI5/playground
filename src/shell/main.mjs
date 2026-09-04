@@ -44,6 +44,7 @@ import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
 import { setTestResults, setUpInsight, showInsight, updateInsight } from "./insight.mjs";
 import { restoreCheckerSettings } from "./checker-settings.mjs";
 import { setUpSplitter, setUpTabs } from "./layout.mjs";
+import { upgradeSiteLinks } from "./site-memory.mjs";
 import { announceAppHeight, announceReady, announceStatus, startEmbedMessages } from "./embed.mjs";
 import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
 import { openShare, setUpShareDialog } from "./share-dialog.mjs";
@@ -236,6 +237,11 @@ async function boot() {
   // embedded playground follows its reader's system rather than a choice
   // made in some other tab (see theme.mjs).
   setUpTheme({ restore: !embedded });
+  // Samples and Docs in the trailer, pointed at the page each of those sites
+  // was last left on (site-memory.mjs). Nothing is stored for the playground
+  // itself; it only reads. Skipped when embedded, where the trailer is not on
+  // screen at all.
+  if (!embedded) upgradeSiteLinks();
   setUpAutorun({ restore: !embedded });
   setUpSplitter();
   setUpAbout();
