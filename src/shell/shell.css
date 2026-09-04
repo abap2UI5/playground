@@ -74,15 +74,28 @@ body {
   display: flex;
   align-items: center;
   gap: .6rem;
-  padding: .45rem .75rem;
+  /* 20px at the ends, which is the catalogue's bar padding: the mark and the
+     two marks opposite it sit exactly where they sit over there. */
+  padding: .45rem 1.25rem;
   border-bottom: 1px solid var(--line);
   background: var(--bg-sunken);
   flex: none;
   flex-wrap: wrap;
 }
 
-.brand { font-weight: 600; letter-spacing: -.01em; margin-right: .25rem; }
-.brand-dim { color: var(--fg-dim); font-weight: 400; }
+/* Laid out as the catalogue's brand is (src/catalogue/catalogue.css): the
+   mark, then the site in the ordinary weight and the part of it you are in in
+   the heavy one. The two bars are read as one bar by somebody moving between
+   them, which is the whole reason the numbers here are that file's numbers. */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  white-space: nowrap;
+  margin-right: .25rem;
+}
+.brand b { font-weight: 600; }
 .spacer { flex: 1; }
 
 .status {
@@ -814,66 +827,67 @@ button.insight-row {
 
 /* --------------------------------------------------------------- trailer */
 
-/* The right-hand end of the bar, as the documentation site's nav bar ends
-   (VitePress's appearance switch and social links, measured rather than
-   imported): a 40 by 22 switch whose thumb slides and swaps a sun for a moon,
-   a hairline, and the marks at the same 20px - here in a box the height of
-   the bar's buttons rather than the 36px a 64px nav bar can give them. The
-   checked look keys off the same media query and data-theme the palette
-   does, so the switch is right before the bundle has run; theme.mjs keeps
-   aria-checked and the label in step for a screen reader. The switch's
-   background is the one colour on this page that is the same in both
-   themes, as it is over there. */
-.trailer { display: flex; align-items: center; gap: 0; }
+/* The right-hand end of the bar, which is the sample catalogue's right-hand
+   end (src/catalogue/catalogue.css) down to the numbers: where in this site
+   you are, the theme button, one hairline, then the two marks. Three
+   documents carry that group - this one, the catalogue and the per-sample
+   pages tools/sample-pages.mjs writes - and somebody moving between them
+   reads one bar, so it is kept identical by hand rather than left to three
+   interpretations of a house style. The sun and the moon are swapped over the
+   same media query and data-theme the palette keys on, so the button is right
+   before this bundle has been evaluated; theme.mjs keeps aria-checked and the
+   label in step for a screen reader. */
+.trailer { display: flex; align-items: center; gap: 18px; }
 
-.switch {
-  position: relative; display: block; flex: none;
-  width: 40px; height: 22px; padding: 0; border-radius: 11px;
-  border: 1px solid var(--line);
-  background: rgb(142 150 170 / .14);
-  transition: border-color .25s;
-}
-.switch:hover { border-color: var(--accent); }
-.switch-check {
-  position: absolute; top: 1px; left: 1px;
-  width: 18px; height: 18px; border-radius: 50%;
-  background: var(--bg);
-  box-shadow: 0 1px 2px rgb(0 0 0 / .04), 0 1px 2px rgb(0 0 0 / .06);
-  transition: transform .25s;
-}
-.switch-icon {
-  position: relative; display: block;
-  width: 18px; height: 18px; border-radius: 50%; overflow: hidden;
+/* The line height is the catalogue body's (14px/1.55), which this page does
+   not set - without it the item is the same text in a shorter box, and the
+   hover pill is visibly the wrong height beside the one over there. */
+.bar-nav { display: flex; gap: 4px; line-height: 1.55; }
+.bar-nav a,
+.bar-nav .here {
+  padding: 5px 10px;
+  border-radius: 5px;
   color: var(--fg-dim);
+  text-decoration: none;
 }
-.switch-icon svg {
-  position: absolute; top: 3px; left: 3px; width: 12px; height: 12px;
-  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+.bar-nav a:hover { background: var(--bg); color: var(--fg); }
+/* The one you are on - here always the playground, which is why it is a span
+   and not a link. The look aria-current gets over there. */
+.bar-nav .here { color: var(--fg); font-weight: 600; }
+
+.theme {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--fg-dim);
+  border-radius: 5px;
+  width: 30px;
+  height: 26px;
+  padding: 0;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
 }
-.switch .moon { opacity: 0; }
+.theme:hover { color: var(--fg); }
+.theme-moon { display: none; }
+:root[data-theme="dark"] .theme-sun { display: none; }
+:root[data-theme="dark"] .theme-moon { display: inline; }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .switch-check { transform: translateX(18px); }
-  :root:not([data-theme="light"]) .switch-icon { color: var(--fg); }
-  :root:not([data-theme="light"]) .switch .sun { opacity: 0; }
-  :root:not([data-theme="light"]) .switch .moon { opacity: 1; }
+  :root:not([data-theme="light"]) .theme-sun { display: none; }
+  :root:not([data-theme="light"]) .theme-moon { display: inline; }
 }
-:root[data-theme="dark"] .switch-check { transform: translateX(18px); }
-:root[data-theme="dark"] .switch-icon { color: var(--fg); }
-:root[data-theme="dark"] .switch .sun { opacity: 0; }
-:root[data-theme="dark"] .switch .moon { opacity: 1; }
 
 .socials { display: flex; align-items: center; margin-right: -6px; }
 .socials::before {
-  content: ""; width: 1px; height: 24px; margin: 0 8px 0 16px;
+  content: ""; width: 1px; height: 22px; margin: 0 6px 0 12px;
   background: var(--line);
 }
 .social {
   display: flex; align-items: center; justify-content: center;
-  width: 32px; height: 32px; color: var(--fg-dim);
+  width: 30px; height: 30px; color: var(--fg-dim);
   transition: color .5s;
 }
 .social:hover { color: var(--fg); }
-.social svg { width: 20px; height: 20px; fill: currentColor; }
+.social svg { width: 18px; height: 18px; fill: currentColor; }
 
 /* Furniture in somebody else's page keeps no links out of it, and its theme
    is its reader's system, not something to switch from inside a frame. */
@@ -963,12 +977,31 @@ button.insight-row {
 .code-atom   { color: var(--code-atom); }
 .code-comment { color: var(--fg-dim); font-style: italic; }
 
-/* Between a phone and a wide desk the bar is one row only without the
-   version line, which the About dialog carries as well - the same trade the
-   phone makes below, made earlier now that the bar ends in a switch and
-   three marks. The docs hide their nav bar's extras below 1280px too. */
-@media (max-width: 1279px) {
+/* Between a phone and a wide desk the bar sheds what is said twice, one thing
+   at a time, so that it stays ONE row down to the width where the phone rules
+   take over. The order is what each thing costs against what it says, and the
+   three widths are where the row would otherwise wrap - measured, not chosen:
+
+   - 1560: the version line goes. The About dialog carries it as well.
+   - 1440: the brand keeps its mark and loses its word - the nav's bold item
+     says "playground" right there, and the word cost 150px to say it twice.
+   - 1280: the nav goes, which is 250px of the catalogue's bar and the reason
+     these three widths exist at all. The theme button and the two marks stay
+     to the phone width, where the marks go too.
+
+   Nothing is removed for good: everything the nav reaches is reachable from
+   the page (the samples browser, the About dialog's links), which is what
+   made these the things to drop. */
+@media (max-width: 1559px) {
   .versions { display: none; }
+}
+
+@media (max-width: 1439px) {
+  .brand span { display: none; }
+}
+
+@media (max-width: 1279px) {
+  .bar-nav { display: none; }
 }
 
 @media (max-width: 820px) {
@@ -986,8 +1019,8 @@ button.insight-row {
   .brand,
   .versions,
   .spacer { display: none; }
-  /* The links at the far end go the way the docs' do on a phone - into
-     nothing, here, where they had a menu to go into; the switch stays. */
+  /* The marks at the far end go the way the catalogue drops its own below
+     620px - the nav went at 1280, and the theme button stays. */
   .socials { display: none; }
 
   .panes {

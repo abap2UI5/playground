@@ -1,12 +1,13 @@
 // Light or dark, for the whole page: the bar and the panels, the editor and
 // the app in its frame.
 //
-// The page follows the system until the switch at the right-hand end of the
-// bar says otherwise - the same switch the documentation site's bar carries,
-// and it behaves the same way: a choice is kept between visits, and a choice
-// that equals what the system says anyway is forgotten rather than stored,
-// so a page that was switched back agrees with the system again from then on
-// and follows it when it changes. That is the rule every stored setting here
+// The page follows the system until the button at the right-hand end of the
+// bar says otherwise - the same button the sample catalogue's bar carries, in
+// the same group and under the same key, and it behaves the same way: a
+// choice is kept between visits, and a choice that equals what the system
+// says anyway is forgotten rather than stored, so a page that was switched
+// back agrees with the system again from then on and follows it when it
+// changes. That is the rule every stored setting here
 // follows (see checker-settings.mjs), and for the same reason: a stored copy
 // of the default is a preference nobody expressed.
 //

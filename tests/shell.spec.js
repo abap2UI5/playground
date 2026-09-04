@@ -375,6 +375,26 @@ test("on a phone Run brings the app forward - unless there is no app to bring", 
   await expect(page.locator(".insight-row.is-error").first()).toBeVisible();
 });
 
+test("the bar begins and ends as the sample catalogue's bar does", async ({ page }) => {
+  await open(page);
+
+  // The same brand, one word changed: the mark, the site, and the part of it
+  // you are in (src/catalogue/index.html, tools/sample-pages.mjs).
+  await expect(page.locator(".brand")).toHaveText("abap2UI5 playground");
+  await expect(page.locator(".brand img")).toBeVisible();
+
+  // And the same far end: where in the site you are, the theme button, then
+  // LinkedIn and GitHub. The documentation is a nav item here rather than the
+  // third mark it used to be.
+  await expect(page.locator(".bar-nav > *")).toHaveText(["Playground", "Samples", "Docs"]);
+  await expect(page.locator('.bar-nav [aria-current="page"]')).toHaveText("Playground");
+  await expect(page.locator('.bar-nav a[href="samples/"]')).toBeVisible();
+  await expect(page.locator("#theme")).toBeVisible();
+  await expect(page.locator(".bar .social")).toHaveCount(2);
+  await expect(page.locator('.bar .social[href*="linkedin.com/company/abap2ui5"]')).toBeVisible();
+  await expect(page.locator('.bar .social[href*="github.com/abap2UI5"]')).toBeVisible();
+});
+
 test("the bar keeps to a few rows on a phone", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 760 });
   await open(page);

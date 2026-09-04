@@ -108,7 +108,16 @@
      there and merely inactive over code that came from nowhere, so the bar
      does not rearrange itself when a linked file opens. -->
 <header class="bar">
-  <span class="brand">abap2UI5 <span class="brand-dim">Playground</span></span>
+  <!-- The mark, then the site and the part of it you are in: the brand the
+       sample catalogue and every per-sample page wear (src/catalogue/index.html,
+       tools/sample-pages.mjs), so somebody moving between them reads one bar
+       rather than three. A span rather than the link it is over there - the
+       playground is already here, and a stray click on it would throw away a
+       page that costs seconds to load. -->
+  <span class="brand">
+    <img src="favicon.png" alt="" width="20" height="20">
+    <span>abap2UI5 <b>playground</b></span>
+  </span>
 
   <!-- Icons only, the three of them: the arrows are undo and redo anywhere,
        and a pair of braces is what a code editor puts on its format action.
@@ -147,25 +156,31 @@
   <button id="about" class="ghost about-button" type="button"
           title="What this is built from" aria-label="About this playground">i</button>
 
-  <!-- The right-hand end, as the documentation site's bar ends: a switch for
-       light and dark, a hairline, and the same three marks - LinkedIn, GitHub
-       and, where the docs put the playground, the playground puts the docs.
-       The switch is wired in src/shell/theme.mjs, which also keeps the label
-       and aria-checked in step with the theme; the checked look itself is
-       CSS over the same media query and data-theme the palette uses, so the
-       switch is right before the bundle has said anything. The marks are
-       inline for the same reason the docs' third one is: an icon that is an
-       empty square until a stylesheet arrives is worse than one that never
-       needed it. -->
+  <!-- The right-hand end, as the sample catalogue's bar ends and every
+       per-sample page's with it: where in this site you are, a button for
+       light and dark, a hairline, then LinkedIn and GitHub. The three
+       documents are read as one bar by somebody moving between them, so this
+       group is the same group in all three (src/catalogue/index.html,
+       tools/sample-pages.mjs) - Docs is a nav item here rather than the third
+       mark it used to be, because it is one of the three places this site
+       goes and naming it beats a book somebody has to hover. The button is
+       wired in src/shell/theme.mjs, which keeps the label and aria-checked in
+       step with the theme; the sun and the moon are swapped by CSS over the
+       same media query and data-theme the palette uses, so it says the right
+       thing before the bundle has been evaluated. The marks are inline SVG
+       for the reason the other two documents' are: a mark that is an empty
+       square until a stylesheet arrives is worse than one that never needed
+       it, and the copies are kept in step by hand. -->
   <span class="trailer">
-    <button id="theme" class="switch" type="button" role="switch" aria-checked="false"
+    <nav class="bar-nav">
+      <span class="here" aria-current="page">Playground</span>
+      <a href="samples/" title="Every abap2UI5 sample, searchable">Samples</a>
+      <a href="https://abap2ui5.github.io/docs/" target="_blank" rel="noopener">Docs</a>
+    </nav>
+    <button id="theme" class="theme" type="button" role="switch" aria-checked="false"
             aria-label="Switch to dark theme" title="Switch to dark theme">
-      <span class="switch-check">
-        <span class="switch-icon">
-          <svg class="sun" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
-          <svg class="moon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
-        </span>
-      </span>
+      <span class="theme-sun" aria-hidden="true">☀</span>
+      <span class="theme-moon" aria-hidden="true">☾</span>
     </button>
     <span class="socials">
       <a class="social" href="https://www.linkedin.com/company/abap2ui5/" target="_blank" rel="noopener"
@@ -175,10 +190,6 @@
       <a class="social" href="https://github.com/abap2UI5/abap2UI5" target="_blank" rel="noopener"
          aria-label="abap2UI5 on GitHub" title="abap2UI5 on GitHub">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
-      </a>
-      <a class="social" href="https://abap2ui5.github.io/docs/" target="_blank" rel="noopener"
-         aria-label="Documentation" title="Documentation">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M6.5 17H20v4H6.5a2.5 2.5 0 0 1 0-5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 7h7M9 10.5h5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
       </a>
     </span>
   </span>
@@ -194,7 +205,10 @@
       ABAP on the left, the app it produces on the right, and nothing in between
       but the browser. No server, no SAP system, no backend of any kind — the
       page you are looking at is a static file, and everything below happens in
-      this tab.
+      this tab. What the framework underneath it can do is in the
+      <a href="https://abap2ui5.github.io/docs/" target="_blank" rel="noopener">documentation</a>
+      — which is also where the bar's Docs goes, on a window wide enough to
+      carry the nav.
     </p>
 
     <h3>How it works</h3>
