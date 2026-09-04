@@ -72,20 +72,23 @@ test("a sample's page carries what the catalogue knows, in the HTML itself", asy
   expect(html).not.toContain('<div class="actions">');
 });
 
-test("a port's facts carry SAP's own sample, in SAP's own repository", async ({ page }) => {
-  // The demo kit shows a sample; the folder behind it is the whole of one, and
-  // "what did the original do" is the first question a port raises. The link
-  // is built out of the sample id alone - a UI5 namespace is a path in that
-  // repository - so this asserts the shape rather than a particular port.
-  const entry = paged.find((e) => e.sample && e.runs);
+test("a port's facts carry SAP's own sample, running in SAP's own demo kit", async ({ page }) => {
+  // "What did the original do" is the first question a port raises, and the
+  // demo kit answers it the way this page does - the sample on screen, not the
+  // directory the sample was committed in. The demo kit files a sample under
+  // the ENTITY it belongs to, which is not derivable from the sample id, so
+  // the link carries both facts and this asserts the shape rather than a
+  // particular port.
+  const entry = paged.find((e) => e.sample && e.entity && e.runs);
   expect(entry, "the index has a port of a demo kit sample that runs here").toBeTruthy();
 
   const html = await (await page.request.get(`/samples/${entry.page}`)).text();
-  const [library, name] = entry.sample.split(".sample.");
-  expect(html).toContain("<dt>SAP's own sample</dt>");
+  // The whole row, so a regression to the folder it replaced - a listing of
+  // view, controller and data, which is the question answered the long way
+  // round - fails here rather than passing on the words around it.
   expect(html).toContain(
-    `https://github.com/SAP/openui5/tree/master/src/${library}/test/`
-    + `${library.replace(/\./g, "/")}/demokit/sample/${name.replace(/\./g, "/")}`,
+    `<dt>SAP's own sample</dt><dd><a href="`
+    + `https://sdk.openui5.org/entity/${entry.entity}/sample/${entry.sample}"`,
   );
 
   // And the class itself is a fact too, not a button: the file, in the
@@ -122,9 +125,17 @@ test("the demo box mounts a playground in the page, and not before it is pressed
   await expect(frame).toHaveCount(1);
   const src = new URL(await frame.getAttribute("src"));
   expect(src.searchParams.get("embed")).toBe("1");
+  // The APP and nothing else: no editor, no toolbar, no status line. A page
+  // that prints the whole class two screens down does not need a second copy
+  // of it inside a frame, and the editor is on the box in "Open the full
+  // playground".
+  expect(src.searchParams.get("view")).toBe("app");
   expect(src.searchParams.getAll("src")).toEqual([entry.raw]);
-  await expect(page.frameLocator(".demo iframe").locator("#status"))
-    .toHaveText("running", { timeout: 180000 });
+  const inside = page.frameLocator(".demo iframe");
+  await expect(inside.locator("#status")).toHaveText("running", { timeout: 180000 });
+  await expect(inside.locator(".bar")).toBeHidden();
+  await expect(inside.locator(".pane-left")).toBeHidden();
+  await expect(inside.locator("#app")).toBeVisible();
 });
 
 test("a sample page prints the class itself, coloured and escaped", async ({ page }) => {

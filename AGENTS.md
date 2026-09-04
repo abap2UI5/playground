@@ -792,7 +792,9 @@ was lost in the move; nothing was ever there.
 
 So every entry in the index also gets a **static page**: title, the demo kit's
 own sentence, the class, the facts as a `<dl>` — which is also where the links
-out live: the class on GitHub, SAP's own sample for a port of one, the
+out live: the class on GitHub, SAP's own sample *running in the demo kit* for a
+port of one (`sdk.openui5.org/entity/<entity>/sample/<sample>`, which needs the
+entity too: seventy ports are filed under an entity in another namespace), the
 documentation —, every control the class BUILDS (the linter's answer, each one
 a link into the catalogue's control facet), its libraries, what it needs where
 it cannot run, **the sample running**, **the class itself**, the neighbours
@@ -815,6 +817,18 @@ could only ever fail is not an offer — and the box carries *Open the full
 playground ↗* for a reader who wants the whole window. It is also why the page
 no longer opens with a row of buttons: Run runs it here now, and the two links
 beside it were links in front of the answer.
+
+What it mounts is `data-view="app"` at `data-height="420"`: **the app and
+nothing else** — no editor, no toolbar, no status line — in a box smaller than
+the one an editor beside it needed. A page that prints the whole class two
+screens down does not need a second copy of it inside a frame, and a strip of
+the playground's own furniture across the top of it is furniture rather than
+answer. The editor is on the box, in *Open the full playground ↗*, which is
+where a reader who wants to change a line goes anyway. 420 is what the demo is
+read at rather than a floor it grows from: an abap2UI5 app is a `Shell` around
+a `Page` laid out at 100% of its box, so it never overflows one and the
+loader's grow-on-overflow never fires (`src/embed/abap2ui5-embed.js` says why
+at length).
 
 **The ABAP is on the page, not behind a link.** The class *is* the sample, and
 a page that described one and did not show it sent the reader to GitHub for the

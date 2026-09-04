@@ -33,6 +33,14 @@
 // page now, the link out to the full playground rides on the box, and GitHub
 // and the documentation are facts, in the facts.
 //
+// The box shows the APP and nothing else (`data-view="app"`): no editor, no
+// toolbar, no status line - a page that already prints the whole class two
+// screens down does not need a second copy of it inside a frame, and a strip
+// of somebody else's furniture across the top of it is furniture, not answer.
+// What the box is for is "what does this look like when it runs", and that is
+// all it now shows. The editor is one click away on the box, in the full
+// playground, which is where somebody who wants to change a line goes anyway.
+//
 // And, at the bottom, THE CLASS ITSELF - the thing the page is about, printed
 // rather than linked to (tools/sample-sources.mjs fetches it,
 // tools/abap-highlight.mjs colours it here at build time, because these pages
@@ -93,19 +101,26 @@ const dirOf = (cls) => {
   return /^[a-z][a-z0-9_]{2,60}$/.test(name) ? name : undefined;
 };
 
-/* The sample this port rebuilds, in SAP's own repository. The demo kit shows
- * a sample; the folder behind it is the whole of one - view, controller and
- * data - and "what did the original do" is the first question a port raises.
- * Built out of the sample id alone, because a UI5 namespace IS a path there:
- * sap.m.sample.ObjectIdentifier lives at sap.m's demokit/sample/ObjectIdentifier.
- * A SAPUI5-only sample gets no link at all - OpenUI5 is the repository, and it
- * has no folder for a sample that was never in it. */
-const openui5Sample = (id) => {
-  const parts = /^([a-z]\w*(?:\.[a-z]\w*)*)\.sample\.([A-Za-z]\w*(?:\.[A-Za-z]\w*)*)$/.exec(String(id ?? ""));
+/* The sample this port rebuilds, RUNNING, in SAP's own demo kit. "What did the
+ * original do" is the first question a port raises, and the demo kit answers it
+ * the way this page does - the sample on screen, with the view, the controller
+ * and the data it is made of one tab along. It used to be the repository folder
+ * behind that sample instead, which answered the same question with a directory
+ * listing and made a reader assemble the sample in their head.
+ *
+ * The demo kit addresses a sample under the ENTITY it belongs to, and that is
+ * not derivable from the sample id: seventy of the ports are filed under an
+ * entity in another namespace (sap.m.sample.ContainerNoPadding belongs to
+ * sap.ui.core.ContainerPadding), so the link needs both facts and a row missing
+ * either gets none. Nor does a SAPUI5-only sample get one: sdk.openui5.org is
+ * OpenUI5's demo kit, and it never showed a sample that was not in OpenUI5. */
+const openui5Sample = (entity, id) => {
+  const parts = /^([a-z]\w*(?:\.[a-z]\w*)*)\.sample\.(?:[A-Za-z]\w*)(?:\.[A-Za-z]\w*)*$/.exec(String(id ?? ""));
   if (parts === null || isSapui5Only(parts[1])) return undefined;
-  const [, library, name] = parts;
-  return `https://github.com/SAP/openui5/tree/master/src/${library}/test/`
-    + `${library.replace(/\./g, "/")}/demokit/sample/${name.replace(/\./g, "/")}`;
+  /* A dotted UI5 name and nothing else - the entity goes into a path, and a
+   * path is not a thing to build out of somebody else's JSON. */
+  if (!/^[a-z]\w*(?:\.[A-Za-z]\w*)+$/.test(String(entity ?? ""))) return undefined;
+  return `https://sdk.openui5.org/entity/${entity}/sample/${id}`;
 };
 
 const cut = (text, max) => {
@@ -204,7 +219,7 @@ h2 { font-size: 15px; margin: 26px 0 8px; }
  * running and the sample written, because they are the same sample - and the
  * button inside it is the loader's own (src/embed/abap2ui5-embed.js), which
  * ships no stylesheet: an embedding page dresses it, and this one dresses it
- * as the catalogue. Unpressed it is a band and not the frame's full 560
+ * as the catalogue. Unpressed it is a band and not the frame's full 420
  * pixels: a demo nobody asked for should cost the page one line of its
  * scroll, not a screen of empty box on the way past. */
 .demo { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 0; background: var(--bg); }
@@ -335,11 +350,11 @@ function samplePage(row, ctx) {
   if (row.stageTitle) facts.push(["Learning path", esc(row.stageTitle)]);
   if (row.entity) facts.push(["UI5 entity", `<code>${esc(row.entity)}</code>`]);
   if (row.sample) facts.push(["Demo kit sample", `<code>${esc(row.sample)}</code>`]);
-  const original = openui5Sample(row.sample);
+  const original = openui5Sample(row.entity, row.sample);
   if (original) {
     facts.push([
       "SAP's own sample",
-      `<a href="${esc(original)}" target="_blank" rel="noopener">SAP/openui5 ↗</a>`,
+      `<a href="${esc(original)}" target="_blank" rel="noopener">running at sdk.openui5.org ↗</a>`,
     ]);
   }
   facts.push([
@@ -372,8 +387,9 @@ function samplePage(row, ctx) {
    * turn the source link in that playground into "Back to the catalogue",
    * narrowed to the one search that has exactly one hit (src/shell/main.mjs).
    * It sits on the demo box rather than above the page, because it is the
-   * answer to "I want more room than this box", which is a thing a reader
-   * knows after seeing the box and not before. */
+   * answer to "I want more room than this box" and to "I want to change a
+   * line" - the box shows the app alone - and both are things a reader knows
+   * after seeing the box and not before. */
   const run = row.runs
     ? `<a class="run" href="../../?src=${encodeURIComponent(row.raw)}&amp;from=catalogue&amp;back=`
       + `${encodeURIComponent(`q=${row.class}`)}">Open the full playground ↗</a>`
@@ -386,10 +402,10 @@ function samplePage(row, ctx) {
     ? `<h2>Run it here</h2>
   <div class="demo">
     <div class="demo-head">
-      <span>The playground itself, in this page — the editor on the left, the app it builds on the right.</span>
+      <span>The sample running, in this page — the app on its own, with no editor over it.</span>
       ${run}
     </div>
-    <div class="abap2ui5-demo" data-src="${esc(row.raw)}" data-height="560"
+    <div class="abap2ui5-demo" data-src="${esc(row.raw)}" data-view="app" data-height="420"
          data-label="Run it in the browser"></div>
   </div>
   <p class="note demo-note">
