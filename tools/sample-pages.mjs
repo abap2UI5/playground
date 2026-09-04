@@ -19,6 +19,15 @@
 // into the playground. A page that only repeated its title would deserve the
 // thin-content treatment it would get.
 //
+// And, at the bottom, THE CLASS ITSELF - the thing the page is about, printed
+// rather than linked to (tools/sample-sources.mjs fetches it,
+// tools/abap-highlight.mjs colours it here at build time, because these pages
+// run no JavaScript). A reader who came to find out how a sample does what it
+// does was one click away from the answer on GitHub and is now none; a search
+// for a call nobody wrote a sentence about - `client->nav_app_leave( )`, a
+// property name, an event - has something to match. A class that could not be
+// fetched simply has no block: the facts above it are the page either way.
+//
 // WHERE THEY ARE LINKED FROM, which is what makes them reachable at all: every
 // card on the catalogue page (its title is a link now), the full list at
 // samples/all/ that the catalogue's footer points to, each page's "more in
@@ -38,6 +47,8 @@
 // thing to build out of somebody else's JSON.
 import fs from "fs";
 import path from "path";
+import { highlightAbap } from "./abap-highlight.mjs";
+import { fetchSampleSources } from "./sample-sources.mjs";
 
 /* Where the site is published. Only these pages need to know: a canonical
  * link and a sitemap are absolute by definition, and everything else on this
@@ -82,6 +93,23 @@ const THEME_SCRIPT = `<script>
   } catch (e) { /* a browser that refuses storage still gets the system theme */ }
 </script>`;
 
+/* The two marks the playground's own bar ends in (src/shell/index.html) and
+ * the catalogue's carries beside its theme switch, inline for the same reason
+ * they are inline there: an icon that is an empty square until a stylesheet
+ * arrives is worse than one that never needed it. The three documents keep
+ * one copy each, by hand - a shared partial would be a build step in front of
+ * a page whose whole point is that it is a file. */
+const SOCIALS = `<span class="socials">
+    <a class="social" href="https://www.linkedin.com/company/abap2ui5/" target="_blank" rel="noopener"
+       aria-label="abap2UI5 on LinkedIn" title="abap2UI5 on LinkedIn">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/></svg>
+    </a>
+    <a class="social" href="https://github.com/abap2UI5/abap2UI5" target="_blank" rel="noopener"
+       aria-label="abap2UI5 on GitHub" title="abap2UI5 on GitHub">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+    </a>
+  </span>`;
+
 const bar = (up) => `<header class="bar">
   <a class="brand" href="${up}">
     <img src="${up}favicon.png" alt="" width="20" height="20">
@@ -92,6 +120,7 @@ const bar = (up) => `<header class="bar">
     <a href="${up}samples/">Samples</a>
     <a href="https://abap2ui5.github.io/docs/" target="_blank" rel="noopener">Docs</a>
   </nav>
+  ${SOCIALS}
 </header>`;
 
 const foot = (up) => `<footer class="foot">
@@ -136,6 +165,29 @@ h2 { font-size: 15px; margin: 26px 0 8px; }
   border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; text-decoration: none;
 }
 .chips a:hover { border-color: var(--accent); }
+/* The class itself. The frame is a card the width of the text column plus
+ * whatever the code needs: ABAP is written in lines that do not wrap, so the
+ * block scrolls sideways rather than folding a chain into a paragraph, and it
+ * is the only thing on these pages allowed to be wider than the prose. The
+ * token colours are the ones the playground's bottom panel prints XML and
+ * JSON in (src/shell/shell.css) - one scheme for the whole site. */
+.source { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 0; }
+.source-head {
+  display: flex; flex-wrap: wrap; gap: 2px 16px; justify-content: space-between; align-items: baseline;
+  padding: 7px 13px; font-size: 12px; color: var(--fg-dim);
+  background: var(--bg-sunken); border-bottom: 1px solid var(--line);
+}
+.source-head b { font-family: var(--font-mono); font-weight: 400; color: var(--fg); }
+.source-body {
+  margin: 0; padding: 12px 14px; overflow-x: auto;
+  font-family: var(--font-mono); font-size: 12.5px; line-height: 1.55; tab-size: 2;
+}
+.source-body code { font: inherit; }
+.code-key { color: var(--code-name); }
+.code-string { color: var(--code-string); }
+.code-number { color: var(--code-atom); }
+.code-comment { color: var(--fg-dim); font-style: italic; }
+.source-note { margin: 8px 0 0; }
 .nearby { list-style: none; margin: 0; padding: 0; max-width: 74ch; }
 .nearby li { margin: 0 0 5px; font-size: 13px; }
 .nearby span { color: var(--fg-dim); }
@@ -149,6 +201,27 @@ h2 { font-size: 15px; margin: 26px 0 8px; }
   .facts dd { margin-bottom: 8px; }
 }
 `;
+
+/* How much of a class a page prints. Nearly all of them are shorter than this
+ * and are printed whole; the tail of samples-controls is not - one of them is
+ * two megabytes of table data around a chain - and a page that is mostly
+ * literal rows is a page nobody reads and a deploy nobody needs. What is cut
+ * is said, and the whole class is one link away. */
+const MAX_LINES = 900;
+const MAX_CHARS = 60000;
+
+/** The class as it will be printed: whole, or the first of it and how much. */
+function forPrinting(code) {
+  const lines = String(code).replace(/\s+$/, "").split("\n");
+  const kept = [];
+  let chars = 0;
+  for (const line of lines) {
+    if (kept.length >= MAX_LINES || chars + line.length > MAX_CHARS) break;
+    kept.push(line);
+    chars += line.length + 1;
+  }
+  return { text: kept.join("\n"), shown: kept.length, lines: lines.length };
+}
 
 /** One sample's page. */
 function samplePage(row, ctx) {
@@ -212,6 +285,11 @@ function samplePage(row, ctx) {
     : "";
   const github = safe(row.github);
   const docs = safe((row.docs || [])[0]);
+
+  /* The class, if the fetch got it (tools/sample-sources.mjs). A page without
+   * it is the page as it was before this block existed, which is why nothing
+   * else here depends on it. */
+  const code = row.code ? forPrinting(row.code) : undefined;
 
   /* The samples AROUND this one in its group, not the first twelve of it:
    * every sap.m port would otherwise link to the same twelve neighbours, which
@@ -320,6 +398,27 @@ ${bar("../../")}
   }
 
   ${
+    code
+      ? `<h2>The ABAP</h2>
+  <div class="source">
+    <div class="source-head">
+      <span><b>${esc(String(row.raw).split("/").pop())}</b> — ${code.lines} line${code.lines === 1 ? "" : "s"}${
+        row.branch ? `, on branch ${esc(row.branch)}` : ""
+      }</span>
+      ${github ? `<a href="${esc(github)}" target="_blank" rel="noopener">Read it on GitHub ↗</a>` : ""}
+    </div>
+    <pre class="source-body"><code>${highlightAbap(code.text)}</code></pre>
+  </div>${
+    code.shown < code.lines
+      ? `\n  <p class="note source-note">The first ${code.shown} lines of ${code.lines}${
+        github ? ` — <a href="${esc(github)}" target="_blank" rel="noopener">the whole class is on GitHub</a>` : ""
+      }.</p>`
+      : ""
+  }`
+      : ""
+  }
+
+  ${
     nearby.length
       ? `<h2>More in ${esc(row.group || (source ? source.title : "this repository"))}</h2>
   <ul class="nearby">${nearby
@@ -405,7 +504,7 @@ ${foot("../../")}
  * Writes the pages and the sitemap. Everything comes from the index this build
  * just produced, so the pages are exactly as current as it is.
  */
-export function writeSamplePages(index, distDir) {
+export async function writeSamplePages(index, distDir) {
   const samplesDir = path.join(distDir, "samples");
   fs.mkdirSync(samplesDir, { recursive: true });
 
@@ -450,6 +549,11 @@ export function writeSamplePages(index, distDir) {
       libraries: (entry.libraries || []).filter((l) => typeof l === "string"),
     });
   }
+
+  /* The ABAP of every page, in a dozen requests rather than one per class -
+   * and the one part of these pages that is allowed not to arrive. */
+  const code = await fetchSampleSources(rows);
+  for (const row of rows) row.code = code.get(row.raw);
 
   const byGroup = new Map();
   for (const row of rows) {

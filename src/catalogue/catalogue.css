@@ -21,6 +21,14 @@
   --warn-bg: #fdf3e0;
   --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  /* The syntax colours the per-sample pages print ABAP in - the same scheme
+   * the playground's bottom panel uses for XML and JSON (src/shell/shell.css,
+   * src/shell/highlight.mjs): names in red, literals in green, numbers in
+   * purple. Here they are written into the markup at build time, because
+   * those pages run no JavaScript. */
+  --code-name: #a02222;
+  --code-string: #15713a;
+  --code-atom: #7a3ea8;
   --width: 1160px;
   color-scheme: light;
 }
@@ -36,6 +44,9 @@
     --accent-fg: #0b1620;
     --warn: #e8b45c;
     --warn-bg: #2a2317;
+    --code-name: #ef9a95;
+    --code-string: #7ed49a;
+    --code-atom: #cba6f7;
     color-scheme: dark;
   }
 }
@@ -50,6 +61,9 @@
   --accent-fg: #0b1620;
   --warn: #e8b45c;
   --warn-bg: #2a2317;
+  --code-name: #ef9a95;
+  --code-string: #7ed49a;
+  --code-atom: #cba6f7;
   color-scheme: dark;
 }
 
@@ -125,6 +139,23 @@ a:hover { text-decoration: none; }
   :root:not([data-theme="light"]) .theme-sun { display: none; }
   :root:not([data-theme="light"]) .theme-moon { display: inline; }
 }
+
+/* The way out of this site, at the end of the bar the playground's own ends
+ * with (src/shell/shell.css) - one hairline, then the two marks. They are the
+ * same size and the same two colours here, because this bar and that one are
+ * read as one bar by somebody moving between them. */
+.socials { display: flex; align-items: center; margin-right: -6px; }
+.socials::before {
+  content: ""; width: 1px; height: 22px; margin: 0 6px 0 12px;
+  background: var(--line);
+}
+.social {
+  display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; color: var(--fg-dim);
+  transition: color .5s;
+}
+.social:hover { color: var(--fg); }
+.social svg { width: 18px; height: 18px; fill: currentColor; }
 
 /* -------------------------------------------------------------- masthead */
 
@@ -223,14 +254,23 @@ main {
   display: flex;
   flex-direction: column;
   gap: 7px;
+  /* The card is a link, and the title carries it - see below. */
+  position: relative;
 }
+.card:hover { border-color: var(--accent); }
 
 .card h3 { margin: 0; font-size: 14px; line-height: 1.35; }
-/* The title links to the sample's own page. It reads as the heading it is -
-   the card is already a link-coloured thing all over - and shows what it is on
-   hover, which is where a reader looks for one. */
+/* The title links to the sample's own page, and ::after stretches that one
+   link over the whole card: a row of a search result is aimed at as a row, not
+   as the line of text at the top of it. Everything else in the card is plain
+   text, so there is nothing underneath for the overlay to cover up - the one
+   card that still has a link of its own (a row with no page, which keeps its
+   link to GitHub) has no overlay, because it has no page to stretch. */
 .card h3 a { color: inherit; text-decoration: none; }
-.card h3 a:hover { color: var(--accent); text-decoration: underline; }
+.card h3 a::after { content: ""; position: absolute; inset: 0; border-radius: 8px; }
+.card:hover h3 a { color: var(--accent); }
+.card h3 a:focus-visible::after { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 .card .sub { margin: 0; font-size: 13px; color: var(--fg-dim); }
 .card .who {
   font: 11px/1.4 var(--font-mono);
@@ -238,7 +278,28 @@ main {
   word-break: break-all;
 }
 
+/* What the card says it is for, at the bottom of it: the way in on the left,
+   and on the right the one thing a reader wants before deciding - whether it
+   runs in this browser or needs something first. */
+.more {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: auto 0 0;
+  padding-top: 3px;
+  font-size: 12px;
+}
+.more-go { color: var(--accent); font-weight: 600; }
+.more-why { color: var(--fg-dim); }
+
 .badges { display: flex; flex-wrap: wrap; gap: 5px; }
+/* The one thing on a card that is above the link stretched over it: what a
+   sample needs in full is the badge's tooltip, and a tooltip under an overlay
+   is a tooltip nobody can reach. The cost is a badge-sized patch of a card
+   that does not open it, which is cheaper than the answer being unreachable. */
+.card .badge.needs[title] { position: relative; z-index: 1; }
 .badge {
   font-size: 11px;
   padding: 1px 7px;
@@ -280,6 +341,10 @@ main {
 @media (max-width: 620px) {
   .bar { gap: 10px; padding: 0 12px; }
   .brand span { display: none; }
+  /* On a phone the bar is what is paid for before anything is read, and the
+     nav is the half of it somebody came for. The marks go, as they go from
+     the playground's own bar at 820px. */
+  .socials { display: none; }
   main { padding: 0 12px 40px; }
   .masthead { padding: 22px 0 16px; }
   .masthead h1 { font-size: 22px; }

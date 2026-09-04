@@ -359,8 +359,13 @@ const index = {
  * on every entry it made a page for: which entries get one is its rule (a
  * class name that is a class name, a source URL that is https), and the
  * catalogue page and the dialog link to what it actually wrote rather than
- * repeating that rule and drifting from it. */
-writeSamplePages(index, path.join(ROOT, "dist"));
+ * repeating that rule and drifting from it.
+ *
+ * It is also the second thing in this build that talks to the network: the
+ * pages print the ABAP itself, and tools/sample-sources.mjs fetches it one
+ * tarball per ref. That fetch degrades exactly like the six above - a ref that
+ * does not arrive costs its samples their code block and nothing else. */
+await writeSamplePages(index, path.join(ROOT, "dist"));
 
 fs.mkdirSync(path.dirname(OUT), { recursive: true });
 /* Undefined values drop out of JSON.stringify on their own, which is what the

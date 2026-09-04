@@ -25,7 +25,7 @@ them before touching `tools/` or `src/runtime`.
 | `src/examples/` | ABAP served as static files, so `?src=` has same-origin targets and the link tests depend on no foreign host |
 | `src/embed/` | The embed loader (`abap2ui5-embed.js`) and a worked example page; copied verbatim to `dist/embed/` |
 | `src/catalogue/` | The sample catalogue at `/samples/`: one page, one stylesheet, one module, over the index `tools/build-catalogue.mjs` writes. Its own document and its own bundle - see "The sample catalogue" below |
-| `tools/` | The build (`build.mjs`, which drives `fetch-deps`, `build-framework`, `build-ui5`, `build-catalogue` — which writes the index and, through `sample-pages.mjs`, one static page per sample plus the sitemap —, `build-site`), the size budget (`check-size`) and the dev server (`serve`) |
+| `tools/` | The build (`build.mjs`, which drives `fetch-deps`, `build-framework`, `build-ui5`, `build-catalogue` — which writes the index and, through `sample-pages.mjs`, one static page per sample plus the sitemap, with the ABAP on those pages fetched by `sample-sources.mjs` and coloured by `abap-highlight.mjs` —, `build-site`), the size budget (`check-size`) and the dev server (`serve`) |
 | `tests/` | Playwright specs — the only test layer; everything is tested through a real browser against the built `dist/` |
 
 `deps/`, `build/` and `dist/` are generated and gitignored. Never commit them.
@@ -95,10 +95,14 @@ of each line. Each step is still its own script and still runnable by name
    same index and before it is written, `tools/sample-pages.mjs` writes what it
    implies: one static page per sample under `dist/samples/<class>/`, the full
    list at `dist/samples/all/`, `dist/samples/sample.css` and
-   `dist/sitemap.xml` - see "A page per sample" below. The one step that
+   `dist/sitemap.xml` - see "A page per sample" below. Those pages print the
+   ABAP itself, which `tools/sample-sources.mjs` fetches one tarball per ref
+   (a dozen requests for 770 classes, not one each) and `tools/abap-highlight.mjs`
+   colours here rather than in the reader's browser. The one step that
    talks to the network at build time, and the one whose failure is survivable
-   by design - see "The sample catalogue" below for what degrades and why the
-   index is built rather than fetched by the page.
+   by design - a catalogue or a tarball that does not arrive costs what it
+   carried and never the build; see "The sample catalogue" below for what
+   degrades and why the index is built rather than fetched by the page.
 5. **`tools/build-site.mjs`** bundles the page and, as a bundle of its own,
    the registry worker (`dist/editor/registry.mjs`: abaplint, the corpus
    parse and the transpiler, from `src/editor/registry-worker.mjs`), writes
@@ -725,13 +729,35 @@ the honest thing for it to say, and nothing else on this site depends on it.
 site would not otherwise need: the six files change when a sample is merged in
 another repository, and that is no reason for anything to be pushed here.
 
-**The round trip is the point.** A row that runs links to
-`../?src=<raw>&from=catalogue&back=<this page's query>`, and `showSourceLink()`
-in `src/shell/main.mjs` turns that into *Back to the catalogue* in the bar —
-pointing at the reader's own search, in the same tab, instead of at the file on
-GitHub. Find it here, run it there, come back and keep looking. A `?src=` link
-from anywhere else still offers the GitHub page, which is what that reader
-wants.
+**A card is one link, and it goes to the sample's own page.** Cards used to end
+in three actions — Run it, Source, Docs — and they were the wrong three: they
+left the site before the reader had seen what the sample *was*, and they made
+the row look like the destination, so the page underneath it read as something
+that did not exist. A card now carries the title (the link, stretched over the
+whole card by `.card h3 a::after`, so a row is aimed at as a row), the badges,
+the class, and one line saying what opening it gets — *Open the sample ›* and
+whether it runs in this browser. Run, GitHub and the documentation are the
+actions at the top of the page it opens, which is where a reader who has
+decided is standing. The one row that keeps a link of its own is one with no
+page written for it: it links to the class on GitHub, because that is all there
+is.
+
+**The round trip is the point.** The Run on a sample's page goes to
+`../../?src=<raw>&from=catalogue&back=q=<class>`, and `showSourceLink()` in
+`src/shell/main.mjs` turns that into *Back to the catalogue* in the bar — in the
+same tab, narrowed to the sample they came from, instead of pointing at the
+file on GitHub. Find it here, read it there, run it, come back and keep
+looking. A static page cannot know the search a reader had, which is the one
+thing this lost when Run moved off the card; `q=<class>` is the search with
+exactly one hit. A `?src=` link from anywhere else still offers the GitHub
+page, which is what that reader wants.
+
+**The bar ends as the playground's does** — the theme switch, a hairline, then
+LinkedIn and GitHub. Three documents carry those two marks by hand
+(`src/shell/index.html`, `src/catalogue/index.html`, `tools/sample-pages.mjs`):
+inline SVG, because a mark that is an empty square until a stylesheet arrives
+is worse than one that never needed it, and a shared partial would be a build
+step in front of a page whose whole point is that it is a file.
 
 ### A page per sample — `tools/sample-pages.mjs`, at `/samples/<class>/`
 
@@ -745,13 +771,28 @@ was lost in the move; nothing was ever there.
 So every entry in the index also gets a **static page**: title, the demo kit's
 own sentence, the class, the facts as a `<dl>`, every control the class BUILDS
 (the linter's answer, each one a link into the catalogue's control facet), its
-libraries, what it needs where it cannot run, the neighbours around it in its
-group, and the three ways out — run it here, read the ABAP, back to the search.
-Real text in the HTML and **no JavaScript at all**; the only script on the page
-is the two-line theme read the other two documents also carry. `sample.css` is
-written beside them and loaded next to `catalogue.css`, which is the frame:
-these are the catalogue's pages, and a second palette would drift from it on
-the first change to either.
+libraries, what it needs where it cannot run, **the class itself**, the
+neighbours around it in its group, and the three ways out — run it here, read
+the ABAP, back to the search. Real text in the HTML and **no JavaScript at
+all**; the only script on the page is the two-line theme read the other two
+documents also carry. `sample.css` is written beside them and loaded next to
+`catalogue.css`, which is the frame: these are the catalogue's pages, and a
+second palette would drift from it on the first change to either.
+
+**The ABAP is on the page, not behind a link.** The class *is* the sample, and
+a page that described one and did not show it sent the reader to GitHub for the
+answer and a search engine nothing but a description. `tools/sample-sources.mjs`
+fetches it — **one tarball per ref** from codeload, so 770 classes cost about a
+dozen requests instead of 770, cached on disk for a day and re-fetched by every
+CI runner — and `tools/abap-highlight.mjs` colours it *here*, because these
+pages run no JavaScript: a scanner over comments, literals, numbers and
+keywords, emitting the same token classes the bottom panel's own highlighter
+does (`src/shell/highlight.mjs`), with every character escaped on the way in.
+Classes are printed whole up to **900 lines or 60 KB**, after which the page
+says what it cut and links to the rest — the tail of samples-controls is table
+data around a chain, and one of them is two megabytes. A class that could not
+be fetched simply has no block, and its page is what it was before: a ref that
+does not arrive costs its samples their code and never the build.
 
 Four rules hold the set together:
 
@@ -764,7 +805,9 @@ Four rules hold the set together:
   repositories' committed files: every value is escaped into the markup, every
   link is dropped unless it is `https`, and a class name that is not a plain
   ABAP name gets no directory. A path is not a thing to build out of somebody
-  else's JSON.
+  else's JSON — and the printed ABAP is the same rule at scale: the highlighter
+  escapes every character before any of it goes near a template literal, so a
+  repository can never decide what is a tag here.
 - **Linked, not only listed.** A page in a sitemap and in no link is a page a
   crawler may ignore. Every card's title links to its page, each page links to
   its neighbours, and the catalogue's *footer* — its static half, the part that
