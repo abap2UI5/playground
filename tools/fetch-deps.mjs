@@ -10,7 +10,7 @@
 //                                             current consistent set
 //
 // Bumping a pin is an ordinary reviewed commit: --update-pins moves the three
-// shas TOGETHER along the documented invariant (the frontend leads, its
+// runtime shas TOGETHER along the documented invariant (the frontend leads, its
 // result/cloud/VERSION names the framework commit, the framework's own
 // node/setup pin names open-abap-core), then the build and the tests decide.
 // bump-sources.yaml runs exactly that weekly and opens a PR; by hand it is
@@ -49,6 +49,23 @@ export const PINS = [
     note: "the published UI5 frontend - result/cloud/app/webapp, mirrored from the framework pin above",
   },
   {
+    /* The samples the playground opens on and carries offline. They are not
+     * written here: every one of them is a class in abap2UI5/samples, named by
+     * src/editor/sample-list.mjs and copied into the bundle at build time
+     * (tools/build-site.mjs), with its title and its blurb read out of that
+     * repository's own catalogue.json. A sample the playground used to hold a
+     * hand-written copy of was a fork of a sample - improved upstream and not
+     * here, or the other way round, and nothing said which.
+     *
+     * Pinned rather than fetched from main for the same reason as the three
+     * below: a sample renamed upstream must fail a build somebody is looking
+     * at, not the deploy that happens to run next. */
+    name: "abap2ui5-samples",
+    url: "https://github.com/abap2UI5/samples",
+    sha: "9cb15cfd77dd2d8d2ff82cf9ac6b5b97c3106aaa",
+    note: "the samples the page opens on and lists as built in",
+  },
+  {
     name: "open-abap-core",
     url: "https://github.com/open-abap/open-abap-core",
     // The commit abap2UI5 itself pins, so the playground transpiles the
@@ -82,6 +99,8 @@ if (process.argv.includes("--print-latest")) {
  *      own node/setup/fetch-deps.mjs, so the playground keeps transpiling
  *      against the same standard library upstream's CI tests against.
  *
+ * The samples pin follows its own HEAD beside them - see below.
+ *
  * Rewrites the shas in this file and exits; running the fetch and the build
  * on the result is the caller's job (the workflow does both, gated). */
 if (process.argv.includes("--update-pins")) {
@@ -105,7 +124,17 @@ if (process.argv.includes("--update-pins")) {
     console.error("update-pins: could not read the open-abap-core sha from the framework's node/setup/fetch-deps.mjs - its pin shape changed.");
     process.exit(1);
   }
-  const next = { "abap2ui5": framework, "abap2ui5-frontend": frontendHead, "open-abap-core": openAbap };
+  /* The samples pin is not part of the three-way invariant above - it is a
+   * catalogue of apps, not a half of the runtime - so it simply follows its
+   * own HEAD. It is here rather than in a second command because a bump is a
+   * bump: one PR, one review, one build that either stays green or does not. */
+  const samplesHead = git(["ls-remote", "https://github.com/abap2UI5/samples", "HEAD"]).split("\t")[0];
+  const next = {
+    "abap2ui5": framework,
+    "abap2ui5-frontend": frontendHead,
+    "abap2ui5-samples": samplesHead,
+    "open-abap-core": openAbap,
+  };
   const self = fileURLToPath(import.meta.url);
   let text = fs.readFileSync(self, "utf8");
   let moved = 0;

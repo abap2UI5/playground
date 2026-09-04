@@ -3,7 +3,7 @@
 // Always visible, even over a single file: the one tab is what tells a reader
 // that files have abapGit names and that "+" exists at all. It starts hidden in
 // the markup only so nothing flashes before boot puts real tabs into it.
-import { addFile, closeFile, currentFile, getFiles, openFile } from "../editor/editor.mjs";
+import { addFile, closeFile, currentFile, getFiles, onFileShown, openFile } from "../editor/editor.mjs";
 import { nameProblem, skeletonFor } from "../editor/files.mjs";
 import { setStatus } from "./ui.mjs";
 
@@ -38,11 +38,17 @@ export function setUpFiles(options = {}) {
       return;
     }
     const tab = e.target.closest("[data-file]");
-    if (tab) {
-      openFile(tab.dataset.file);
-      render();
-      onOpened?.();
-    }
+    if (tab) openFile(tab.dataset.file);
+  });
+
+  // The strip follows the editor, not the other way round: a click here
+  // opens a file, and so does a row in the panel that names another file -
+  // both land in the editor's model change, and that is where the strip
+  // learns which tab is active. It used to be told only by its own clicks,
+  // and a row into another file left the wrong tab lit.
+  onFileShown(() => {
+    render();
+    onOpened?.();
   });
 
   render();
@@ -143,7 +149,7 @@ function askForNewFile() {
       done();
       return;
     }
-    const problem = nameProblem(trimmed, existing);
+    const problem = nameProblem(trimmed, existing, existing);
     if (problem) {
       // Kept open with the offending name still in it: the answer to "that is
       // not a file name" is almost always a small correction, not starting

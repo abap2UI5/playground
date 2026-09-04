@@ -2,10 +2,26 @@ name: pages
 
 # Publishes dist/ to GitHub Pages. Runs the same build and the same tests as
 # check.yml before deploying - a red test never reaches the published page.
+#
+# ALSO ON A SCHEDULE, which a static site would not normally need. The sample
+# catalogue at /samples/ is built from the six catalogues the three sample
+# repositories commit (tools/build-catalogue.mjs), and those change when a
+# sample is merged THERE - which is no reason for anything to be pushed here.
+# Without this, a sample merged the day after a playground deploy would wait
+# for the next unrelated commit to show up in the catalogue. Daily, which is
+# the freshness the examples dialog used to get from its 24-hour cache of the
+# same catalogues, and cheap: every build step is stamped, so a run that finds
+# nothing changed rebuilds only the site and the index.
+#
+# Nightly rather than triggered from the three repositories: a repository_
+# dispatch would need a token held over there, and none of this is urgent
+# enough to be worth one.
 
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: '0 4 * * *'
   workflow_dispatch:
 
 permissions:

@@ -8,11 +8,15 @@
 import {
   applyFixes,
   currentFile,
+  fileVersion,
   fixableNow,
   focusProblem,
   getFiles,
+  getSource,
   invalidateAnalysis,
   refresh,
+  setEditorReadOnly,
+  setSourceOf,
 } from "../editor/editor.mjs";
 import {
   abaplintDefaults,
@@ -21,7 +25,12 @@ import {
   applyAbaplintSettings,
   documentSymbols,
 } from "../editor/registry.mjs";
-import { applyLinterSettings, linterDefaults, linterSettings } from "../editor/abap2ui5-lint.mjs";
+import { applyLinterSettings, linterDefaults, linterSettings, viewsFor } from "../editor/abap2ui5-lint.mjs";
+import { copyToClipboard } from "./share.mjs";
+import { onRoundtrip, roundtripList } from "./roundtrips.mjs";
+import { prettyXml } from "./xml-pretty.mjs";
+import { highlighted } from "./highlight.mjs";
+import { sourceWithView, viewEditable } from "./view-edit.mjs";
 import { keepAbaplintSettings, keepLinterSettings } from "./checker-settings.mjs";
 import { readStored, writeStored } from "./storage.mjs";
 import { currentLog, hideOutput, onLogChange, setStatus } from "./ui.mjs";
@@ -42,15 +51,42 @@ function collapse() {
   heightBeforeCollapse = panel.style.height;
   panel.style.height = "";
   panel.classList.add("is-collapsed");
+  paintToggle();
 }
 
 function expand() {
   panel.classList.remove("is-collapsed", "is-tucked");
   if (heightBeforeCollapse !== "") panel.style.height = heightBeforeCollapse;
+  paintToggle();
+}
+
+// Folded or not is a preference, so it is kept - but only when somebody said
+// so. The panel opens itself when something is written to the log, and a
+// failure taking the screen is not a request to have it open tomorrow.
+function remember(collapsed) {
+  writeStored(COLLAPSED_KEY, collapsed ? "1" : "0");
+}
+
+function paintToggle() {
+  const button = document.getElementById("insight-toggle");
+  if (!button) return;
+  const open = !panel.classList.contains("is-collapsed");
+  button.textContent = open ? "▾" : "▴";
+  button.setAttribute("aria-expanded", String(open));
+  const label = open ? "Hide the panel" : "Show the panel";
+  button.title = label;
+  button.setAttribute("aria-label", label);
 }
 
 const HEIGHT_KEY = "abap2ui5-playground:insight-height";
+const COLLAPSED_KEY = "abap2ui5-playground:insight-collapsed";
 const MIN_HEIGHT = 80;
+
+// Where the panel starts when nobody has said. At desk width it is a stripe
+// under a tall editor and there is no reason to hide it; on a phone it is a
+// third of what the editor has to begin with, and the Problems badge in the
+// strip says whether it is worth the room before it takes any.
+const NARROW = "(max-width: 820px)";
 
 export function setUpInsight() {
   panel = document.getElementById("insight");
@@ -59,16 +95,30 @@ export function setUpInsight() {
 
   setUpResize();
 
+  const toggle = document.getElementById("insight-toggle");
+  toggle?.addEventListener("click", () => {
+    const open = !panel.classList.contains("is-collapsed");
+    if (open) collapse();
+    else expand();
+    remember(open);
+  });
+
+  const stored = readStored(COLLAPSED_KEY);
+  if (stored === null ? window.matchMedia(NARROW).matches : stored === "1") collapse();
+  paintToggle();
+
   for (const tab of tabs) {
     tab.addEventListener("click", () => {
-      // Clicking the tab that is already open collapses the panel. On a short
-      // screen the editor is what matters, and this is the only control that
-      // gives the space back.
+      // Clicking the tab that is already open collapses the panel - the toggle
+      // beside them is the same thing said out loud, for the reader who never
+      // guessed that a tab does two things.
       if (tab.dataset.insight === view && !panel.classList.contains("is-collapsed")) {
         collapse();
+        remember(true);
         return;
       }
       expand();
+      remember(false);
       view = tab.dataset.insight;
       render();
     });
@@ -93,6 +143,13 @@ export function setUpInsight() {
     const row = e.target.closest("[data-file]");
     if (!row) return;
     focusProblem(row.dataset.file, Number(row.dataset.line), Number(row.dataset.column));
+  });
+
+  // A roundtrip landing while its tab is open is listed as it lands; the
+  // badge counts them whichever tab is open.
+  onRoundtrip(() => {
+    paintRoundtripCount();
+    if (view === "roundtrips") render();
   });
 
   render();
@@ -163,7 +220,7 @@ export function updateInsight(problems) {
   paintCount();
   // The config views hold half-typed text somebody is in the middle of - a
   // rerender under their hands would throw it away on every keystroke.
-  if (view === "problems" || view === "outline") render();
+  if (view === "problems" || view === "outline" || view === "view") render();
 }
 
 // A dot on the Log tab while there is something unread in it, so switching
@@ -188,6 +245,9 @@ function paintCount() {
 const VIEWS = {
   problems: problemList,
   outline: outlineList,
+  view: viewPreview,
+  tests: testView,
+  roundtrips: roundtripView,
   log: logView,
   abaplint: abaplintConfig,
   abap2ui5: linterConfig,
@@ -263,10 +323,27 @@ function problemList() {
     who.className = "insight-who";
     // Which checker said it, because the two mean different things: abaplint
     // says this will not compile, abap2UI5 says it will compile and be wrong.
-    who.textContent = problem.source === "abap2UI5" ? `abap2UI5 · ${problem.rule ?? ""}` : "abaplint";
+    who.textContent = problem.source === "abap2UI5" ? `abap2UI5 · ${problem.rule ?? ""}` : (problem.source ?? "abaplint");
 
     row.append(where, what, who);
     item.append(row);
+
+    // Where the rule is explained - the linter's rules page for an abap2UI5
+    // finding, rules.abaplint.org for abaplint's (its diagnostics carry the
+    // link as codeDescription). Outside the button, because a link cannot
+    // live inside one; the row still goes to the problem, this goes to the
+    // page that says what the problem means and shows the same code fixed.
+    const url = problem.url ?? problem.codeDescription?.href;
+    if (url) {
+      const doc = document.createElement("a");
+      doc.className = "insight-doc";
+      doc.href = url;
+      doc.target = "_blank";
+      doc.rel = "noopener";
+      doc.title = `What ${problem.rule ?? problem.code ?? "this rule"} means, and the same code fixed`;
+      doc.textContent = "rule ↗";
+      item.append(doc);
+    }
     list.append(item);
   }
   return wrap;
@@ -286,12 +363,12 @@ function fixBar(count) {
   button.type = "button";
   button.className = "primary";
   button.textContent = "Fix them";
-  button.addEventListener("click", () => {
+  button.addEventListener("click", async () => {
     button.disabled = true;
     // Both checkers rewrite the source, so this is somebody's code being
     // changed under them. It goes in as one edit per file, which is what makes
     // Ctrl+Z take the whole thing back rather than unpicking it fix by fix.
-    const fixed = applyFixes();
+    const fixed = await applyFixes();
     updateInsight(refresh());
     // The outcome goes to the status line, not into this bar: the line above
     // was written by a render that the updateInsight( ) on the line before just
@@ -354,13 +431,31 @@ const KIND = {
   14: "const",
 };
 
+// The outline comes from the registry worker, so it is a round trip: what is
+// rendered is the last answer for this file at this version, and a newer one
+// is asked for and rendered when it lands. A file mid-edit can be
+// unparseable, and an outline is not worth an exception - the underlines
+// already say what is wrong - so a failed answer is an empty one.
+let outline = { key: undefined, symbols: [] };
+let outlineAsked;
+
 function outlineOf(file) {
   if (!file) return [];
+  const key = `${file}@${fileVersion(file)}`;
+  if (outline.key === key) return outline.symbols;
+  if (outlineAsked !== key) {
+    outlineAsked = key;
+    documentSymbols(file)
+      .then((symbols) => flatten(symbols, 0))
+      .catch(() => [])
+      .then((symbols) => {
+        outline = { key, symbols };
+        if (view === "outline" && `${currentFile()}@${fileVersion(currentFile())}` === key) render();
+      });
+  }
   try {
-    return flatten(documentSymbols(file), 0);
+    return outline.symbols;
   } catch {
-    // A file mid-edit can be unparseable, and an outline is not worth an
-    // exception - the underlines already say what is wrong.
     return [];
   }
 }
@@ -384,6 +479,182 @@ function empty(text) {
   p.className = "insight-empty";
   p.textContent = text;
   return p;
+}
+
+// ------------------------------------------------------------------- view
+
+// The XML the builder chain in the open file produces, as the abap2UI5
+// linter reconstructs it - without running a line of ABAP, so it follows
+// the typing. Not the view the app rendered: that one is in the Roundtrips
+// tab, where it arrived. This is the answer to "what does this chain make",
+// one element per line, which is the fastest way to learn the builder.
+//
+// And, with Edit, the other direction: change the XML and the chain is
+// written again to build it (src/shell/view-edit.mjs). It is the shortest way
+// there is to learn the builder - move a control, see the ABAP that moves it -
+// and the fastest way to try a property on a control without looking up which
+// call sets it.
+function viewPreview() {
+  const file = currentFile();
+  const source = file ? getSource(file) : undefined;
+  if (source === undefined) return empty("Nothing to show yet.");
+  // The edit is about one file's chain. Switching to another one ends it
+  // rather than writing this XML into that file.
+  if (editing && editing.file !== file) stopEditing();
+
+  const { docs, notes, loaded } = viewsFor(source);
+  if (!loaded) return empty("The abap2UI5 linter is still loading - the view appears when it has.");
+  if (docs.length === 0) {
+    return empty("This file builds no view with z2ui5_cl_ui5_view_builder - nothing to reconstruct.");
+  }
+  // The same element, kept across a re-render: half-typed XML and where the
+  // caret is in it are not things to rebuild from the source, which is exactly
+  // what everything else in this panel is.
+  if (editing) return editing.element;
+
+  const wrap = document.createElement("div");
+  wrap.className = "view-preview";
+  docs.forEach((doc, i) => {
+    const pretty = prettyXml(doc);
+    const head = document.createElement("div");
+    head.className = "log-head";
+    const title = document.createElement("span");
+    title.className = "log-title";
+    title.textContent = docs.length === 1 ? "The view this file builds" : `View ${i + 1} of ${docs.length}`;
+    const actions = document.createElement("span");
+    actions.className = "log-actions";
+    // One view per file is what can be edited: with two, which chain a change
+    // belongs to is a guess, and the reader is one click from the ABAP anyway.
+    if (docs.length === 1) actions.append(editButton(source, doc, pretty));
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "ghost";
+    copy.textContent = "Copy";
+    copy.addEventListener("click", async () => {
+      copy.textContent = (await copyToClipboard(pretty)) ? "copied" : "Copy";
+    });
+    actions.append(copy);
+    head.append(title, actions);
+    const body = document.createElement("pre");
+    body.className = "log-body view-xml";
+    body.append(highlighted(pretty, "xml"));
+    wrap.append(head, body);
+  });
+  if (notes.length > 0) {
+    const said = document.createElement("p");
+    said.className = "config-blurb view-notes";
+    said.textContent = notes.join(" · ");
+    wrap.append(said);
+  }
+  return wrap;
+}
+
+// Edit, or the reason it is off. A chain this cannot rewrite is the normal
+// case rather than the exceptional one - a view filled from a LOOP, a control
+// name held in a variable, a second view in the same method - and the button
+// says which of those it is instead of being missing.
+function editButton(source, doc, pretty) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "ghost";
+  button.id = "view-edit";
+  button.textContent = "Edit";
+  const can = viewEditable(source, doc);
+  if (can.ok) {
+    button.title = "Change the view here; the builder chain is written again from it";
+    button.addEventListener("click", () => startEditing(currentFile(), doc, pretty));
+  } else {
+    button.disabled = true;
+    button.title = can.why;
+  }
+  return button;
+}
+
+// What is open in the View tab's editor, or nothing. The draft lives here
+// rather than in the textarea alone so that a re-render - a roundtrip
+// landing, a tab going away and coming back - cannot lose what was typed.
+let editing;
+
+function startEditing(file, xml, pretty) {
+  editing = { file, xml, draft: pretty };
+  editing.element = buildViewEditor();
+  // The ABAP is derived from this XML while it is open, so it stops being
+  // typed into: two editable copies of one view means deciding which of them
+  // is the truth on every keystroke, and neither answer is a good one.
+  setEditorReadOnly(true);
+  render();
+}
+
+function stopEditing() {
+  editing = undefined;
+  setEditorReadOnly(false);
+}
+
+function buildViewEditor() {
+  const wrap = document.createElement("div");
+  wrap.className = "view-preview is-editing";
+
+  const head = document.createElement("div");
+  head.className = "log-head";
+  const title = document.createElement("span");
+  title.className = "log-title";
+  title.textContent = "Editing the view";
+  const actions = document.createElement("span");
+  actions.className = "log-actions";
+  const save = document.createElement("button");
+  save.type = "button";
+  save.className = "primary";
+  save.id = "view-save";
+  save.textContent = "Save";
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "ghost";
+  cancel.id = "view-cancel";
+  cancel.textContent = "Cancel";
+  actions.append(save, cancel);
+  head.append(title, actions);
+
+  const area = document.createElement("textarea");
+  area.className = "config-text view-editor";
+  area.id = "view-editor";
+  area.spellcheck = false;
+  area.value = editing.draft;
+  area.addEventListener("input", () => {
+    editing.draft = area.value;
+  });
+
+  const said = document.createElement("p");
+  said.className = "config-said view-said";
+  said.id = "view-said";
+  const explain = () => {
+    said.classList.remove("is-error");
+    said.textContent =
+      "The ABAP editor is read-only until this is saved or cancelled. A value you leave alone keeps the " +
+      "ABAP that produced it, so a bind stays a bind.";
+  };
+  explain();
+
+  save.addEventListener("click", () => {
+    const file = editing.file;
+    const written = sourceWithView(getSource(file), editing.xml, editing.draft);
+    if (!written.ok) {
+      said.classList.add("is-error");
+      said.textContent = written.why;
+      return;
+    }
+    stopEditing();
+    setSourceOf(file, written.source);
+    setStatus("the builder chain was written again from the view");
+    render();
+  });
+
+  cancel.addEventListener("click", () => {
+    stopEditing();
+    render();
+  });
+
+  wrap.append(head, area, said);
+  return wrap;
 }
 
 // ------------------------------------------------------------------ config
@@ -545,6 +816,204 @@ function appended(...nodes) {
   box.append(...nodes);
   return box;
 }
+
+// ------------------------------------------------------------------ tests
+
+// What the last Run's unit tests said - set by run( ) in main.mjs from the
+// runtime's answer (runUnitTests( ) in src/runtime/index.mjs); a run with
+// no test include sets an empty list, which the tab explains.
+let testResults = [];
+
+export function setTestResults(results) {
+  testResults = results ?? [];
+  paintTestCount();
+  if (view === "tests") render();
+}
+
+function paintTestCount() {
+  const badge = document.getElementById("test-count");
+  if (!badge) return;
+  const failed = testResults.filter((r) => !r.passed).length;
+  badge.textContent = testResults.length === 0 ? "" : failed > 0 ? String(failed) : "✓";
+  badge.className = `insight-badge${failed > 0 ? " is-error" : testResults.length > 0 ? " is-ok" : ""}`;
+}
+
+// One row per test method: passed or failed, the class and the method, how
+// long it took, and for a failure the assertion's message with what was
+// expected and what was there. A row goes to the assertion's line - the
+// runtime traces the JavaScript frame the assertion was raised from back to
+// the test include - and, for a test that passed, nowhere.
+function testView() {
+  if (testResults.length === 0) {
+    return empty(
+      "No tests ran. Add a file called <class>.clas.testclasses.abap beside your class - the + in the file strip " +
+        "offers it - with local classes FOR TESTING, and Run runs them before starting the app.",
+    );
+  }
+  const wrap = document.createElement("div");
+  wrap.className = "tests";
+
+  const passed = testResults.filter((r) => r.passed).length;
+  const failed = testResults.length - passed;
+  const head = document.createElement("p");
+  head.className = `tests-summary${failed > 0 ? " is-error" : ""}`;
+  head.textContent =
+    failed === 0
+      ? `${passed} test${passed === 1 ? "" : "s"} passed`
+      : `${failed} of ${testResults.length} test${testResults.length === 1 ? "" : "s"} failed`;
+  wrap.append(head);
+
+  const list = document.createElement("ul");
+  list.className = "insight-list";
+  for (const result of testResults) {
+    const item = document.createElement("li");
+    const row = document.createElement(result.location ? "button" : "div");
+    if (result.location) row.type = "button";
+    row.className = `insight-row test-row is-${result.passed ? "ok" : "error"}`;
+    if (result.location) {
+      row.dataset.file = result.location.file;
+      row.dataset.line = String(result.location.line);
+      row.dataset.column = "1";
+    }
+
+    const mark = document.createElement("span");
+    mark.className = "test-mark";
+    mark.textContent = result.passed ? "✓" : "✗";
+
+    const name = document.createElement("span");
+    name.className = "insight-what test-name";
+    name.textContent = `${result.testclass.toLowerCase()}->${result.method.toLowerCase()}`;
+
+    const took = document.createElement("span");
+    took.className = "insight-who";
+    took.textContent = `${Math.max(1, Math.round(result.microseconds / 1000))} ms`;
+
+    row.append(mark, name, took);
+    item.append(row);
+
+    if (!result.passed) {
+      const detail = document.createElement("div");
+      detail.className = "test-detail";
+      const lines = [];
+      if (result.message) lines.push(result.message);
+      if (result.expected !== "" || result.actual !== "") {
+        lines.push(`expected: ${result.expected}`, `actual:   ${result.actual}`);
+      }
+      if (lines.length === 0) lines.push(result.status.toLowerCase());
+      detail.textContent = lines.join("\n");
+      item.append(detail);
+    }
+    list.append(item);
+  }
+  wrap.append(list);
+  return wrap;
+}
+
+// ------------------------------------------------------------- roundtrips
+
+function paintRoundtripCount() {
+  const badge = document.getElementById("roundtrip-count");
+  if (!badge) return;
+  const list = roundtripList();
+  const failed = list.some((r) => r.status >= 400);
+  badge.textContent = list.length === 0 ? "" : String(list.length);
+  badge.className = `insight-badge${failed ? " is-error" : ""}`;
+}
+
+// Which roundtrip is opened up in the list, by its number; a new Run starts
+// the numbering over, so a stale selection simply matches nothing.
+let openedRoundtrip;
+
+// The conversation between the frontend and the app, one row per roundtrip:
+// the event, how long the ABAP took, and what the answer did - a view, a
+// popup, a model update, a dump. A row opens up into the request and the
+// response as they travelled, and the view XML the answer carried, one
+// element per line.
+function roundtripView() {
+  const list = roundtripList();
+  if (list.length === 0) {
+    return empty("Nothing yet. Every request the app sends and every answer it gets lands here, with the time the ABAP took.");
+  }
+
+  const wrap = document.createElement("div");
+  wrap.className = "roundtrips";
+
+  const rows = document.createElement("ul");
+  rows.className = "insight-list";
+  for (const entry of list) {
+    const item = document.createElement("li");
+    item.className = "roundtrip-item";
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = `insight-row roundtrip-row${entry.status >= 400 ? " is-error" : ""}${entry.n === openedRoundtrip ? " is-open" : ""}`;
+    row.setAttribute("aria-expanded", String(entry.n === openedRoundtrip));
+
+    const n = document.createElement("span");
+    n.className = "insight-where";
+    n.textContent = `#${entry.n}`;
+
+    const what = document.createElement("span");
+    what.className = "insight-what";
+    what.textContent = entry.args.length > 0 ? `${entry.event} (${entry.args.join(", ")})` : entry.event;
+
+    const did = document.createElement("span");
+    did.className = "roundtrip-did";
+    did.textContent = entry.did.join(" · ");
+
+    const ms = document.createElement("span");
+    ms.className = "insight-who";
+    ms.textContent = `${entry.ms} ms`;
+
+    row.append(n, what, did, ms);
+    row.addEventListener("click", () => {
+      openedRoundtrip = openedRoundtrip === entry.n ? undefined : entry.n;
+      render();
+    });
+    item.append(row);
+    if (entry.n === openedRoundtrip) item.append(roundtripDetail(entry));
+    rows.append(item);
+  }
+  wrap.append(rows);
+  return wrap;
+}
+
+function roundtripDetail(entry) {
+  const detail = document.createElement("div");
+  detail.className = "roundtrip-detail";
+  const block = (title, text, kind) => {
+    const head = document.createElement("div");
+    head.className = "log-head";
+    const label = document.createElement("span");
+    label.className = "log-title";
+    label.textContent = title;
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "ghost";
+    copy.textContent = "Copy";
+    copy.addEventListener("click", async () => {
+      copy.textContent = (await copyToClipboard(text)) ? "copied" : "Copy";
+    });
+    head.append(label, copy);
+    const pre = document.createElement("pre");
+    pre.className = "log-body roundtrip-body";
+    pre.append(highlighted(text, kind));
+    detail.append(head, pre);
+  };
+  for (const view of entry.views) block(`View for slot ${view.slot}`, prettyXml(view.xml), "xml");
+  // A request and a response are objects the runtime hands over, so they are
+  // JSON here - `asText` only stringifies what is not already a string, and a
+  // body that came as a string (a dump) is not JSON and is left grey.
+  block("Request", asText(entry.request), kindOf(entry.request));
+  block(
+    entry.status >= 400 ? `Response (${entry.status})` : "Response",
+    asText(entry.response),
+    kindOf(entry.response),
+  );
+  return detail;
+}
+
+const asText = (value) => (typeof value === "string" ? value : JSON.stringify(value, null, 2));
+const kindOf = (value) => (typeof value === "string" ? "text" : "json");
 
 // ------------------------------------------------------------------- log
 

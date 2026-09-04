@@ -20,8 +20,10 @@
 //                first is the app. Same rule as the playground's ?src=.
 //   data-code    ABAP source inline, for a demo that lives only in this page.
 //   data-view    "app" for the running app on its own, without the editor.
-//   data-height  starting height in pixels (default 520, or 320 for view=app,
-//                which then grows to fit what the app rendered).
+//   data-height  starting height in pixels (default 520). A view=app demo grows
+//                past it when the app OVERFLOWS it - an app laid out at 100% of
+//                its box never does, so for those this is the height it is read
+//                at and the one thing worth setting per demo.
 //   data-label   the text on the button (default "Run this example").
 //   data-origin  where the playground is served from, if not this script's own.
 //
@@ -112,7 +114,24 @@
     el.dataset.mounted = "1";
 
     const appOnly = el.dataset.view === "app";
-    const height = Number(el.dataset.height) || (appOnly ? 320 : 520);
+    /* 520 either way, and app-only used to start at 320 on the theory that a
+     * small app should not sit in the middle of a big box - it would grow to
+     * fit, and starting small cost nothing.
+     *
+     * It cost the whole feature. Growing happens on the height the app
+     * document reports, and `scrollHeight` is never less than the box: a
+     * document reports a height above its box only when it OVERFLOWS one. An
+     * abap2UI5 app does not overflow. It is a `Shell` around a `Page` laid out
+     * at 100% of whatever it was given, so it reports exactly the box it has
+     * and confirms it forever - 320px, a page header and about four lines,
+     * with the rest of the app clipped underneath. Every documentation page
+     * embedding an app-only demo was showing its readers a thumbnail.
+     *
+     * So the starting height is what a demo is actually read at, and growing
+     * stays what it always was: the overflow case, an app that really is
+     * taller than the box. `data-height` is how a page that knows better says
+     * so. */
+    const height = Number(el.dataset.height) || 520;
 
     const frame = document.createElement("iframe");
     frame.src = await urlFor(el);

@@ -6,50 +6,130 @@
 <title>abap2UI5 Playground</title>
 <meta name="description" content="Write abap2UI5 apps in the browser: ABAP on the left, the running app on the right, no server involved.">
 <link rel="stylesheet" href="assets/shell.css">
+<!-- The abap2UI5 mark, as the documentation site wears it - rendered down from
+     the docs' logo.png (tools have no ImageMagick here; the PNGs are checked
+     in). 64px covers a tab at any pixel density; the touch icon is what a
+     phone puts on its home screen. -->
+<link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<!-- Installable: the manifest names the page as an app, the service worker
+     (sw.js) keeps every asset it needs, and a browser that has both offers
+     "install" - after which the playground opens from a home screen and
+     runs with no network at all, on the build the last online visit left
+     in the cache. Every path relative, like everything else here. The
+     theme colour is the bar's, in both palettes, so the window frame an
+     installed app gets is the bar continued. -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f5f7">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1e2024">
 
-<!-- The three heavy assets the page is going to want, asked for now rather
-     than when the code that needs them gets around to running.
+<!-- The ABAP runtime, started before anything else on this page.
 
-     Left alone they arrive in a chain, because each one is requested by the
-     code in the one before it: nothing asks for the framework or the corpus
-     until assets/shell.mjs has been downloaded and evaluated, and nothing asks
-     for SQLite until the framework has been. Every link in that chain is a
-     round trip that could have been spent transferring something.
+     The transpiled framework runs in a dedicated worker (src/runtime/
+     worker.mjs, src/shell/runtime-client.mjs), and so does the abaplint
+     registry (src/editor/registry-worker.mjs, src/editor/registry.mjs). Both
+     are started here, in an inline script at the top of the document, rather
+     than from the shell bundle that will use them. Left to the bundle, nothing would ask for the
+     framework until assets/shell.mjs had been downloaded and evaluated - a
+     megabyte and a half over the wire and most of a second of processor -
+     and the framework's own download and evaluation would follow that
+     instead of overlapping it. From here it starts with the document, on a
+     thread of its own, and is usually up before the editor is.
 
-     What that is worth depends on which of the two is scarce. Where bandwidth
-     is the whole story there is nothing to win and these change nothing;
-     where round trips cost anything they are worth about a tenth of the wait.
-     AGENTS.md, "What a visitor waits for", has the measurements.
+     A plain script rather than a module: a module script is deferred until
+     the document has been parsed, and this is meant to run the moment the
+     parser reaches it. The bundle picks the worker up by this name; a page
+     without this script still works, it only starts the runtime later.
 
-     These are relative to the document, like everything else here, so they
-     resolve under a GitHub Pages project path as well as at a site root. Keep
-     them in step with what src/shell/main.mjs and the framework actually
-     fetch: a preload nothing collects is downloaded twice and warned about in
-     the console. `crossorigin` is on the two fetched ones because fetch()
-     makes a CORS request and a preload only satisfies a request it matches;
-     the framework is an ES module, so it gets modulepreload instead. -->
-<link rel="modulepreload" href="runtime/framework.mjs">
-<link rel="preload" href="editor/corpus.json" as="fetch" crossorigin>
-<link rel="preload" href="runtime/sql-wasm.wasm" as="fetch" crossorigin>
+     What the worker says before the bundle is listening is kept, because it
+     would otherwise be lost: a Worker dispatches its events whether or not
+     anybody has attached a handler yet. Both things it can say arrive in
+     exactly that window on a fast machine - "ready", when the framework came
+     out of the cache and booted before the bundle had been evaluated, and an
+     error, when the script could not be loaded at all - and either one lost
+     is a page that waits for a runtime forever. The bundle replays the
+     buffer when it attaches and then switches it off.
+
+     Relative to the document, like everything else here, so it resolves
+     under a GitHub Pages project path as well as at a site root. Keep the
+     path in step with tools/build-framework.mjs, which writes the bundle. -->
+<script>
+  (function () {
+    function start(script) {
+      var worker = new Worker(new URL(script, document.baseURI), { type: "module" });
+      worker.early = [];
+      worker.addEventListener("message", function (event) {
+        if (worker.early) worker.early.push({ data: event.data });
+      });
+      worker.addEventListener("error", function (event) {
+        if (worker.early) worker.early.push({ error: event.message });
+      });
+      return worker;
+    }
+    // The ABAP runtime, and the abaplint registry - which fetches and parses
+    // the corpus the editor checks against, so nothing here preloads it: a
+    // document's preload does not reach a worker's fetch, and neither does
+    // SQLite's .wasm, which the runtime fetches for itself. Both scripts are
+    // named in tools/build-site.mjs and tools/build-framework.mjs.
+    window.__abap2ui5Runtime = start("runtime/framework.mjs");
+    window.__abap2ui5Registry = start("editor/registry.mjs");
+
+    // The theme the switch in the bar chose last time, applied before the
+    // first paint - src/shell/theme.mjs owns the key and the rule, and reads
+    // it again through storage.mjs; this repeats the read only so the bar does
+    // not paint light and turn dark once the bundle has been evaluated. Not
+    // when embedded, where theme.mjs never restores it either. localStorage
+    // throws where it is refused (see storage.mjs), hence the try.
+    try {
+      if (!/[?&]embed=1(&|$)/.test(location.search)) {
+        var theme = localStorage.getItem("abap2ui5-playground:theme");
+        if (theme === "dark" || theme === "light") document.documentElement.dataset.theme = theme;
+      }
+    } catch (e) {
+      // No preference stored, then.
+    }
+  })();
+</script>
+
+<!-- The chunks assets/shell.mjs imports at its top, preloaded so they travel
+     beside it rather than after it. Written by tools/build-site.mjs, which
+     knows their hashed names; the marker is replaced, not kept. -->
+<!-- __MODULEPRELOADS__ -->
 </head>
 <body>
+<!-- Two groups: on the left what makes something run - Format, the samples
+     browser (the built-in samples and the sample repositories, searchable;
+     there is no sample menu, this is the one way in, which is why it is the
+     one button dressed to be clicked), Run and the Auto switch that presses
+     it, and the status line that answers them; on the right, after the spacer, what one does with a running app -
+     share it, go to where its code lives, open it on its own. The Source
+     link (its page on GitHub - "GitHub" it used to say, until the framework's
+     GitHub mark arrived at the far end and the two read as one) is always
+     there and merely inactive over code that came from nowhere, so the bar
+     does not rearrange itself when a linked file opens. -->
 <header class="bar">
   <span class="brand">abap2UI5 <span class="brand-dim">Playground</span></span>
 
+  <!-- Icons only, the three of them: the arrows are undo and redo anywhere,
+       and a pair of braces is what a code editor puts on its format action.
+       They sit where a toolbar keeps them, first. Undo and Redo are enabled
+       only while there is something to take back or to do again; the titles
+       carry the keyboard shortcuts. -->
+  <button id="undo" class="icon" disabled title="Undo (Ctrl+Z)" aria-label="Undo">&#x21B6;</button>
+  <button id="redo" class="icon" disabled title="Redo (Ctrl+Y)" aria-label="Redo">&#x21B7;</button>
+  <button id="format" class="icon" disabled title="Format (Shift+Alt+F)" aria-label="Format">{&#x2009;}</button>
+  <button id="examples" class="invite" disabled title="Browse the built-in samples and the sample repositories">Samples</button>
   <button id="run" class="primary" disabled title="Run (Ctrl+Enter)">Run</button>
-  <button id="format" disabled title="Pretty print (Shift+Alt+F)">Format</button>
 
-  <label class="field">
-    <span class="field-label">Sample</span>
-    <select id="samples" disabled></select>
-  </label>
-
-  <button id="examples" disabled title="Browse the sample repositories">Examples</button>
-
-  <button id="share" disabled title="Copy a link that carries this code">Share</button>
-  <button id="fullscreen" disabled title="Open the app on its own, in a new tab">Full screen</button>
-
-  <a id="source-link" class="source-link" target="_blank" rel="noopener" hidden>on GitHub</a>
+  <!-- Run, pressed for you. A switch rather than a button, because it has a
+       state somebody has to be able to read off the bar: on, it takes Run's
+       accent and Run itself goes inactive, which is the whole of what it
+       says. Wired in src/shell/main.mjs, which also keeps aria-checked and
+       both titles in step. -->
+  <button id="autorun" class="toggle" type="button" role="switch" aria-checked="false" disabled
+          title="Autorun: run every change as it is typed" aria-label="Autorun: run every change as it is typed">
+    <span class="toggle-dot" aria-hidden="true"></span>Auto
+  </button>
 
   <!-- The one channel the page reports through, and under ?view=full the only
        one it has left - so it is announced rather than only shown. Polite: it
@@ -57,9 +137,51 @@
        what a screen reader is already saying. -->
   <span id="status" class="status" role="status" aria-live="polite">starting…</span>
   <span class="spacer"></span>
+
+  <button id="share" disabled title="Copy a link that carries this code">Share</button>
+  <a id="source-link" class="source-link" target="_blank" rel="noopener" aria-disabled="true"
+     title="Only code that came from GitHub has a page to go to">Source</a>
+  <button id="fullscreen" disabled title="Open the app on its own, in a new tab">Full screen</button>
+
   <span id="versions" class="versions"></span>
   <button id="about" class="ghost about-button" type="button"
           title="What this is built from" aria-label="About this playground">i</button>
+
+  <!-- The right-hand end, as the documentation site's bar ends: a switch for
+       light and dark, a hairline, and the same three marks - LinkedIn, GitHub
+       and, where the docs put the playground, the playground puts the docs.
+       The switch is wired in src/shell/theme.mjs, which also keeps the label
+       and aria-checked in step with the theme; the checked look itself is
+       CSS over the same media query and data-theme the palette uses, so the
+       switch is right before the bundle has said anything. The marks are
+       inline for the same reason the docs' third one is: an icon that is an
+       empty square until a stylesheet arrives is worse than one that never
+       needed it. -->
+  <span class="trailer">
+    <button id="theme" class="switch" type="button" role="switch" aria-checked="false"
+            aria-label="Switch to dark theme" title="Switch to dark theme">
+      <span class="switch-check">
+        <span class="switch-icon">
+          <svg class="sun" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+          <svg class="moon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+        </span>
+      </span>
+    </button>
+    <span class="socials">
+      <a class="social" href="https://www.linkedin.com/company/abap2ui5/" target="_blank" rel="noopener"
+         aria-label="abap2UI5 on LinkedIn" title="abap2UI5 on LinkedIn">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/></svg>
+      </a>
+      <a class="social" href="https://github.com/abap2UI5/abap2UI5" target="_blank" rel="noopener"
+         aria-label="abap2UI5 on GitHub" title="abap2UI5 on GitHub">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+      </a>
+      <a class="social" href="https://abap2ui5.github.io/docs/" target="_blank" rel="noopener"
+         aria-label="Documentation" title="Documentation">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M6.5 17H20v4H6.5a2.5 2.5 0 0 1 0-5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 7h7M9 10.5h5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+      </a>
+    </span>
+  </span>
 </header>
 
 <dialog id="about-dialog" class="about">
@@ -96,22 +218,23 @@
 
     <h3>Where the apps come from</h3>
     <p>
-      The <b>Sample</b> dropdown above carries a handful to start from. Three
-      sibling repositories carry the rest: <b>Examples</b> browses the
-      catalogues of the first two without leaving this page, every card on
-      their own pages has a button that opens the class right here, and what
-      needs a real system stays where the system is:
+      <b>Samples</b> above carries a handful of built-in samples to start
+      from and browses, without leaving this page, the samples of all three
+      sibling repositories - the same list the
+      <a href="samples/">sample catalogue</a> holds, which is where to go when
+      a search is worth linking to. What needs a real system is listed there
+      too, and stays where the system is:
     </p>
     <!-- NOT .about-credits: that list is other people's work, and a test holds
          it to naming none of ours. This one names ours on purpose. -->
     <ul class="about-where">
-      <li><a href="https://abap2ui5.github.io/samples/" target="_blank" rel="noopener">Learn</a>
+      <li><a href="https://github.com/abap2UI5/samples" target="_blank" rel="noopener">Learn</a>
         — the path through abap2UI5 itself, one idea per sample: bindings,
         events, popups, navigation, whole apps.</li>
-      <li><a href="https://abap2ui5.github.io/samples-controls/" target="_blank" rel="noopener">Controls</a>
+      <li><a href="https://github.com/abap2UI5/samples-controls" target="_blank" rel="noopener">Controls</a>
         — the UI5 demo kit rebuilt in ABAP, searchable by control, by library
         and by the release a sample needs.</li>
-      <li><a href="https://abap2ui5.github.io/samples-stack/" target="_blank" rel="noopener">Stack</a>
+      <li><a href="https://github.com/abap2UI5/samples-stack" target="_blank" rel="noopener">Stack</a>
         — abap2UI5 with OData, RAP, WebSockets or the launchpad. Those are the
         one set that will <em>not</em> run here: they need a real system, which
         is the whole point of them.</li>
@@ -145,6 +268,16 @@
       request. That is the thanks that reaches an open source project. Thank you.
     </p>
 
+    <h3>Keyboard</h3>
+    <dl class="about-keys">
+      <dt><kbd>Ctrl</kbd> <kbd>Enter</kbd></dt><dd>Run - the unit tests in a <code>.clas.testclasses.abap</code> file first, then the app; also <kbd>Ctrl</kbd> <kbd>S</kbd>, which a browser would otherwise spend on saving the page. <strong>Auto</strong> beside it presses Run for you, shortly after you stop typing</dd>
+      <dt><kbd>Ctrl</kbd> <kbd>Z</kbd> / <kbd>Y</kbd></dt><dd>Undo and redo, per file</dd>
+      <dt><kbd>Shift</kbd> <kbd>Alt</kbd> <kbd>F</kbd></dt><dd>Format the open file</dd>
+      <dt><kbd>F1</kbd></dt><dd>Everything else the editor can do, by name</dd>
+      <dt><kbd>F12</kbd> / <kbd>F2</kbd></dt><dd>Go to the definition under the cursor / rename it</dd>
+      <dt><kbd>Esc</kbd></dt><dd>Close a dialog, or the name being typed for a new file</dd>
+    </dl>
+
     <h3>Where it stops</h3>
     <p>
       A few classes, not a package: no tables of your own, no message classes,
@@ -161,18 +294,85 @@
   </div>
 </dialog>
 
-<!-- The examples browser: the built-in samples plus whatever the sample
-     repositories' committed catalogues offer, fetched when this opens - see
-     src/shell/examples.mjs. The search sits outside the method="dialog" form
-     on purpose: inside it, Enter in the input would close the dialog. -->
+<!-- Share: the link is in the clipboard before this opens; what it adds is
+     the other ways out - an embed block, a markdown fence, a zip for
+     abapGit. Filled by src/shell/share-dialog.mjs on every open. -->
+<dialog id="share-dialog" class="about share">
+  <form method="dialog" class="about-head">
+    <h2>Share</h2>
+    <button class="ghost" aria-label="Close">✕</button>
+  </form>
+  <div class="about-body" id="share-body"></div>
+</dialog>
+
+<!-- The examples browser: the built-in samples plus everything the sample
+     catalogue holds, read from this site's own samples/apps.json when this
+     opens - see src/shell/examples.mjs. It is a big modal on purpose: the
+     catalogue is 770-odd samples and a 44rem column of one-line rows was a
+     keyhole onto it. Over the editor rather than beside it, so the page it
+     covers is out of the way while somebody is looking for something.
+     The search sits outside the method="dialog" form on purpose: inside it,
+     Enter in the input would close the dialog. -->
 <dialog id="examples-dialog" class="about examples">
   <header class="about-head examples-head">
-    <h2>Examples</h2>
-    <input id="examples-search" type="search" placeholder="Search title, control, class…"
-           autocomplete="off" spellcheck="false" aria-label="Search the examples">
+    <h2>Samples</h2>
+    <input id="examples-search" type="search" placeholder="Search title, summary, control, class…"
+           autocomplete="off" spellcheck="false" aria-label="Search the samples">
+    <span id="examples-count" class="examples-count" aria-live="polite"></span>
     <form method="dialog"><button class="ghost" aria-label="Close">✕</button></form>
   </header>
-  <div class="about-body examples-body" id="examples-body"></div>
+  <div class="examples-main">
+    <!-- Everything that narrows the list, down the side: the boxes that pick
+         a repository, the boxes that narrow to what runs, and the three
+         facets the index carries the facts for. src/shell/examples.mjs reads
+         the boxes by data-filter and the facets by id, and keeps all of them
+         between visits. -->
+    <aside class="examples-side">
+      <p class="examples-intro">
+        Three repositories, one catalogue. <b>Learn</b> is the path through
+        abap2UI5 itself, <b>Controls</b> the UI5 demo kit rebuilt in ABAP, and
+        <b>Stack</b> abap2UI5 with OData, RAP or a launchpad behind it.
+      </p>
+      <div class="examples-filters" role="group" aria-label="Filter the samples">
+        <span class="examples-filter-group is-sources" role="group" aria-label="Repositories">
+          <label><input type="checkbox" data-filter="learn" checked> Learn</label>
+          <label><input type="checkbox" data-filter="controls" checked> Controls</label>
+          <label><input type="checkbox" data-filter="stack" checked> Stack</label>
+        </span>
+        <!-- "Only what runs here" drops what needs a system or a library this
+             build has not got; "OpenUI5 only" drops what needs SAPUI5; "newer
+             than 1.71" off drops what needs a UI5 above the floor abap2UI5
+             holds its shipped apps to. -->
+        <label class="examples-filter"><input type="checkbox" data-filter="runsonly"> Only what runs here</label>
+        <label class="examples-filter"><input type="checkbox" data-filter="openui5only"> OpenUI5 only</label>
+        <label class="examples-filter"><input type="checkbox" data-filter="newer" checked> newer than 1.71</label>
+      </div>
+      <!-- The two questions the sample repositories' own catalogues cannot
+           answer, which is why the index carries the linter's derived facts:
+           which samples BUILD a control, and what renders on a given release.
+           Filled from the index when it lands; empty and disabled until then. -->
+      <div class="examples-facets">
+        <label class="examples-facet">
+          <span>Uses control</span>
+          <select id="examples-control"><option value="">any control</option></select>
+        </label>
+        <label class="examples-facet">
+          <span>Library</span>
+          <select id="examples-library"><option value="">any library</option></select>
+        </label>
+        <label class="examples-facet">
+          <span>Runs on UI5</span>
+          <select id="examples-release"><option value="">any release</option></select>
+        </label>
+      </div>
+      <button type="button" id="examples-clear" class="ghost examples-clear" hidden>Clear the search and filters</button>
+      <!-- The same list with an address: filters in the URL, so a search can be
+           linked or sent to somebody. This dialog is the quick way in; the page
+           is the one to bookmark. -->
+      <a class="examples-all" href="samples/">Open the full catalogue ↗</a>
+    </aside>
+    <div class="about-body examples-body" id="examples-body"></div>
+  </div>
 </dialog>
 
 <main class="panes" id="panes">
@@ -189,22 +389,42 @@
     <div class="insight" id="insight">
       <div class="insight-grip" id="insight-grip" role="separator" aria-orientation="horizontal"
            tabindex="0" aria-label="Resize the panel"></div>
-      <div class="insight-tabs" role="tablist">
-        <button type="button" data-insight="problems" class="insight-tab is-active" role="tab"
-                aria-selected="true" aria-controls="insight-body">
-          Problems <span id="problem-count" class="insight-badge"></span>
-        </button>
-        <button type="button" data-insight="outline" class="insight-tab" role="tab"
-                aria-selected="false" aria-controls="insight-body">Outline</button>
-        <button type="button" data-insight="log" class="insight-tab" role="tab"
-                aria-selected="false" aria-controls="insight-body">
-          Log <span id="log-dot" class="insight-badge"></span>
-        </button>
-        <span class="insight-gap"></span>
-        <button type="button" data-insight="abaplint" class="insight-tab" role="tab"
-                aria-selected="false" aria-controls="insight-body">abaplint</button>
-        <button type="button" data-insight="abap2ui5" class="insight-tab" role="tab"
-                aria-selected="false" aria-controls="insight-body">abap2UI5 lint</button>
+      <!-- The strip is the tablist plus one control that is not a view of
+           anything: the toggle that folds the panel away. It sits outside the
+           tablist because it is not a tab - and, on a screen too narrow for
+           five tabs, because that lets them scroll under it while the way to
+           get the space back stays where it is. -->
+      <div class="insight-tabs">
+        <div class="insight-tablist" role="tablist" aria-label="Panel views">
+          <button type="button" data-insight="problems" class="insight-tab is-active" role="tab"
+                  aria-selected="true" aria-controls="insight-body">
+            Problems <span id="problem-count" class="insight-badge"></span>
+          </button>
+          <button type="button" data-insight="outline" class="insight-tab" role="tab"
+                  aria-selected="false" aria-controls="insight-body">Outline</button>
+          <button type="button" data-insight="view" class="insight-tab" role="tab"
+                  aria-selected="false" aria-controls="insight-body">View</button>
+          <button type="button" data-insight="tests" class="insight-tab" role="tab"
+                  aria-selected="false" aria-controls="insight-body">
+            Tests <span id="test-count" class="insight-badge"></span>
+          </button>
+          <button type="button" data-insight="roundtrips" class="insight-tab" role="tab"
+                  aria-selected="false" aria-controls="insight-body">
+            Roundtrips <span id="roundtrip-count" class="insight-badge"></span>
+          </button>
+          <button type="button" data-insight="log" class="insight-tab" role="tab"
+                  aria-selected="false" aria-controls="insight-body">
+            Log <span id="log-dot" class="insight-badge"></span>
+          </button>
+          <span class="insight-gap"></span>
+          <button type="button" data-insight="abaplint" class="insight-tab" role="tab"
+                  aria-selected="false" aria-controls="insight-body">abaplint</button>
+          <button type="button" data-insight="abap2ui5" class="insight-tab" role="tab"
+                  aria-selected="false" aria-controls="insight-body">abap2UI5 lint</button>
+        </div>
+        <button type="button" id="insight-toggle" class="insight-tab insight-toggle"
+                aria-expanded="true" aria-controls="insight-body"
+                title="Hide the panel" aria-label="Hide the panel">▾</button>
       </div>
       <div class="insight-body" id="insight-body" role="tabpanel"></div>
     </div>

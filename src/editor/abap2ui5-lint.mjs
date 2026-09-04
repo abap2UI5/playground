@@ -15,8 +15,29 @@
 //
 // The findings carry the same `severity` names as the config file, and the
 // same rule names, so a message here is the message CI would print.
-import { checkAbapSource } from "@abap2ui5/linter";
-import { applyFixes, isFixable } from "@abap2ui5/linter/fix";
+// The linter itself, and the half-megabyte of UI5 metadata it checks against,
+// arrive as a chunk of their own rather than with the page: nothing needs
+// them before the corpus has parsed, and until then they were being
+// downloaded and evaluated on the way to the first editor frame. boot( ) asks
+// for them as soon as the corpus has landed, and re-runs the analysis when
+// they arrive; until then this module answers "no findings", which is also
+// what it answers for a class that builds no view. The settings below are
+// this module's own and need nothing loaded.
+let lib;
+let loading;
+export function loadLinter() {
+  // Named exports, or the same names on `default` - which is where a bundler
+  // puts a CommonJS module's exports when it is imported dynamically.
+  const named = (mod, name) => mod[name] ?? mod.default?.[name];
+  loading ??= Promise.all([import("@abap2ui5/linter"), import("@abap2ui5/linter/fix")]).then(([main, fix]) => {
+    lib = {
+      checkAbapSource: named(main, "checkAbapSource"),
+      applyFixes: named(fix, "applyFixes"),
+      isFixable: named(fix, "isFixable"),
+    };
+  });
+  return loading;
+}
 
 // The floor abap2UI5 holds its own shipped apps to (abap2ui5lint.jsonc), and
 // therefore the one an example copied out of the playground has to clear. A
@@ -27,6 +48,13 @@ import { applyFixes, isFixable } from "@abap2ui5/linter/fix";
 // choosing - the UI5 release their app has to work on. The linter's own option
 // for it is `minUi5`, and settingsFor( ) below is where the two meet.
 const DEFAULTS = { ui5: "1.71", distribution: "openui5" };
+
+// The rule's card on the linter's rules page - what it means, how severe it
+// is, the same code fixed. A finding that carries `url` itself is believed
+// (the linter sets one on every finding from 0.7 on); an older one gets the
+// page's anchor, which is the rule id.
+export const RULES_PAGE = "https://abap2ui5.github.io/linter/";
+export const ruleUrl = (finding) => finding.url ?? `${RULES_PAGE}#${finding.type}`;
 
 let settings = { ...DEFAULTS };
 
@@ -66,8 +94,9 @@ const settingsFor = (s) => ({ minUi5: s.ui5, distribution: s.distribution });
 // falls over on unusual input must not take the editor's diagnostics with it,
 // and the file being typed into is unusual input by definition.
 export function findingsFor(source) {
+  if (lib === undefined) return [];
   try {
-    const result = checkAbapSource(source, settingsFor(settings));
+    const result = lib.checkAbapSource(source, settingsFor(settings));
     // A class that builds no view has nothing for this linter to say. Reporting
     // that as a finding would put a message on every helper class.
     if (!result.usesBuilder) return [];
@@ -77,6 +106,22 @@ export function findingsFor(source) {
   }
 }
 
+// The view itself, as the linter reconstructed it - what the View tab shows.
+// The same reconstruction the findings come from, so what is shown is what
+// was checked; the notes are the linter's own remarks about how sure it is
+// of the shape (a level left open at stringify( ), a helper it could not
+// follow). Empty until the linter has loaded, and for a class that builds no
+// view - the tab says so in both cases.
+export function viewsFor(source) {
+  if (lib === undefined) return { docs: [], notes: [], loaded: false };
+  try {
+    const result = lib.checkAbapSource(source, settingsFor(settings));
+    if (!result.usesBuilder) return { docs: [], notes: [], loaded: true };
+    return { docs: result.docs ?? [], notes: result.notes ?? [], loaded: true };
+  } catch {
+    return { docs: [], notes: [], loaded: true };
+  }
+}
 
 // Which of a set of findings this linter can repair itself. Not all of them:
 // an icon that does not exist has no correct replacement to guess at, while a
@@ -87,7 +132,8 @@ export function findingsFor(source) {
 // the editor's one analysis pass has just asked findingsFor( ), and asking it
 // again from here was a second reconstruction of the same builder chain.
 export function fixableAmong(findings) {
-  return findings.filter(isFixable);
+  if (lib === undefined) return [];
+  return findings.filter(lib.isFixable);
 }
 
 // Repairs what can be repaired, and says how much. `deferred` counts fixes that
@@ -96,6 +142,6 @@ export function fixableAmong(findings) {
 export function applyLinterFixes(source) {
   const fixable = fixableAmong(findingsFor(source));
   if (fixable.length === 0) return { source, fixed: 0 };
-  const { output, applied } = applyFixes(source, fixable);
+  const { output, applied } = lib.applyFixes(source, fixable);
   return { source: output, fixed: applied };
 }

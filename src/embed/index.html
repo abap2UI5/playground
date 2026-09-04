@@ -202,7 +202,7 @@ ENDCLASS."></div>
   <tr><td><code>data-src</code></td><td>URL of an ABAP file, or several separated by whitespace; the first is the app. This site and GitHub's raw hosts only.</td></tr>
   <tr><td><code>data-code</code></td><td>ABAP inline, for a demo that lives only in this page.</td></tr>
   <tr><td><code>data-view</code></td><td><code>app</code> for the running app without the editor.</td></tr>
-  <tr><td><code>data-height</code></td><td>Starting height in pixels. Default 520, or 320 for <code>view=app</code>, which then grows to fit.</td></tr>
+  <tr><td><code>data-height</code></td><td>Starting height in pixels. Default 520, and a <code>view=app</code> demo grows past it when the app overflows it — an app laid out at 100% of its box never does, so for those this is the height it is read at.</td></tr>
   <tr><td><code>data-label</code></td><td>The text on the button.</td></tr>
   <tr><td><code>data-auto</code></td><td><code>1</code> to load without a click.</td></tr>
   <tr><td><code>data-origin</code></td><td>Where the playground is served from, if not this script's own.</td></tr>

@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>abap2UI5 sample catalogue</title>
+<meta name="description" content="Every abap2UI5 sample: the learning path, the UI5 demo kit rebuilt in ABAP, and the samples that need OData, RAP or a launchpad. Searchable by control, by library and by the UI5 release your system runs.">
+<link rel="icon" href="../favicon.png">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" href="catalogue.css">
+<!-- The stored theme, before the first paint. Same key and same rule as the
+     playground's own inline script (src/shell/theme.mjs): a choice is applied,
+     no choice follows the system. Kept in step by hand - two lines of script
+     that must not wait for a module. -->
+<script>
+  try {
+    var t = localStorage.getItem("abap2ui5-playground:theme");
+    if (t === "dark" || t === "light") document.documentElement.dataset.theme = t;
+  } catch (e) { /* a browser that refuses storage still gets the system theme */ }
+</script>
+</head>
+<body>
+
+<header class="bar">
+  <a class="brand" href="../">
+    <img src="../favicon.png" alt="" width="20" height="20">
+    <span>abap2UI5 <b>playground</b></span>
+  </a>
+  <nav class="bar-nav">
+    <a href="../" title="Write ABAP and run it in the browser">Playground</a>
+    <a href="./" aria-current="page">Samples</a>
+    <a href="https://abap2ui5.github.io/docs/" target="_blank" rel="noopener">Docs</a>
+  </nav>
+  <button id="theme" class="theme" type="button" aria-label="Switch between light and dark">
+    <span class="theme-sun" aria-hidden="true">☀</span>
+    <span class="theme-moon" aria-hidden="true">☾</span>
+  </button>
+  <!-- The way out, as the playground's own bar and the documentation site's
+       end: LinkedIn and GitHub, inline SVG rather than an icon font, because
+       a mark that is an empty square until a stylesheet arrives is worse than
+       one that never needed it. The per-sample pages carry the same two
+       (tools/sample-pages.mjs); the three copies are kept in step by hand. -->
+  <span class="socials">
+    <a class="social" href="https://www.linkedin.com/company/abap2ui5/" target="_blank" rel="noopener"
+       aria-label="abap2UI5 on LinkedIn" title="abap2UI5 on LinkedIn">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/></svg>
+    </a>
+    <a class="social" href="https://github.com/abap2UI5/abap2UI5" target="_blank" rel="noopener"
+       aria-label="abap2UI5 on GitHub" title="abap2UI5 on GitHub">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+    </a>
+  </span>
+</header>
+
+<main>
+  <!-- Written into the document rather than drawn by the script: this is what
+       a search engine, a reader with no JavaScript and a slow first paint all
+       get, and it is the paragraph that says what the page is. -->
+  <section class="masthead">
+    <h1>Every abap2UI5 sample, in one place</h1>
+    <p>
+      Three repositories, one catalogue. <b>Learn</b> is the path through
+      abap2UI5 itself — bindings, events, popups, navigation, whole apps.
+      <b>Controls</b> is the UI5 demo kit rebuilt in ABAP, one port per sample.
+      <b>Stack</b> is abap2UI5 with OData, RAP, WebSockets or the launchpad.
+    </p>
+    <p>
+      Search by what a sample <em>does</em>, or filter by the control it builds,
+      the library it needs, or the UI5 release your system runs. <b>Open a
+      sample</b> for its own page: what it builds, what it needs, the ABAP
+      itself — and the button that runs it here, in this browser, with nothing
+      installed. The ones that need a real system say so and open for reading.
+    </p>
+  </section>
+
+  <form class="controls" id="controls" role="search" aria-label="Search the samples">
+    <div class="search-row">
+      <input id="q" type="search" autocomplete="off" spellcheck="false"
+             placeholder="Search title, summary, control, class…"
+             aria-label="Search the samples">
+      <button type="button" id="clear" class="clear" hidden>Clear all</button>
+    </div>
+
+    <div class="facets">
+      <label class="facet">
+        <span>Repository</span>
+        <select id="f-source"><option value="">all three</option></select>
+      </label>
+      <label class="facet">
+        <span>Uses control</span>
+        <select id="f-control"><option value="">any control</option></select>
+      </label>
+      <label class="facet">
+        <span>Library</span>
+        <select id="f-library"><option value="">any library</option></select>
+      </label>
+      <label class="facet">
+        <span>Runs on UI5</span>
+        <select id="f-release"><option value="">any release</option></select>
+      </label>
+      <label class="facet facet-check">
+        <input id="f-runs" type="checkbox">
+        <span>Only what runs in the playground</span>
+      </label>
+    </div>
+
+    <p class="count" id="count" aria-live="polite"></p>
+  </form>
+
+  <div id="results" class="results">
+    <!-- The one thing a reader with no JavaScript sees, replaced as soon as
+         the index has landed. -->
+    <p class="empty js-off">
+      The catalogue is a list of 700-odd samples and needs JavaScript to filter.
+      Without it, the three repositories are readable on GitHub:
+      <a href="https://github.com/abap2UI5/samples">samples</a>,
+      <a href="https://github.com/abap2UI5/samples-controls">samples-controls</a>,
+      <a href="https://github.com/abap2UI5/samples-stack">samples-stack</a>.
+    </p>
+  </div>
+</main>
+
+<footer class="foot">
+  <p>
+    Built from the catalogues the three repositories commit —
+    <a href="https://github.com/abap2UI5/samples">abap2UI5/samples</a>,
+    <a href="https://github.com/abap2UI5/samples-controls">samples-controls</a>,
+    <a href="https://github.com/abap2UI5/samples-stack">samples-stack</a> —
+    and rebuilt on every deploy of the
+    <a href="https://github.com/abap2UI5/playground">playground</a>.
+    Every sample also has <a href="all/">a page of its own</a> — the plain list,
+    for reading down and for linking to.
+    <span id="built" class="built"></span>
+  </p>
+</footer>
+
+<script type="module" src="catalogue.mjs"></script>
+</body>
+</html>

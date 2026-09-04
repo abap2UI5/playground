@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { getSource, open, setSource } from "./helpers.mjs";
+import { getSource, MAIN_CLASS, open, setSource } from "./helpers.mjs";
 
 // Autofix, and the way back to code that came from a link.
 
@@ -47,11 +47,11 @@ test("the abap2UI5 linter fixes a missing namespace declaration", async ({ page 
   // is content - it is valid ABAP - and the app would fail to load the control.
   await setSource(
     page,
-    `CLASS zcl_playground DEFINITION PUBLIC CREATE PUBLIC.
+    `CLASS ${MAIN_CLASS} DEFINITION PUBLIC CREATE PUBLIC.
   PUBLIC SECTION.
     INTERFACES z2ui5_if_app.
 ENDCLASS.
-CLASS zcl_playground IMPLEMENTATION.
+CLASS ${MAIN_CLASS} IMPLEMENTATION.
   METHOD z2ui5_if_app~main.
     DATA(view) = z2ui5_cl_ui5_view_builder=>factory(
         )->ele( n = \`View\` ns = \`mvc\`
@@ -84,13 +84,18 @@ test("the fix bar stays away when there is nothing it could do", async ({ page }
 
 test("linked code offers the way back to GitHub, and only linked code does", async ({ page }) => {
   await open(page);
-  await expect(page.locator("#source-link"), "a sample was not linked from anywhere").toBeHidden();
+  // Over a sample the link is there but inactive: no page to go to, and the
+  // bar does not rearrange itself when one appears.
+  const inactive = page.locator("#source-link");
+  await expect(inactive, "a sample was not linked from anywhere").toHaveAttribute("aria-disabled", "true");
+  await expect(inactive).not.toHaveAttribute("href", /./);
 
   await page.goto("/?src=examples/zcl_linked_example.clas.abap");
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
 
   const link = page.locator("#source-link");
   await expect(link).toBeVisible();
+  await expect(link).not.toHaveAttribute("aria-disabled", "true");
   await expect(link).toHaveAttribute("target", "_blank");
   // Same-origin here, so the href is the file itself; the interesting case is
   // the translation from raw.githubusercontent to the page a human wants,

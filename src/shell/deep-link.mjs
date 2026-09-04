@@ -24,6 +24,20 @@ function checkAllowed(url) {
   );
 }
 
+// The URL somebody pastes is the one in their address bar, and on GitHub that
+// is the page around the file, not the file: github.com/o/r/blob/ref/path.
+// Translated to the raw host before the allow list looks at it, so the link a
+// human copies works and the one a machine builds still does. github.com's own
+// /raw/ redirect is translated the same way rather than followed, because a
+// redirect across origins is a fetch the page cannot see the end of.
+export function rawFor(url) {
+  if (url.hostname !== "github.com") return url;
+  const match = /^\/([^/]+)\/([^/]+)\/(?:blob|raw)\/(.+)$/.exec(url.pathname);
+  if (!match) return url;
+  const [, owner, repo, rest] = match;
+  return new URL(`https://raw.githubusercontent.com/${owner}/${repo}/${rest}`);
+}
+
 // The file name an object is given once it is here. abapGit's own name is in
 // the URL, and it is the name abaplint needs, so it is simply kept.
 function nameFrom(url) {
@@ -165,7 +179,7 @@ export async function fetchLinkedFiles(params) {
   const links = linkedSources(params).map((raw) => {
     let url;
     try {
-      url = new URL(raw, window.location.href);
+      url = rawFor(new URL(raw, window.location.href));
     } catch {
       throw new Error(`${raw} is not a URL.`);
     }
