@@ -1,11 +1,11 @@
 import { test, expect } from "@playwright/test";
-import { addNamedFile, control, markers, open, outputText, setSource } from "./helpers.mjs";
+import { addNamedFile, control, MAIN_CLASS, MAIN_FILE, MAIN_MARK, markers, open, outputText, setSource } from "./helpers.mjs";
 
 // The playground's whole point: what is in the editor is what runs. These tests
 // change the ABAP and check that the app on the right changed with it, and that
 // the ways it can go wrong say so.
 
-const app = (title, body) => `CLASS zcl_playground DEFINITION PUBLIC CREATE PUBLIC.
+const app = (title, body) => `CLASS ${MAIN_CLASS} DEFINITION PUBLIC CREATE PUBLIC.
   PUBLIC SECTION.
     INTERFACES z2ui5_if_app.
     DATA out TYPE string.
@@ -13,7 +13,7 @@ const app = (title, body) => `CLASS zcl_playground DEFINITION PUBLIC CREATE PUBL
     DATA client TYPE REF TO z2ui5_if_client.
     METHODS view_display.
 ENDCLASS.
-CLASS zcl_playground IMPLEMENTATION.
+CLASS ${MAIN_CLASS} IMPLEMENTATION.
   METHOD z2ui5_if_app~main.
     me->client = client.
     IF client->check_on_init( ).
@@ -41,7 +41,7 @@ ENDCLASS.`;
 
 test("editing the ABAP and running shows the new app", async ({ page }) => {
   await open(page);
-  await expect(page.frameLocator("#app").getByText("Hello abap2UI5")).toBeVisible();
+  await expect(page.frameLocator("#app").getByText(MAIN_MARK)).toBeVisible();
 
   await setSource(page, app("Second Version", "out = `written by the editor`."));
   await page.locator("#run").click();
@@ -143,17 +143,17 @@ test("a run is refused while the ABAP has an error, and the line is named", asyn
 
   // The previous app is still standing - a failed compile does not blank the
   // screen you were looking at.
-  await expect(page.frameLocator("#app").getByText("Hello abap2UI5")).toBeVisible();
+  await expect(page.frameLocator("#app").getByText(MAIN_MARK)).toBeVisible();
 });
 
 test("a class under the wrong name is explained rather than silently ignored", async ({ page }) => {
   await open(page);
 
-  await setSource(page, app("Renamed", "out = `x`.").replace(/zcl_playground/g, "zcl_something_else"));
+  await setSource(page, app("Renamed", "out = `x`.").replaceAll(MAIN_CLASS, "zcl_something_else"));
   await page.locator("#run").click();
 
   await expect(page.locator(".log-body")).toBeVisible({ timeout: 30000 });
-  expect(await outputText(page)).toContain("zcl_playground.clas.abap");
+  expect(await outputText(page)).toContain(MAIN_FILE);
   expect(await outputText(page)).toContain("ZCL_SOMETHING_ELSE");
 });
 
@@ -219,7 +219,7 @@ ENDCLASS.`,
 
   await setSource(
     page,
-    `CLASS zcl_playground DEFINITION PUBLIC INHERITING FROM zcl_pg_base CREATE PUBLIC.
+    `CLASS ${MAIN_CLASS} DEFINITION PUBLIC INHERITING FROM zcl_pg_base CREATE PUBLIC.
   PUBLIC SECTION.
     INTERFACES z2ui5_if_app.
     DATA out TYPE string.
@@ -227,7 +227,7 @@ ENDCLASS.`,
     DATA client TYPE REF TO z2ui5_if_client.
     METHODS view_display.
 ENDCLASS.
-CLASS zcl_playground IMPLEMENTATION.
+CLASS ${MAIN_CLASS} IMPLEMENTATION.
   METHOD z2ui5_if_app~main.
     me->client = client.
     IF client->check_on_init( ).
@@ -297,7 +297,7 @@ test("a dump is pointed at: the ABAP line it was raised at, underlined, listed a
   const line = source.split("\n").findIndex((l) => l.includes("1 / zero")) + 1;
   await page.locator("#run").click();
 
-  await expect(page.locator("#status")).toHaveText(`the app dumped - zcl_playground.clas.abap line ${line}`, { timeout: 60000 });
+  await expect(page.locator("#status")).toHaveText(`the app dumped - ${MAIN_FILE} line ${line}`, { timeout: 60000 });
   // Listed as a runtime problem, at that line, naming the exception.
   const row = page.locator(".insight-row.is-error");
   await expect(row).toHaveCount(1);

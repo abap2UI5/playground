@@ -18,11 +18,10 @@ them before touching `tools/` or `src/runtime`.
 
 | Path | Purpose |
 | --- | --- |
-| `src/shell/` | The page: boot and Run (`main.mjs`, which also owns the **Auto** switch beside Run - the debounce, the stored setting and the three reasons Run may be inactive), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the samples browser over the sample catalogue (`examples.mjs`, reading the built index — a near-full-screen modal with the filters and the catalogue's three facets down its side), which UI5 library a control ships in (`ui5-libs.mjs`) beside the closed list of the ones this site carries (`ui5-libraries.mjs`), the bottom panel (`insight.mjs`), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch at the bar's right-hand end, applied as `data-theme` on `<html>` and handed to the editor and the app frame), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
-| `src/editor/` | Monaco plus the abaplint registry — in a worker: `registry-core.mjs` and `transpile-core.mjs` are abaplint and the single-object transpile as they run there, `registry-worker.mjs` the worker's entry, `registry.mjs` the page's client with a promise in front of everything, `providers.mjs` Monaco's language providers answered over it — the abap2UI5 linter wrapper (`abap2ui5-lint.mjs`), the file set, and the sample catalogue in two halves - `sample-list.mjs`, which is what the built-in samples are and which files they are made of, and `samples.mjs`, which pairs that with the ABAP it imports out of `src/samples/` |
+| `src/shell/` | The page: boot and Run (`main.mjs`, which also owns the **Auto** switch beside Run - the debounce, the stored setting and the three reasons Run may be inactive), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the samples browser over the sample catalogue (`examples.mjs`, reading the built index — a near-full-screen modal with the filters and the catalogue's three facets down its side), which UI5 library a control ships in (`ui5-libs.mjs`) beside the closed list of the ones this site carries (`ui5-libraries.mjs`), the bottom panel (`insight.mjs`), the syntax colour it prints XML and JSON in (`highlight.mjs`) and the View tab's edit mode - the builder chain read back out of the ABAP (`chain-read.mjs`), the edited document matched against the one that was shown (`view-edit.mjs`) and the chain written again in the house layout (`chain-write.mjs`), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch at the bar's right-hand end, applied as `data-theme` on `<html>` and handed to the editor and the app frame), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
+| `src/editor/` | Monaco plus the abaplint registry — in a worker: `registry-core.mjs` and `transpile-core.mjs` are abaplint and the single-object transpile as they run there, `registry-worker.mjs` the worker's entry, `registry.mjs` the page's client with a promise in front of everything, `providers.mjs` Monaco's language providers answered over it — the abap2UI5 linter wrapper (`abap2ui5-lint.mjs`), the file set, and the samples the page carries - `sample-list.mjs`, which is nothing but the class names of a handful of apps in **abap2UI5/samples**, and `samples.mjs`, which pairs what the build resolved them into (`build/samples/`) with the ABAP itself |
 | `src/runtime/` | The ABAP side of the page: the framework entry (`index.mjs`, `roundtrip()` and `defineClasses()`), `worker.mjs` around it, which is the bundle's entry and answers those over `postMessage` when it runs as the worker the page starts, the sql.js database (`db-setup.mjs`), and the browser shims for Node modules |
 | `src/abap/` | The playground's own ABAP (`zcl_pg_bridge`, `zcl_pg_hello`); it travels through the same downport and transpile as the framework |
-| `src/samples/` | The built-in samples' ABAP, one real `.clas.abap` file per object under a directory per sample - so every one of them can be `zcl_playground.clas.abap` and still be a file named after its class. Inlined into the page bundle by the `.abap` text loader in `tools/build-site.mjs`; listed by `src/editor/sample-list.mjs` |
 | `src/examples/` | ABAP served as static files, so `?src=` has same-origin targets and the link tests depend on no foreign host |
 | `src/embed/` | The embed loader (`abap2ui5-embed.js`) and a worked example page; copied verbatim to `dist/embed/` |
 | `src/catalogue/` | The sample catalogue at `/samples/`: one page, one stylesheet, one module, over the index `tools/build-catalogue.mjs` writes. Its own document and its own bundle - see "The sample catalogue" below |
@@ -30,6 +29,19 @@ them before touching `tools/` or `src/runtime`.
 | `tests/` | Playwright specs — the only test layer; everything is tested through a real browser against the built `dist/` |
 
 `deps/`, `build/` and `dist/` are generated and gitignored. Never commit them.
+
+**There are no samples in this repository.** There were - a dozen classes under
+`src/samples/`, written here - and every one of them was a fork of a sample:
+improved upstream and not here, or here and nowhere else, with nothing on the
+page saying which. The samples the page carries now are named by class in
+`src/editor/sample-list.mjs` and come out of **abap2UI5/samples**, pinned by
+commit in `tools/fetch-deps.mjs`; `writeSamples()` in `tools/build-site.mjs`
+resolves the names against that pin, copies the ABAP into `build/samples/` and
+writes the index and the import module the bundle reads. Titles and blurbs come
+out of that repository's own `catalogue.json`, so a carried sample reads exactly
+as it does in the samples browser's other seven hundred rows - it *is* one of
+them; the only difference is that it travelled with the page. A class named in
+the list and missing from the pin fails the build with its name in the message.
 
 ## The build pipeline
 
@@ -41,9 +53,11 @@ them rather than both. Their output is streamed with the step's name in front
 of each line. Each step is still its own script and still runnable by name
 (`npm run build:framework`):
 
-1. **`tools/fetch-deps.mjs`** pins `abap2UI5/abap2UI5` and `open-abap-core` by
-   commit SHA under `deps/`. Bumping a pin is editing the sha there — nothing
-   else fetches source.
+1. **`tools/fetch-deps.mjs`** pins `abap2UI5/abap2UI5`, its published
+   frontend, `open-abap-core` and `abap2UI5/samples` by commit SHA under
+   `deps/`. Bumping a pin is editing the sha there — nothing else fetches
+   source. The samples pin is the one that decides which code the page opens
+   on, so a bump of it is a change to the site, not only to the toolchain.
 2. **`tools/build-framework.mjs`** copies the framework plus `src/abap` to
    `build/downport/`, downports to v702 syntax (`abaplint --fix`, ~3 minutes,
    deterministic), transpiles, and esbuild-bundles the result with the runtime
@@ -104,7 +118,7 @@ of each line. Each step is still its own script and still runnable by name
    budget is over `assets/*.mjs` as a sum, so a module that moved into a chunk
    has not gotten any smaller. Two loaders go with it: Monaco's icon font is
    copied out with a hashed name, and `.abap` is **text** — which is how the
-   built-in samples under `src/samples/` reach the bundle. They are real ABAP
+   samples the page carries reach the bundle from `build/samples/`. They are real ABAP
    files rather than template literals inside JavaScript so that the samples
    browser can link a row to the ABAP, and `src/editor/samples.mjs` is their
    only importer; `src/editor/sample-list.mjs` is the half of the catalogue
@@ -439,9 +453,39 @@ again, and an embedded playground never restores one.
 The **View tab** (`viewPreview()` in `src/shell/insight.mjs`) shows the XML
 the linter reconstructs from the open file's builder chain — `viewsFor()` in
 `abap2ui5-lint.mjs`, the same reconstruction the findings come from, put one
-element per line by `xml-pretty.mjs`. It is a second reconstruction beside
-the analysis pass, run only while that tab is open; the tab says so when the
-linter has not loaded yet and when the file builds no view.
+element per line by `xml-pretty.mjs` and coloured by `highlight.mjs`. It is a
+second reconstruction beside the analysis pass, run only while that tab is
+open; the tab says so when the linter has not loaded yet and when the file
+builds no view.
+
+**Edit** turns that tab around: change the XML and the chain is written again
+to build it. Three files, and the middle one is the whole design.
+`chain-read.mjs` reads the chain back out of the ABAP by *executing* the four
+builder methods against a tree — `a( )` lands on the last child if there is one
+and on the node itself if there is not, exactly as the class does, which is why
+the split shape (a statement per subtree, held in variables) reads correctly
+without the reader knowing about shapes. Every attribute keeps the ABAP that
+produced it, verbatim. `view-edit.mjs` matches the edited document against the
+one that was shown — by name, longest common subsequence at each level, so an
+inserted control does not shift everything after it onto the wrong original —
+and an attribute whose value still reads as it was shown gets its original ABAP
+back. **That is the point of the whole thing**: the reconstruction renders
+`client->_bind( t_flight )` as `{/T_FLIGHT}` and `client->_event( … )` as
+`.eB()`, so a chain generated from the rendering alone would compile, run, and
+quietly be a different app with every binding frozen. `chain-write.mjs` writes
+the single-chain shape in the house layout, which the linter's
+`chain-house-layout` rule checks (see the `view-chain-layout` skill in the
+framework repository) — `tests/view-edit.spec.js` holds both the layout and the
+surviving binds.
+
+What it will not do it says instead of guessing: a view built with a LOOP or an
+IF, a control name held in a variable, two views in one method, a variable used
+after the chain, text between two tags (the builder sets attributes; it has no
+call for a text node), a value with a line break in it. The button is disabled
+with that sentence as its title. While the editor is open the ABAP editor is
+read-only (`setEditorReadOnly()`) — the ABAP is derived from the XML for as
+long as it is, and two editable copies of one view would mean deciding which is
+the truth on every keystroke.
 
 **Unit tests run before the app** (`tests/unit.spec.js`, the `unit-tests`
 sample). A `<class>.clas.testclasses.abap` file is a class's test include
@@ -484,12 +528,22 @@ every Run, bounded at 200. The shapes it reads are the wire format
 `app/webapp/core/Server.js` documents in the framework.
 
 The **draft** follows the middle rule for the same reason: a file set identical
-to one of the built-in samples is forgotten rather than stored (`isSample()` in
+to one of the samples the page carries is not stored (`isSample()` in
 `src/editor/samples.mjs`, applied in `remember()`). Reading a sample is not work
 to continue, and storing it as a draft pinned that visitor to a frozen copy of
 it — the sample was improved in a later deploy and they went on being opened on
 the old one, findings and all, labelled "from your last session". One keystroke
 makes it a draft again, and `tests/shell.spec.js` holds both halves.
+
+What it does **not** do any more is delete the draft that was there. A sample
+used to go into the editor as an undoable edit — every sample the playground
+carried was called `zcl_playground.clas.abap`, so `setFiles()` reused the model
+and the reader's work stayed one Ctrl+Z away. The samples come out of
+abap2UI5/samples now and bring their own class names, so the model the work was
+in is disposed with its file and Undo cannot reach it. `replaceWith()` in
+`main.mjs` works out which of the two happened and the status line says the true
+one — *one Undo away* or *comes back if you reload* — and the stored draft is
+what makes the second sentence true.
 
 **Fix them** (`applyFixes()` in `src/editor/editor.mjs`) applies both checkers'
 fixes to everything open: abaplint's structural fixes first, then the linter's,
@@ -523,10 +577,14 @@ deploy — readers get the published playground, never your checkout.
   6 files, 2 levels deep, silent when a name is not found.
 - **`?embed=1`**: drops the chrome, and never reads or writes the stored
   draft — an embedding must not overwrite a reader's work.
-- **`?view=app`**: hides the editor too, keeps the bar (a demo that cannot be
-  restarted is a screenshot). **`?view=full`**: no bar either — what the Full
-  screen button opens; the bar returns while the status line reports an error,
-  because it is the only channel that mode has left.
+- **`?view=app`**: hides the editor too — the app on its own, for a paragraph
+  about what an app does rather than how it is written. **`?view=full`** is the
+  same view under the name the Full screen button opens it by. Neither carries
+  the bar: everything it offers is a click away in the "open this in the
+  playground" link an embedding page prints beside the frame, and what it did
+  instead was put a strip of this site's furniture across somebody else's
+  paragraph. It returns while the status line reports an error, because it is
+  the only channel that mode has left.
 - **The Samples button** (`src/shell/examples.mjs` — the ids and the module
   keep the older name). A **big modal**: near enough the whole viewport, the
   page behind it dimmed and blurred, the filters in a side of their own and the
@@ -536,7 +594,7 @@ deploy — readers get the published playground, never your checkout.
   (`src/shell/drafts.mjs`, `tests/drafts.spec.js` — a name and Save keep
   what is open under it in localStorage, fifty at most, opened and deleted
   where they are listed; the one unnamed draft `remember()` keeps is
-  unchanged), then the built-ins, then everything the sample catalogue holds:
+  unchanged), then the samples the page carries, then everything the catalogue holds:
   the learning path in its own reading order, the ports grouped by library,
   the stack samples by technology. It reads **one file, and it is this site's
   own** — `samples/apps.json`, written at build time by
@@ -545,7 +603,7 @@ deploy — readers get the published playground, never your checkout.
   them here; the catalogue page needs the same list in the same shape, and two
   implementations of one list is exactly the drift those repositories avoid by
   generating their views from one scan. Every row links to its **ABAP** on
-  GitHub, and a built-in to its file under `src/samples/`; it used to link to
+  GitHub, and a carried sample to the same file in abap2UI5/samples; it used to link to
   `src/editor/samples.mjs`, so a reader asking where the code lives landed in
   the JavaScript that quoted it. Down the side are the filters, kept
   between visits: the three repositories as one tinted group (Learn, Controls,
@@ -569,7 +627,7 @@ deploy — readers get the published playground, never your checkout.
   ABAP and, where the repository has one, to its documentation page.
   A chosen entry becomes the raw URL of its class and goes through the `?src=`
   loading path above — there is one loader, and this is a menu in front of it.
-  Nothing is fetched before the button is clicked; no index means the built-ins
+  Nothing is fetched before the button is clicked; no index means the carried samples
   and the drafts alone, silently. Rows that cannot run here are listed and say
   why, their buttons disabled — a sample somebody cannot find is worse than one
   they cannot run — and *which* rows those are is decided once, at build time,
@@ -847,7 +905,9 @@ blessing sources every other repository's CI would reject. The build itself
 refuses a linter whose UI5 metadata snapshot disagrees with `UI5_VERSION`
 (`tools/build-ui5.mjs`), so that drift surfaces in the bump PR, not on main.
 The git-source pins move the same way: `bump-sources.yaml` runs
-`tools/fetch-deps.mjs --update-pins` weekly - the frontend leads, its
-`result/cloud/VERSION` names the framework commit, the framework names
-open-abap-core - behind the same full gate, so the last freshness work done
-by hand is gone too.
+`tools/fetch-deps.mjs --update-pins` weekly - the three runtime pins together
+(the frontend leads, its `result/cloud/VERSION` names the framework commit, the
+framework names open-abap-core) and the samples pin to its own HEAD beside them
+- behind the same full gate, so the last freshness work done by hand is gone
+too. That gate is also what turns a sample renamed upstream into a red bump PR
+rather than a page that opens on nothing.

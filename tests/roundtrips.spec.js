@@ -1,11 +1,16 @@
 import { test, expect } from "@playwright/test";
-import { control, open } from "./helpers.mjs";
+import { open, runSample } from "./helpers.mjs";
 
 // The Roundtrips tab: the conversation between the frontend and the app,
 // which the playground is in the middle of - see src/shell/roundtrips.mjs.
+//
+// The "Data Binding" sample, because a conversation needs two sides: it has an
+// input bound to an attribute and a button that raises an event, so a press is
+// a roundtrip with a name and a model coming back.
 
 test("every roundtrip is listed with its event and what the answer did, and opens into its bodies", async ({ page }) => {
   await open(page);
+  await runSample(page, "binding");
   await page.locator('[data-insight="roundtrips"]').click();
   const rows = page.locator(".roundtrip-row");
   // The app started: one roundtrip, which brought the main view.
@@ -16,9 +21,9 @@ test("every roundtrip is listed with its event and what the answer did, and open
   await expect(page.locator("#roundtrip-count")).toHaveText("1");
 
   // A press of the button: the event, by name, and the model that came back.
-  await control(page, "inpName", "-inner").fill("Trace");
-  await control(page, "btnGreet").click();
-  await expect(control(page, "txtGreeting")).toContainText("Hello Trace!");
+  await page.frameLocator("#app").getByRole("textbox").first().fill("Trace");
+  await page.frameLocator("#app").getByRole("button", { name: "Greet" }).click();
+  await expect(page.frameLocator("#app").getByText("Hello Trace!")).toBeVisible({ timeout: 30000 });
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(1)).toContainText("GREET");
   await expect(rows.nth(1)).toContainText("model");
@@ -33,7 +38,7 @@ test("every roundtrip is listed with its event and what the answer did, and open
   await expect(detail.locator(".roundtrip-body").filter({ hasText: "Hello Trace!" })).toBeVisible();
   // And the first row's answer carried the view, shown one element per line.
   await rows.nth(0).click();
-  await expect(page.locator(".roundtrip-detail .roundtrip-body").first()).toContainText('<Button id="btnGreet"');
+  await expect(page.locator(".roundtrip-detail .roundtrip-body").first()).toContainText("<Button ");
 
   // Run starts the conversation over.
   await page.locator("#run").click();

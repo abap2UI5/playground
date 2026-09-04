@@ -73,6 +73,7 @@ export function createEditor(container, files, options = {}) {
   monaco.editor.defineTheme(THEME_LIGHT, { base: "vs", inherit: true, rules: [], colors: {} });
   monaco.editor.defineTheme(THEME_DARK, { base: "vs-dark", inherit: true, rules: [], colors: {} });
 
+  fileOrder = files.map((f) => f.name);
   for (const file of files) createModel(file);
 
   editor = monaco.editor.create(container, {
@@ -91,6 +92,26 @@ export function createEditor(container, files, options = {}) {
 
 export function setEditorTheme(dark) {
   monaco.editor.setTheme(dark ? THEME_DARK : THEME_LIGHT);
+}
+
+// Whether the editor takes typing.
+//
+// One caller: the View tab's edit mode, which hands the reader the view to
+// change instead of the chain that builds it. While that is open the ABAP is
+// derived from the XML rather than the other way round, and typing into both
+// at once would mean deciding which of the two is the truth on every
+// keystroke. The panel is the one that says when this goes back on, in every
+// path out of edit mode - Save, Cancel, and the file being switched away from.
+export function setEditorReadOnly(readOnly) {
+  editor?.updateOptions({ readOnly });
+}
+
+// Replaces one file's text as an edit somebody can undo, which is what makes
+// a view rewritten out of the View tab a Ctrl+Z away from what it replaced.
+// Same door the fixers use; see writeSource( ) at the bottom of this file.
+export function setSourceOf(name, source) {
+  writeSource(name, source);
+  refresh();
 }
 
 function createModel(file) {
@@ -121,11 +142,7 @@ export function connectRegistry() {
 
 // The names of the open files, without reading their text - which getFiles( )
 // does, and which a completion on every keystroke should not.
-const openNames = () =>
-  monaco.editor
-    .getModels()
-    .filter((m) => m.uri.scheme === "file")
-    .map((m) => m.uri.path.replace(/^\//, ""));
+const openNames = () => orderedModels().map(nameOf);
 
 // The version Monaco keeps per model, bumped on every edit - for a reader
 // that caches something about a file and has to know when it went stale.
@@ -142,10 +159,31 @@ export const whenAnalysed = (fn) => {
 
 // Everything currently open, in the order it was opened.
 export function getFiles() {
-  return monaco.editor
-    .getModels()
-    .filter((m) => m.uri.scheme === "file")
-    .map((m) => ({ name: m.uri.path.replace(/^\//, ""), source: m.getValue() }));
+  return orderedModels().map((m) => ({ name: m.uri.path.replace(/^\//, ""), source: m.getValue() }));
+}
+
+// The open files in the order they were OPENED IN, not the order Monaco
+// happens to hold their models in.
+//
+// The first file is the app - it is what Run starts - so this order decides
+// what runs, and Monaco's is the order models were created in. setFiles( )
+// reuses a model whose file is already open (that is what keeps a loaded
+// sample one Ctrl+Z away from the draft it replaced), so a sample whose second
+// file is another sample's first one came out with its files the wrong way
+// round and started the wrong class. Nothing said so: both classes were there,
+// both compiled, and the app on screen was simply not the one that had been
+// picked.
+let fileOrder = [];
+const nameOf = (model) => model.uri.path.replace(/^\//, "");
+function orderedModels() {
+  const open = monaco.editor.getModels().filter((m) => m.uri.scheme === "file");
+  const at = (m) => {
+    const i = fileOrder.indexOf(nameOf(m));
+    // A model nobody ordered - there is none today - goes last rather than
+    // first, where it would silently become the app.
+    return i === -1 ? fileOrder.length : i;
+  };
+  return open.sort((a, b) => at(a) - at(b));
 }
 
 export const getSource = (name) => modelFor(name)?.getValue();
@@ -163,9 +201,13 @@ export function onFileShown(fn) {
   editor.onDidChangeModel(() => fn());
 }
 
-export const currentFile = () => editor.getModel().uri.path.replace(/^\//, "");
+// Which file the editor is showing, or nothing at all - there is a moment in
+// setFiles( ) below where it holds no model, and a reader that asks then is
+// asking a fair question with no answer.
+export const currentFile = () => editor.getModel()?.uri.path.replace(/^\//, "");
 
 export function addFile(file) {
+  fileOrder = [...fileOrder.filter((n) => n !== file.name), file.name];
   createModel(file);
   openFile(file.name);
   if (connected) refresh();
@@ -182,6 +224,7 @@ export function closeFile(name) {
   const remaining = files.filter((f) => f.name !== name);
   if (remaining.length === 0) return;
   if (currentFile() === name) openFile(remaining[0].name);
+  fileOrder = fileOrder.filter((n) => n !== name);
   model.dispose();
   modelGeneration += 1;
   if (connected) refresh();
@@ -197,16 +240,24 @@ export function closeFile(name) {
 // not have are closed; files it adds are created. Every sample starts in
 // the same main file, so the draft's main file is always kept this way.
 export function setFiles(files) {
-  const wanted = new Set(files.map((f) => f.name));
-  for (const model of monaco.editor.getModels()) {
-    if (model.uri.scheme === "file" && !wanted.has(model.uri.path.replace(/^\//, ""))) model.dispose();
-  }
+  fileOrder = files.map((f) => f.name);
   modelGeneration += 1;
   for (const file of files) {
     if (modelFor(file.name)) writeSource(file.name, file.source);
     else createModel(file);
   }
   editor.setModel(modelFor(files[0].name));
+  // The leftovers go only once the editor is showing one of the new models.
+  // Disposing the model the editor holds leaves the editor with NO model, and
+  // everything that asks which file is open reads `uri` off null in that
+  // window - the panel does, on the change the disposal itself fires. It was
+  // unreachable while every sample was called zcl_playground.clas.abap: the
+  // shown model was always one of the ones being written over rather than one
+  // being disposed.
+  const wanted = new Set(files.map((f) => f.name));
+  for (const model of monaco.editor.getModels()) {
+    if (model.uri.scheme === "file" && !wanted.has(model.uri.path.replace(/^\//, ""))) model.dispose();
+  }
   if (connected) refresh();
   onChange?.(getFiles());
 }

@@ -1,16 +1,16 @@
 import { test, expect } from "@playwright/test";
-import { markers, open, setSource } from "./helpers.mjs";
+import { clickEditor, MAIN_CLASS, markers, open, setSource } from "./helpers.mjs";
 
 // The editor half: Monaco with abaplint behind it, checking the class against
 // the real abap2UI5 sources rather than against a grammar.
 
-const CLEAN = `CLASS zcl_playground DEFINITION PUBLIC CREATE PUBLIC.
+const CLEAN = `CLASS ${MAIN_CLASS} DEFINITION PUBLIC CREATE PUBLIC.
   PUBLIC SECTION.
     INTERFACES z2ui5_if_app.
   PROTECTED SECTION.
     DATA client TYPE REF TO z2ui5_if_client.
 ENDCLASS.
-CLASS zcl_playground IMPLEMENTATION.
+CLASS ${MAIN_CLASS} IMPLEMENTATION.
   METHOD z2ui5_if_app~main.
     me->client = client.
     DATA(view) = z2ui5_cl_ui5_view_builder=>factory( ).
@@ -23,7 +23,7 @@ test("the editor shows the sample, highlighted as ABAP", async ({ page }) => {
 
   const editor = page.locator(".monaco-editor");
   await expect(editor).toBeVisible();
-  await expect(page.locator("#editor")).toContainText("CLASS zcl_playground DEFINITION");
+  await expect(page.locator("#editor")).toContainText(`CLASS ${MAIN_CLASS} DEFINITION`);
   // Monaco colours ABAP keywords through its own grammar; a token span for the
   // keyword class is the observable part of that.
   await expect(page.locator(".monaco-editor .mtk5, .monaco-editor .mtk6").first()).toBeVisible();
@@ -60,11 +60,11 @@ test("a missing method implementation is reported", async ({ page }) => {
   await open(page);
   await setSource(
     page,
-    `CLASS zcl_playground DEFINITION PUBLIC CREATE PUBLIC.
+    `CLASS ${MAIN_CLASS} DEFINITION PUBLIC CREATE PUBLIC.
   PUBLIC SECTION.
     INTERFACES z2ui5_if_app.
 ENDCLASS.
-CLASS zcl_playground IMPLEMENTATION.
+CLASS ${MAIN_CLASS} IMPLEMENTATION.
 ENDCLASS.`,
   );
 
@@ -77,7 +77,7 @@ test("completion offers the framework's class names", async ({ page }) => {
   await setSource(page, CLEAN);
 
   // Type a prefix where a class name belongs and ask for suggestions.
-  await page.locator(".monaco-editor .view-lines").click();
+  await clickEditor(page);
   await page.keyboard.press("Control+End");
   await page.keyboard.press("Enter");
   await page.keyboard.type("z2ui5_cl_ui5_view");

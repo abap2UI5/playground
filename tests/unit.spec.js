@@ -1,15 +1,26 @@
 import { test, expect } from "@playwright/test";
-import { addNamedFile, control, getSource, open, openFiles, runSample, setSource } from "./helpers.mjs";
+import { readFileSync } from "node:fs";
+import { addNamedFile, control, getSource, MAIN_CLASS, MAIN_FILE, open, openFiles, setSource } from "./helpers.mjs";
 
 // ABAP Unit in the browser: the local test classes in a class's test include,
 // run by Run before the app starts - see runUnitTests( ) in
 // src/runtime/index.mjs and the Tests tab in src/shell/insight.mjs.
+//
+// The app and its tests are a fixture of this file rather than a sample in the
+// menu. They used to be one, back when the playground wrote its own samples;
+// the samples come out of abap2UI5/samples now, and a class that exists to
+// have a test broken in it is not a sample - it is what this test needs.
+const fixture = (name) =>
+  readFileSync(new URL(`fixtures/${name}.abap`, import.meta.url), "utf8").replaceAll("%CLASS%", MAIN_CLASS);
 
-const TESTS = "zcl_playground.clas.testclasses.abap";
+const TESTS = `${MAIN_CLASS}.clas.testclasses.abap`;
 
 test("a failing test is listed with what was expected, and its row goes to the assertion", async ({ page }) => {
   await open(page);
-  await runSample(page, "unit-tests");
+  await setSource(page, fixture("unit-app"), MAIN_FILE);
+  await addNamedFile(page, TESTS);
+  await setSource(page, fixture("unit-tests"), TESTS);
+  await page.locator("#run").click();
   await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
 
   // Break one expectation. The app still starts - a failing test is no

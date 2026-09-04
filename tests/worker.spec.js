@@ -1,5 +1,10 @@
 import { test, expect } from "@playwright/test";
-import { control, open } from "./helpers.mjs";
+import { control, getSource, MAIN_MARK, open, runSample, SAMPLES, setSource } from "./helpers.mjs";
+
+// The sample with an input and a button in it, and the word this test writes
+// into it so it can tell its own copy from a fresh one.
+const BINDING = SAMPLES.find((s) => s.id === "binding");
+const MARK = "Kept for the offline visit";
 
 // The service worker exists for one reason: a second visit should not pay for
 // the first one again. What has to hold is both halves of that - the heavy
@@ -73,7 +78,7 @@ test("the documents are answered from the network first, and the cache is only t
   });
   await open(page);
   await expect(page).not.toHaveTitle("stale");
-  await expect(page.frameLocator("#app").getByText("Hello abap2UI5")).toBeVisible();
+  await expect(page.frameLocator("#app").getByText(MAIN_MARK)).toBeVisible();
 
   // And nothing at all is in the cache that was not asked for by name.
   const cached = await page.evaluate(async () => {
@@ -128,7 +133,7 @@ test("the app frame's stylesheets and component come out of the cache as well", 
 
   const { served, fetched } = watch(page);
   await open(page);
-  await expect(control(page, "btnGreet")).toBeVisible();
+  await expect(page.frameLocator("#app").getByText(MAIN_MARK)).toBeVisible();
 
   // The two theme stylesheets carry a query (?sap-ui-dist-version=...) that
   // names the build rather than a moment, and the frontend's own bundle and
@@ -161,23 +166,35 @@ test("the playground opens and runs with no network, on what the last visit left
   // shape of "what the last visit left": the modules a UI5 app loads lazily
   // are in the cache once they have been loaded, and not before.
   await open(page);
-  await expect(page.frameLocator("#app").getByText("Hello abap2UI5")).toBeVisible();
-  await control(page, "inpName", "-inner").fill("online");
-  await control(page, "btnGreet").click();
-  await expect(control(page, "txtGreeting")).toContainText("Hello online!");
+  // An app with something to press, made into a draft so the offline visit
+  // opens on the same one: a sample that was only read is not stored (see
+  // remember( ) in main.mjs), and this test needs the button on both visits.
+  await runSample(page, BINDING.id);
+  const [file] = BINDING.files;
+  await setSource(page, (await getSource(page, file)).replace("Data Binding", MARK), file);
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toHaveText(/^running/, { timeout: 60000 });
+  await press(page, "online");
   await page.waitForLoadState("networkidle");
 
   await context.setOffline(true);
   try {
     await open(page);
-    await expect(page.frameLocator("#app").getByText("Hello abap2UI5")).toBeVisible();
-    await control(page, "inpName", "-inner").fill("offline");
-    await control(page, "btnGreet").click();
-    await expect(control(page, "txtGreeting")).toContainText("Hello offline!");
+    await expect(page.frameLocator("#app").getByText(MARK)).toBeVisible();
+    await press(page, "offline");
   } finally {
     await context.setOffline(false);
   }
 });
+
+// Type a name and press Greet, and read the answer the ABAP wrote back. By
+// role and by text: the samples come out of abap2UI5/samples and give their
+// controls no ids.
+async function press(page, name) {
+  await page.frameLocator("#app").getByRole("textbox").first().fill(name);
+  await page.frameLocator("#app").getByRole("button", { name: "Greet" }).click();
+  await expect(page.frameLocator("#app").getByText(`Hello ${name}!`)).toBeVisible({ timeout: 30000 });
+}
 
 test("a ?src= link is still read from where it lives, and still runs", async ({ page }) => {
   await open(page);
