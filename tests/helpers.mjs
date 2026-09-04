@@ -77,8 +77,17 @@ export async function getSource(page, file = MAIN_FILE) {
 // string concatenation in it the element is wider than the pane it sits in -
 // and its centre, which is where a click lands, is over the app frame beside
 // the editor. The pane is the thing that is always where it looks.
+//
+// And not the pane's CENTRE, which is where a bare click( ) lands: a short
+// file leaves that point near the seam between the last line and the empty
+// space under it, and there is a single dead pixel on that seam where Monaco
+// takes the mousedown and moves the focus nowhere - after which every
+// keystroke the test presses goes to the document. Which pixel it is moves
+// with the fraction of a pixel the bar above the editor happens to be tall,
+// so a bar that grows by a hair turns four tests red and none of them are
+// about the bar. A point on the first line is a line whatever the file says.
 export async function clickEditor(page) {
-  await page.locator("#editor").click();
+  await page.locator("#editor").click({ position: { x: 200, y: 10 } });
 }
 
 export async function openFiles(page) {
