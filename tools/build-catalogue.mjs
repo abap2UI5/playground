@@ -33,6 +33,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { UI5_LIBRARIES, UI5_VERSION } from "../src/shell/ui5-libraries.mjs";
 import { cmpVersion, isCarried, isSapui5Only, libraryOf } from "../src/shell/ui5-libs.mjs";
+import { writeSamplePages } from "./sample-pages.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = path.join(ROOT, "dist", "samples", "apps.json");
@@ -350,6 +351,16 @@ const index = {
   controls,
   entries,
 };
+
+/* The pages that index implies: one per sample, the full list, the sitemap.
+ * Same data, same moment - see tools/sample-pages.mjs for why a catalogue that
+ * is one JavaScript-rendered URL is a catalogue no search engine can return a
+ * sample from. It runs BEFORE the index is written because it stamps `page`
+ * on every entry it made a page for: which entries get one is its rule (a
+ * class name that is a class name, a source URL that is https), and the
+ * catalogue page and the dialog link to what it actually wrote rather than
+ * repeating that rule and drifting from it. */
+writeSamplePages(index, path.join(ROOT, "dist"));
 
 fs.mkdirSync(path.dirname(OUT), { recursive: true });
 /* Undefined values drop out of JSON.stringify on their own, which is what the

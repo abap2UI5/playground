@@ -175,6 +175,16 @@ cannot run. A sample opened from the catalogue carries its way back, so the
 playground's bar offers **Back to the catalogue** — to the search you came
 from, not the top of the list.
 
+**Every sample also has a page of its own** — `samples/<class>/`, a static
+document with the sample's description, the class, every control it builds, the
+release it needs and what it needs when it cannot run here, plus the links to
+run it, to read the ABAP and back to the search. The catalogue itself is one
+URL that JavaScript fills in, which is right for searching and useless for
+being *found*: there was no address for "the abap2UI5 port of `sap.m.Wizard`"
+and so nothing a search engine could return. Now there is one for each of them,
+listed in [`sitemap.xml`](https://abap2ui5.github.io/playground/sitemap.xml)
+and reachable from [the full list](https://abap2ui5.github.io/playground/samples/all/).
+
 This replaced three separate GitHub Pages sites, one per sample repository.
 
 ## The examples browser

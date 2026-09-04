@@ -26,7 +26,7 @@ them before touching `tools/` or `src/runtime`.
 | `src/examples/` | ABAP served as static files, so `?src=` has same-origin targets and the link tests depend on no foreign host |
 | `src/embed/` | The embed loader (`abap2ui5-embed.js`) and a worked example page; copied verbatim to `dist/embed/` |
 | `src/catalogue/` | The sample catalogue at `/samples/`: one page, one stylesheet, one module, over the index `tools/build-catalogue.mjs` writes. Its own document and its own bundle - see "The sample catalogue" below |
-| `tools/` | The build (`build.mjs`, which drives `fetch-deps`, `build-framework`, `build-ui5`, `build-catalogue`, `build-site`), the size budget (`check-size`) and the dev server (`serve`) |
+| `tools/` | The build (`build.mjs`, which drives `fetch-deps`, `build-framework`, `build-ui5`, `build-catalogue` — which writes the index and, through `sample-pages.mjs`, one static page per sample plus the sitemap —, `build-site`), the size budget (`check-size`) and the dev server (`serve`) |
 | `tests/` | Playwright specs — the only test layer; everything is tested through a real browser against the built `dist/` |
 
 `deps/`, `build/` and `dist/` are generated and gitignored. Never commit them.
@@ -77,7 +77,11 @@ of each line. Each step is still its own script and still runnable by name
    of libraries the site carries.
 4. **`tools/build-catalogue.mjs`** fetches the six committed catalogues of the
    three sample repositories and joins them into `dist/samples/apps.json`, the
-   index behind the catalogue page and the examples dialog. The one step that
+   index behind the catalogue page and the examples dialog. Then, from that
+   same index and before it is written, `tools/sample-pages.mjs` writes what it
+   implies: one static page per sample under `dist/samples/<class>/`, the full
+   list at `dist/samples/all/`, `dist/samples/sample.css` and
+   `dist/sitemap.xml` - see "A page per sample" below. The one step that
    talks to the network at build time, and the one whose failure is survivable
    by design - see "The sample catalogue" below for what degrades and why the
    index is built rather than fetched by the page.
@@ -642,6 +646,57 @@ pointing at the reader's own search, in the same tab, instead of at the file on
 GitHub. Find it here, run it there, come back and keep looking. A `?src=` link
 from anywhere else still offers the GitHub page, which is what that reader
 wants.
+
+### A page per sample — `tools/sample-pages.mjs`, at `/samples/<class>/`
+
+The catalogue is one URL with 770 samples drawn into it by JavaScript. That is
+right for somebody searching and useless for somebody searching **the web**:
+there is no address for "the abap2UI5 port of `sap.m.Wizard`", so there is
+nothing a search engine can return. The three repository pages it replaced were
+the same shape — a masthead and an empty `<section id="results">` — so nothing
+was lost in the move; nothing was ever there.
+
+So every entry in the index also gets a **static page**: title, the demo kit's
+own sentence, the class, the facts as a `<dl>`, every control the class BUILDS
+(the linter's answer, each one a link into the catalogue's control facet), its
+libraries, what it needs where it cannot run, the neighbours around it in its
+group, and the three ways out — run it here, read the ABAP, back to the search.
+Real text in the HTML and **no JavaScript at all**; the only script on the page
+is the two-line theme read the other two documents also carry. `sample.css` is
+written beside them and loaded next to `catalogue.css`, which is the frame:
+these are the catalogue's pages, and a second palette would drift from it on
+the first change to either.
+
+Four rules hold the set together:
+
+- **`page` is stamped on the index entry by the writer**, which is why it runs
+  before `apps.json` is written. Which entries get a page is its rule — a class
+  name that is a class name, an `https` source URL — and the catalogue's cards
+  link to what was actually written rather than repeating that rule and
+  drifting from it.
+- **External data, escaped.** Everything on these pages comes from three
+  repositories' committed files: every value is escaped into the markup, every
+  link is dropped unless it is `https`, and a class name that is not a plain
+  ABAP name gets no directory. A path is not a thing to build out of somebody
+  else's JSON.
+- **Linked, not only listed.** A page in a sitemap and in no link is a page a
+  crawler may ignore. Every card's title links to its page, each page links to
+  its neighbours, and the catalogue's *footer* — its static half, the part that
+  needs no JavaScript — links to `samples/all/`, which names all 770.
+- **No `robots.txt`.** This site is a project page under
+  `abap2ui5.github.io/playground/`, and a crawler only reads `/robots.txt` at
+  the domain root, which belongs to another repository. `sitemap.xml` is
+  discovered by being submitted, or not at all; the links above are what
+  actually does the work.
+
+`SITE` (overridable with `PG_SITE_URL`) is the one absolute URL on this site,
+and only these pages need it — a canonical link and a sitemap are absolute by
+definition, everything else stays relative so the site still works under any
+path. The pages are **not** in the service worker's allow list: they are static
+documents nobody revisits offline, and 770 of them in a cache is not what
+somebody who came to write ABAP asked for. `tests/sample-pages.spec.js` runs
+against the real index, because a fixture would test a page that was never
+written.
 
 The service worker keeps the page and its index **on use, not in the precache**
 (`src/shell/sw.js`): `apps.json` alone is most of a megabyte, and somebody who

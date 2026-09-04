@@ -133,7 +133,22 @@ const text = (tag, className, content) => {
 
 function card(row) {
   const node = text("article", "card");
-  node.append(text("h3", "", row.title));
+  /* The title is a link to the sample's OWN page - one static document per
+   * sample, written at build time by tools/sample-pages.mjs. That page is
+   * what a search engine can return and what a reader can send; this list is
+   * how one finds it here. `page` is stamped on the entry by the writer, so a
+   * row without one (a class name that is not a name, a missing source URL)
+   * simply keeps a plain heading. */
+  const head = text("h3");
+  if (row.page) {
+    const link = text("a", "", row.title);
+    link.href = row.page;
+    link.title = `${row.title} — what it shows, what it builds, and where it runs`;
+    head.append(link);
+  } else {
+    head.textContent = row.title;
+  }
+  node.append(head);
   if (row.note && row.note !== row.title) node.append(text("p", "sub", row.note));
 
   const badges = text("div", "badges");
