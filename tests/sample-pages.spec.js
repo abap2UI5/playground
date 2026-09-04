@@ -17,6 +17,7 @@ import path from "node:path";
 // written. They therefore assert shapes and invariants over whatever the three
 // repositories currently hold, never a particular sample's wording.
 
+const CORS = { "access-control-allow-origin": "*" };
 const DIST = path.join(process.cwd(), "dist");
 const index = JSON.parse(fs.readFileSync(path.join(DIST, "samples", "apps.json"), "utf8"));
 const paged = index.entries.filter((e) => e.page);
@@ -58,6 +59,68 @@ test("a sample's page carries what the catalogue knows, in the HTML itself", asy
   expect(html).toContain(`back=${encodeURIComponent(`q=${entry.class}`)}`);
   expect(html).toContain(entry.github);
   expect(html).toContain('<a href="../">Sample catalogue</a>');
+});
+
+test("a sample page prints the class itself, coloured and escaped", async ({ page }) => {
+  // The class IS the sample, so it is on the page rather than one click away
+  // on GitHub - fetched at build time (tools/sample-sources.mjs) and coloured
+  // there too (tools/abap-highlight.mjs), because these pages run no
+  // JavaScript. A reader who wanted to know how it does what it does has the
+  // answer in front of them, and a search for a call nobody wrote a sentence
+  // about has something to match.
+  const entry = paged.find((e) => e.runs && e.source === "learn") || paged.find((e) => e.runs);
+  expect(entry, "the index has a sample that runs here").toBeTruthy();
+  const html = await (await page.request.get(`/samples/${entry.page}`)).text();
+
+  expect(html).toContain("<h2>The ABAP</h2>");
+  expect(html).toContain(entry.raw.split("/").pop());
+  const block = html.slice(html.indexOf('<pre class="source-body">'));
+  expect(block).toContain("<code>");
+  // Coloured: the statement words carry a class, and it is the one the
+  // playground's own panel prints XML and JSON with.
+  expect(block).toMatch(/<span class="code-key">(CLASS|class)<\/span>/);
+  expect(block).toContain("ENDCLASS");
+
+  // Escaped, all of it. This is somebody else's committed file printed into
+  // this site's markup: the one thing that must never happen is a repository
+  // deciding what is a tag here. `->` is in every abap2UI5 class there is.
+  const code = block.slice(block.indexOf("<code>") + 6, block.indexOf("</code>"));
+  expect(code).toContain("-&gt;");
+  expect(code.replace(/<\/?span[^>]*>/g, "")).not.toMatch(/<[a-zA-Z/]/);
+});
+
+test("the pages carry the ABAP, not just the sample that was looked at", async () => {
+  // A fetch that quietly returned nothing would leave 770 pages that still
+  // build, still link and still describe - and no longer show the thing they
+  // are about. So the set is counted, not sampled.
+  const printed = paged.filter((entry) =>
+    fs.readFileSync(path.join(DIST, "samples", entry.page, "index.html"), "utf8")
+      .includes("<h2>The ABAP</h2>"),
+  );
+  expect(printed.length).toBeGreaterThan(paged.length * 0.9);
+});
+
+test("Run on a sample page opens it in the playground, and the playground offers the way back", async ({ page }) => {
+  // The round trip that used to start on a card in the catalogue starts here
+  // now: the card is a link to this page, and this page is where Run is.
+  const entry = paged.find((e) => e.runs && e.source === "learn") || paged.find((e) => e.runs);
+  expect(entry, "the index has a sample that runs here").toBeTruthy();
+  await page.route(`**/${entry.raw.split("/").pop()}`, (route) =>
+    route.fulfill({
+      status: 200, contentType: "text/plain", headers: CORS,
+      body: `CLASS ${entry.class} DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    INTERFACES z2ui5_if_app.\nENDCLASS.\n`
+        + `CLASS ${entry.class} IMPLEMENTATION.\n  METHOD z2ui5_if_app~main.\n  ENDMETHOD.\nENDCLASS.\n`,
+    }),
+  );
+  await page.goto(`/samples/${entry.page}`);
+  await page.locator("a.run").click();
+
+  const back = page.locator("#source-link");
+  await expect(back).toHaveText("Back to the catalogue", { timeout: 120000 });
+  // Narrowed to the class the reader came from, which is the search that has
+  // exactly one hit - a static page cannot know the search they had.
+  await expect(back).toHaveAttribute("href", `samples/?q=${entry.class}`);
+  await expect(back).not.toHaveAttribute("target", "_blank");
 });
 
 test("a sample that cannot run here says what it needs, and offers no Run", async ({ page }) => {
@@ -112,6 +175,10 @@ test("a page renders as the catalogue's own, and its links work", async ({ page 
   await expect(page.locator("h1")).toHaveText(entry.title);
   // The bar is the catalogue's, so the stylesheet beside it is loading.
   await expect(page.locator(".bar-nav a", { hasText: "Samples" })).toBeVisible();
+  // And it ends where the playground's own bar ends: LinkedIn, then GitHub.
+  await expect(page.locator(".bar .social")).toHaveCount(2);
+  await expect(page.locator('.bar .social[href*="linkedin.com"]')).toBeVisible();
+  await expect(page.locator('.bar .social[href*="github.com"]')).toBeVisible();
   expect(await page.locator(".bar").evaluate((el) => getComputedStyle(el).borderBottomWidth)).toBe("1px");
 
   // Back to the catalogue, and on to a neighbour: the internal links are what

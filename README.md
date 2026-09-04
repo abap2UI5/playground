@@ -179,18 +179,20 @@ those onto the `catalogue.json` beside them and builds one index at deploy
 time. **The filters live in the URL**, so a search is a link you can send:
 `?q=table&lib=sap.ui.table&rel=1.84`.
 
-Most rows open in the playground and run in your browser with nothing
-installed. What cannot — a stack sample, which needs a real system; a port
-whose library only SAPUI5 has — is listed all the same, says what it needs, and
-opens for reading instead: a sample you cannot find is worse than one you
-cannot run. A sample opened from the catalogue carries its way back, so the
-playground's bar offers **Back to the catalogue** — to the search you came
-from, not the top of the list.
+**A row is a link to that sample's page**, and that is all it is: what a
+sample builds, what it needs, the ABAP itself, and the buttons that run it here
+or open it on GitHub are all on the page it opens. Most samples run in your
+browser with nothing installed. What cannot — a stack sample, which needs a
+real system; a port whose library only SAPUI5 has — is listed all the same,
+says what it needs, and opens for reading instead: a sample you cannot find is
+worse than one you cannot run. Run it from its page and the playground's bar
+offers **Back to the catalogue**, in the same tab.
 
-**Every sample also has a page of its own** — `samples/<class>/`, a static
+**Every sample has a page of its own** — `samples/<class>/`, a static
 document with the sample's description, the class, every control it builds, the
-release it needs and what it needs when it cannot run here, plus the links to
-run it, to read the ABAP and back to the search. The catalogue itself is one
+release it needs, what it needs when it cannot run here, **the whole class
+printed and syntax-coloured**, plus the links to run it, to read the ABAP and
+back to the search. The catalogue itself is one
 URL that JavaScript fills in, which is right for searching and useless for
 being *found*: there was no address for "the abap2UI5 port of `sap.m.Wizard`"
 and so nothing a search engine could return. Now there is one for each of them,

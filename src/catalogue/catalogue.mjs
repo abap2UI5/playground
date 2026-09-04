@@ -12,10 +12,16 @@
 // examples dialog in the playground could never do and the reason this page
 // exists beside it rather than instead of it.
 //
-// Every row that can run opens in the playground with `?src=` (the loader in
-// src/shell/deep-link.mjs) and `&from=catalogue`, which is what puts "back to
-// the catalogue" in the playground's bar instead of the GitHub link. The round
-// trip is the point: find it here, run it there, come back and keep looking.
+// A ROW IS A LINK, and it goes to that sample's own page - `samples/<class>/`,
+// written at build time by tools/sample-pages.mjs. It used to end in three
+// actions instead (Run it, Source, Docs) and they were the wrong three: they
+// left the site before the reader had seen what the sample was, and they made
+// the row look like the destination, so the page underneath it read as
+// something that did not exist. Run is on that page, with `?src=` and
+// `&from=catalogue` (the loader in src/shell/deep-link.mjs), which is what puts
+// "back to the catalogue" in the playground's bar instead of the GitHub link.
+// The round trip is still the point: find it here, read it there, run it, come
+// back and keep looking.
 import { cmpVersion } from "../shell/ui5-libs.mjs";
 
 const $ = (id) => document.getElementById(id);
@@ -133,17 +139,18 @@ const text = (tag, className, content) => {
 
 function card(row) {
   const node = text("article", "card");
-  /* The title is a link to the sample's OWN page - one static document per
-   * sample, written at build time by tools/sample-pages.mjs. That page is
-   * what a search engine can return and what a reader can send; this list is
-   * how one finds it here. `page` is stamped on the entry by the writer, so a
-   * row without one (a class name that is not a name, a missing source URL)
-   * simply keeps a plain heading. */
+  /* The title is the link to the sample's OWN page - one static document per
+   * sample, written at build time by tools/sample-pages.mjs - and the
+   * stylesheet stretches it over the whole card, so the card IS that link.
+   * That page is what a search engine can return, what a reader can send, and
+   * where the sample's own actions are. `page` is stamped on the entry by the
+   * writer, so a row without one (a class name that is not a name, a missing
+   * source URL) simply keeps a plain heading. */
   const head = text("h3");
   if (row.page) {
     const link = text("a", "", row.title);
     link.href = row.page;
-    link.title = `${row.title} — what it shows, what it builds, and where it runs`;
+    link.title = `Open ${row.title}: what it shows, what it builds, and the ABAP itself`;
     head.append(link);
   } else {
     head.textContent = row.title;
@@ -172,32 +179,34 @@ function card(row) {
   node.append(badges);
   node.append(text("p", "who", row.class));
 
-  const actions = text("div", "actions");
-  if (row.runs) {
-    const run = text("a", "run", "Run it");
-    /* `back` is this page's own query string, so the playground's bar can
-     * offer the way back to the SEARCH rather than to the top of the list -
-     * see showSourceLink( ) in src/shell/main.mjs. Empty when nothing is
-     * filtered, which keeps a plain link plain. */
-    const back = location.search.replace(/^\?/, "");
-    run.href = `../?src=${encodeURIComponent(row.raw)}&from=catalogue`
-      + (back ? `&back=${encodeURIComponent(back)}` : "");
-    run.title = "Open this class in the playground and run it here";
-    actions.append(run);
+  /* ONE way on from a card, and it is the sample's own page. The card used to
+   * end in three - Run it, Source, Docs - and they were the wrong three: they
+   * left the site before the reader had seen what the sample was, and they
+   * made the card look like the destination it is not, so the page underneath
+   * (the facts, the controls, the ABAP itself) read as something that did not
+   * exist. Run, GitHub and the documentation are all still one click away -
+   * they are the actions AT THE TOP of that page, where a reader who has
+   * decided is standing.
+   *
+   * The line below is the affordance; the link that carries it is the title's,
+   * stretched over the whole card in the stylesheet, so a card is one target
+   * and not a heading somebody has to aim at. */
+  if (row.page) {
+    const more = text("p", "more");
+    more.append(text("span", "more-go", "Open the sample ›"));
+    more.append(text("span", "more-why", row.runs ? "runs in this browser" : row.needs || ""));
+    node.append(more);
+  } else {
+    /* No page was written for this row, so the card keeps the one link it can
+     * stand behind: the class in its repository. */
+    const actions = text("div", "actions");
+    const read = text("a", "", "Read the source");
+    read.href = row.github;
+    read.target = "_blank";
+    read.rel = "noopener";
+    actions.append(read);
+    node.append(actions);
   }
-  const read = text("a", "", row.runs ? "Source" : "Read the source");
-  read.href = row.github;
-  read.target = "_blank";
-  read.rel = "noopener";
-  actions.append(read);
-  if (row.docs && row.docs.length) {
-    const docs = text("a", "", "Docs");
-    docs.href = row.docs[0];
-    docs.target = "_blank";
-    docs.rel = "noopener";
-    actions.append(docs);
-  }
-  node.append(actions);
   return node;
 }
 
