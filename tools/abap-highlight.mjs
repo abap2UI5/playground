@@ -1,7 +1,8 @@
 // Colour for the ABAP the sample pages print, decided at BUILD time.
 //
-// The per-sample pages carry no JavaScript (tools/sample-pages.mjs says why),
-// so a highlighter that runs in the reader's browser is not available to them.
+// The per-sample pages are static documents (tools/sample-pages.mjs says why):
+// the only scripts on one are the theme read and the loader behind its demo
+// box, so a highlighter that runs in the reader's browser is not one of them.
 // This one runs here instead: it takes the class as it stands in its
 // repository and returns the HTML for it, already escaped, with the same token
 // classes the bottom panel's own highlighter emits (src/shell/highlight.mjs).

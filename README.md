@@ -183,8 +183,8 @@ time. **The filters live in the URL**, so a search is a link you can send:
 `?q=table&lib=sap.ui.table&rel=1.84`.
 
 **A row is a link to that sample's page**, and that is all it is: what a
-sample builds, what it needs, the ABAP itself, and the buttons that run it here
-or open it on GitHub are all on the page it opens. Most samples run in your
+sample builds, what it needs, the ABAP itself, and a box that runs the sample
+in that page are all on the page it opens. Most samples run in your
 browser with nothing installed. What cannot — a stack sample, which needs a
 real system; a port whose library only SAPUI5 has — is listed all the same,
 says what it needs, and opens for reading instead: a sample you cannot find is
@@ -193,9 +193,11 @@ offers **Back to the catalogue**, in the same tab.
 
 **Every sample has a page of its own** — `samples/<class>/`, a static
 document with the sample's description, the class, every control it builds, the
-release it needs, what it needs when it cannot run here, **the whole class
-printed and syntax-coloured**, plus the links to run it, to read the ABAP and
-back to the search. The catalogue itself is one
+release it needs, what it needs when it cannot run here, **the sample running —
+press the demo box and the playground mounts in the page, on that sample** —,
+**the whole class printed and syntax-coloured**, and the links out: the class
+on GitHub, SAP's own sample for a port of one, the whole playground, back to
+the search. The catalogue itself is one
 URL that JavaScript fills in, which is right for searching and useless for
 being *found*: there was no address for "the abap2UI5 port of `sap.m.Wizard`"
 and so nothing a search engine could return. Now there is one for each of them,

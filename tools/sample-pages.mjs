@@ -8,7 +8,9 @@
 // three repository pages it replaced were the same shape - a masthead and an
 // empty <section id="results">. Nothing was lost in the move; nothing was ever
 // there. These pages are the address: one per sample, real text in the HTML,
-// no JavaScript at all.
+// and nothing a crawler has to run to see any of it - the two scripts on a
+// page are the theme read and the demo loader below, and neither writes a word
+// of it.
 //
 // WHAT MAKES THEM WORTH INDEXING rather than 770 pages of nothing: each one
 // carries what only this catalogue knows - the demo kit's own description of
@@ -19,14 +21,27 @@
 // into the playground. A page that only repeated its title would deserve the
 // thin-content treatment it would get.
 //
+// AND THE SAMPLE RUNNING, above the class it is written in: a demo box that
+// mounts the playground in an iframe, in this page, with this sample's ABAP in
+// it. The loader is the one any documentation page embeds
+// (src/embed/abap2ui5-embed.js), so these pages are the first reader of the kit
+// this site ships - and, like every other page that embeds it, they get the
+// press-to-start rule with it: a playground is a whole ABAP runtime plus an
+// abaplint parse of nine hundred sources, and 770 pages that booted one on
+// sight would be 770 pages nobody waits for. That box is also why the page no
+// longer opens with a row of buttons - "Run it in the browser" runs it in the
+// page now, the link out to the full playground rides on the box, and GitHub
+// and the documentation are facts, in the facts.
+//
 // And, at the bottom, THE CLASS ITSELF - the thing the page is about, printed
 // rather than linked to (tools/sample-sources.mjs fetches it,
 // tools/abap-highlight.mjs colours it here at build time, because these pages
-// run no JavaScript). A reader who came to find out how a sample does what it
-// does was one click away from the answer on GitHub and is now none; a search
-// for a call nobody wrote a sentence about - `client->nav_app_leave( )`, a
-// property name, an event - has something to match. A class that could not be
-// fetched simply has no block: the facts above it are the page either way.
+// carry no highlighter of their own). A reader who came to find out how a
+// sample does what it does was one click away from the answer on GitHub and is
+// now none; a search for a call nobody wrote a sentence about -
+// `client->nav_app_leave( )`, a property name, an event - has something to
+// match. A class that could not be fetched simply has no block: the facts
+// above it are the page either way.
 //
 // WHERE THEY ARE LINKED FROM, which is what makes them reachable at all: every
 // card on the catalogue page (its title is a link now), the full list at
@@ -47,6 +62,7 @@
 // thing to build out of somebody else's JSON.
 import fs from "fs";
 import path from "path";
+import { isSapui5Only } from "../src/shell/ui5-libs.mjs";
 import { highlightAbap } from "./abap-highlight.mjs";
 import { fetchSampleSources } from "./sample-sources.mjs";
 
@@ -75,6 +91,21 @@ const safe = (url) => (/^https:\/\/[^\s"'<>]+$/.test(String(url ?? "")) ? String
 const dirOf = (cls) => {
   const name = String(cls ?? "").toLowerCase();
   return /^[a-z][a-z0-9_]{2,60}$/.test(name) ? name : undefined;
+};
+
+/* The sample this port rebuilds, in SAP's own repository. The demo kit shows
+ * a sample; the folder behind it is the whole of one - view, controller and
+ * data - and "what did the original do" is the first question a port raises.
+ * Built out of the sample id alone, because a UI5 namespace IS a path there:
+ * sap.m.sample.ObjectIdentifier lives at sap.m's demokit/sample/ObjectIdentifier.
+ * A SAPUI5-only sample gets no link at all - OpenUI5 is the repository, and it
+ * has no folder for a sample that was never in it. */
+const openui5Sample = (id) => {
+  const parts = /^([a-z]\w*(?:\.[a-z]\w*)*)\.sample\.([A-Za-z]\w*(?:\.[A-Za-z]\w*)*)$/.exec(String(id ?? ""));
+  if (parts === null || isSapui5Only(parts[1])) return undefined;
+  const [, library, name] = parts;
+  return `https://github.com/SAP/openui5/tree/master/src/${library}/test/`
+    + `${library.replace(/\./g, "/")}/demokit/sample/${name.replace(/\./g, "/")}`;
 };
 
 const cut = (text, max) => {
@@ -110,14 +141,19 @@ const SOCIALS = `<span class="socials">
     </a>
   </span>`;
 
+/* The brand names the part of the site the reader is in, and here that is the
+ * samples - the playground is one nav item away, and a bar that called this
+ * page "playground" was naming the neighbour rather than the room. The nav
+ * says so twice: Samples carries aria-current, which is what makes it the bold
+ * one (catalogue.css) and what a screen reader announces. */
 const bar = (up) => `<header class="bar">
-  <a class="brand" href="${up}">
+  <a class="brand" href="${up}samples/">
     <img src="${up}favicon.png" alt="" width="20" height="20">
-    <span>abap2UI5 <b>playground</b></span>
+    <span>abap2UI5 <b>samples</b></span>
   </a>
   <nav class="bar-nav">
     <a href="${up}" title="Write ABAP and run it in the browser">Playground</a>
-    <a href="${up}samples/">Samples</a>
+    <a href="${up}samples/" aria-current="page">Samples</a>
     <a href="https://abap2ui5.github.io/docs/" target="_blank" rel="noopener">Docs</a>
   </nav>
   ${SOCIALS}
@@ -146,8 +182,7 @@ main { padding-bottom: 40px; }
 .sample h1 { font-size: 26px; margin: 0 0 8px; line-height: 1.25; }
 .sample .lede { margin: 0 0 4px; font-size: 15px; color: var(--fg); max-width: 74ch; }
 .sample .who { font-family: var(--font-mono); font-size: 12px; color: var(--fg-dim); }
-.sample .badges { margin: 12px 0; }
-.sample .actions { margin: 16px 0 24px; }
+.sample .badges { margin: 12px 0 24px; }
 .warns {
   background: var(--warn-bg); color: var(--warn); border-radius: 8px;
   padding: 10px 14px; margin: 0 0 22px; max-width: 74ch; font-size: 13px;
@@ -165,6 +200,30 @@ h2 { font-size: 15px; margin: 26px 0 8px; }
   border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; text-decoration: none;
 }
 .chips a:hover { border-color: var(--accent); }
+/* The demo. Same card as the class below it - one shape for the sample
+ * running and the sample written, because they are the same sample - and the
+ * button inside it is the loader's own (src/embed/abap2ui5-embed.js), which
+ * ships no stylesheet: an embedding page dresses it, and this one dresses it
+ * as the catalogue. Unpressed it is a band and not the frame's full 560
+ * pixels: a demo nobody asked for should cost the page one line of its
+ * scroll, not a screen of empty box on the way past. */
+.demo { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 0; background: var(--bg); }
+.demo-head {
+  display: flex; flex-wrap: wrap; gap: 2px 16px; justify-content: space-between; align-items: baseline;
+  padding: 7px 13px; font-size: 12px; color: var(--fg-dim);
+  background: var(--bg-sunken); border-bottom: 1px solid var(--line);
+}
+.abap2ui5-demo { min-height: 132px; display: flex; }
+.abap2ui5-demo-start {
+  display: block; width: 100%; padding: 44px 16px; border: 0; cursor: pointer;
+  background: transparent; color: var(--accent); font: inherit; font-size: 14px; font-weight: 600;
+}
+.abap2ui5-demo-start::after {
+  content: " — nothing loads until you press it";
+  color: var(--fg-dim); font-weight: 400;
+}
+.abap2ui5-demo-start:hover { background: var(--bg-sunken); }
+.demo-note { margin: 8px 0 0; }
 /* The class itself. The frame is a card the width of the text column plus
  * whatever the code needs: ABAP is written in lines that do not wrap, so the
  * block scrolls sideways rather than folding a chain into a paragraph, and it
@@ -248,6 +307,16 @@ function samplePage(row, ctx) {
     180,
   );
 
+  const github = safe(row.github);
+  const docs = safe((row.docs || [])[0]);
+  const file = String(row.raw).split("/").pop();
+
+  /* The facts, which is now also where the links out live: the class on
+   * GitHub, SAP's own sample, the documentation. They were three buttons above
+   * this list and they were three buttons in front of the answer - a reader
+   * who has not yet read a line of the page has nothing to decide with, and
+   * the one thing they came to do, run it, is a box further down that does it
+   * here. A link is worth what the fact beside it says it is. */
   const facts = [];
   if (source) {
     facts.push([
@@ -256,10 +325,23 @@ function samplePage(row, ctx) {
     ]);
   }
   facts.push(["Class", `<code>${esc(row.class.toUpperCase())}</code>`]);
+  if (github) {
+    facts.push([
+      "Source file",
+      `<a href="${esc(github)}" target="_blank" rel="noopener"><code>${esc(file)}</code> ↗</a>`,
+    ]);
+  }
   if (row.group) facts.push([row.source === "controls" ? "Library" : "Category", esc(row.group)]);
   if (row.stageTitle) facts.push(["Learning path", esc(row.stageTitle)]);
   if (row.entity) facts.push(["UI5 entity", `<code>${esc(row.entity)}</code>`]);
   if (row.sample) facts.push(["Demo kit sample", `<code>${esc(row.sample)}</code>`]);
+  const original = openui5Sample(row.sample);
+  if (original) {
+    facts.push([
+      "SAP's own sample",
+      `<a href="${esc(original)}" target="_blank" rel="noopener">SAP/openui5 ↗</a>`,
+    ]);
+  }
   facts.push([
     "Minimum UI5",
     row.minUi5 === floor ? `${esc(floor)} — the floor abap2UI5 holds its samples to` : esc(row.minUi5),
@@ -271,6 +353,12 @@ function samplePage(row, ctx) {
       : `${esc(row.needs || "does not run here")} — it opens for reading instead`,
   ]);
   if (row.runsOn) facts.push(["Runs on", esc(row.runsOn)]);
+  if (docs) {
+    facts.push([
+      "Documentation",
+      `<a href="${esc(docs)}" target="_blank" rel="noopener">${esc(cut(docs.replace(/^https:\/\//, ""), 60))} ↗</a>`,
+    ]);
+  }
 
   /* Why it needs what it needs: the linter's own reasons, which is the half a
    * reader can argue with rather than only believe. */
@@ -279,12 +367,37 @@ function samplePage(row, ctx) {
     ...(row.since || []).map((s) => `<code>${esc(s.name)}</code> since ${esc(s.since)}`),
   ].filter(Boolean);
 
+  /* The whole playground, on this sample, in a tab of its own - the round
+   * trip the catalogue is built around: `from=catalogue` and `back=` are what
+   * turn the source link in that playground into "Back to the catalogue",
+   * narrowed to the one search that has exactly one hit (src/shell/main.mjs).
+   * It sits on the demo box rather than above the page, because it is the
+   * answer to "I want more room than this box", which is a thing a reader
+   * knows after seeing the box and not before. */
   const run = row.runs
     ? `<a class="run" href="../../?src=${encodeURIComponent(row.raw)}&amp;from=catalogue&amp;back=`
-      + `${encodeURIComponent(`q=${row.class}`)}">Run it in the browser</a>`
+      + `${encodeURIComponent(`q=${row.class}`)}">Open the full playground ↗</a>`
     : "";
-  const github = safe(row.github);
-  const docs = safe((row.docs || [])[0]);
+
+  /* Only a sample that RUNS here gets a demo. The others are listed, read and
+   * linked - what they need is on the page - and a start button that could
+   * only ever fail is not an offer. */
+  const demo = row.runs
+    ? `<h2>Run it here</h2>
+  <div class="demo">
+    <div class="demo-head">
+      <span>The playground itself, in this page — the editor on the left, the app it builds on the right.</span>
+      ${run}
+    </div>
+    <div class="abap2ui5-demo" data-src="${esc(row.raw)}" data-height="560"
+         data-label="Run it in the browser"></div>
+  </div>
+  <p class="note demo-note">
+    Nothing is installed and nothing is sent anywhere: the ABAP is compiled to
+    JavaScript in this browser and runs against abap2UI5 itself.
+  </p>
+  <script src="../../embed/abap2ui5-embed.js" defer></script>`
+    : "";
 
   /* The class, if the fetch got it (tools/sample-sources.mjs). A page without
    * it is the page as it was before this block existed, which is why nothing
@@ -350,17 +463,11 @@ ${bar("../../")}
     ${row.needs ? `<span class="badge needs">${esc(row.needs)}</span>` : ""}
   </div>
 
-  <div class="actions">
-    ${run}
-    ${github ? `<a href="${esc(github)}" target="_blank" rel="noopener">Read the ABAP ↗</a>` : ""}
-    ${docs ? `<a href="${esc(docs)}" target="_blank" rel="noopener">Documentation ↗</a>` : ""}
-  </div>
-
   ${
     row.needs
       ? `<p class="warns"><b>${esc(row.needs)}.</b> This sample is listed here because a sample
     somebody cannot find is worse than one they cannot run${why.length ? `: ${why.join("; ")}` : ""}.
-    The ABAP is above; installed on a system that has what it needs, it runs there.</p>`
+    The ABAP is below; installed on a system that has what it needs, it runs there.</p>`
       : ""
   }
 
@@ -397,12 +504,14 @@ ${bar("../../")}
       : ""
   }
 
+  ${demo}
+
   ${
     code
       ? `<h2>The ABAP</h2>
   <div class="source">
     <div class="source-head">
-      <span><b>${esc(String(row.raw).split("/").pop())}</b> — ${code.lines} line${code.lines === 1 ? "" : "s"}${
+      <span><b>${esc(file)}</b> — ${code.lines} line${code.lines === 1 ? "" : "s"}${
         row.branch ? `, on branch ${esc(row.branch)}` : ""
       }</span>
       ${github ? `<a href="${esc(github)}" target="_blank" rel="noopener">Read it on GitHub ↗</a>` : ""}
