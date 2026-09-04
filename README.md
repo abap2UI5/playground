@@ -194,10 +194,10 @@ offers **Back to the catalogue**, in the same tab.
 **Every sample has a page of its own** — `samples/<class>/`, a static
 document with the sample's description, the class, every control it builds, the
 release it needs, what it needs when it cannot run here, **the sample running —
-press the demo box and the playground mounts in the page, on that sample** —,
-**the whole class printed and syntax-coloured**, and the links out: the class
-on GitHub, SAP's own sample for a port of one, the whole playground, back to
-the search. The catalogue itself is one
+press the demo box and the app mounts in the page, on its own, without the
+editor over it** —, **the whole class printed and syntax-coloured**, and the
+links out: the class on GitHub, SAP's own sample running in the demo kit for a
+port of one, the whole playground, back to the search. The catalogue itself is one
 URL that JavaScript fills in, which is right for searching and useless for
 being *found*: there was no address for "the abap2UI5 port of `sap.m.Wizard`"
 and so nothing a search engine could return. Now there is one for each of them,
