@@ -1,4 +1,39 @@
 import { expect } from "@playwright/test";
+import { readFileSync } from "node:fs";
+
+// What the page carries, as the build worked it out.
+//
+// The samples are abap2UI5/samples' own now - src/editor/sample-list.mjs names
+// the classes, writeSamples( ) in tools/build-site.mjs resolves them against
+// the pinned repository - so nothing about them is written twice. A test that
+// needs a sample's files or its title reads them from what was built rather
+// than repeating them, which is what keeps moving the pin from being a sweep
+// through the suite.
+export const SAMPLES = readSamples();
+
+function readSamples() {
+  try {
+    return JSON.parse(readFileSync(new URL("../build/samples/index.json", import.meta.url), "utf8"));
+  } catch {
+    // The one thing a test cannot work around, said plainly: everything here
+    // runs against a built dist/, and this file is part of that build.
+    throw new Error("build/samples/index.json is not there - run `npm run build` before the tests.");
+  }
+}
+export const sampleFiles = (id) => SAMPLES.find((s) => s.id === id).files;
+
+// The file the playground opens on, and the class inside it. A test that hands
+// the playground ABAP of its own has to declare the class its file is named
+// after: the playground refuses the pair when they disagree, exactly as a
+// system does.
+export const MAIN_FILE = SAMPLES[0].files[0];
+export const MAIN_CLASS = MAIN_FILE.replace(/\.clas\.abap$/, "");
+
+// A phrase that is both IN the app the page opens on and ON the screen once it
+// has run: every sample in that repository titles its Page after itself. One
+// string does both jobs a test needs - replace it in the source to make a
+// version of your own, and look for it in the frame to see that a version ran.
+export const MAIN_MARK = SAMPLES[0].title;
 
 // Opens the playground and waits until it has compiled and started the class in
 // the editor. Everything downstream depends on that, so every test starts here.
@@ -16,7 +51,7 @@ export const control = (page, id, suffix = "") =>
 // Replaces what is in the editor. The editor reacts to a change on a short
 // debounce, so this waits out that delay rather than leaving every caller to
 // remember it.
-export async function setSource(page, source, file = "zcl_playground.clas.abap") {
+export async function setSource(page, source, file = MAIN_FILE) {
   await page.evaluate(
     ([s, f]) => window.monaco.editor.getModel(window.monaco.Uri.parse(`file:///${f}`)).setValue(s),
     [source, file],
@@ -24,20 +59,30 @@ export async function setSource(page, source, file = "zcl_playground.clas.abap")
   await page.waitForTimeout(400);
 }
 
-export async function getSource(page, file = "zcl_playground.clas.abap") {
+export async function getSource(page, file = MAIN_FILE) {
   return page.evaluate(
     (f) => window.monaco.editor.getModel(window.monaco.Uri.parse(`file:///${f}`))?.getValue(),
     file,
   );
 }
 
+// The open files, in the order the playground holds them - which is the order
+// the strip shows and, for the first one, what Run starts. Read off the strip
+// rather than out of Monaco: Monaco's own model list is in creation order,
+// which is not the same thing once a file has been reopened.
+// Puts the caret in the ABAP editor.
+//
+// Not a click on `.view-lines`, which is what this used to be: Monaco sizes
+// that element to the WIDEST line in the file, so on a class with a long
+// string concatenation in it the element is wider than the pane it sits in -
+// and its centre, which is where a click lands, is over the app frame beside
+// the editor. The pane is the thing that is always where it looks.
+export async function clickEditor(page) {
+  await page.locator("#editor").click();
+}
+
 export async function openFiles(page) {
-  return page.evaluate(() =>
-    window.monaco.editor
-      .getModels()
-      .filter((m) => m.uri.scheme === "file")
-      .map((m) => m.uri.path.replace(/^\//, "")),
-  );
+  return page.locator(".file-tab [data-file]").evaluateAll((tabs) => tabs.map((t) => t.dataset.file));
 }
 
 // Picks a built-in sample in the samples browser and waits for the dialog to

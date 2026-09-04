@@ -46,8 +46,9 @@ pipeline and moves the last step into the browser.
   and keyword case, and also the tab, the trailing space, the double space, the
   space before the full stop and the two statements sharing a line — over every
   file that is open, as one edit that Ctrl+Z takes back. It never reflows a
-  builder chain and never changes what the code does. Under the editor, a resizable
-  panel with five tabs: every problem, an outline of the class, the log, and the
+  builder chain and never changes what the code does. Under the editor, a
+  resizable panel with the view your chain builds, every problem, an outline of
+  the class, the conversation between the app and the ABAP, the log, and the
   configuration of each checker — editable, so "why is it not warning here?"
   has an answer you can try rather than only read.
 - **A second opinion.** The [abap2UI5 linter](https://www.npmjs.com/package/@abap2ui5/linter)
@@ -56,6 +57,17 @@ pipeline and moves the last step into the browser.
   produces and says whether *that* works on UI5 1.71 — a control or property
   that release does not have, an icon that is in no icon font. Those compile,
   and at run time they render nothing and log nothing.
+- **Editing the view instead of the chain.** The **View** tab shows the XML
+  that reconstruction produces, coloured; **Edit** turns it around. Change the
+  XML — move a control, add a property, insert a `Label` — press Save, and the
+  builder chain is written again to build it, in the layout the abap2UI5
+  repositories hold their chains in. An attribute you leave alone keeps the
+  ABAP that produced it, so a `client->_bind( … )` stays a bind rather than
+  freezing into the string it happened to render as. It is the shortest way
+  there is to learn the builder: change the view, read the ABAP that changed
+  with it. What it cannot rewrite — a view filled from a `LOOP`, a control name
+  held in a variable — it says instead of guessing, and the ABAP editor is
+  read-only for as long as the view is the one being typed into.
 - **Run.** Only the classes in the editor are compiled, in about 20 ms, and
   registered with the running runtime. **Auto** beside it presses Run for you,
   shortly after you stop typing: while it is on, Run itself is inactive and
@@ -182,21 +194,22 @@ This replaced three separate GitHub Pages sites, one per sample repository.
 **Samples** in the bar is the same list without leaving the editor, and it
 takes the screen while it is open: a full-size window over the playground, the
 filters down its side, the rows in as many columns as fit. Drafts you saved,
-the built-in samples, and everything the catalogue holds — searched by several
-words in any order, over titles, summaries, class names and the controls a
-sample builds, and narrowed by the same facets the catalogue page has: the
+the samples the page carries, and everything the catalogue holds — searched by
+several words in any order, over titles, summaries, class names and the controls
+a sample builds, and narrowed by the same facets the catalogue page has: the
 control it uses, the library, the release your system runs, plus repository,
 "only what runs here", "OpenUI5 only" and "newer than 1.71". Every row says
 what it is, what group it belongs to, what release it needs and — where it
 cannot run here — what it needs instead, and links to its ABAP on GitHub and to
-its documentation page. The built-in samples too, which live as ordinary
-`.clas.abap` files under `src/samples/`. A chosen entry opens through the same
+its documentation page. The ones the page carries too, which are entries of
+[abap2UI5/samples](https://github.com/abap2UI5/samples) like every other row and
+link to the same files. A chosen entry opens through the same
 path a `?src=` link takes — the raw URL of its class, fetched, checked and run
 — so it arrives with the **Source** link back to where it lives.
 
 It reads the same index the catalogue page does, from this site rather than
 from GitHub, and nothing is fetched until the button is clicked. Where the
-index cannot be had, the browser quietly lists the built-in samples and your
+index cannot be had, the browser quietly lists the samples in the page and your
 drafts alone. Everything offered is judged the way typed code is judged — a
 catalogued sample the transpiler cannot compile says so in the Problems list,
 which is the designed behaviour.
@@ -208,13 +221,15 @@ the `+` in the file strip offers one, with a skeleton that passes — holds its
 local test classes, exactly as abapGit keeps them. Run runs them first,
 through the runner open-abap ships, and starts the app after: a failing test
 is listed in the **Tests** tab with what was expected and what was there, its
-row goes to the assertion, and the status line says how many failed. The
-**Unit tests** sample is the worked example.
+row goes to the assertion, and the status line says how many failed.
 
 **Drafts.** The playground keeps whatever was last in the editor on its own.
-For more than one piece of work, the samples browser has **Your drafts** at
-the top: name what is open, save it, and it is listed there — in this
-browser — to open or delete another day.
+Opening a sample over it never loses it: the status line says which way back
+there is — *one Undo away* when the sample went in under the same file name,
+*comes back if you reload* when it brought its own class name and the editor
+had to close yours. For more than one piece of work, the samples browser has
+**Your drafts** at the top: name what is open, save it, and it is listed there
+— in this browser — to open or delete another day.
 
 **Share** puts every open file in the URL fragment, deflated: a 2500-character
 class becomes a link of about 700 characters. Being a fragment, it never leaves
@@ -222,9 +237,12 @@ the browser — it is not sent to the server and does not appear in any log. The
 link is copied first; the dialog that opens then has the other ways out: the
 block that embeds this demo in a documentation page (the loader with the class
 inline, or the playground framed when there are several files), the markdown
-fence a docs page prints an example in, and **Download for abapGit** — a zip of
-the files with their metadata, laid out as a repository, for abapGit's offline
-import.
+fence a docs page prints an example in, and **Download for abapGit** — a zip
+laid out as a repository rather than as a bag of files: the sources and their
+metadata under `src/`, the `.abapgit.xml` that says so (the shape
+[app-template](https://github.com/abap2UI5/app-template) carries), and a README
+naming the app, how to start it and the link this code came from. Import it
+offline with abapGit, or push it as it stands.
 
 **Light or dark.** The page follows the system until the switch at the
 right-hand end of the bar says otherwise — the same switch the documentation
@@ -277,10 +295,12 @@ so it cannot overwrite what a reader has open in a normal one, and follows its
 reader's system theme rather than a choice made in some other tab.
 **`?view=app`** drops the editor too, for a paragraph about what an app does
 rather than how it is written; the ABAP still compiles and runs, it is simply
-not on screen. **`?view=full`** is that view
-with the bar gone as well — the app and nothing else, which is what Full screen
-opens. The bar comes back if something goes wrong, because the status line it
-carries is the only channel either view has left.
+not on screen. **`?view=full`** is the same view under the name Full screen
+opens it by. Neither shows the bar — the app and nothing else — because Run,
+the source and undo are all one click away in "Open in the playground" beside
+the frame, and a bar over a demo is this site's furniture in somebody else's
+page. It comes back if something goes wrong, because the status line it carries
+is the only channel either view has left.
 
 ## Live demos in a documentation page
 
@@ -311,7 +331,7 @@ const href = await window.abap2ui5Embed.url({ code, view: "app" });
 ```
 
 That matters more than it looks: a fragment the playground cannot read is
-treated as somebody else's link and quietly replaced by the built-in sample, so
+treated as somebody else's link and quietly replaced by the sample the page opens on, so
 an encoder written by hand fails by showing the wrong code rather than by
 failing.
 
@@ -355,11 +375,11 @@ seconds.
 | | |
 |---|---|
 | `tools/build.mjs` | what `npm run build` runs: the five below, the middle two together |
-| `tools/fetch-deps.mjs` | pins abap2UI5 and open-abap-core by commit under `deps/` |
+| `tools/fetch-deps.mjs` | pins abap2UI5, its frontend, open-abap-core and abap2UI5/samples by commit under `deps/` |
 | `tools/build-framework.mjs` | downport → transpile → `dist/runtime/framework.mjs`, the worker the page runs the framework in |
 | `tools/build-ui5.mjs` | the abap2UI5 frontend built against OpenUI5 → `dist/app/` |
 | `tools/build-catalogue.mjs` | the six committed catalogues of the three sample repositories, joined into `dist/samples/apps.json` |
-| `tools/build-site.mjs` | the page bundle and its chunks, the catalogue page, the ABAP corpus the editor uses, and the service worker |
+| `tools/build-site.mjs` | the page bundle and its chunks, the catalogue page, the ABAP corpus the editor uses, the samples the page carries (resolved out of the pinned abap2UI5/samples), and the service worker |
 | `tools/check-size.mjs` | the budget for what a visitor downloads |
 
 `PG_DEBUG=1` builds the page and framework bundles unminified and with source
@@ -370,7 +390,12 @@ Monaco and abaplint (the registry in a worker of its own),
 `src/shell` is the page around them, `src/catalogue` is the sample catalogue at
 `/samples/` (a second document with a bundle of its own), `src/abap` is the
 handful of ABAP the playground adds to the framework, and `src/examples` is
-ABAP served as static files so `?src=` has something to point at.
+ABAP served as static files so `?src=` has something to point at. There are no
+samples here: the ones the page carries are named by class in
+`src/editor/sample-list.mjs` and come out of the pinned
+[abap2UI5/samples](https://github.com/abap2UI5/samples) at build time, so the
+playground holds no copy of a sample that can drift from the one upstream
+maintains.
 
 ### Bumping abap2UI5 or OpenUI5
 

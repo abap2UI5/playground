@@ -137,8 +137,8 @@ export function openShare(files, url, copied = false) {
   const blurb = document.createElement("p");
   blurb.className = "config-blurb";
   blurb.textContent =
-    "A zip of these files with their metadata, laid out as a repository: import it offline with abapGit, " +
-    "or unzip it into a repository of your own.";
+    "A zip of these files with their metadata, laid out as a repository - .abapgit.xml, a README and the " +
+    "sources under src/: import it offline with abapGit, or push it as it stands.";
   const row = document.createElement("div");
   row.className = "config-row";
   const button = document.createElement("button");
@@ -147,7 +147,7 @@ export function openShare(files, url, copied = false) {
   button.textContent = "Download for abapGit";
   button.addEventListener("click", () => {
     try {
-      const zip = abapGitZip(files);
+      const zip = abapGitZip(files, url);
       download(zip.name, zip.bytes);
       setStatus(`${zip.name} is on its way`);
     } catch (e) {

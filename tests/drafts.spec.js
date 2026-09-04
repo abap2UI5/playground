@@ -1,5 +1,8 @@
 import { test, expect } from "@playwright/test";
-import { getSource, open, pickSample, setSource } from "./helpers.mjs";
+import { getSource, MAIN_FILE, MAIN_MARK, open, pickSample, SAMPLES, setSource } from "./helpers.mjs";
+
+// A sample other than the one the page opens on, to replace the draft with.
+const OTHER = SAMPLES[1];
 
 // Named drafts, in the samples browser - see src/shell/drafts.mjs.
 
@@ -7,7 +10,7 @@ const MARKER = "kept as a named draft";
 
 test("a draft saved under a name comes back another day, and can be deleted", async ({ page }) => {
   await open(page);
-  await setSource(page, (await getSource(page)).replace("Hello abap2UI5", MARKER));
+  await setSource(page, (await getSource(page)).replace(MAIN_MARK, MARKER));
 
   // Named and saved from the samples browser.
   await page.locator("#examples").click();
@@ -16,13 +19,13 @@ test("a draft saved under a name comes back another day, and can be deleted", as
   await page.locator(".drafts-save-button").click();
   const row = page.locator('.example-row[data-draft="my greeting"]');
   await expect(row).toBeVisible();
-  await expect(row).toContainText("zcl_playground.clas.abap");
+  await expect(row).toContainText(MAIN_FILE);
   await page.keyboard.press("Escape");
 
   // Replaced by a sample, then brought back from the list - and it runs.
-  await pickSample(page, "counter");
+  await pickSample(page, OTHER.id);
   await expect(page.locator("#status")).toHaveText(/running/, { timeout: 60000 });
-  expect(await getSource(page)).not.toContain(MARKER);
+  expect(await getSource(page, OTHER.files[0])).not.toContain(MARKER);
   await page.locator("#examples").click();
   await row.click();
   await expect(page.locator("#status")).toHaveText(/running/, { timeout: 60000 });

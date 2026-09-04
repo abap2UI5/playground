@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { getSource, open, setSource } from "./helpers.mjs";
+import { getSource, MAIN_CLASS, open, setSource } from "./helpers.mjs";
 
 // Autofix, and the way back to code that came from a link.
 
@@ -47,11 +47,11 @@ test("the abap2UI5 linter fixes a missing namespace declaration", async ({ page 
   // is content - it is valid ABAP - and the app would fail to load the control.
   await setSource(
     page,
-    `CLASS zcl_playground DEFINITION PUBLIC CREATE PUBLIC.
+    `CLASS ${MAIN_CLASS} DEFINITION PUBLIC CREATE PUBLIC.
   PUBLIC SECTION.
     INTERFACES z2ui5_if_app.
 ENDCLASS.
-CLASS zcl_playground IMPLEMENTATION.
+CLASS ${MAIN_CLASS} IMPLEMENTATION.
   METHOD z2ui5_if_app~main.
     DATA(view) = z2ui5_cl_ui5_view_builder=>factory(
         )->ele( n = \`View\` ns = \`mvc\`

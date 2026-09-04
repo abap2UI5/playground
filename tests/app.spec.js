@@ -1,41 +1,57 @@
 import { test, expect } from "@playwright/test";
-import { control, open } from "./helpers.mjs";
+import { open, runSample } from "./helpers.mjs";
 
 // The playground as a user meets it: the class in the editor is compiled and
 // started, it renders in the frame, and clicking something in it runs ABAP.
+//
+// The samples are abap2UI5/samples' own now (src/editor/sample-list.mjs), and
+// they do not give their controls ids - so these locate what a person locates:
+// a field by its label, a button by its text. `Basics II` is the one with both,
+// which is why the two interaction tests open it rather than the app the page
+// starts on.
+
+// The input and the button of the "Data Binding" sample, and the Text the
+// backend writes into.
+const app = (page) => page.frameLocator("#app");
+const nameField = (page) => app(page).getByRole("textbox").first();
+const greetButton = (page) => app(page).getByRole("button", { name: "Greet" });
 
 test("the class in the editor renders as an app", async ({ page }) => {
   await open(page);
 
   // The title comes out of the ABAP view builder, travels as XML through the
   // roundtrip, and is rendered by UI5 - so seeing it means the whole chain works.
-  await expect(page.frameLocator("#app").getByText("Hello abap2UI5")).toBeVisible();
-  await expect(control(page, "inpName", "-inner")).toHaveValue("World");
+  await expect(app(page).getByText("Hello World, the Smallest App")).toBeVisible();
+  await expect(app(page).getByText("The whole app is what you see below")).toBeVisible();
 });
 
 test("a click in the app runs ABAP and updates the view", async ({ page }) => {
   await open(page);
+  await runSample(page, "binding");
 
-  await control(page, "inpName", "-inner").fill("Playground");
-  await control(page, "btnGreet").click();
+  await nameField(page).fill("Playground");
+  await greetButton(page).click();
 
   // Computed in ABAP from the value the input pushed over, and pushed back
   // into the model automatically.
-  await expect(control(page, "txtGreeting")).toContainText("Hello Playground!", { timeout: 30000 });
+  await expect(app(page).getByText("Hello Playground!")).toBeVisible({ timeout: 30000 });
 });
 
 test("Run restarts the app from scratch", async ({ page }) => {
   await open(page);
+  await runSample(page, "binding");
 
-  await control(page, "inpName", "-inner").fill("Changed");
-  await control(page, "btnGreet").click();
-  await expect(control(page, "txtGreeting")).toContainText("Hello Changed!");
+  await nameField(page).fill("Changed");
+  await greetButton(page).click();
+  await expect(app(page).getByText("Hello Changed!")).toBeVisible({ timeout: 30000 });
 
   await page.locator("#run").click();
   await expect(page.locator("#status")).toHaveText("running");
 
-  await expect(control(page, "inpName", "-inner")).toHaveValue("World");
-  await expect(control(page, "txtGreeting")).toHaveText("");
+  // A fresh database and a reloaded frame: the attribute is back at what
+  // check_on_init( ) puts there, and nothing the backend wrote survives.
+  await expect(nameField(page)).toHaveValue("World", { timeout: 30000 });
+  await expect(app(page).getByText("Hello Changed!")).toHaveCount(0);
 });
 
 test("a run loads only from this origin, and nothing 404s", async ({ page }) => {
@@ -51,7 +67,7 @@ test("a run loads only from this origin, and nothing 404s", async ({ page }) => 
   });
 
   await open(page);
-  await expect(page.frameLocator("#app").getByText("Hello abap2UI5")).toBeVisible();
+  await expect(app(page).getByText("Hello World, the Smallest App")).toBeVisible();
 
   expect(external, "the playground must work without a CDN").toEqual([]);
   expect(missing, "a 404 means the build left something out").toEqual([]);

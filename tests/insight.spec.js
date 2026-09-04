@@ -1,16 +1,16 @@
 import { test, expect } from "@playwright/test";
-import { getSource, markers, open, setSource } from "./helpers.mjs";
+import { getSource, MAIN_CLASS, markers, open, setSource } from "./helpers.mjs";
 
 // The panel under the editor: the problems list, the outline, and the second
 // checker that feeds the first.
 
-const withIcon = (icon) => `CLASS zcl_playground DEFINITION PUBLIC CREATE PUBLIC.
+const withIcon = (icon) => `CLASS ${MAIN_CLASS} DEFINITION PUBLIC CREATE PUBLIC.
   PUBLIC SECTION.
     INTERFACES z2ui5_if_app.
   PROTECTED SECTION.
     METHODS view_display.
 ENDCLASS.
-CLASS zcl_playground IMPLEMENTATION.
+CLASS ${MAIN_CLASS} IMPLEMENTATION.
   METHOD z2ui5_if_app~main.
     IF client->check_on_init( ).
       DATA(view) = z2ui5_cl_ui5_view_builder=>factory(
@@ -48,8 +48,14 @@ test("the problems list reports what abaplint found, and going to one moves the 
   await expect(page.locator("#insight")).toBeVisible();
   await expect(page.locator("#insight-body")).toContainText("Nothing to report");
 
-  await setSource(page, (await page.evaluate(() => window.monaco.editor.getModels()[0].getValue()))
-    .replace("PUBLIC SECTION.", "PUBLIC SECTION.\n    DATA broken TYPE zcl_does_not_exist."));
+  const broken = (await getSource(page)).replace(
+    "PUBLIC SECTION.",
+    "PUBLIC SECTION.\n    DATA broken TYPE zcl_does_not_exist.",
+  );
+  await setSource(page, broken);
+  // Where the bad line ended up, worked out rather than counted: the sample is
+  // abap2UI5/samples' own and its header may grow a line at any pin.
+  const at = broken.split("\n").findIndex((l) => l.includes("zcl_does_not_exist")) + 1;
 
   const row = page.locator(".insight-row.is-error").first();
   await expect(row).toBeVisible({ timeout: 20000 });
@@ -58,7 +64,7 @@ test("the problems list reports what abaplint found, and going to one moves the 
 
   await row.click();
   const line = await page.evaluate(() => window.monaco.editor.getEditors()[0].getPosition().lineNumber);
-  expect(line, "clicking a problem goes to its line").toBe(4);
+  expect(line, "clicking a problem goes to its line").toBe(at);
 });
 
 test("the abap2UI5 linter reports an icon that abaplint is happy with", async ({ page }) => {
@@ -93,13 +99,14 @@ test("the outline lists the class and its methods, and clicking one jumps there"
   await page.locator('[data-insight="outline"]').click();
 
   const body = page.locator("#insight-body");
-  await expect(body).toContainText("zcl_playground");
-  await expect(body).toContainText("view_display");
+  await expect(body).toContainText(MAIN_CLASS);
+  // Every abap2UI5 app implements this one, whatever else it has.
+  await expect(body).toContainText("main");
 
-  await page.locator(".insight-row", { hasText: "view_display" }).first().click();
+  await page.locator(".insight-row", { hasText: "main" }).first().click();
   const line = await page.evaluate(() => window.monaco.editor.getEditors()[0].getPosition().lineNumber);
-  const source = await page.evaluate(() => window.monaco.editor.getModels()[0].getValue());
-  expect(source.split("\n")[line - 1].toLowerCase(), "landed on the method").toContain("view_display");
+  const source = await getSource(page);
+  expect(source.split("\n")[line - 1].toLowerCase(), "landed on the method").toContain("main");
 });
 
 test("clicking the open tab collapses the panel, and clicking again brings it back", async ({ page }) => {
@@ -150,7 +157,7 @@ test("on a phone the panel starts folded away, and a failure still opens it", as
   await expect(page.locator("#insight-toggle")).toBeVisible();
 
   // A failure is not tooling: it takes the room it needs even here.
-  await setSource(page, (await getSource(page)).replace(/zcl_playground/g, "zcl_renamed"));
+  await setSource(page, (await getSource(page)).replaceAll(MAIN_CLASS, "zcl_renamed"));
   await page.locator("#run").click();
   await expect(page.locator(".log-body")).toBeVisible({ timeout: 30000 });
 });
@@ -458,7 +465,7 @@ test("the log is a tab of the one panel, and an error opens it", async ({ page }
   // match its file, which abaplint would only report as a filename complaint -
   // has to bring the panel to itself rather than wait to be found.
   await page.locator('[data-insight="outline"]').click();
-  await setSource(page, (await getSource(page)).replace(/zcl_playground/g, "zcl_renamed"));
+  await setSource(page, (await getSource(page)).replaceAll(MAIN_CLASS, "zcl_renamed"));
   await page.locator("#run").click();
 
   await expect(page.locator(".log-body")).toBeVisible({ timeout: 30000 });
@@ -477,7 +484,7 @@ test("an embedded playground keeps the panel away until something goes wrong", a
   await expect(page.locator("#insight"), "tooling stays out of somebody else's page").toBeHidden();
 
   // A failure is not tooling: it has to reach the reader even here.
-  await setSource(page, (await getSource(page)).replace(/zcl_playground/g, "zcl_renamed"));
+  await setSource(page, (await getSource(page)).replaceAll(MAIN_CLASS, "zcl_renamed"));
   await page.locator("#run").click();
   await expect(page.locator("#insight")).toBeVisible({ timeout: 30000 });
   await expect(page.locator(".log-body")).toBeVisible();
@@ -489,24 +496,66 @@ test("the View tab shows the XML the builder chain makes, and follows the typing
   // The sample's view, one element per line - reconstructed by the abap2UI5
   // linter from the chain, not rendered by the app.
   const xml = page.locator(".view-xml");
-  await expect(xml).toContainText('<Button id="btnGreet" text="say hello"', { timeout: 30000 });
+  await expect(xml).toContainText('<Title text="Hello World"', { timeout: 30000 });
   const lines = (await xml.textContent()).split("\n");
   expect(lines.length).toBeGreaterThan(5);
   expect(lines[0]).toMatch(/^<mvc:View /);
-  expect(lines.some((l) => l.startsWith("      <Input "))).toBe(true);
+  // One element per line, indented by depth: the Page's children sit three
+  // levels in (mvc:View, Shell, Page).
+  expect(lines.some((l) => l.startsWith("      <Title "))).toBe(true);
 
   // A keystroke changes the chain, and the preview follows it.
-  await setSource(page, (await getSource(page)).replace("say hello", "greet me"));
-  await expect(xml).toContainText('text="greet me"');
+  await setSource(page, (await getSource(page)).replace("Hello World`", "Hello again`"));
+  await expect(xml).toContainText('text="Hello again"');
 
   // A file that builds no view says so instead of showing nothing.
-  await setSource(page, `CLASS zcl_playground DEFINITION PUBLIC CREATE PUBLIC.
+  await setSource(page, `CLASS ${MAIN_CLASS} DEFINITION PUBLIC CREATE PUBLIC.
   PUBLIC SECTION.
     INTERFACES z2ui5_if_app.
 ENDCLASS.
-CLASS zcl_playground IMPLEMENTATION.
+CLASS ${MAIN_CLASS} IMPLEMENTATION.
   METHOD z2ui5_if_app~main.
   ENDMETHOD.
 ENDCLASS.`);
   await expect(page.locator("#insight-body")).toContainText("builds no view");
+});
+
+test("the panel colours the XML and the JSON it shows", async ({ page }) => {
+  await open(page);
+  await page.locator('[data-insight="view"]').click();
+  const xml = page.locator(".view-xml");
+  await expect(xml).toContainText("<mvc:View", { timeout: 30000 });
+
+  // An element name, an attribute name and a value are three different things
+  // and the panel says which is which - see src/shell/highlight.mjs.
+  await expect(xml.locator("span.code-tag").first()).toHaveText("mvc:View");
+  expect(await xml.locator("span.code-attr").count()).toBeGreaterThan(3);
+  await expect(xml.locator("span.code-value").filter({ hasText: "Hello World" }).first()).toBeVisible();
+
+  // Measured rather than asserted on the classes: a token with a class and no
+  // colour behind it looks exactly like the grey this replaced, and a palette
+  // variable that never reached the stylesheet is precisely how that happens.
+  const colours = await xml.evaluate((pre) => {
+    const of = (sel) => getComputedStyle(pre.querySelector(sel)).color;
+    return { tag: of("span.code-tag"), attr: of("span.code-attr"), value: of("span.code-value") };
+  });
+  expect(colours.tag).toBe(colours.attr);
+  expect(colours.value).not.toBe(colours.tag);
+
+  // Colouring is painting, not editing: the text is the same text, which is
+  // what keeps Copy copying a view somebody can paste into a UI5 project.
+  const text = await xml.textContent();
+  expect(text).toContain('<Title text="Hello World"');
+
+  // The same for the JSON a roundtrip carried, where a key and a string are
+  // the two things a reader is looking for in a wall of braces.
+  await page.locator('[data-insight="roundtrips"]').click();
+  await page.locator(".roundtrip-row").first().click();
+  const detail = page.locator(".roundtrip-detail");
+  await expect(detail).toBeVisible();
+  // The view the answer carried is XML and gets the XML colours; the request
+  // and the response beside it are objects and get the JSON ones.
+  await expect(detail.locator(".roundtrip-body").first().locator("span.code-tag").first()).toBeVisible();
+  expect(await detail.locator("span.code-key").count()).toBeGreaterThan(0);
+  expect(await detail.locator("span.code-string").count()).toBeGreaterThan(0);
 });
