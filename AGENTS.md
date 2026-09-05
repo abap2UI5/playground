@@ -18,7 +18,7 @@ them before touching `tools/` or `src/runtime`.
 
 | Path | Purpose |
 | --- | --- |
-| `src/shell/` | The page: boot and Run (`main.mjs`, which also owns the **Auto** switch beside Run - the debounce, the stored setting and the three reasons Run may be inactive), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the samples browser over the sample catalogue (`examples.mjs`, reading the built index — a near-full-screen modal with the filters and the catalogue's three facets down its side), which UI5 library a control ships in (`ui5-libs.mjs`) beside the closed list of the ones this site carries (`ui5-libraries.mjs`), the bottom panel (`insight.mjs`), the syntax colour it prints XML and JSON in (`highlight.mjs`) and the View tab's edit mode - the builder chain read back out of the ABAP (`chain-read.mjs`), the edited document matched against the one that was shown (`view-edit.mjs`), the change put back as an edit to the ABAP that is there (`chain-patch.mjs`) and, when it cannot be, the chain written again in the house layout (`chain-write.mjs`), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch at the bar's right-hand end, applied as `data-theme` on `<html>` and handed to the editor and the app frame), where the reader was on each of the neighbouring sites (`site-memory.mjs` — see "One site in three places" below), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
+| `src/shell/` | The page: boot and Run (`main.mjs`, which also owns the **Auto** switch beside Run - the debounce, the stored setting and the three reasons Run may be inactive), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the samples browser over the sample catalogue (`examples.mjs`, reading the built index — a near-full-screen modal with the filters and the catalogue's three facets down its side), which UI5 library a control ships in (`ui5-libs.mjs`) beside the closed list of the ones this site carries (`ui5-libraries.mjs`), the bottom panel (`insight.mjs`), the syntax colour it prints XML and JSON in (`highlight.mjs`) and the View tab's edit mode - the builder chain read back out of the ABAP (`chain-read.mjs`), the edited document matched against the one that was shown (`view-edit.mjs`), the change put back as an edit to the ABAP that is there (`chain-patch.mjs`) and, when it cannot be, the chain written again in the house layout (`chain-write.mjs`), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch in the menu behind the bar's last button, applied as `data-theme` on `<html>` and handed to the editor and the app frame; `extra.mjs` is the six lines that close that menu), where the reader was on each of the neighbouring sites (`site-memory.mjs` — see "One site in three places" below), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
 | `src/editor/` | Monaco plus the abaplint registry — in a worker: `registry-core.mjs` and `transpile-core.mjs` are abaplint and the single-object transpile as they run there, `registry-worker.mjs` the worker's entry, `registry.mjs` the page's client with a promise in front of everything, `providers.mjs` Monaco's language providers answered over it — the abap2UI5 linter wrapper (`abap2ui5-lint.mjs`), the file set, and the samples the page carries - `sample-list.mjs`, which is nothing but the class names of a handful of apps in **abap2UI5/samples**, and `samples.mjs`, which pairs what the build resolved them into (`build/samples/`) with the ABAP itself |
 | `src/runtime/` | The ABAP side of the page: the framework entry (`index.mjs`, `roundtrip()` and `defineClasses()`), `worker.mjs` around it, which is the bundle's entry and answers those over `postMessage` when it runs as the worker the page starts, the sql.js database (`db-setup.mjs`), and the browser shims for Node modules |
 | `src/abap/` | The playground's own ABAP - `zcl_pg_bridge` and nothing else; it travels through the same downport and transpile as the framework. There was a `zcl_pg_hello` beside it, a copy of the hello world in **abap2UI5/samples**; the runtime tests drive the framework's own `z2ui5_cl_ui5_app_hi_world` instead, so this repository holds no app of its own to keep in step with one somebody else maintains |
@@ -777,21 +777,37 @@ exactly one hit. A `?src=` link from anywhere else still offers the GitHub
 page, which is what that reader wants.
 
 **The bar names the part of the site you are in.** On `/samples/` and on every
-per-sample page the brand reads *abap2UI5 **samples***, links to the catalogue
-rather than to the playground, and the nav's Samples carries `aria-current`,
-which is what makes it the bold item (`catalogue.css`) and what a screen reader
-announces. The playground is one nav item away; a bar that called these pages
+per-sample page the brand is the mark and *abap2UI5*, closed by a hairline
+(`.brand::after`, 16px from the name like the two lines at the other end) —
+nothing more, because the nav's Samples carries `aria-current`, which is what
+makes it the bold item (`catalogue.css`) and what a screen reader announces,
+and a brand that said *samples* too said it twice. The brand links to the catalogue rather than to
+the playground, which is one nav item away; a bar that called these pages
 "playground" was naming the neighbour rather than the room.
 
-**The bar begins and ends the same way in all three documents** — at one end
-the mark, then *abap2UI5* and the part of the site you are in in bold; at the
-other the nav, the theme button, a hairline, then LinkedIn and GitHub. The
-playground's own bar carries that group too (`src/shell/index.html`,
-`src/shell/shell.css`), down to the catalogue's numbers, with *playground* as
-the current item — a span rather than a link, because it is the page you are
-on and a stray click on it would throw away a page that costs seconds to load.
-The documentation, which used to be a third mark over there, is the nav's
-third item instead. Three documents carry the two marks by hand
+**The samples pages' right-hand end reads, in this order:** a hairline, the
+nav — *Documentation*, *Samples*, *Playground* —, a hairline, LinkedIn and
+GitHub, then one more button, drawn as a third mark, that opens **the menu**:
+the light-or-dark switch, then the project's tools (linter, VS Code extension,
+MCP server, app template, add-ons) and its repositories on GitHub — the list
+the documentation's own Links menu carries. The menu is a `<details>`, so it
+opens and closes with no script; `setUpExtra()` in `catalogue.mjs` closes it on
+a click outside it and on Escape. Each hairline stands 16px from the words and
+the marks beside it, because a line nearer to one neighbour reads as belonging
+to it; `catalogue.css` says how that adds up out of the bar's gap, a link's
+padding, the nav's gap and the mark's box. The catalogue and every per-sample
+page carry that bar the same to the character, bar the hrefs — a reader who
+opens a sample must not see the head change under them — so the per-sample
+pages wire their menu and their switch with an inline copy of the catalogue's
+handlers (`MENU_SCRIPT` in `tools/sample-pages.mjs`, kept in step with
+`setUpExtra()` and `setUpTheme()` by hand, as the site memory is). The
+playground's own bar (`src/shell/index.html`, `src/shell/shell.css`) carries
+the same group after its toolbar — *Playground* as the current item, a span
+rather than a link, because it is the page you are on and a stray click on it
+would throw away a page that costs seconds to load, and the brand a span for
+the same reason — with `extra.mjs` closing its menu; the documentation site's
+bar (`theme/SiteBar.vue` over there) is the fourth copy. Three
+documents here carry the two marks and the menu by hand
 (`src/shell/index.html`, `src/catalogue/index.html`,
 `tools/sample-pages.mjs`): inline SVG, because a mark that is an empty square
 until a stylesheet arrives is worse than one that never needed it, and a
@@ -817,9 +833,10 @@ documentation —, every control the class BUILDS (the linter's answer, each one
 a link into the catalogue's control facet), its libraries, what it needs where
 it cannot run, **the sample running**, **the class itself**, the neighbours
 around it in its group, and back to the search. Real text in the HTML, and
-nothing a crawler has to run to see any of it: the two scripts on a page are
-the two-line theme read the other two documents also carry and the demo loader
-below, and neither writes a word of it. `sample.css` is written beside them and
+nothing a crawler has to run to see any of it: the scripts on a page are the
+two-line theme read the other two documents also carry, the bar's menu and
+its switch and the site memory as inline copies of what the bundles import, and the demo
+loader below, and none of them writes a word of it. `sample.css` is written beside them and
 loaded next to `catalogue.css`, which is the frame: these are the catalogue's
 pages, and a second palette would drift from it on the first change to either.
 

@@ -243,16 +243,44 @@ test("a link that did not come from the catalogue still points at GitHub", async
 });
 
 test("the bar ends where the playground's own bar ends", async ({ page }) => {
+  await openCatalogue(page);
+  // The mark and the name at one end - the nav already says Samples, in bold,
+  // so the brand does not say it again.
+  await expect(page.locator(".brand")).toHaveText("abap2UI5");
+  await expect(page.locator(".brand img")).toBeVisible();
+  // At the other, in this order: Documentation, Samples and Playground, then
+  // the two marks, then the button that opens the rest.
+  await expect(page.locator(".bar-nav > *")).toHaveText(["Documentation", "Samples", "Playground"]);
+  await expect(page.locator('.bar-nav [aria-current="page"]')).toHaveText("Samples");
+  await expect(page.locator('.bar-nav a[data-site="docs"]')).toHaveText("Documentation");
   // The way off this site is two marks at the end of the bar, the same two the
   // playground and the per-sample pages carry - so a reader moving between the
   // three documents reads them as one bar.
-  await openCatalogue(page);
   await expect(page.locator(".bar .social")).toHaveCount(2);
   await expect(page.locator('.bar .social[href*="linkedin.com/company/abap2ui5"]')).toBeVisible();
   await expect(page.locator('.bar .social[href*="github.com/abap2UI5"]')).toBeVisible();
   // Inline SVG, not an icon font: it is drawn before any stylesheet has to
   // arrive, which is why it is repeated in three documents by hand.
   await expect(page.locator(".bar .social svg").first()).toBeVisible();
+  // After them, one button for the rest: light or dark, the project's tools and
+  // its repositories, in a menu that is closed until it is pressed and closes
+  // again on Escape or on a click anywhere else.
+  const more = page.locator(".bar .extra");
+  const theme = page.locator("#theme");
+  await expect(more.locator("summary")).toBeVisible();
+  await expect(theme).toBeHidden();
+  await more.locator("summary").click();
+  await expect(theme).toBeVisible();
+  expect(await more.locator(".menu a").count()).toBeGreaterThanOrEqual(10);
+  for (const part of ["github.com/abap2UI5/linter", "github.com/abap2UI5/vscode-extension", "github.com/abap2UI5-addons"]) {
+    await expect(more.locator(`.menu a[href*="${part}"]`)).toBeVisible();
+  }
+  await page.keyboard.press("Escape");
+  await expect(theme).toBeHidden();
+  await more.locator("summary").click();
+  await expect(theme).toBeVisible();
+  await page.locator("h1").click();
+  await expect(theme).toBeHidden();
 });
 
 test("a broken index says so rather than showing an empty page", async ({ page }) => {

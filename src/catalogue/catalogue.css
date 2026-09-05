@@ -26,7 +26,8 @@
    * src/shell/highlight.mjs): names in red, literals in green, numbers in
    * purple. Here they are written into the markup at build time, because
    * those pages carry no highlighter - the only scripts on them are the theme
-   * read and the loader behind their demo box. */
+   * read, the bar's menu and its switch, the site memory and the loader behind
+   * their demo box. */
   --code-name: #a02222;
   --code-string: #15713a;
   --code-atom: #7a3ea8;
@@ -86,7 +87,7 @@ a:hover { text-decoration: none; }
 .bar {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 16px;
   padding: 0 20px;
   height: 46px;
   border-bottom: 1px solid var(--line);
@@ -106,11 +107,36 @@ a:hover { text-decoration: none; }
   white-space: nowrap;
 }
 .brand b { font-weight: 600; }
+/* A hairline after the name, 16px from it as the two lines at the other end
+ * are from their neighbours (8 of the brand's gap, 8 of its own margin), with
+ * the width of the bar after it: it closes the brand rather than opening a
+ * group. Drawn here rather than written into the markup so that the catalogue
+ * and every per-sample page get it from one place. */
+.brand::after {
+  content: ""; width: 1px; height: 22px; margin-left: 8px;
+  background: var(--line);
+}
 
+/* The right-hand group, in this order: a hairline, the nav (Documentation,
+ * Samples, Playground), a hairline, the two marks, then the button that opens
+ * the menu - the same on the catalogue and on every per-sample page
+ * (tools/sample-pages.mjs). The nav is what pushes the group to the end. Each
+ * line stands 16px from the words and the marks beside it, and the sums here
+ * say how, out of these parts: the bar's gap is 16px, a link's padding 10px,
+ * the nav's gap 4px, and a mark sits 6px inside its 30px box. A line that is
+ * nearer to one neighbour than the other reads as belonging to it. The first
+ * line opens the group as the brand's closes the brand, with the width of the
+ * bar on its other side. */
 .bar-nav {
   display: flex;
+  align-items: center;
   gap: 4px;
   margin-left: auto;
+}
+/* After the line, 2 + the nav's gap 4 + the link's padding 10: 16. */
+.bar-nav::before {
+  content: ""; width: 1px; height: 22px; margin: 0 2px 0 0;
+  background: var(--line);
 }
 .bar-nav a {
   padding: 5px 10px;
@@ -121,38 +147,77 @@ a:hover { text-decoration: none; }
 .bar-nav a:hover { background: var(--bg); color: var(--fg); }
 .bar-nav a[aria-current="page"] { color: var(--fg); font-weight: 600; }
 
-.theme {
-  border: 1px solid var(--line);
-  background: var(--bg);
-  color: var(--fg-dim);
-  /* Said rather than left to the browser's own button font: the playground's
-     bar carries this same button (src/shell/shell.css), and a glyph drawn in
-     Arial here and in the UI font there is the one thing about the two bars
-     that did not match. */
-  font-family: var(--font-ui);
-  border-radius: 5px;
-  width: 30px;
-  height: 26px;
-  cursor: pointer;
-  font-size: 13px;
-  line-height: 1;
+/* The menu behind the bar's last button: light or dark, then the tools and
+ * the repositories. A <details>, so it opens and closes with no script; the
+ * summary is drawn as a third mark - the same box, the same two colours - and
+ * the menu hangs from it, over the page. "extra" rather than "more", which is
+ * the cards' own class below. */
+.extra { position: relative; display: flex; }
+.extra-button {
+  list-style: none;
+  display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; color: var(--fg-dim);
+  border-radius: 5px; cursor: pointer;
+  transition: color .5s;
 }
-.theme:hover { color: var(--fg); }
-.theme-moon { display: none; }
-:root[data-theme="dark"] .theme-sun { display: none; }
-:root[data-theme="dark"] .theme-moon { display: inline; }
+.extra-button::-webkit-details-marker { display: none; }
+.extra-button:hover, .extra[open] .extra-button { color: var(--fg); }
+.extra[open] .extra-button { background: var(--bg); }
+.extra-button svg { width: 18px; height: 18px; fill: currentColor; }
+.menu {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 6;
+  display: flex; flex-direction: column;
+  min-width: 220px; padding: 6px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+}
+.menu a, .menu .theme {
+  display: flex; align-items: center;
+  padding: 6px 10px;
+  border-radius: 5px;
+  color: var(--fg);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.menu .theme {
+  /* A button that reads as a row like the links around it - the font said
+     rather than left to the browser's own button font. */
+  font: inherit; font-family: var(--font-ui);
+  width: 100%;
+  background: none; border: 0; text-align: left; cursor: pointer;
+}
+.menu a:hover, .menu .theme:hover { background: var(--bg-sunken); }
+.menu .glyph { display: inline-block; width: 16px; margin-right: 8px; text-align: center; }
+.menu-head {
+  margin: 6px 0 2px; padding: 8px 10px 0;
+  border-top: 1px solid var(--line);
+  font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--fg-dim);
+}
+/* The switch says what a press does, so it swaps its whole label with the
+ * theme - over the same media query and data-theme the palette uses, so it
+ * says the right thing before any script has run. */
+.when-dark { display: none; }
+:root[data-theme="dark"] .when-light { display: none; }
+:root[data-theme="dark"] .when-dark { display: inline; }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .theme-sun { display: none; }
-  :root:not([data-theme="light"]) .theme-moon { display: inline; }
+  :root:not([data-theme="light"]) .when-light { display: none; }
+  :root:not([data-theme="light"]) .when-dark { display: inline; }
 }
 
 /* The way out of this site, at the end of the bar the playground's own ends
- * with (src/shell/shell.css) - one hairline, then the two marks. They are the
- * same size and the same two colours here, because this bar and that one are
- * read as one bar by somebody moving between them. */
-.socials { display: flex; align-items: center; margin-right: -6px; }
+ * with (src/shell/shell.css) - one hairline, then the two marks, the same size
+ * and the same two colours here, because this bar and that one are read as one
+ * bar by somebody moving between them - and, after them, the button that opens
+ * the menu above, drawn as a third. Pulled in by the last link's padding,
+ * which is invisible until hovered, so that the line stands 16px from the word
+ * (10 + the bar's gap 16 - 10) and 16px from the mark (10 + 6); the right-hand
+ * margin brings the last mark's box flush with the bar's own padding. */
+.socials { display: flex; align-items: center; margin: 0 -6px 0 -10px; }
 .socials::before {
-  content: ""; width: 1px; height: 22px; margin: 0 6px 0 12px;
+  content: ""; width: 1px; height: 22px; margin: 0 10px 0 0;
   background: var(--line);
 }
 .social {
@@ -349,8 +414,9 @@ main {
   .brand span { display: none; }
   /* On a phone the bar is what is paid for before anything is read, and the
      nav is the half of it somebody came for. The marks go, as they go from
-     the playground's own bar at 820px. */
-  .socials { display: none; }
+     the playground's own bar at 820px; the menu stays, because the theme
+     switch is in it and GitHub is one of its rows. */
+  .social { display: none; }
   main { padding: 0 12px 40px; }
   .masthead { padding: 22px 0 16px; }
   .masthead h1 { font-size: 22px; }

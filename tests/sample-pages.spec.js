@@ -256,14 +256,36 @@ test("a page renders as the catalogue's own, and its links work", async ({ page 
   await expect(page.locator("h1")).toHaveText(entry.title);
   // The bar is the catalogue's, so the stylesheet beside it is loading - and
   // it names the part of the site this page is in rather than its neighbour:
-  // the brand says samples, and Samples is the current one, which is what
-  // makes it the bold item and what a screen reader announces.
-  await expect(page.locator(".brand")).toHaveText("abap2UI5 samples");
+  // the brand is the mark and the name, and Samples is the current nav item,
+  // which is what makes it the bold one and what a screen reader announces.
+  await expect(page.locator(".brand")).toHaveText("abap2UI5");
   await expect(page.locator(".brand")).toHaveAttribute("href", "../../samples/");
+  await expect(page.locator(".bar-nav > *")).toHaveText(["Documentation", "Samples", "Playground"]);
   const here = page.locator(".bar-nav a", { hasText: "Samples" });
   await expect(here).toBeVisible();
   await expect(here).toHaveAttribute("aria-current", "page");
   expect(await here.evaluate((el) => getComputedStyle(el).fontWeight)).toBe("600");
+  // The theme switch is in the menu behind the bar's last button, as on the
+  // catalogue - and both work here too, without a bundle: the menu opens on
+  // its button and closes on a click anywhere else; a press on the switch turns
+  // the page dark and is kept under the site's one key; a press back to what
+  // the system says is forgotten rather than stored, the rule the other two
+  // documents follow.
+  await page.emulateMedia({ colorScheme: "light" });
+  const more = page.locator(".bar .extra");
+  const theme = page.locator("#theme");
+  await expect(theme).toBeHidden();
+  await more.locator("summary").click();
+  await expect(theme).toBeVisible();
+  const stored = () => page.evaluate(() => localStorage.getItem("abap2ui5-playground:theme"));
+  await theme.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  expect(await stored()).toBe("dark");
+  await theme.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  expect(await stored()).toBe(null);
+  await page.locator("h1").click();
+  await expect(theme).toBeHidden();
   // And it ends where the playground's own bar ends: LinkedIn, then GitHub.
   await expect(page.locator(".bar .social")).toHaveCount(2);
   await expect(page.locator('.bar .social[href*="linkedin.com"]')).toBeVisible();
