@@ -246,19 +246,39 @@ export function restoreScroll() {
  * cannot reach - to zero. It went to the top, which is exactly what it is here
  * to stop. So it is re-applied as the page grows, for up to three seconds.
  *
- * It stops the moment the offset takes, and the moment the READER moves: a
- * scroll that was not this one is the reader saying where they want to be,
- * and it wins. Without that a page shorter than the stored offset would hold
- * them at the bottom of it for three seconds.
+ * WHAT CANCELS IT IS THE READER, AND NOTHING ELSE. It used to stop as soon as
+ * `scrollY` was not where the last frame put it, on the theory that a scroll
+ * this did not cause is the reader taking over. It is not: a page still
+ * loading moves its own scroll - the browser's scroll anchoring shifts the
+ * offset to keep the content under your eyes steady as things arrive above it.
+ * That read as a reader, and the restore gave up a little way down. So the
+ * reader is asked directly: a wheel, a touch, a key, a pointer. Layout
+ * settling is not one of those.
  */
 function settle(y) {
-  const until = Date.now() + 3000;
-  let mine = -1;
+  const until = Date.now() + 2000;
+  const MOVED = ["wheel", "touchstart", "keydown", "pointerdown"];
+  let stopped = false;
+  const stop = () => {
+    stopped = true;
+    for (const e of MOVED) removeEventListener(e, stop, true);
+  };
+  for (const e of MOVED) addEventListener(e, stop, { capture: true, passive: true });
+
+  /* IT HOLDS THE POSITION, it does not merely reach it. Reaching it once and
+   * stopping is how this failed over on the documentation, whose router draws
+   * the page and then scrolls it to the top ITSELF, after this - measured, in
+   * that order, `scrollTo(0, 1600)` and then `scrollTo(0, 0)`. Two seconds of
+   * holding covers that and a page still growing underneath.
+   *
+   * Holding is only safe BECAUSE the reader can take it back: the four events
+   * above end it on the first wheel, key, touch or pointer - a scrollbar drag
+   * included - so nothing is ever fought with. */
   const put = () => {
-    if (mine >= 0 && Math.round(scrollY) !== mine) return;
-    scrollTo(0, y);
-    mine = Math.round(scrollY);
-    if (mine !== y && Date.now() < until) requestAnimationFrame(put);
+    if (stopped) return;
+    if (Math.round(scrollY) !== y) scrollTo(0, y);
+    if (Date.now() < until) requestAnimationFrame(put);
+    else stop();
   };
   requestAnimationFrame(put);
 }
