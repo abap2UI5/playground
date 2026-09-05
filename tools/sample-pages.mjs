@@ -71,7 +71,7 @@
 import fs from "fs";
 import path from "path";
 import { isSapui5Only } from "../src/shell/ui5-libs.mjs";
-import { highlightAbap } from "./abap-highlight.mjs";
+import { highlightAbapLines } from "./abap-highlight.mjs";
 import { fetchSampleSources } from "./sample-sources.mjs";
 
 /* Where the site is published. Only these pages need to know: a canonical
@@ -378,6 +378,16 @@ const foot = (up) => `<footer class="foot">
  * these pages are the catalogue's pages and a second palette would drift from
  * it by the first change to either. */
 const CSS = `/* The per-sample pages, beside catalogue.css - written by tools/sample-pages.mjs. */
+/* The one colour these pages add to the catalogue's palette: the line a link
+ * points at. Declared in all three of the palette's blocks, because
+ * catalogue.css switches scheme two ways - the media query for a reader who
+ * has expressed no choice, [data-theme] for one who has - and a value written
+ * in only one of them is a highlight that is missing on half the site. Opaque
+ * on purpose: the sticky gutter sits on it, and a translucent tint would show
+ * the code sliding along underneath the numbers. */
+:root { --mark: #e6f0fb; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --mark: #1d2836; } }
+:root[data-theme="dark"] { --mark: #1d2836; }
 main { padding-bottom: 40px; }
 .crumbs { margin: 22px 0 6px; font-size: 12px; color: var(--fg-dim); }
 .crumbs a { color: var(--fg-dim); }
@@ -440,10 +450,49 @@ h2 { font-size: 15px; margin: 26px 0 8px; }
 }
 .source-head b { font-family: var(--font-mono); font-weight: 400; color: var(--fg); }
 .source-body {
-  margin: 0; padding: 12px 14px; overflow-x: auto;
+  margin: 0; padding: 12px 0; overflow-x: auto; background: var(--bg);
   font-family: var(--font-mono); font-size: 12.5px; line-height: 1.55; tab-size: 2;
 }
-.source-body code { font: inherit; }
+.source-body code { font: inherit; background: inherit; counter-reset: line; }
+/* A line of the class, and its number - GitHub's line links on a page that has
+ * no editor: every line carries an id, so #L42 and #L42-L58 address a PASSAGE
+ * of a sample the way a heading addresses a section. "Look at line 40 to 55"
+ * is most of what one person tells another about a sample, and until this it
+ * could only be said about the copy on GitHub.
+ *
+ * Three properties this had to keep:
+ *
+ *  - The numbers are not in the text. They are a CSS counter, drawn by
+ *    ::before, so selecting the block and copying it gives the class as
+ *    committed and not nine hundred numbers down its left edge - which is the
+ *    whole reason the class is printed here rather than linked.
+ *  - The gutter stays where it is when the block scrolls sideways. An abap2UI5
+ *    view is a chain written wide, and a number that has scrolled out of the
+ *    box is a number nobody can read a link off: sticky inside the scroller,
+ *    over an OPAQUE background - which is why the line carries the background
+ *    and the number inherits it, so a marked line is not a white column with a
+ *    coloured line beside it.
+ *  - One line needs no JavaScript at all: :target is the browser's own answer
+ *    to #L42, and it is what a page with its script blocked still does. The
+ *    script beside it takes that case over (it adds the live class, and the
+ *    rule below then stops matching) because it also has to answer #L42-L58,
+ *    which is a fragment no element has an id for. */
+/* scroll-margin clears the bar, which is sticky at 46px and would otherwise
+ * be standing on the line a link just jumped to. */
+.ln { display: inline-block; min-width: 100%; padding-right: 14px; background: inherit; counter-increment: line; scroll-margin: 60px 0; }
+.lnr {
+  position: sticky; left: 0; z-index: 1; display: inline-block;
+  min-width: 3ch; padding: 0 14px; text-align: right; background: inherit;
+  color: var(--fg-dim); text-decoration: none; user-select: none; -webkit-user-select: none;
+}
+.lnr::before { content: counter(line); }
+.lnr:hover { color: var(--accent); }
+.source-body:not(.live) .ln:target, .ln.is-marked { background: var(--mark); }
+.source-tools { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; }
+.source-copy {
+  padding: 0; border: 0; background: none; font: inherit; color: var(--accent);
+  cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+}
 .code-key { color: var(--code-name); }
 .code-string { color: var(--code-string); }
 .code-number { color: var(--code-atom); }
@@ -483,6 +532,128 @@ function forPrinting(code) {
   }
   return { text: kept.join("\n"), shown: kept.length, lines: lines.length };
 }
+
+/* The class as the page prints it: one element per line, carrying the id that
+ * makes it addressable and the numbered link that hands the address out.
+ * Joined with a newline and nothing else, so what the block CONTAINS is still
+ * exactly the file - the numbers are drawn by CSS (a counter), and the link
+ * that draws them is empty, so a reader who selects the block and copies it
+ * gets ABAP they can paste. The number is not repeated in an attribute
+ * either: the script beside it reads the line off the href it is already
+ * written with. */
+const numbered = (text) =>
+  highlightAbapLines(text)
+    .map((html, i) =>
+      `<span class="ln" id="L${i + 1}"><a class="lnr" href="#L${i + 1}" aria-label="Line ${i + 1}"></a>${html}</span>`)
+    .join("\n");
+
+/* The line links, once they are in a browser. #L42 alone is answered by the
+ * stylesheet (:target) and needs none of this; what needs a script is the
+ * RANGE - #L42-L58 is a fragment no element has an id for - the shift-click
+ * that composes one, and the button that hands the result over.
+ *
+ * The address bar is the share link, so the selection is written to it with
+ * `replaceState` rather than pushed: a reader who presses Back after picking
+ * three lines wants the page they came from, not the two selections before
+ * this one. And because that leaves the document's :target behind, the block
+ * is marked `live` the moment this runs and the stylesheet's own rule stops
+ * matching - one line highlighted by one mechanism, never two by two.
+ *
+ * A modified click is left alone: ctrl or cmd on a line number opens that line
+ * in a new tab, which is a link doing what a link does.
+ *
+ * At the end of the body, and only on a page that prints a class. */
+const LINES_SCRIPT = `<script>
+  (function () {
+    var pre = document.querySelector(".source-body");
+    if (!pre) return;
+    var lines = pre.querySelectorAll(".ln");
+    if (!lines.length) return;
+    pre.classList.add("live");
+
+    var hint = document.querySelector(".source-hint");
+    var copy = document.querySelector(".source-copy");
+    var HINT = hint ? hint.textContent : "";
+    var COPY = copy ? copy.textContent : "";
+    /* [0-9] rather than the shorthand: this script is written inside a
+       template literal, where a backslash is an escape before it is
+       anything else - the class would arrive in the page as "d+" and
+       match nothing. (It did.) */
+    var HASH = /^#L([0-9]+)(?:-L([0-9]+))?$/;
+    /* The line a shift-click extends from: the last one picked on its own. */
+    var anchor = 0;
+
+    var picked = function () {
+      var m = HASH.exec(location.hash);
+      if (!m) return null;
+      var a = Number(m[1]);
+      var b = m[2] === undefined ? a : Number(m[2]);
+      return { from: Math.min(a, b), to: Math.max(a, b) };
+    };
+
+    var say = function (text) { if (hint) { hint.textContent = text; hint.hidden = false; } };
+
+    var mark = function (scroll) {
+      for (var i = 0; i < lines.length; i++) lines[i].classList.remove("is-marked");
+      var range = picked();
+      if (copy) copy.hidden = range === null;
+      if (range === null) { say(HINT); return; }
+      var first = null;
+      for (var n = range.from; n <= range.to; n++) {
+        var el = document.getElementById("L" + n);
+        if (!el) continue;
+        el.classList.add("is-marked");
+        if (first === null) first = el;
+      }
+      /* A long class is printed as far as its first 900 lines and no further,
+         so a link into what was cut has to be answered by saying so rather
+         than by silently highlighting nothing. */
+      if (first === null) {
+        say("Line " + range.from + " is not on this page — the first " + lines.length + " lines are printed.");
+        return;
+      }
+      say(range.from === range.to ? "Line " + range.from : "Lines " + range.from + "–" + range.to);
+      if (scroll) first.scrollIntoView({ block: "center" });
+    };
+
+    pre.addEventListener("click", function (e) {
+      var number = e.target && e.target.closest ? e.target.closest(".lnr") : null;
+      if (!number || e.metaKey || e.ctrlKey) return;
+      var line = Number(String(number.getAttribute("href")).slice(2));
+      if (!line) return;
+      var hash = "#L" + line;
+      if (e.shiftKey && anchor) hash = "#L" + Math.min(anchor, line) + "-L" + Math.max(anchor, line);
+      else anchor = line;
+      e.preventDefault();
+      history.replaceState(null, "", hash);
+      mark(false);
+    });
+
+    addEventListener("hashchange", function () {
+      var range = picked();
+      if (range) anchor = range.from;
+      mark(true);
+    });
+
+    if (copy) {
+      copy.addEventListener("click", function () {
+        var done = function (text) {
+          copy.textContent = text;
+          setTimeout(function () { copy.textContent = COPY; }, 2000);
+        };
+        try {
+          navigator.clipboard.writeText(location.href).then(
+            function () { done("Link copied"); },
+            function () { done("Copy it from the address bar"); });
+        } catch (e) { done("Copy it from the address bar"); }
+      });
+    }
+
+    var start = picked();
+    if (start) anchor = start.from;
+    mark(start !== null);
+  })();
+</script>`;
 
 /** One sample's page. */
 function samplePage(row, ctx) {
@@ -720,9 +891,13 @@ ${bar("../../")}
       <span><b>${esc(file)}</b> — ${code.lines} line${code.lines === 1 ? "" : "s"}${
         row.branch ? `, on branch ${esc(row.branch)}` : ""
       }</span>
-      ${github ? `<a href="${esc(github)}" target="_blank" rel="noopener">Read it on GitHub ↗</a>` : ""}
+      <span class="source-tools">
+        <span class="source-hint" hidden>Click a number to link to a line — shift-click for a range.</span>
+        <button type="button" class="source-copy" hidden>Copy link</button>
+        ${github ? `<a href="${esc(github)}" target="_blank" rel="noopener">Read it on GitHub ↗</a>` : ""}
+      </span>
     </div>
-    <pre class="source-body"><code>${highlightAbap(code.text)}</code></pre>
+    <pre class="source-body"><code>${numbered(code.text)}</code></pre>
   </div>${
     code.shown < code.lines
       ? `\n  <p class="note source-note">The first ${code.shown} lines of ${code.lines}${
@@ -751,6 +926,7 @@ ${foot("../../")}
 ${MENU_SCRIPT}
 ${MEMORY_SCRIPT}
 ${SEARCH_SCRIPT("../../")}
+${code ? LINES_SCRIPT : ""}
 </body>
 </html>
 `;

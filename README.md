@@ -195,8 +195,10 @@ offers **Back to the catalogue**, in the same tab.
 document with the sample's description, the class, every control it builds, the
 release it needs, what it needs when it cannot run here, **the sample running —
 press the demo box and the app mounts in the page, on its own, without the
-editor over it** —, **the whole class printed and syntax-coloured**, and the
-links out: the class on GitHub, SAP's own sample running in the demo kit for a
+editor over it** —, **the whole class printed and
+syntax-coloured, every line of it with an address** — `#L42` highlights a line,
+`#L42-L58` a passage, and *Copy link* hands the result over —, and the links
+out: the class on GitHub, SAP's own sample running in the demo kit for a
 port of one, the whole playground, back to the search. The catalogue itself is one
 URL that JavaScript fills in, which is right for searching and useless for
 being *found*: there was no address for "the abap2UI5 port of `sap.m.Wizard`"

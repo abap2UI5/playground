@@ -888,6 +888,38 @@ data around a chain, and one of them is two megabytes. A class that could not
 be fetched simply has no block, and its page is what it was before: a ref that
 does not arrive costs its samples their code and never the build.
 
+**And every line of it has an address.** `#L42` highlights a line and
+`#L42-L58` a passage, which is the one thing a reader could do with the copy on
+GitHub and not with the copy here — "look at line 40 to 55" is most of what one
+person tells another about a sample. Each line is an element of its own
+carrying that id, and the number beside it is a **CSS counter**, drawn by
+`::before` from `sample.css`: the numbers are not in the text, so selecting the
+block and copying it still gives ABAP that pastes, which is the whole reason
+the class is printed here rather than linked. The gutter is `sticky` inside the
+scroller, over an opaque background — an abap2UI5 view is a chain written wide,
+and a number that has scrolled out of the box is a number nobody can read a
+link off; the line carries the background and the number inherits it, so a
+marked line is not a white column with a coloured line beside it.
+
+**One line needs no script at all**: `:target` is the browser's own answer to
+`#L42`, and it is what a page with its JavaScript blocked still does. The
+script (`LINES_SCRIPT`, at the end of the body, only on a page that prints a
+class) exists for what `:target` cannot answer — the RANGE, which is a fragment
+no element has an id for —, for the shift-click that composes one, and for the
+*Copy link* button beside the class. It takes the single-line case over as it
+runs, by marking the block `live` so the stylesheet's rule stops matching: one
+line highlighted by one mechanism, never two by two. The selection is written
+to the address bar with `replaceState` rather than pushed — the address bar is
+the share link, and a reader who presses Back after picking three lines wants
+the page they came from, not the two selections before this one. A link into
+what the 900-line cut left out says so, rather than highlighting nothing.
+
+What it costs is markup: an id and a link per line roughly doubles the
+transferred weight of a page — about 6 KB to 12 KB gzipped on a typical one,
+17 to 28 KB on the largest, 4.8 MB to 9.3 MB over all 771. That is the price
+of an address per line, and it is paid in static documents nobody waits for
+rather than in the bundle somebody came to write ABAP in.
+
 Four rules hold the set together:
 
 - **`page` is stamped on the index entry by the writer**, which is why it runs

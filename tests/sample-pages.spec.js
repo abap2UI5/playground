@@ -28,6 +28,15 @@ const index = JSON.parse(fs.readFileSync(path.join(DIST, "samples", "apps.json")
 const paged = index.entries.filter((e) => e.page);
 const controlName = (i) => index.controls[i];
 
+/* The first page that prints a class of at least this many lines, with the
+ * page itself - the line-link tests need a class long enough to pick a passage
+ * out of, and which sample that is depends on what the three repositories
+ * currently hold. */
+const printed = (least) =>
+  paged
+    .map((entry) => ({ entry, html: fs.readFileSync(path.join(DIST, "samples", entry.page, "index.html"), "utf8") }))
+    .find(({ html }) => (html.match(/<span class="ln" id="L/g) || []).length >= least) || {};
+
 test("a sample's page carries what the catalogue knows, in the HTML itself", async ({ page }) => {
   // A port that runs here and builds something - the case the catalogue is
   // for, and the one whose page has every part.
@@ -163,7 +172,112 @@ test("a sample page prints the class itself, coloured and escaped", async ({ pag
   // deciding what is a tag here. `->` is in every abap2UI5 class there is.
   const code = block.slice(block.indexOf("<code>") + 6, block.indexOf("</code>"));
   expect(code).toContain("-&gt;");
-  expect(code.replace(/<\/?span[^>]*>/g, "")).not.toMatch(/<[a-zA-Z/]/);
+  // The two elements the writer puts in - the line and its numbered link -
+  // and nothing else: what is left after those is the file, escaped.
+  expect(code.replace(/<\/?(?:span|a)[^>]*>/g, "")).not.toMatch(/<[a-zA-Z/]/);
+});
+
+test("every line of the class has an address, and the numbers are not in the text", async () => {
+  // GitHub's line links, on a page that has no editor. "Look at line 40 to 55"
+  // is most of what one person tells another about a sample, and until this it
+  // could only be said about the copy on GitHub.
+  const { entry, html } = printed(12);
+  expect(entry, "a page prints a class of at least twelve lines").toBeTruthy();
+
+  const count = (html.match(/<span class="ln" id="L/g) || []).length;
+  expect(html).toContain('<span class="ln" id="L1"><a class="lnr" href="#L1" aria-label="Line 1"></a>');
+  expect(html).toContain(`<span class="ln" id="L${count}">`);
+  expect(html).not.toContain(`<span class="ln" id="L${count + 1}">`);
+
+  // The number is drawn by CSS from a counter, so the link that carries it is
+  // EMPTY: a reader who selects the block and copies it gets ABAP they can
+  // paste, not the class with nine hundred numbers down its left edge. That is
+  // the whole reason the class is printed here rather than linked.
+  expect(html).not.toContain("data-line");
+  for (const [, anchor] of html.matchAll(/<a class="lnr"[^>]*>([^<]*)<\/a>/g)) expect(anchor).toBe("");
+  const css = fs.readFileSync(path.join(DIST, "samples", "sample.css"), "utf8");
+  expect(css).toContain("content: counter(line)");
+  expect(css).toContain("user-select: none");
+});
+
+test("a line link marks the line, a shift-click makes a passage, and the button hands it over", async ({ page, context }) => {
+  const { entry } = printed(12);
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+
+  await page.goto(`/samples/${entry.page}#L3-L5`);
+  await expect(page.locator(".ln.is-marked")).toHaveCount(3);
+  await expect(page.locator(".source-hint")).toHaveText("Lines 3–5");
+
+  // A fresh visit offers the affordance and nothing else: there is no link to
+  // copy until a line has been picked.
+  await page.goto(`/samples/${entry.page}`);
+  await expect(page.locator(".source-copy")).toBeHidden();
+  await expect(page.locator(".source-hint")).toBeVisible();
+  const history = await page.evaluate(() => history.length);
+
+  await page.locator(".ln#L9 .lnr").click();
+  await expect(page).toHaveURL(/#L9$/);
+  await expect(page.locator(".ln.is-marked")).toHaveCount(1);
+  await page.locator(".ln#L12 .lnr").click({ modifiers: ["Shift"] });
+  await expect(page).toHaveURL(/#L9-L12$/);
+  await expect(page.locator(".ln.is-marked")).toHaveCount(4);
+  await expect(page.locator(".source-hint")).toHaveText("Lines 9–12");
+  // The address bar IS the share link, so the selection is written to it with
+  // replaceState: a reader who presses Back after picking three lines wants
+  // the page they came from, not the two selections before this one.
+  expect(await page.evaluate(() => history.length)).toBe(history);
+
+  await page.locator(".source-copy").click();
+  await expect(page.locator(".source-copy")).toHaveText("Link copied");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/#L9-L12$/);
+
+  // What the block CONTAINS is still the file: the numbers are drawn, not written.
+  const selected = await page.evaluate(() => {
+    const range = document.createRange();
+    range.selectNodeContents(document.querySelector(".source-body code"));
+    getSelection().removeAllRanges();
+    getSelection().addRange(range);
+    return getSelection().toString();
+  });
+  expect(selected.split("\n")[0]).toMatch(/^\s*(CLASS|\*|")/);
+
+  // The gutter is sticky, because an abap2UI5 view is a chain written wide and
+  // a number that has scrolled out of the box is a number nobody can read a
+  // link off - over an opaque background, so a marked line does not get a
+  // white column punched down its left edge.
+  await page.evaluate(() => { document.querySelector(".source-body").scrollLeft = 300; });
+  const box = await page.locator(".ln#L9 .lnr").boundingBox();
+  const pre = await page.locator(".source-body").boundingBox();
+  expect(Math.abs(box.x - pre.x)).toBeLessThan(2);
+  const line = await page.locator(".ln#L9").evaluate((el) => getComputedStyle(el).backgroundColor);
+  expect(await page.locator(".ln#L9 .lnr").evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(line);
+});
+
+test("a link into a class that was cut off says so rather than highlighting nothing", async ({ page }) => {
+  // A long class is printed as far as its first 900 lines (tools/sample-pages.mjs),
+  // so a link into what was cut is a question the page has to answer out loud.
+  const { entry, html } = printed(12);
+  const count = (html.match(/<span class="ln" id="L/g) || []).length;
+  await page.goto(`/samples/${entry.page}#L${count + 500}`);
+  await expect(page.locator(".source-hint")).toContainText("is not on this page");
+  await expect(page.locator(".ln.is-marked")).toHaveCount(0);
+});
+
+test.describe("with the script blocked", () => {
+  test.use({ javaScriptEnabled: false });
+
+  test("a link to one line still highlights it", async ({ page }) => {
+    // :target is the browser's own answer to #L42, and it is what these pages
+    // fall back to: the script is needed for the RANGE - a fragment no element
+    // has an id for - and for the shift-click that composes one.
+    const { entry } = printed(12);
+    await page.goto(`/samples/${entry.page}#L3`);
+    const marked = await page.locator(".ln#L3").evaluate((el) => getComputedStyle(el).backgroundColor);
+    const plain = await page.locator(".ln#L4").evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(marked).not.toBe(plain);
+    expect(await page.locator(".ln#L1 .lnr").evaluate((el) => getComputedStyle(el, "::before").content))
+      .toBe("counter(line)");
+  });
 });
 
 test("the pages carry the ABAP, not just the sample that was looked at", async () => {
