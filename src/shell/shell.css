@@ -1312,6 +1312,12 @@ button.insight-row {
   z-index: 60;
   display: flex;
   justify-content: center;
+  /* Against the top, not stretched to the full height. The scrim is a flex row
+     and its default `align-items: stretch` made the panel as tall as the space
+     it was given, whatever it held: the empty state was a paragraph, a row of
+     chips and the key row, and then four hundred pixels of white nothing under
+     them. `max-height` still caps it, and a long list still scrolls inside. */
+  align-items: flex-start;
   /* Higher up and roomier than it was: this is a place to browse ~940 entries
    * in, and 12vh of dimmed page above it was margin nobody reads. */
   padding: 8vh 16px 16px;
