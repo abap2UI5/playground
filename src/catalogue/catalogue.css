@@ -86,7 +86,7 @@ a:hover { text-decoration: none; }
 .bar {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 16px;
   padding: 0 20px;
   height: 46px;
   border-bottom: 1px solid var(--line);
@@ -108,19 +108,23 @@ a:hover { text-decoration: none; }
 .brand b { font-weight: 600; }
 
 /* The right-hand group, in this order: the theme button, a hairline, the nav
- * (Documentation, Samples, Playground), then the two marks - the same on the
- * catalogue and on every per-sample page (tools/sample-pages.mjs). The button
- * is what pushes the group to the end. The line stands at the same distance
- * from the button's edge as from the first word: the bar's gap plus its own
- * margin on one side (18 + 6), its other margin plus the nav's gap and the
- * link's padding on the other (10 + 4 + 10) - 24px each. */
+ * (Documentation, Samples, Playground), a hairline, then the two marks - the
+ * same on the catalogue and on every per-sample page (tools/sample-pages.mjs).
+ * The button is what pushes the group to the end. Each line stands 16px from
+ * whatever is on either side of it - the button's edge, the words, the marks -
+ * and the sums here say how, out of these parts: the bar's gap is 16px, a
+ * link's padding 10px, the nav's gap 4px, and a mark sits 6px inside its 30px
+ * box. A line that is nearer to one neighbour than the other reads as
+ * belonging to it, and this one belongs to neither. */
 .bar-nav {
   display: flex;
   align-items: center;
   gap: 4px;
 }
+/* Before the line, the bar's gap: 16. After it, 2 + the nav's gap 4 + the
+ * link's padding 10: 16. */
 .bar-nav::before {
-  content: ""; width: 1px; height: 22px; margin: 0 10px 0 6px;
+  content: ""; width: 1px; height: 22px; margin: 0 2px 0 0;
   background: var(--line);
 }
 .bar-nav a {
@@ -159,12 +163,17 @@ a:hover { text-decoration: none; }
 }
 
 /* The way out of this site, at the end of the bar the playground's own ends
- * with (src/shell/shell.css) - the two marks, the same size and the same two
- * colours here, because this bar and that one are read as one bar by somebody
- * moving between them. No hairline in front of them here: the bar's own gap sets
- * them off from the nav, and a line there had 40px on one side of it and 12px
- * on the other. */
-.socials { display: flex; align-items: center; margin-right: -6px; }
+ * with (src/shell/shell.css) - one hairline, then the two marks, the same size
+ * and the same two colours here, because this bar and that one are read as one
+ * bar by somebody moving between them. Pulled in by the last link's padding,
+ * which is invisible until hovered, so that the line stands 16px from the word
+ * (10 + the bar's gap 16 - 10) and 16px from the mark (10 + 6); the right-hand
+ * margin brings the last mark's box flush with the bar's own padding. */
+.socials { display: flex; align-items: center; margin: 0 -6px 0 -10px; }
+.socials::before {
+  content: ""; width: 1px; height: 22px; margin: 0 10px 0 0;
+  background: var(--line);
+}
 .social {
   display: flex; align-items: center; justify-content: center;
   width: 30px; height: 30px; color: var(--fg-dim);

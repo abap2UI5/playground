@@ -767,11 +767,13 @@ the playground, which is one nav item away; a bar that called these pages
 "playground" was naming the neighbour rather than the room.
 
 **The samples pages' right-hand end reads, in this order:** the theme button,
-a hairline, the nav — *Documentation*, *Samples*, *Playground* —, then LinkedIn
-and GitHub. The line stands 24px from the button and 24px from the first word
-(`.bar-nav::before` in `catalogue.css` says how that adds up); the marks are set
-off from the nav by the bar's own gap and no line, because a line there had
-40px on one side of it and 12px on the other. The catalogue and every per-sample page carry that
+a hairline, the nav — *Documentation*, *Samples*, *Playground* —, a hairline,
+then LinkedIn and GitHub. Each line stands 16px from whatever is on either
+side of it — the button's edge, the words, the marks — because a line nearer
+to one neighbour reads as belonging to it; `catalogue.css` says how that adds
+up out of the bar's gap, a link's padding, the nav's gap and the mark's box
+(the one before the marks used to have 40px on one side and 12px on the
+other). The catalogue and every per-sample page carry that
 bar the same to the character, bar the hrefs — a reader who opens a sample
 must not see the head change under them — so the per-sample pages wire their
 button with an inline copy of the catalogue's handler (`SWITCH_SCRIPT` in

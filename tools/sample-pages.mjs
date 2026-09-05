@@ -221,7 +221,7 @@ const SOCIALS = `<span class="socials">
  * screen reader announces, and the brand links to the catalogue rather than to
  * the playground, which is one nav item away. The right-hand end reads: the
  * theme button (wired by SWITCH_SCRIPT), a hairline, Documentation, Samples,
- * Playground, then LinkedIn and GitHub. */
+ * Playground, a hairline, LinkedIn, GitHub. */
 const bar = (up) => `<header class="bar">
   <a class="brand" href="${up}samples/">
     <img src="${up}favicon.png" alt="" width="20" height="20">
