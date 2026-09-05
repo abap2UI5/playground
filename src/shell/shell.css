@@ -93,22 +93,49 @@ body {
 
 /* ------------------------------------------------------------------- bar */
 
+/* TWO ROWS, AND THE FIRST ONE IS NOT THIS PAGE'S.
+ *
+ * It used to be one row carrying both: the project's bar - brand, sections,
+ * search, marks, menu - and the workbench's toolbar, undo through Full screen,
+ * with the toolbar owning the middle and the sections pushed to the far right.
+ * Every other document of the project puts the sections hard against the brand
+ * and the search in the middle, so this was the one bar of the four that read
+ * differently, and the reader crossing into it met a rearranged version of the
+ * row they had just been using. Below 1280px it was also the bar that had to
+ * start dropping its own parts to fit.
+ *
+ * So the row is the catalogue's row, rule for rule (src/catalogue/catalogue.css
+ * - the numbers here are that file's numbers, kept in step by hand), and
+ * everything that is about THIS page moved down into `.toolbar` beneath it.
+ * Four documents, one bar; and the workbench got a row it does not share. */
 .bar {
   display: flex;
   align-items: center;
+  gap: 16px;
+  padding: 0 20px;
+  height: 46px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-sunken);
+  /* Positioned, so the search box can be placed against the bar itself rather
+     than centred in what is left over (the rule at min-width 1100 below). */
+  position: relative;
+  flex: none;
+  z-index: 5;
+}
+
+/* The workbench: what makes something run, and what one does with it once it
+   does. The row the bar used to be - it may wrap, and a row that has wrapped
+   has to be allowed to grow, which is why the height here is a floor and not
+   a height. On the page's own background rather than the bar's, so the two
+   rows read as what they are: the project's chrome, then this page's tools. */
+.toolbar {
+  display: flex;
+  align-items: center;
   gap: .6rem;
-  /* 20px at the ends, which is the catalogue's bar padding: the mark and the
-     two marks opposite it sit exactly where they sit over there. The height is
-     that bar's too, 46px, and min-height is what sets it: the padding is a
-     little under what a row of ordinary bar buttons needs (33.28px of button,
-     11.2px of padding and the border comes to 45.5), so the floor decides and
-     the flex centring spends the half pixel either side. Not `height`, which
-     is what the catalogue can afford: this bar wraps, and a row that has
-     wrapped has to be allowed to grow. */
   padding: .35rem 1.25rem;
   min-height: 46px;
   border-bottom: 1px solid var(--line);
-  background: var(--bg-sunken);
+  background: var(--bg);
   flex: none;
   flex-wrap: wrap;
 }
@@ -123,7 +150,6 @@ body {
   gap: 8px;
   font-size: 14px;
   white-space: nowrap;
-  margin-right: .25rem;
 }
 .brand::after {
   content: ""; width: 1px; height: 22px; margin-left: 8px;
@@ -404,8 +430,12 @@ iframe {
    back the moment something goes wrong, because it carries the only channel
    this mode has left - the log panel sits in the pane this view hides, and a
    blank frame that explains nothing is worse than a bar nobody asked for. */
-.is-app-only .bar { display: none; }
-.is-app-only.has-trouble .bar { display: flex; }
+.is-app-only .bar,
+.is-app-only .toolbar { display: none; }
+/* What comes back is the TOOLBAR, because the status line is in it. The bar
+   above it is the project's chrome, which is the part that had no business
+   being in somebody's documentation page in the first place. */
+.is-app-only.has-trouble .toolbar { display: flex; }
 
 /* --------------------------------------------------------------- insight */
 
@@ -863,32 +893,27 @@ button.insight-row {
 .source-link:hover { border-color: var(--accent); }
 .source-link[aria-disabled="true"] { opacity: .5; pointer-events: none; }
 
-/* --------------------------------------------------------------- trailer */
+/* ----------------------------------------------------- the rest of the bar */
 
-/* The right-hand end of the bar, which is the sample catalogue's right-hand
-   end (src/catalogue/catalogue.css) down to the numbers: a hairline, where in
-   this site you are, a hairline, the two marks, then the button that opens
-   the menu - light or dark, the project's tools and its repositories. Four
-   documents carry that group - this one, the catalogue, the per-sample pages
-   tools/sample-pages.mjs writes and the documentation's bar - and somebody
-   moving between them reads one bar, so it is kept identical by hand rather
-   than left to four interpretations of a house style. Each hairline stands
-   16px from what is on either side of it, out of these parts: the trailer's
-   gap is 16px, a link's padding 10px, the nav's gap 4px, and a mark sits 6px
-   inside its 30px box; in front of the first line the bar's own gap (.6rem)
-   is made up to 16. */
-.trailer { display: flex; align-items: center; gap: 16px; }
-
-/* On this bar the box does NOT float in the middle - the toolbar owns the
- * middle here - so it sits at the head of the group, where the row's own
- * spacer has already pushed it right. */
-.trailer .search-slot { margin: 0; }
-
-.bar-nav { display: flex; align-items: center; gap: 4px; }
-.bar-nav::before {
-  content: ""; width: 1px; height: 22px; margin: 0 2px 0 calc(16px - .6rem);
-  background: var(--line);
-}
+/* The sections, the box and the marks, which are the sample catalogue's
+   (src/catalogue/catalogue.css) down to the numbers: the brand closed by a
+   hairline, the four sections, the search, a hairline, the two marks, then the
+   button that opens the menu - light or dark, the project's tools and its
+   repositories. Four documents carry that group - this one, the catalogue, the
+   per-sample pages tools/sample-pages.mjs writes and the documentation's bar -
+   and somebody moving between them reads one bar, so it is kept identical by
+   hand rather than left to four interpretations of a house style. Each
+   hairline stands 16px from what is on either side of it, out of these parts:
+   the bar's gap is 16px, a link's padding 10px, the nav's gap 4px, and a mark
+   sits 6px inside its 30px box. */
+/* The four sections, hard against the brand - that is where a reader's eye is
+   when it arrives, and it is what the other three bars do. -10, not 6: `.bar`
+   is a flex row with a 16px gap, and that gap counts between the brand and
+   this group as well; 16 - 10 + the link's own 10px padding is the 16px every
+   hairline on this bar stands from the word beside it. There is no hairline of
+   its own in front of them any more - the brand's `::after` draws that line,
+   and two lines 6px apart is a stutter rather than a separator. */
+.bar-nav { display: flex; align-items: center; gap: 4px; margin-left: -10px; }
 .bar-nav a,
 .bar-nav .here {
   padding: 5px 10px;
@@ -992,8 +1017,10 @@ button.insight-row {
 }
 
 /* Furniture in somebody else's page keeps no links out of it, and its theme
-   is its reader's system, not something to switch from inside a frame. */
-.is-embedded .trailer { display: none; }
+   is its reader's system, not something to switch from inside a frame. The
+   whole first row goes, which is the brand, the four sections, the search and
+   the marks in one line - it used to be four rules and a wrapper. */
+.is-embedded .bar { display: none; }
 
 /* ------------------------------------------------------------------ view */
 
@@ -1098,16 +1125,20 @@ button.insight-row {
   .versions { display: none; }
 }
 
-@media (max-width: 1439px) {
+/* The bar on a phone, as the catalogue drops the same two things at the same
+   width: the name beside the mark, and the two marks - the menu stays, because
+   the theme switch is in it and GitHub is one of its rows. */
+@media (max-width: 620px) {
+  .bar { gap: 10px; padding: 0 12px; }
   .brand span { display: none; }
+  .social { display: none; }
 }
 
-@media (max-width: 1279px) {
-  .bar-nav { display: none; }
-  /* With the nav gone the marks' line follows the About button: the bar's own
-     gap, made up to 16px. */
-  .socials { margin-left: calc(16px - .6rem); }
-}
+/* The two widths that used to be here - the brand's name at 1440 and the whole
+   nav at 1280 - were the crowded row paying for itself. There is no crowded
+   row: the bar carries the brand, four words, a box and three glyphs, which is
+   what the catalogue's bar carries, and it drops the same two things at the
+   same width it does (below). */
 
 @media (max-width: 820px) {
   /* The bar is the one cost on this page that is paid before anything is
@@ -1118,10 +1149,9 @@ button.insight-row {
      spacer that holds the right-hand group at the edge goes, so it stops
      pushing the last control onto a row of its own. Two rows of controls
      is what fits a 390px phone; tests/shell.spec.js holds the height. */
-  .bar { gap: .3rem; padding: .3rem .4rem; }
-  .bar button, .bar .source-link { padding: .3rem .5rem; }
-  .bar button.icon { padding: .2rem .45rem; }
-  .brand,
+  .toolbar { gap: .3rem; padding: .3rem .4rem; }
+  .toolbar button, .toolbar .source-link { padding: .3rem .5rem; }
+  .toolbar button.icon { padding: .2rem .45rem; }
   .versions,
   .spacer { display: none; }
   /* The marks at the far end go the way the catalogue drops its own below
@@ -1133,8 +1163,6 @@ button.insight-row {
      carry nothing else - and the documentation's keeps its own. What is lost
      here is one way in to a search that is one tap away on all three of the
      places this bar links to. */
-  .social { display: none; }
-  .socials { margin-left: calc(16px - .3rem); }
 
   .panes {
     display: block;
@@ -1216,6 +1244,26 @@ button.insight-row {
  * for the fill so the field reads as recessed into a bar that is already grey.
  * The same values are in the documentation's style.css. */
 .search-slot { display: flex; margin: 0 auto; }
+
+/* THE BOX IS CENTRED ON THE BAR, NOT ON WHAT IS LEFT OVER.
+ *
+ * Auto margins centre it between the sections and the marks, and those two
+ * groups are nothing like equal - four words against three glyphs, with the
+ * brand in front of them. `.bar` is positioned, so above the width where the
+ * row is comfortable the box is placed against the bar itself and the marks
+ * take over holding the right-hand end. Below that the auto margins stay: an
+ * absolutely placed box in a narrow row sooner or later sits on the words.
+ * The catalogue's rule, to the pixel (src/catalogue/catalogue.css). */
+@media (min-width: 1100px) {
+  .search-slot {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    margin: 0;
+  }
+
+  .socials { margin-left: auto; }
+}
 
 .search-button {
   display: flex;
@@ -1355,22 +1403,11 @@ button.insight-row {
   .search-label, .search-key { display: none; }
 }
 
-/* THE SEARCH GOES WITH THE MARKS ON A PHONE, AND ONLY ON THIS BAR. It is a
- * 30px box on a row that is already two rows of controls, and it took the bar
- * back over the height tests/shell.spec.js holds it to - which is the check
- * that exists because this bar was once four wrapped rows.
- *
- * Down here rather than beside `.social` up in the same media query, because
- * the shared search block above it sets `display: flex` on this class at the
- * same specificity, and the later rule is the one that wins. It did not, for
- * one test run, and the bar was 117px again.
- *
- * The catalogue and the per-sample pages keep their box on a phone - those
- * bars carry nothing else - so what is lost here is one way in to a search
- * that is one tap away on all three places this bar links to. */
-@media (max-width: 820px) {
-  .search-slot { display: none; }
-}
+/* The box used to go with the marks on a phone, and only on this bar: it was a
+ * 30px box on a row that was already two rows of controls, and it took the bar
+ * over the height tests/shell.spec.js holds it to. It is not on that row any
+ * more. All four documents keep their box on a phone now, as a glyph, which is
+ * what the rule above turns it into. */
 
 /* EVERY ITEM IS AS WIDE AS ITS OWN BOLD SELF, ALWAYS.
  *
@@ -1387,12 +1424,20 @@ button.insight-row {
  * (theme/style.css over there). */
 .bar-nav a,
 .bar-nav .here {
+  /* A row now, because each item is a mark and a word: the reservation moved
+     one level in, onto the word, where the bold copy belongs. */
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.bar-nav a > span,
+.bar-nav .here > span {
   display: inline-flex;
   flex-direction: column;
   align-items: center;
 }
-.bar-nav a::after,
-.bar-nav .here::after {
+.bar-nav a > span::after,
+.bar-nav .here > span::after {
   content: attr(data-text);
   height: 0;
   overflow: hidden;
@@ -1400,3 +1445,38 @@ button.insight-row {
   font-weight: 600;
   pointer-events: none;
 }
+
+/* THE MARK IN FRONT OF THE WORD. The same four the home page's cards carry
+   over on the documentation - a house, a book, a window, a play button - drawn
+   in the link's own colour, so they dim and brighten with it and the one you
+   are on is marked twice. 15px, which is the search box's glyph: two different
+   icon sizes in one bar is a thing a reader sees without being able to name.
+   Inline SVG rather than a font or a sprite, for the reason the two marks at
+   the other end are: an icon that is an empty square until a stylesheet
+   arrives is worse than one that never needed it. */
+.bar-nav svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+/* ON A PHONE THE FOUR ITEMS ARE THEIR MARKS. Four words and their marks are
+   499px of a 390px screen, and the row simply ran off the end of it - the words
+   alone were 415, so this was true before the marks arrived and the marks are
+   what makes it fixable. Clipped rather than `display: none`: a name that is
+   not displayed at all is a name a screen reader does not read either, and
+   these are the four ways out of the page. */
+@media (max-width: 620px) {
+  .bar-nav a > span,
+  .bar-nav .here > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .bar-nav a,
+  .bar-nav .here { padding: 5px 7px; }
+}
+

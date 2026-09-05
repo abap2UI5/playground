@@ -652,12 +652,20 @@ main {
  * (theme/style.css over there). */
 .bar-nav a,
 .bar-nav .here {
+  /* A row now, because each item is a mark and a word: the reservation moved
+     one level in, onto the word, where the bold copy belongs. */
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.bar-nav a > span,
+.bar-nav .here > span {
   display: inline-flex;
   flex-direction: column;
   align-items: center;
 }
-.bar-nav a::after,
-.bar-nav .here::after {
+.bar-nav a > span::after,
+.bar-nav .here > span::after {
   content: attr(data-text);
   height: 0;
   overflow: hidden;
@@ -665,3 +673,38 @@ main {
   font-weight: 600;
   pointer-events: none;
 }
+
+/* THE MARK IN FRONT OF THE WORD. The same four the home page's cards carry
+   over on the documentation - a house, a book, a window, a play button - drawn
+   in the link's own colour, so they dim and brighten with it and the one you
+   are on is marked twice. 15px, which is the search box's glyph: two different
+   icon sizes in one bar is a thing a reader sees without being able to name.
+   Inline SVG rather than a font or a sprite, for the reason the two marks at
+   the other end are: an icon that is an empty square until a stylesheet
+   arrives is worse than one that never needed it. */
+.bar-nav svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+/* ON A PHONE THE FOUR ITEMS ARE THEIR MARKS. Four words and their marks are
+   499px of a 390px screen, and the row simply ran off the end of it - the words
+   alone were 415, so this was true before the marks arrived and the marks are
+   what makes it fixable. Clipped rather than `display: none`: a name that is
+   not displayed at all is a name a screen reader does not read either, and
+   these are the four ways out of the page. */
+@media (max-width: 620px) {
+  .bar-nav a > span,
+  .bar-nav .here > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .bar-nav a,
+  .bar-nav .here { padding: 5px 7px; }
+}
+

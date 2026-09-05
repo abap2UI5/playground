@@ -329,21 +329,24 @@ Below 820px (`src/shell/shell.css`, one media query; `setUpTabs()` in
 of a phone is not a pane. Two more things follow from the same arithmetic, and
 both are easy to undo by tidying up:
 
-- **The bar compacts rather than wrapping.** At desk width it is one row; on a
-  phone it wrapped to four — a fifth of the screen, spent before the editor or
-  the app got any of it. What repeats itself goes (the brand and the version
-  line, which the About dialog carries as well), the paddings shrink,
+- **The toolbar compacts rather than wrapping.** The header is two rows: the
+  project's bar, which behaves as the catalogue's does (the brand's word and
+  the two marks go below 620px, the search shrinks to its glyph below 820, and
+  the four sections become their marks below 620), and the workbench beneath
+  it, which is what this is about. At desk width it is one row; on a phone the
+  single bar this used to be wrapped to four — a fifth of the screen, spent
+  before the editor or the app got any of it. What repeats itself goes (the
+  version line, which the About dialog carries as well), the paddings shrink,
   and the `.spacer` that holds the right-hand group at the edge is dropped so
-  it stops pushing the last control onto a row of its own. The nav and the two
-  marks at the far end go as well (the catalogue drops its own below 620px);
-  the theme button stays. Nothing else is *removed*: every control is still
-  there and still reachable, which is what `tests/shell.spec.js` holds it to,
-  along with the height. **Above that width the bar sheds the same kind of
-  thing one at a time** rather than all at once, at the three widths where the
-  row would otherwise wrap — measured, not chosen: the version line at 1560,
-  the brand's word at 1440 (the mark stays, and the nav's bold item says
-  "playground" anyway), the nav at 1280. So it is one row from 989px up, where
-  before the nav arrived it was one row from 1143px.
+  it stops pushing the last control onto a row of its own. Nothing is
+  *removed*: every control is still there and still reachable, which is what
+  `tests/shell.spec.js` holds it to, along with the height of **both rows
+  together**: 128px of a 760px phone, measured on the running page. That is
+  28px more than the one row it replaced, and what those 28px buy on a phone is
+  the four sections and the search, which the old row had dropped entirely.
+  The version line still goes at 1560; the two widths that dropped the brand's
+  word at 1440 and the whole nav at 1280 are gone with the crowded row that
+  needed them.
 - **The panel starts folded away** (`setUpInsight()` in `src/shell/insight.mjs`).
   It is a fixed 11rem under an editor that has about 25 to give, so on a narrow
   screen it opens collapsed to its tab strip — where the Problems badge still
@@ -809,11 +812,11 @@ pages wire their menu and their switch with an inline copy of the catalogue's
 handlers (`MENU_SCRIPT` in `tools/sample-pages.mjs`, kept in step with
 `setUpExtra()` and `setUpTheme()` by hand, as the site memory is). The
 playground's own bar (`src/shell/index.html`, `src/shell/shell.css`) carries
-the same group after its toolbar — *Playground* as the current item, a span
+the same group on the row above its toolbar — *Playground* as the current item, a span
 rather than a link, because it is the page you are on and a stray click on it
 would throw away a page that costs seconds to load, and the brand a span for
 the same reason — with `extra.mjs` closing its menu; the documentation site's
-bar (`theme/SiteBar.vue` over there) is the fourth copy. Three
+bar (`theme/TheBar.vue` over there) is the fourth copy. Three
 documents here carry the two marks and the menu by hand
 (`src/shell/index.html`, `src/catalogue/index.html`,
 `tools/sample-pages.mjs`): inline SVG, because a mark that is an empty square
@@ -860,14 +863,18 @@ Playground with this code* for a reader who wants the whole window. It is also w
 no longer opens with a row of buttons: Run runs it here now, and the two links
 beside it were links in front of the answer.
 
-What it mounts is `data-view="app"` at `data-height="420"`: **the app and
-nothing else** — no editor, no toolbar, no status line — in a box smaller than
-the one an editor beside it needed. A page that prints the whole class two
-screens down does not need a second copy of it inside a frame, and a strip of
-the playground's own furniture across the top of it is furniture rather than
-answer. The editor is on the box, in *Switch to Playground with this code*,
-which is where a reader who wants to change a line goes anyway. 420 is what the demo is
-read at rather than a floor it grows from: an abap2UI5 app is a `Shell` around
+What it mounts is `data-view="app"` at `data-height="620"`, in a box capped at
+820px: **the app and nothing else** — no editor, no toolbar, no status line.
+A page that prints the whole class two screens down does not need a second copy
+of it inside a frame, and a strip of the playground's own furniture across the
+top of it is furniture rather than answer. The editor is on the box, in *Switch
+to Playground with this code*, which is where a reader who wants to change a
+line goes anyway. The two numbers are one decision: the column is 1160px wide,
+and 420px in it was 2.8:1 — a letterbox, in which a UI5 page with a header and
+a list had room for four rows before it scrolled inside a box the reader cannot
+resize. 620 in 820 is about 5:4, which is the shape of a window, which is the
+shape of the thing inside it. It is what the demo is read at rather than a
+floor it grows from: an abap2UI5 app is a `Shell` around
 a `Page` laid out at 100% of its box, so it never overflows one and the
 loader's grow-on-overflow never fires (`src/embed/abap2ui5-embed.js` says why
 at length).
@@ -1025,19 +1032,28 @@ sections of the project — **Home**, **Documentation**, **Samples**,
 the last button. Home and Documentation are two pages of the documentation's
 deployment; Samples and Playground are here.
 
-**This repository's own bar is the exception, in one respect only.** On the
-catalogue and the per-sample pages the sections stand against the brand and the
-search is centred, exactly as over there. The playground's own bar cannot do
-that: it is a workbench — undo, format, Samples, Run, Auto, Share, Full screen
-— and that toolbar owns the middle and the space after the mark. So there the
-group (search, four sections, marks, menu) keeps the right-hand end it has
-always had, in the same order and drawn with the same values. Everything about
-the group itself is identical; only where the row puts it is not.
+Each section carries its **mark** in front of its name — a house, a book, a
+window, a play button, the four the documentation's home page draws on its own
+cards — in the link's own colour, so the section you are on is marked twice.
+Below 620px the names are clipped away and the marks are the items: four names
+and their marks are 499px of a 390px screen, and the row ran off the end of it.
+Clipped rather than `display: none`, so a screen reader still reads them.
+
+**The playground's bar used to be the exception, and is not any more.** It was
+one row carrying both the project's bar and this page's workbench — undo,
+format, Samples, Run, Auto, Share, Full screen — with the toolbar owning the
+middle and the four sections pushed to the far right, and below 1280px it had
+to start dropping its own parts to fit. So it is **two rows** now:
+`header.bar`, which is the catalogue's bar rule for rule, and `div.toolbar`
+beneath it, which is the workbench and is only this page's. `?view=app` and
+`?view=full` hide both; what comes back when something goes wrong is the
+TOOLBAR, because the status line is in it and in that view it is the only
+channel there is.
 
 **The bar exists four times, by hand** — `src/shell/index.html`,
 `src/catalogue/index.html`, `tools/sample-pages.mjs` and, over there,
-`theme/SiteBar.vue` with `theme/style.css` — and so does the menu behind its
-last button: the switch, the practical links (issues, release notes, install,
+`theme/TheBar.vue` with `SiteNav.vue`, `SiteMenu.vue` and `theme/style.css` —
+and so does the menu behind its last button: the switch, the practical links (issues, release notes, install,
 support, contribute, sponsor), the tools, then the repositories by kind in two
 columns. So does the palette
 (`src/shell/shell.css` is the original; `catalogue.css` says it is a copy and
@@ -1054,7 +1070,11 @@ per-sample page load it as `dist/samples/search.mjs`, one module for all 773
 documents, bundled from `src/catalogue/search-entry.mjs` and budgeted in
 `tools/check-size.mjs`. `src/shell/search-engine.mjs` (the matching) IS a copy
 — of `docs/.vitepress/theme/search-engine.js` over there, kept in step by hand
-like the palette.
+like the palette. It also carries the memory of the **last query**: a hit opens
+another page, often another deployment, and the box that opened there was
+empty, so a reader comparing three samples of one control typed the same word
+three times. The query is written down as a hit is opened and the next box on
+this origin starts with it, selected, so the first keystroke replaces it.
 
 What it searches is one generated document, `/docs/search-index.json`: every
 page of the documentation, and every entry of the three sample catalogues. The
@@ -1069,12 +1089,14 @@ three facets beside it, and writes a URL that can be shared. The box in the bar
 answers a different question — "where is X in this project" — from any of the
 four bars, and leaves the page to answer it.
 
-**One origin means one localStorage**, which two things rely on:
+**One origin means one localStorage**, which four things rely on:
 
 | | |
 |---|---|
 | the theme | `abap2ui5-playground:theme`, read before the first paint by the inline script at the top of all three documents here and by a head script over there. The switch in any of the four bars turns all four |
 | where you were | `src/shell/site-memory.mjs`, imported by the shell and the catalogue bundles and carried as an inline copy by the per-sample pages, which have no bundle. Every samples page writes its own path down — the catalogue's *with its filters*, because the filters are the page there — and the Samples item on the other bars is lifted to it: at boot, again when the page is shown or the tab looked at again, and on the click itself (`keepSiteLinksCurrent()`), because a link lifted once and left open carries the position from before. A stored value is **checked, not followed**: resolved against this origin and kept only if it is still inside the href the markup carries, so a poisoned or stale key costs a restored position and nothing else. All three items open in the same tab — the sites are one site, and a bar that opened one of them in a second window was the one asymmetry between the four bars |
+| where **on** the page you were | The same file, keys `:scroll` (a small map of path → offset, the twelve most recent) and `:returning`. The item above came back to the page and to the TOP of it, which on a list of 770 rows is most of the way to not having remembered anything. Restored **on arrival by the bar and nowhere else**: a `data-back` link writes down how far down this page the reader is and one record saying where they are being sent, and the page that *is* that, arriving within half a minute and with no hash of its own, honours it. Restoring on every load would fight the browser's own back-and-forward restoration and would drop a reader who followed an ordinary link into the middle of a page. Checked the same way a stored path is — `scrollTo` takes whatever it is given |
+| the last thing you searched for | `src/shell/search-engine.mjs`, key `:search`, described above. Checked: a string, short, and less than half an hour old |
 
 The playground is consulted by both and remembered by neither: its URL carries
 the code in the editor, so an item that reopened yesterday's sample would be a
