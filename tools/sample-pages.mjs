@@ -8,9 +8,9 @@
 // three repository pages it replaced were the same shape - a masthead and an
 // empty <section id="results">. Nothing was lost in the move; nothing was ever
 // there. These pages are the address: one per sample, real text in the HTML,
-// and nothing a crawler has to run to see any of it - the two scripts on a
-// page are the theme read and the demo loader below, and neither writes a word
-// of it.
+// and nothing a crawler has to run to see any of it - the scripts on a page
+// are the theme read and the theme switch, the site memory and the demo loader
+// below, and none of them writes a word of it.
 //
 // WHAT MAKES THEM WORTH INDEXING rather than 770 pages of nothing: each one
 // carries what only this catalogue knows - the demo kit's own description of
@@ -139,14 +139,41 @@ const THEME_SCRIPT = `<script>
   } catch (e) { /* a browser that refuses storage still gets the system theme */ }
 </script>`;
 
+/* The bar's theme button, wired - the hand copy of setUpTheme() in
+ * src/catalogue/catalogue.mjs, which these pages cannot import: they carry no
+ * bundle, which is most of what makes them what they are. Same key, same rule
+ * (a choice that equals the system is forgotten rather than stored, so a page
+ * switched back follows the system again), kept in step with that file and
+ * with src/shell/theme.mjs by hand, as THEME_SCRIPT above is with its two.
+ *
+ * At the end of the body rather than in the head: it needs the bar to exist,
+ * and nothing is painted differently by it - the stored theme was applied
+ * before the first paint by THEME_SCRIPT. */
+const SWITCH_SCRIPT = `<script>
+  (function () {
+    var button = document.getElementById("theme");
+    if (!button) return;
+    var media = window.matchMedia("(prefers-color-scheme: dark)");
+    var system = function () { return media.matches ? "dark" : "light"; };
+    button.addEventListener("click", function () {
+      var now = document.documentElement.dataset.theme || system();
+      var next = now === "dark" ? "light" : "dark";
+      document.documentElement.dataset.theme = next;
+      try {
+        if (next === system()) localStorage.removeItem("abap2ui5-playground:theme");
+        else localStorage.setItem("abap2ui5-playground:theme", next);
+      } catch (e) { /* a browser that refuses storage still gets the switch, just not the memory */ }
+    });
+  })();
+</script>`;
+
 /* Where the reader is, and where the documentation was left - the hand copy of
  * src/shell/site-memory.mjs, which the playground and the catalogue import and
- * these pages cannot: they carry no bundle, which is most of what makes them
- * what they are. Same keys, same checks, kept in step with that file by hand
- * as THEME_SCRIPT above is kept in step with its two.
+ * these pages cannot, for the reason above. Same keys, same checks, kept in
+ * step with that file by hand.
  *
- * At the end of the body rather than in the head: this one needs the bar to
- * exist, and nothing is painted differently by it. */
+ * At the end of the body as well: this one needs the bar to exist too, and
+ * nothing is painted differently by it. */
 const MEMORY_SCRIPT = `<script>
   try {
     localStorage.setItem("abap2ui5-playground:last-samples",
@@ -170,8 +197,8 @@ const MEMORY_SCRIPT = `<script>
 </script>`;
 
 /* The two marks the playground's own bar ends in (src/shell/index.html) and
- * the catalogue's carries beside its theme switch, inline for the same reason
- * they are inline there: an icon that is an empty square until a stylesheet
+ * the catalogue's ends in (src/catalogue/index.html), inline for the same
+ * reason they are inline there: an icon that is an empty square until a stylesheet
  * arrives is worse than one that never needed it. The three documents keep
  * one copy each, by hand - a shared partial would be a build step in front of
  * a page whose whole point is that it is a file. */
@@ -186,19 +213,24 @@ const SOCIALS = `<span class="socials">
     </a>
   </span>`;
 
-/* The catalogue's bar (src/catalogue/index.html), kept in step by hand. The
- * brand is the mark and the name; the nav says which part of the site this is:
- * Samples carries aria-current, which is what makes it the bold one
- * (catalogue.css) and what a screen reader announces, and the brand links to
- * the catalogue rather than to the playground, which is one nav item away.
- * The right-hand end reads as the catalogue's does - Documentation, Samples,
- * Playground, a hairline, LinkedIn, GitHub - minus the theme button in front,
- * because these pages carry no script to wire one. */
+/* The catalogue's bar (src/catalogue/index.html), the same to the character
+ * bar the hrefs, kept in step by hand - a reader who opens a sample from the
+ * catalogue must not see the head change under them. The brand is the mark and
+ * the name; the nav says which part of the site this is: Samples carries
+ * aria-current, which is what makes it the bold one (catalogue.css) and what a
+ * screen reader announces, and the brand links to the catalogue rather than to
+ * the playground, which is one nav item away. The right-hand end reads: the
+ * theme button (wired by SWITCH_SCRIPT), a hairline, Documentation, Samples,
+ * Playground, then LinkedIn and GitHub. */
 const bar = (up) => `<header class="bar">
   <a class="brand" href="${up}samples/">
     <img src="${up}favicon.png" alt="" width="20" height="20">
     <span>abap2UI5</span>
   </a>
+  <button id="theme" class="theme" type="button" aria-label="Switch between light and dark">
+    <span class="theme-sun" aria-hidden="true">☀</span>
+    <span class="theme-moon" aria-hidden="true">☾</span>
+  </button>
   <nav class="bar-nav">
     <a href="https://abap2ui5.github.io/docs/" data-site="docs" target="_blank" rel="noopener">Documentation</a>
     <a href="${up}samples/" aria-current="page">Samples</a>
@@ -591,6 +623,7 @@ ${bar("../../")}
 </main>
 
 ${foot("../../")}
+${SWITCH_SCRIPT}
 ${MEMORY_SCRIPT}
 </body>
 </html>
@@ -654,6 +687,7 @@ ${bar("../../")}
 </main>
 
 ${foot("../../")}
+${SWITCH_SCRIPT}
 ${MEMORY_SCRIPT}
 </body>
 </html>

@@ -26,7 +26,7 @@
    * src/shell/highlight.mjs): names in red, literals in green, numbers in
    * purple. Here they are written into the markup at build time, because
    * those pages carry no highlighter - the only scripts on them are the theme
-   * read and the loader behind their demo box. */
+   * read and switch, the site memory and the loader behind their demo box. */
   --code-name: #a02222;
   --code-string: #15713a;
   --code-atom: #7a3ea8;
@@ -108,19 +108,15 @@ a:hover { text-decoration: none; }
 .brand b { font-weight: 600; }
 
 /* The right-hand group, in this order: the theme button, a hairline, the nav
- * (Documentation, Samples, Playground), a hairline, the two marks. Whichever
- * comes first pushes the group to the end - the button on the catalogue, the
- * nav on the per-sample pages, which carry no button (tools/sample-pages.mjs) -
- * and the hairline in front of the nav is drawn only when the button is there
- * to separate it from. */
+ * (Documentation, Samples, Playground), then the two marks - the same on the
+ * catalogue and on every per-sample page (tools/sample-pages.mjs). The button
+ * is what pushes the group to the end. */
 .bar-nav {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-left: auto;
 }
-.theme + .bar-nav { margin-left: 0; }
-.theme + .bar-nav::before {
+.bar-nav::before {
   content: ""; width: 1px; height: 22px; margin: 0 8px 0 12px;
   background: var(--line);
 }
@@ -160,15 +156,12 @@ a:hover { text-decoration: none; }
 }
 
 /* The way out of this site, at the end of the bar the playground's own ends
- * with (src/shell/shell.css) - one hairline, then the two marks. They are the
- * same size and the same two colours here, because this bar and that one are
- * read as one bar by somebody moving between them; the hairline is the same
- * line as the one in front of the nav above. */
+ * with (src/shell/shell.css) - the two marks, the same size and the same two
+ * colours here, because this bar and that one are read as one bar by somebody
+ * moving between them. No hairline in front of them here: the bar's own gap
+ * sets them off from the nav, and a line there had 40px on one side of it and
+ * 12px on the other. */
 .socials { display: flex; align-items: center; margin-right: -6px; }
-.socials::before {
-  content: ""; width: 1px; height: 22px; margin: 0 6px 0 12px;
-  background: var(--line);
-}
 .social {
   display: flex; align-items: center; justify-content: center;
   width: 30px; height: 30px; color: var(--fg-dim);

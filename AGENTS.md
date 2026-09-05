@@ -767,14 +767,15 @@ the playground, which is one nav item away; a bar that called these pages
 "playground" was naming the neighbour rather than the room.
 
 **The samples pages' right-hand end reads, in this order:** the theme button,
-a hairline, the nav — *Documentation*, *Samples*, *Playground* —, a hairline,
-then LinkedIn and GitHub. Whichever of the button and the nav comes first is
-the one that pushes the group to the end (`margin-left: auto` on both, taken
-off the nav when it follows the button), and the hairline in front of the nav
-is drawn only then (`.theme + .bar-nav::before`): the per-sample pages carry no
-theme button, because their only scripts are the theme read and the demo
-loader, so there the nav opens the group. The playground's own bar carries the
-same items in its older order (`src/shell/index.html`, `src/shell/shell.css`):
+a hairline, the nav — *Documentation*, *Samples*, *Playground* —, then LinkedIn
+and GitHub, set off by the bar's own gap and no line (a hairline there had 40px
+on one side of it and 12px on the other). The catalogue and every per-sample page carry that
+bar the same to the character, bar the hrefs — a reader who opens a sample
+must not see the head change under them — so the per-sample pages wire their
+button with an inline copy of the catalogue's handler (`SWITCH_SCRIPT` in
+`tools/sample-pages.mjs`, kept in step with `setUpTheme()` in `catalogue.mjs`
+by hand, as the site memory is). The playground's own bar carries the same
+items in its older order (`src/shell/index.html`, `src/shell/shell.css`):
 the nav — *Playground* as the current item, a span rather than a link, because
 it is the page you are on and a stray click on it would throw away a page that
 costs seconds to load —, then the button, a hairline, then the marks; the
@@ -805,9 +806,10 @@ documentation —, every control the class BUILDS (the linter's answer, each one
 a link into the catalogue's control facet), its libraries, what it needs where
 it cannot run, **the sample running**, **the class itself**, the neighbours
 around it in its group, and back to the search. Real text in the HTML, and
-nothing a crawler has to run to see any of it: the two scripts on a page are
-the two-line theme read the other two documents also carry and the demo loader
-below, and neither writes a word of it. `sample.css` is written beside them and
+nothing a crawler has to run to see any of it: the scripts on a page are the
+two-line theme read the other two documents also carry, the theme switch and
+the site memory as inline copies of what the bundles import, and the demo
+loader below, and none of them writes a word of it. `sample.css` is written beside them and
 loaded next to `catalogue.css`, which is the frame: these are the catalogue's
 pages, and a second palette would drift from it on the first change to either.
 
