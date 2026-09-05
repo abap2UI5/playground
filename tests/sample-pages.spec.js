@@ -256,10 +256,11 @@ test("a page renders as the catalogue's own, and its links work", async ({ page 
   await expect(page.locator("h1")).toHaveText(entry.title);
   // The bar is the catalogue's, so the stylesheet beside it is loading - and
   // it names the part of the site this page is in rather than its neighbour:
-  // the brand says samples, and Samples is the current one, which is what
-  // makes it the bold item and what a screen reader announces.
-  await expect(page.locator(".brand")).toHaveText("abap2UI5 samples");
+  // the brand is the mark and the name, and Samples is the current nav item,
+  // which is what makes it the bold one and what a screen reader announces.
+  await expect(page.locator(".brand")).toHaveText("abap2UI5");
   await expect(page.locator(".brand")).toHaveAttribute("href", "../../samples/");
+  await expect(page.locator(".bar-nav > *")).toHaveText(["Documentation", "Samples", "Playground"]);
   const here = page.locator(".bar-nav a", { hasText: "Samples" });
   await expect(here).toBeVisible();
   await expect(here).toHaveAttribute("aria-current", "page");

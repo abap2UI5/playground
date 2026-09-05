@@ -186,20 +186,23 @@ const SOCIALS = `<span class="socials">
     </a>
   </span>`;
 
-/* The brand names the part of the site the reader is in, and here that is the
- * samples - the playground is one nav item away, and a bar that called this
- * page "playground" was naming the neighbour rather than the room. The nav
- * says so twice: Samples carries aria-current, which is what makes it the bold
- * one (catalogue.css) and what a screen reader announces. */
+/* The catalogue's bar (src/catalogue/index.html), kept in step by hand. The
+ * brand is the mark and the name; the nav says which part of the site this is:
+ * Samples carries aria-current, which is what makes it the bold one
+ * (catalogue.css) and what a screen reader announces, and the brand links to
+ * the catalogue rather than to the playground, which is one nav item away.
+ * The right-hand end reads as the catalogue's does - Documentation, Samples,
+ * Playground, a hairline, LinkedIn, GitHub - minus the theme button in front,
+ * because these pages carry no script to wire one. */
 const bar = (up) => `<header class="bar">
   <a class="brand" href="${up}samples/">
     <img src="${up}favicon.png" alt="" width="20" height="20">
-    <span>abap2UI5 <b>samples</b></span>
+    <span>abap2UI5</span>
   </a>
   <nav class="bar-nav">
-    <a href="${up}" title="Write ABAP and run it in the browser">Playground</a>
+    <a href="https://abap2ui5.github.io/docs/" data-site="docs" target="_blank" rel="noopener">Documentation</a>
     <a href="${up}samples/" aria-current="page">Samples</a>
-    <a href="https://abap2ui5.github.io/docs/" data-site="docs" target="_blank" rel="noopener">Docs</a>
+    <a href="${up}" title="Write ABAP and run it in the browser">Playground</a>
   </nav>
   ${SOCIALS}
 </header>`;

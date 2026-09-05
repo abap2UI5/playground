@@ -22,24 +22,30 @@
 <body>
 
 <header class="bar">
+  <!-- The mark and the name, nothing more: the nav already says Samples, in
+       bold, so a brand that said it too said it twice. -->
   <a class="brand" href="./">
     <img src="../favicon.png" alt="" width="20" height="20">
-    <span>abap2UI5 <b>samples</b></span>
+    <span>abap2UI5</span>
   </a>
-  <nav class="bar-nav">
-    <a href="../" title="Write ABAP and run it in the browser">Playground</a>
-    <a href="./" aria-current="page">Samples</a>
-    <a href="https://abap2ui5.github.io/docs/" data-site="docs" target="_blank" rel="noopener">Docs</a>
-  </nav>
+  <!-- The right-hand end, in this order: the theme button, a hairline
+       (catalogue.css draws it in front of the nav), then the three places this
+       site goes - Documentation, Samples, Playground -, a hairline, then
+       LinkedIn and GitHub. The per-sample pages carry the same bar
+       (tools/sample-pages.mjs); the two copies are kept in step by hand. -->
   <button id="theme" class="theme" type="button" aria-label="Switch between light and dark">
     <span class="theme-sun" aria-hidden="true">☀</span>
     <span class="theme-moon" aria-hidden="true">☾</span>
   </button>
+  <nav class="bar-nav">
+    <a href="https://abap2ui5.github.io/docs/" data-site="docs" target="_blank" rel="noopener">Documentation</a>
+    <a href="./" aria-current="page">Samples</a>
+    <a href="../" title="Write ABAP and run it in the browser">Playground</a>
+  </nav>
   <!-- The way out, as the playground's own bar and the documentation site's
        end: LinkedIn and GitHub, inline SVG rather than an icon font, because
        a mark that is an empty square until a stylesheet arrives is worse than
-       one that never needed it. The per-sample pages carry the same two
-       (tools/sample-pages.mjs); the three copies are kept in step by hand. -->
+       one that never needed it. -->
   <span class="socials">
     <a class="social" href="https://www.linkedin.com/company/abap2ui5/" target="_blank" rel="noopener"
        aria-label="abap2UI5 on LinkedIn" title="abap2UI5 on LinkedIn">

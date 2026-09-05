@@ -160,10 +160,12 @@
        per-sample page's with it: where in this site you are, a button for
        light and dark, a hairline, then LinkedIn and GitHub. The three
        documents are read as one bar by somebody moving between them, so this
-       group is the same group in all three (src/catalogue/index.html,
-       tools/sample-pages.mjs) - Docs is a nav item here rather than the third
-       mark it used to be, because it is one of the three places this site
-       goes and naming it beats a book somebody has to hover. The button is
+       group holds the same items in all three (src/catalogue/index.html,
+       tools/sample-pages.mjs; the samples pages put the button first and
+       read Documentation, Samples, Playground) - Docs is a nav item here
+       rather than the third mark it used to be, because it is one of the
+       three places this site goes and naming it beats a book somebody has to
+       hover. The button is
        wired in src/shell/theme.mjs, which keeps the label and aria-checked in
        step with the theme; the sun and the moon are swapped by CSS over the
        same media query and data-theme the palette uses, so it says the right

@@ -759,21 +759,27 @@ exactly one hit. A `?src=` link from anywhere else still offers the GitHub
 page, which is what that reader wants.
 
 **The bar names the part of the site you are in.** On `/samples/` and on every
-per-sample page the brand reads *abap2UI5 **samples***, links to the catalogue
-rather than to the playground, and the nav's Samples carries `aria-current`,
-which is what makes it the bold item (`catalogue.css`) and what a screen reader
-announces. The playground is one nav item away; a bar that called these pages
+per-sample page the brand is the mark and *abap2UI5* — nothing more, because
+the nav's Samples carries `aria-current`, which is what makes it the bold item
+(`catalogue.css`) and what a screen reader announces, and a brand that said
+*samples* too said it twice. The brand links to the catalogue rather than to
+the playground, which is one nav item away; a bar that called these pages
 "playground" was naming the neighbour rather than the room.
 
-**The bar begins and ends the same way in all three documents** — at one end
-the mark, then *abap2UI5* and the part of the site you are in in bold; at the
-other the nav, the theme button, a hairline, then LinkedIn and GitHub. The
-playground's own bar carries that group too (`src/shell/index.html`,
-`src/shell/shell.css`), down to the catalogue's numbers, with *playground* as
-the current item — a span rather than a link, because it is the page you are
-on and a stray click on it would throw away a page that costs seconds to load.
-The documentation, which used to be a third mark over there, is the nav's
-third item instead. Three documents carry the two marks by hand
+**The samples pages' right-hand end reads, in this order:** the theme button,
+a hairline, the nav — *Documentation*, *Samples*, *Playground* —, a hairline,
+then LinkedIn and GitHub. Whichever of the button and the nav comes first is
+the one that pushes the group to the end (`margin-left: auto` on both, taken
+off the nav when it follows the button), and the hairline in front of the nav
+is drawn only then (`.theme + .bar-nav::before`): the per-sample pages carry no
+theme button, because their only scripts are the theme read and the demo
+loader, so there the nav opens the group. The playground's own bar carries the
+same items in its older order (`src/shell/index.html`, `src/shell/shell.css`):
+the nav — *Playground* as the current item, a span rather than a link, because
+it is the page you are on and a stray click on it would throw away a page that
+costs seconds to load —, then the button, a hairline, then the marks; the
+documentation is *Docs* there and on the documentation site's own bar. Three
+documents carry the two marks by hand
 (`src/shell/index.html`, `src/catalogue/index.html`,
 `tools/sample-pages.mjs`): inline SVG, because a mark that is an empty square
 until a stylesheet arrives is worse than one that never needed it, and a

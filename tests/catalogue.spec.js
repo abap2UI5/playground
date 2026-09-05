@@ -243,10 +243,22 @@ test("a link that did not come from the catalogue still points at GitHub", async
 });
 
 test("the bar ends where the playground's own bar ends", async ({ page }) => {
+  await openCatalogue(page);
+  // The mark and the name at one end - the nav already says Samples, in bold,
+  // so the brand does not say it again.
+  await expect(page.locator(".brand")).toHaveText("abap2UI5");
+  await expect(page.locator(".brand img")).toBeVisible();
+  // At the other, in this order: the theme button, then Documentation, Samples
+  // and Playground, then the two marks.
+  await expect(page.locator(".bar-nav > *")).toHaveText(["Documentation", "Samples", "Playground"]);
+  await expect(page.locator('.bar-nav [aria-current="page"]')).toHaveText("Samples");
+  await expect(page.locator('.bar-nav a[data-site="docs"]')).toHaveText("Documentation");
+  expect(await page.locator("#theme").evaluate(
+    (el) => el.nextElementSibling?.classList.contains("bar-nav"),
+  )).toBe(true);
   // The way off this site is two marks at the end of the bar, the same two the
   // playground and the per-sample pages carry - so a reader moving between the
   // three documents reads them as one bar.
-  await openCatalogue(page);
   await expect(page.locator(".bar .social")).toHaveCount(2);
   await expect(page.locator('.bar .social[href*="linkedin.com/company/abap2ui5"]')).toBeVisible();
   await expect(page.locator('.bar .social[href*="github.com/abap2UI5"]')).toBeVisible();

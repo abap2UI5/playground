@@ -107,10 +107,22 @@ a:hover { text-decoration: none; }
 }
 .brand b { font-weight: 600; }
 
+/* The right-hand group, in this order: the theme button, a hairline, the nav
+ * (Documentation, Samples, Playground), a hairline, the two marks. Whichever
+ * comes first pushes the group to the end - the button on the catalogue, the
+ * nav on the per-sample pages, which carry no button (tools/sample-pages.mjs) -
+ * and the hairline in front of the nav is drawn only when the button is there
+ * to separate it from. */
 .bar-nav {
   display: flex;
+  align-items: center;
   gap: 4px;
   margin-left: auto;
+}
+.theme + .bar-nav { margin-left: 0; }
+.theme + .bar-nav::before {
+  content: ""; width: 1px; height: 22px; margin: 0 8px 0 12px;
+  background: var(--line);
 }
 .bar-nav a {
   padding: 5px 10px;
@@ -122,6 +134,7 @@ a:hover { text-decoration: none; }
 .bar-nav a[aria-current="page"] { color: var(--fg); font-weight: 600; }
 
 .theme {
+  margin-left: auto;
   border: 1px solid var(--line);
   background: var(--bg);
   color: var(--fg-dim);
@@ -149,7 +162,8 @@ a:hover { text-decoration: none; }
 /* The way out of this site, at the end of the bar the playground's own ends
  * with (src/shell/shell.css) - one hairline, then the two marks. They are the
  * same size and the same two colours here, because this bar and that one are
- * read as one bar by somebody moving between them. */
+ * read as one bar by somebody moving between them; the hairline is the same
+ * line as the one in front of the nav above. */
 .socials { display: flex; align-items: center; margin-right: -6px; }
 .socials::before {
   content: ""; width: 1px; height: 22px; margin: 0 6px 0 12px;

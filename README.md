@@ -264,8 +264,9 @@ offline with abapGit, or push it as it stands.
 **Light or dark.** The page follows the system until the button at the
 right-hand end of the bar says otherwise — the same button the
 [sample catalogue](https://abap2ui5.github.io/playground/samples/) carries, in
-the same end group: Playground, Samples and Docs, then the button, LinkedIn and
-GitHub. A choice is kept between visits; a choice that agrees with the system
+the same end group of nav, button, LinkedIn and GitHub (the catalogue puts its
+button first, then Documentation, Samples and Playground). A choice is kept
+between visits; a choice that agrees with the system
 is forgotten rather than stored, so a page switched back follows the system
 again from then on. The button reaches the editor and the running app as well,
 without restarting it.
