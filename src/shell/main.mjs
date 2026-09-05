@@ -44,7 +44,7 @@ import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
 import { setTestResults, setUpInsight, showInsight, updateInsight } from "./insight.mjs";
 import { restoreCheckerSettings } from "./checker-settings.mjs";
 import { setUpSplitter, setUpTabs } from "./layout.mjs";
-import { keepSiteLinksCurrent } from "./site-memory.mjs";
+import { keepSiteLinksCurrent, rememberHere } from "./site-memory.mjs";
 import { setUpSearch } from "./search-box.mjs";
 import { announceAppHeight, announceReady, announceStatus, startEmbedMessages } from "./embed.mjs";
 import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
@@ -245,9 +245,27 @@ async function boot() {
   // Samples and Documentation in the bar, pointed at the page each of those
   // sites was last left on, and at how far down it the reader was
   // (site-memory.mjs) - now, and again whenever that can have moved while this
-  // page stayed open. Nothing is stored for the playground itself; it only
-  // reads. Skipped when embedded, where the bar is not on screen at all.
+  // page stayed open. Skipped when embedded, where the bar is not on screen.
   if (!embedded) keepSiteLinksCurrent();
+  // ...and this page written down as well, which it did not used to be. A
+  // reader who opens a SAMPLE here has code that is not a draft - a sample
+  // that was picked and read is deliberately not stored (see remember( )
+  // below) - so pressing Documentation and then Playground threw it away and
+  // started them on the default sample. The URL is what carries it, so the URL
+  // is what is written: on the way out, which is when it is final, and again
+  // when the tab is hidden, because pagehide is not promised on every route
+  // out of a page.
+  //
+  // Not when embedded (furniture in somebody else's page) and not in an
+  // app-only view (a running app, not a place to come back to).
+  if (!embedded && !appOnly) {
+    const writeHere = () => rememberHere("playground");
+    writeHere();
+    addEventListener("pagehide", writeHere);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") writeHere();
+    });
+  }
   // The search box beside them: one box over the documentation and all ~770
   // samples, over the index the documentation publishes (search-box.mjs).
   // Not when embedded - an embedded playground is furniture in somebody

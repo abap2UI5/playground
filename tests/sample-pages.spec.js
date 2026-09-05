@@ -158,7 +158,9 @@ test("a sample page prints the class itself, coloured and escaped", async ({ pag
   expect(entry, "the index has a sample that runs here").toBeTruthy();
   const html = await (await page.request.get(`/samples/${entry.page}`)).text();
 
-  expect(html).toContain("<h2>The ABAP</h2>");
+  /* With the id outline( ) gives every heading, which is what the "On this
+     page" column links to. */
+  expect(html).toContain('<h2 id="the-abap">The ABAP</h2>');
   expect(html).toContain(entry.raw.split("/").pop());
   const block = html.slice(html.indexOf('<pre class="source-body">'));
   expect(block).toContain("<code>");
@@ -291,7 +293,7 @@ test("the pages carry the ABAP, not just the sample that was looked at", async (
   // are about. So the set is counted, not sampled.
   const printed = paged.filter((entry) =>
     fs.readFileSync(path.join(DIST, "samples", entry.page, "index.html"), "utf8")
-      .includes("<h2>The ABAP</h2>"),
+      .includes('<h2 id="the-abap">The ABAP</h2>'),
   );
   expect(printed.length).toBeGreaterThan(paged.length * 0.9);
 });

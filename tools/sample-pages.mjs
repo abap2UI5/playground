@@ -279,15 +279,28 @@ const MEMORY_SCRIPT = `<script>
       if (typeof y !== "number" || !(y > 0) || y >= 1e7) return;
       /* Re-applied until it takes, for up to three seconds: a page still
          drawing is a page too short to reach the offset, and the browser
-         clamps that to the top - which is what this is here to stop. It stops
-         the moment it takes and the moment the READER moves, because a scroll
-         that was not this one wins. */
-      var until = Date.now() + 3000, mine = -1;
+         clamps that to the top - which is what this is here to stop. What
+         cancels it is the READER and nothing else: a wheel, a touch, a key, a
+         pointer. Not a scroll this did not cause - the browser moves that
+         itself while a page loads, to keep what you are looking at steady,
+         and reading that as a reader made the restore give up a little way
+         down. */
+      /* It HOLDS the position for two seconds rather than merely reaching it
+         once: a page that reaches the offset and stops can be scrolled back to
+         the top a frame later by whatever else is still starting up. Safe only
+         because the four events end it on the reader's first move. */
+      var until = Date.now() + 2000, stopped = false;
+      var moved = ["wheel", "touchstart", "keydown", "pointerdown"];
+      var stop = function () {
+        stopped = true;
+        for (var i = 0; i < moved.length; i++) removeEventListener(moved[i], stop, true);
+      };
+      for (var k = 0; k < moved.length; k++) addEventListener(moved[k], stop, { capture: true, passive: true });
       var put = function () {
-        if (mine >= 0 && Math.round(scrollY) !== mine) return;
-        scrollTo(0, y);
-        mine = Math.round(scrollY);
-        if (mine !== y && Date.now() < until) requestAnimationFrame(put);
+        if (stopped) return;
+        if (Math.round(scrollY) !== y) scrollTo(0, y);
+        if (Date.now() < until) requestAnimationFrame(put);
+        else stop();
       };
       requestAnimationFrame(put);
     })();
@@ -418,7 +431,7 @@ const bar = (up) => `<header class="bar">
     <a href="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3.6 10.9 12 4.2l8.4 6.7v8.3a1 1 0 0 1-1 1h-4.3v-6.1H8.9v6.1H4.6a1 1 0 0 1-1-1z"/></svg><span data-text="Home">Home</span></a>
     <a href="https://abap2ui5.github.io/docs/get_started/about" data-site="docs" data-scope="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 7.2C10.5 5.9 8.5 5.2 6 5.2H3.3v11.9H6c2.5 0 4.5.7 6 1.9 1.5-1.2 3.5-1.9 6-1.9h2.7V5.2H18c-2.5 0-4.5.7-6 1.9z"/><path d="M12 7.2v11.8"/></svg><span data-text="Documentation">Documentation</span></a>
     <a href="${up}samples/" aria-current="page" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.2" y="4.8" width="17.6" height="14.4" rx="2"/><path d="M3.2 9.4h17.6M8.5 9.4v9.8"/></svg><span data-text="Samples">Samples</span></a>
-    <a href="${up}" title="Write ABAP and run it in the browser"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M10.2 8.4v7.2a.5.5 0 0 0 .76.43l5.8-3.6a.5.5 0 0 0 0-.86l-5.8-3.6a.5.5 0 0 0-.76.43z" fill="currentColor" stroke="none"/></svg><span data-text="Playground">Playground</span></a>
+    <a href="${up}" data-site="playground" title="Write ABAP and run it in the browser"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M10.2 8.4v7.2a.5.5 0 0 0 .76.43l5.8-3.6a.5.5 0 0 0 0-.86l-5.8-3.6a.5.5 0 0 0-.76.43z" fill="currentColor" stroke="none"/></svg><span data-text="Playground">Playground</span></a>
   </nav>
   <span class="search-slot" data-search></span>
   ${SOCIALS}
@@ -452,6 +465,59 @@ const CSS = `/* The per-sample pages, beside catalogue.css - written by tools/sa
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --mark: #1d2836; } }
 :root[data-theme="dark"] { --mark: #1d2836; }
 main { padding-bottom: 40px; }
+
+/* ---- the page and its outline ----
+ *
+ * Two columns from 1100px up: the sample, and "On this page" beside it. Below
+ * that the outline goes, rather than stacking above the content - a list of
+ * links between the title and the first section is a wall in front of the
+ * page, and everything it names is one scroll away on a phone anyway.
+ *
+ * The right-hand column was empty at desk width, and the documentation puts
+ * its own outline exactly there; a reader crossing between the two documents
+ * meets the same thing in the same place. The column is 200px, which is what
+ * the longest heading here ("Controls it builds") needs at 13px. */
+.sample { display: block; }
+
+@media (min-width: 1100px) {
+  .sample {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 200px;
+    gap: 0 40px;
+    align-items: start;
+  }
+}
+
+.outline { display: none; }
+
+@media (min-width: 1100px) {
+  .outline {
+    display: block;
+    position: sticky;
+    /* The bar is 46px and sticky; 24px of air under it. */
+    top: 70px;
+    padding-top: 34px;
+    font-size: 13px;
+  }
+}
+
+.outline-head {
+  margin-bottom: 8px;
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.outline nav { display: flex; flex-direction: column; gap: 2px; }
+
+.outline nav a {
+  padding: 4px 0;
+  color: var(--fg-dim);
+  text-decoration: none;
+  line-height: 1.4;
+}
+
+.outline nav a:hover { color: var(--accent); }
 .crumbs { margin: 22px 0 6px; font-size: 12px; color: var(--fg-dim); }
 .crumbs a { color: var(--fg-dim); }
 .sample h1 { font-size: 26px; margin: 0 0 8px; line-height: 1.25; }
@@ -736,6 +802,44 @@ const LINES_SCRIPT = `<script>
 </script>`;
 
 /** One sample's page. */
+
+/**
+ * "On this page", built out of the page's own headings.
+ *
+ * A sample page is a stack of sections - the facts, the controls, the ABAP,
+ * what else is nearby - and on a desk-width window the right-hand third of it
+ * was empty. The documentation puts its outline there, and a reader crossing
+ * from one to the other expects the same thing in the same place; more to the
+ * point, "where is the code" on a page whose code is two screens down is a
+ * question the page can answer without being scrolled.
+ *
+ * The headings are given their ids HERE rather than in the twenty places they
+ * are written, so the outline and the anchors cannot drift apart: one pass
+ * over the finished markup produces both. The id is the heading's own text,
+ * folded to a slug, which is what a reader sees in the address bar after
+ * clicking a row.
+ */
+function outline(html) {
+  const rows = [];
+  const seen = new Set();
+  const withIds = html.replace(/<h2>([\s\S]*?)<\/h2>/g, (whole, inner) => {
+    /* The text a reader sees, with any markup inside the heading dropped. */
+    const text = inner.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+    let id = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "section";
+    while (seen.has(id)) id += "-x";
+    seen.add(id);
+    rows.push({ id, text });
+    return `<h2 id="${id}">${inner}</h2>`;
+  });
+  /* One heading is not an outline - it is the same word twice on one screen. */
+  if (rows.length < 2) return { html: withIds, aside: "" };
+  const aside = `<aside class="outline" aria-label="On this page">
+    <div class="outline-head">On this page</div>
+    <nav>${rows.map((r) => `<a href="#${r.id}">${esc(r.text)}</a>`).join("")}</nav>
+  </aside>`;
+  return { html: withIds, aside };
+}
+
 function samplePage(row, ctx) {
   const { sources, byGroup, floor } = ctx;
   const source = sources.get(row.source);
@@ -882,31 +986,10 @@ function samplePage(row, ctx) {
     isPartOf: { "@type": "WebSite", name: "abap2UI5 sample catalogue", url: `${SITE}samples/` },
   }).replace(/</g, "\\u003c");
 
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(pageTitle)}</title>
-<meta name="description" content="${esc(description)}">
-<link rel="canonical" href="${esc(canonical)}">
-<meta property="og:type" content="article">
-<meta property="og:title" content="${esc(pageTitle)}">
-<meta property="og:description" content="${esc(description)}">
-<meta property="og:url" content="${esc(canonical)}">
-<link rel="icon" href="../../favicon.png">
-<link rel="apple-touch-icon" href="../../apple-touch-icon.png">
-<link rel="stylesheet" href="../catalogue.css">
-<link rel="stylesheet" href="../sample.css">
-${THEME_SCRIPT}
-<script type="application/ld+json">${jsonLd}</script>
-</head>
-<body>
-
-${bar("../../")}
-
-<main class="sample">
-  <p class="crumbs">
+  /* The page's own body, built first so that outline( ) can walk it: the
+     headings get their ids and the aside gets its rows from one pass, which
+     is what keeps a link in the outline pointing at a heading that exists. */
+  const page = outline(`  <p class="crumbs">
     <a href="../">Sample catalogue</a>${source ? ` › <a href="../?src=${esc(row.source)}">${esc(source.title)}</a>` : ""}${row.group ? ` › ${esc(row.group)}` : ""}
   </p>
   <h1>${esc(title)}</h1>
@@ -999,7 +1082,34 @@ ${bar("../../")}
       : ""
   }
 
-  <p class="note"><a href="../">Search every abap2UI5 sample</a> · <a href="../all/">the full list on one page</a></p>
+  <p class="note"><a href="../">Search every abap2UI5 sample</a> · <a href="../all/">the full list on one page</a></p>`);
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(pageTitle)}</title>
+<meta name="description" content="${esc(description)}">
+<link rel="canonical" href="${esc(canonical)}">
+<meta property="og:type" content="article">
+<meta property="og:title" content="${esc(pageTitle)}">
+<meta property="og:description" content="${esc(description)}">
+<meta property="og:url" content="${esc(canonical)}">
+<link rel="icon" href="../../favicon.png">
+<link rel="apple-touch-icon" href="../../apple-touch-icon.png">
+<link rel="stylesheet" href="../catalogue.css">
+<link rel="stylesheet" href="../sample.css">
+${THEME_SCRIPT}
+<script type="application/ld+json">${jsonLd}</script>
+</head>
+<body>
+
+${bar("../../")}
+
+<main class="sample">
+  <div class="sample-body">${page.html}</div>
+  ${page.aside}
 </main>
 
 ${foot("../../")}

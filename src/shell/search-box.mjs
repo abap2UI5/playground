@@ -91,7 +91,28 @@ export function mountSearch(host) {
   field.append(input, close);
 
   const results = el("div", "search-results");
-  panel.append(field, results);
+
+  /* THE KEYS, ALWAYS ON SCREEN. They used to be part of the line the empty
+     state showed, which is the one moment a reader is not using them: the
+     first keystroke replaced that line with results and took the only mention
+     of the arrows and Enter with it. And the shortcut that OPENS the box was
+     printed on the button outside and nowhere inside, so once you were in you
+     were told nothing at all. */
+  const keys = el("div", "search-keys");
+  const hint = (text, keyNames, endOfRow) => {
+    const span = el("span", endOfRow ? "search-keys-end" : null);
+    for (const k of keyNames) span.append(el("kbd", null, k));
+    span.append(document.createTextNode(text));
+    return span;
+  };
+  keys.append(
+    hint(" to move", ["\u2191", "\u2193"]),
+    hint(" to open", ["\u21B5"]),
+    hint(" to close", ["esc"]),
+    hint(" from anywhere", ["/"], true),
+  );
+
+  panel.append(field, results, keys);
   scrim.append(panel);
   document.body.append(scrim);
 
@@ -103,20 +124,66 @@ export function mountSearch(host) {
     results.replaceChildren(el("p", "search-note", text));
   };
 
+  /* SOMETHING TO PRESS WHEN YOU DO NOT KNOW WHAT TO ASK. A box that opens on
+     one grey line is a question put to somebody who came to look around. So it
+     says what is in it, in the two numbers that mean something, and offers
+     eight words to press. They are not decoration: each one opens a shelf (the
+     smallest, `chart`, returns sixteen hits across three areas), and pressing
+     one fills the field, so the next thing the reader does is edit a real
+     query rather than compose one from nothing. */
+  const SUGGESTIONS = ["table", "dialog", "value help", "upload", "chart", "navigation", "binding", "launchpad"];
+
+  function invite() {
+    const box = el("div", "search-empty");
+    const line = el("p", "search-note");
+    if (entries) {
+      const docs = entries.filter((e) => e.area === "docs").length;
+      line.append(
+        el("strong", null, String(docs)),
+        document.createTextNode(" pages of the manual and "),
+        el("strong", null, String(entries.length - docs)),
+        document.createTextNode(" working samples, in one box \u2014 search by control, by class name, or by what you are trying to do."),
+      );
+    } else {
+      line.textContent = "Every page of the documentation and every sample in the three catalogues.";
+    }
+    const try_ = el("div", "search-try");
+    try_.append(el("span", "search-try-head", "Have a look at"));
+    for (const word of SUGGESTIONS) {
+      const chip = el("button", "search-chip", word);
+      chip.type = "button";
+      chip.addEventListener("click", () => {
+        input.value = word;
+        input.focus();
+        draw();
+      });
+      try_.append(chip);
+    }
+    box.append(line, try_);
+    results.replaceChildren(box);
+  }
+
   function draw() {
     const query = input.value.trim();
     rows = [];
     if (!entries) return note("Loading the index…");
-    if (!query) {
-      return note("Every page of the documentation and every sample in the three catalogues.");
-    }
-    const groups = grouped(search(entries, query));
+    if (!query) return invite();
+    /* A high limit, and the grouping does the capping: search( ) slices to
+       thirty by default, and a group would then say "eight of twenty-nine" for
+       a word with two hundred and thirty-one answers - a number worse than no
+       number. Scoring is over ~940 short entries and costs nothing. */
+    const groups = grouped(search(entries, query, { limit: 500 }));
     if (!groups.length) return note(`Nothing matches ${query}.`);
 
     const frag = document.createDocumentFragment();
     for (const group of groups) {
       const box = el("div", "search-group");
-      box.append(el("div", "search-group-head", group.label));
+      const head = el("div", "search-group-head", group.label);
+      /* Eight of two hundred and thirty-one is a different answer from eight,
+         and the difference is whether there is more to look at. */
+      head.append(el("span", "search-count",
+        group.total > group.hits.length ? ` ${group.hits.length} of ${group.total}` : ` ${group.total}`));
+      box.append(head);
       for (const hit of group.hits) {
         const row = el("a", "search-hit");
         row.href = hit.entry.url + (hit.heading ? `#${hit.heading.anchor}` : "");

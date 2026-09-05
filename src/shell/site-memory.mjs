@@ -15,10 +15,22 @@
 // what this falls back to at every step below - nothing here ever makes a link
 // worse than the one that was written.
 //
-// THE PLAYGROUND IS NOT REMEMBERED, only consulted. Its URL carries the code
-// in the editor (?src=...), and a Playground item that reopened yesterday's
-// sample instead of an empty editor would be a different promise from the one
-// the word makes. Samples and docs are places; the playground is a workbench.
+// THE PLAYGROUND IS REMEMBERED TOO, and it did not used to be. The reasoning
+// against it was that its URL carries the code in the editor, so an item that
+// reopened yesterday's sample would be a different promise from the one the
+// word makes: samples and docs are places, the playground is a workbench.
+//
+// What that argument missed is the case it creates. A reader who opens a
+// SAMPLE in the playground has code that is not a draft - a sample that was
+// picked and read is deliberately not stored (main.mjs) - so pressing
+// Documentation and then Playground threw it away and started them on the
+// default sample. Their own edits survived that trip; the sample they were
+// reading did not, and nothing on the screen said why.
+//
+// So the workbench is a place after all. Two things are still never written:
+// an EMBEDDED playground, which is furniture in somebody else's page, and an
+// app-only view (?view=app, ?view=full), which is a running app rather than a
+// place to come back to.
 import { readStored, writeStored } from "./storage.mjs";
 
 /* The playground's namespace, for a key the documentation site writes too.
@@ -29,6 +41,7 @@ import { readStored, writeStored } from "./storage.mjs";
 const KEY = {
   samples: "abap2ui5-playground:last-samples",
   docs: "abap2ui5-playground:last-docs",
+  playground: "abap2ui5-playground:last-playground",
 };
 
 /** Where this page is, in the form a link can be set to. */
@@ -246,19 +259,39 @@ export function restoreScroll() {
  * cannot reach - to zero. It went to the top, which is exactly what it is here
  * to stop. So it is re-applied as the page grows, for up to three seconds.
  *
- * It stops the moment the offset takes, and the moment the READER moves: a
- * scroll that was not this one is the reader saying where they want to be,
- * and it wins. Without that a page shorter than the stored offset would hold
- * them at the bottom of it for three seconds.
+ * WHAT CANCELS IT IS THE READER, AND NOTHING ELSE. It used to stop as soon as
+ * `scrollY` was not where the last frame put it, on the theory that a scroll
+ * this did not cause is the reader taking over. It is not: a page still
+ * loading moves its own scroll - the browser's scroll anchoring shifts the
+ * offset to keep the content under your eyes steady as things arrive above it.
+ * That read as a reader, and the restore gave up a little way down. So the
+ * reader is asked directly: a wheel, a touch, a key, a pointer. Layout
+ * settling is not one of those.
  */
 function settle(y) {
-  const until = Date.now() + 3000;
-  let mine = -1;
+  const until = Date.now() + 2000;
+  const MOVED = ["wheel", "touchstart", "keydown", "pointerdown"];
+  let stopped = false;
+  const stop = () => {
+    stopped = true;
+    for (const e of MOVED) removeEventListener(e, stop, true);
+  };
+  for (const e of MOVED) addEventListener(e, stop, { capture: true, passive: true });
+
+  /* IT HOLDS THE POSITION, it does not merely reach it. Reaching it once and
+   * stopping is how this failed over on the documentation, whose router draws
+   * the page and then scrolls it to the top ITSELF, after this - measured, in
+   * that order, `scrollTo(0, 1600)` and then `scrollTo(0, 0)`. Two seconds of
+   * holding covers that and a page still growing underneath.
+   *
+   * Holding is only safe BECAUSE the reader can take it back: the four events
+   * above end it on the first wheel, key, touch or pointer - a scrollbar drag
+   * included - so nothing is ever fought with. */
   const put = () => {
-    if (mine >= 0 && Math.round(scrollY) !== mine) return;
-    scrollTo(0, y);
-    mine = Math.round(scrollY);
-    if (mine !== y && Date.now() < until) requestAnimationFrame(put);
+    if (stopped) return;
+    if (Math.round(scrollY) !== y) scrollTo(0, y);
+    if (Date.now() < until) requestAnimationFrame(put);
+    else stop();
   };
   requestAnimationFrame(put);
 }
