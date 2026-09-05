@@ -203,9 +203,14 @@ const MEMORY_SCRIPT = `<script>
           if (!last) continue;
           /* Checked, not assigned: a stored value is whatever anything on this
              origin put there. Resolved against this origin, then kept only if it
-             is still inside the path the link already points at - which is what
-             leaves "//elsewhere/x", "/docs/../x" and "javascript:…" alone. */
-          var base = new URL(written.get(a), location.href);
+             is still inside the section the MARKUP declares - the data-scope
+             attribute when the link is written deeper than the section it
+             restores inside (the Documentation item opens the first page of
+             the manual), else the href itself. Which is what leaves
+             "//elsewhere/x", "/docs/../x" and "javascript:…" alone.
+             (No backticks in here: this comment is inside a template
+             literal, and one would end the string mid-sentence. It did.) */
+          var base = new URL(a.dataset.scope || written.get(a), location.href);
           var target = new URL(last, location.origin);
           if (base.origin !== location.origin || target.origin !== location.origin) continue;
           if (!target.pathname.startsWith(base.pathname)) continue;
@@ -328,19 +333,31 @@ const SOCIALS = `<div class="socials">
  * the site this is: Samples carries
  * aria-current, which is what makes it the bold one (catalogue.css) and what a
  * screen reader announces, and the brand links to the catalogue rather than to
- * the playground, which is one nav item away. The right-hand end reads: a
- * hairline, Documentation, Samples, Playground, a hairline, LinkedIn, GitHub,
- * then the button that opens the menu (SOCIALS above, wired by MENU_SCRIPT). */
+ * the playground, which is one nav item away. The row reads: the mark, a
+ * hairline, the four sections - Home, Documentation, Samples, Playground -,
+ * the search box in the middle, then a hairline, LinkedIn, GitHub and the
+ * button that opens the menu (SOCIALS above, wired by MENU_SCRIPT). The box
+ * itself is `search.mjs` beside these pages, one module for all 772 of them
+ * (src/shell/search-box.mjs, bundled by tools/build-site.mjs). */
+/* The box in the bar, as a module beside these pages rather than inlined into
+ * every one of them: 772 copies of a dialog is a quarter of this site's weight
+ * spent on the same file. It is bundled to dist/samples/search.mjs by
+ * tools/build-site.mjs, from src/shell/search-box.mjs, and the catalogue page
+ * loads the same file - so a reader who arrives from there has it already. */
+const SEARCH_SCRIPT = (up) => `<script type="module" src="${up}samples/search.mjs"></script>`;
+
 const bar = (up) => `<header class="bar">
   <a class="brand" href="${up}samples/">
     <img src="${up}favicon.png" alt="" width="20" height="20">
     <span>abap2UI5</span>
   </a>
   <nav class="bar-nav">
-    <a href="https://abap2ui5.github.io/docs/" data-site="docs">Documentation</a>
+    <a href="https://abap2ui5.github.io/docs/">Home</a>
+    <a href="https://abap2ui5.github.io/docs/get_started/about" data-site="docs" data-scope="https://abap2ui5.github.io/docs/">Documentation</a>
     <a href="${up}samples/" aria-current="page">Samples</a>
     <a href="${up}" title="Write ABAP and run it in the browser">Playground</a>
   </nav>
+  <span class="search-slot" data-search></span>
   ${SOCIALS}
 </header>`;
 
@@ -733,6 +750,7 @@ ${bar("../../")}
 ${foot("../../")}
 ${MENU_SCRIPT}
 ${MEMORY_SCRIPT}
+${SEARCH_SCRIPT("../../")}
 </body>
 </html>
 `;
@@ -797,6 +815,7 @@ ${bar("../../")}
 ${foot("../../")}
 ${MENU_SCRIPT}
 ${MEMORY_SCRIPT}
+${SEARCH_SCRIPT("../../")}
 </body>
 </html>
 `;

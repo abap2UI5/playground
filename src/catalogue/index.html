@@ -29,17 +29,24 @@
     <img src="../favicon.png" alt="" width="20" height="20">
     <span>abap2UI5</span>
   </a>
-  <!-- The right-hand end, in this order: a hairline, the three places this
-       site goes - Documentation, Samples, Playground -, a hairline, LinkedIn
-       and GitHub, then the button that opens the rest. catalogue.css draws the
-       two lines, each 16px from the words and the marks beside it. The
-       per-sample pages carry the same bar (tools/sample-pages.mjs); the two
-       copies are kept in step by hand. -->
+  <!-- The four sections of the project, hard against the brand: that is where
+       a reader's eye is when it arrives, and it is what the documentation's
+       bar does (theme/SiteBar.vue over there). Then the search, in the middle
+       on auto margins; then LinkedIn, GitHub and the button that opens the
+       rest. catalogue.css draws the hairlines, each 16px from the words and
+       the marks beside it. The per-sample pages carry the same bar
+       (tools/sample-pages.mjs); the two copies are kept in step by hand. -->
   <nav class="bar-nav">
-    <a href="https://abap2ui5.github.io/docs/" data-site="docs">Documentation</a>
+    <a href="https://abap2ui5.github.io/docs/">Home</a>
+    <a href="https://abap2ui5.github.io/docs/get_started/about" data-site="docs" data-scope="https://abap2ui5.github.io/docs/">Documentation</a>
     <a href="./" aria-current="page">Samples</a>
     <a href="../" title="Write ABAP and run it in the browser">Playground</a>
   </nav>
+  <!-- The box lands here, built by src/shell/search-box.mjs. Written as an
+       empty element rather than as markup, because the same box is on three
+       documents of this repository and a fourth over there, and four
+       hand-written copies of a dialog is three too many. -->
+  <span class="search-slot" data-search></span>
   <!-- The way out, as the playground's own bar and the documentation site's
        end: LinkedIn and GitHub, inline SVG rather than an icon font, because
        a mark that is an empty square until a stylesheet arrives is worse than
@@ -216,5 +223,9 @@
 </footer>
 
 <script type="module" src="catalogue.mjs"></script>
+<!-- The search in the bar: its own module, not part of the catalogue's bundle,
+     because every per-sample page loads the same file and the browser should
+     fetch it once for all 773 documents. -->
+<script type="module" src="search.mjs"></script>
 </body>
 </html>
