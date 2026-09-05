@@ -97,22 +97,18 @@
 <!-- __MODULEPRELOADS__ -->
 </head>
 <body>
-<!-- Two groups: on the left what makes something run - Format, the samples
-     browser (the built-in samples and the sample repositories, searchable;
-     there is no sample menu, this is the one way in, which is why it is the
-     one button dressed to be clicked), Run and the Auto switch that presses
-     it, and the status line that answers them; on the right, after the spacer, what one does with a running app -
-     share it, go to where its code lives, open it on its own. The Source
-     link (its page on GitHub - "GitHub" it used to say, until the framework's
-     GitHub mark arrived at the far end and the two read as one) is always
-     there and merely inactive over code that came from nowhere, so the bar
-     does not rearrange itself when a linked file opens. -->
+<!-- TWO ROWS. The first is the project's bar - the same brand, the same four
+     sections, the same box and the same two marks and menu as the sample
+     catalogue, every per-sample page and the documentation carry, in the same
+     order and at the same measurements. Somebody moving between the four
+     documents reads ONE bar; this used to be the one that read differently,
+     because the workbench shared the row and pushed the sections to the far
+     end of it. The second row is the workbench, and is only this page's. -->
 <header class="bar">
   <!-- The mark and the name, closed by a hairline (shell.css): the brand the
        sample catalogue, every per-sample page and the documentation wear
        (src/catalogue/index.html, tools/sample-pages.mjs, and over there
-       theme/SiteBar.vue), so somebody moving between them reads one bar rather
-       than four. The nav at the far end says which of them you are on, in
+       theme/TheBar.vue). The nav beside it says which of them you are on, in
        bold, so the brand does not say it again. A span rather than the link it
        is over there - the playground is already here, and a stray click on it
        would throw away a page that costs seconds to load. -->
@@ -121,6 +117,116 @@
     <span>abap2UI5</span>
   </span>
 
+  <!-- The four sections of the project, hard against the brand, then the
+       search in the middle, then the marks and the menu: the catalogue's bar,
+       the per-sample pages' bar and the documentation's bar, in that order and
+       with those parts (src/catalogue/index.html, tools/sample-pages.mjs, and
+       theme/SiteNav.vue over there). This row used to be that group squeezed
+       against the right-hand end of a toolbar, which made it the one bar of
+       the four that read differently. Everything this PAGE does is a row of
+       its own now, below. -->
+  <nav class="bar-nav">
+    <a href="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3.6 10.9 12 4.2l8.4 6.7v8.3a1 1 0 0 1-1 1h-4.3v-6.1H8.9v6.1H4.6a1 1 0 0 1-1-1z"/></svg><span data-text="Home">Home</span></a>
+    <a href="https://abap2ui5.github.io/docs/get_started/about" data-site="docs" data-scope="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 7.2C10.5 5.9 8.5 5.2 6 5.2H3.3v11.9H6c2.5 0 4.5.7 6 1.9 1.5-1.2 3.5-1.9 6-1.9h2.7V5.2H18c-2.5 0-4.5.7-6 1.9z"/><path d="M12 7.2v11.8"/></svg><span data-text="Documentation">Documentation</span></a>
+    <a href="samples/" data-site="samples" title="Every abap2UI5 sample, searchable" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.2" y="4.8" width="17.6" height="14.4" rx="2"/><path d="M3.2 9.4h17.6M8.5 9.4v9.8"/></svg><span data-text="Samples">Samples</span></a>
+    <span class="here" aria-current="page"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M10.2 8.4v7.2a.5.5 0 0 0 .76.43l5.8-3.6a.5.5 0 0 0 0-.86l-5.8-3.6a.5.5 0 0 0-.76.43z" fill="currentColor" stroke="none"/></svg><span data-text="Playground">Playground</span></span>
+  </nav>
+  <!-- The box lands here, built by src/shell/search-box.mjs: written as an
+       empty element rather than as markup, because the same box is on three
+       documents of this repository and a fourth over there. -->
+  <span class="search-slot" data-search></span>
+  <div class="socials">
+    <a class="social" href="https://www.linkedin.com/company/abap2ui5/" target="_blank" rel="noopener"
+       aria-label="abap2UI5 on LinkedIn" title="abap2UI5 on LinkedIn">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/></svg>
+    </a>
+    <a class="social" href="https://github.com/abap2UI5/abap2UI5" target="_blank" rel="noopener"
+       aria-label="abap2UI5 on GitHub" title="abap2UI5 on GitHub">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+    </a>
+    <details class="extra" id="extra">
+      <summary class="extra-button" title="More: light or dark, and the rest of abap2UI5" aria-label="More: light or dark, and the rest of abap2UI5">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2.2"/><circle cx="12" cy="12" r="2.2"/><circle cx="19" cy="12" r="2.2"/></svg>
+      </summary>
+      <div class="menu">
+        <button id="theme" class="theme" type="button" role="switch" aria-checked="false">
+          <span class="when-light"><span class="glyph" aria-hidden="true">☾</span>Switch to dark</span>
+          <span class="when-dark"><span class="glyph" aria-hidden="true">☀</span>Switch to light</span>
+        </button>
+        <a href="https://github.com/abap2UI5/abap2UI5/issues" target="_blank" rel="noopener">Issues</a>
+        <a href="https://abap2ui5.github.io/docs/resources/changelog">Release notes</a>
+        <a href="https://abap2ui5.github.io/docs/get_started/quickstart">Install with abapGit</a>
+        <a href="https://abap2ui5.github.io/docs/resources/support">Support</a>
+        <a href="https://abap2ui5.github.io/docs/resources/contribution">Contribute</a>
+        <a href="https://abap2ui5.github.io/docs/resources/sponsor">Sponsor</a>
+        <span class="menu-head">Tools</span>
+        <a href="https://github.com/abap2UI5/linter" target="_blank" rel="noopener">Linter</a>
+        <a href="https://abap2ui5.github.io/linter/">Linter rules</a>
+        <a href="https://github.com/abap2UI5/vscode-extension" target="_blank" rel="noopener">VS Code extension</a>
+        <a href="https://abap2ui5.github.io/docs/advanced/mcp_server">MCP server</a>
+        <a href="https://github.com/abap2UI5/app-template" target="_blank" rel="noopener">App template</a>
+        <a href="https://abap2ui5.github.io/docs/resources/addons">Add-ons</a>
+        <span class="menu-head">Repositories</span>
+        <div class="menu-repos">
+          <div class="menu-group">
+            <span class="menu-sub">Framework</span>
+            <a href="https://github.com/abap2UI5/abap2UI5" target="_blank" rel="noopener">abap2UI5</a>
+            <a href="https://github.com/abap2UI5/frontend" target="_blank" rel="noopener">frontend</a>
+            <a href="https://github.com/abap2UI5/abap2UI5-local" target="_blank" rel="noopener">abap2UI5-local</a>
+            <a href="https://github.com/abap2UI5/mirror-ajson" target="_blank" rel="noopener">mirror-ajson</a>
+            <a href="https://github.com/abap2UI5/mirror-srtti" target="_blank" rel="noopener">mirror-srtti</a>
+            <a href="https://github.com/abap2UI5/web-abap2UI5" target="_blank" rel="noopener">web-abap2UI5</a>
+          </div>
+          <div class="menu-group">
+            <span class="menu-sub">Samples</span>
+            <a href="https://github.com/abap2UI5/samples" target="_blank" rel="noopener">samples</a>
+            <a href="https://github.com/abap2UI5/samples-controls" target="_blank" rel="noopener">samples-controls</a>
+            <a href="https://github.com/abap2UI5/samples-stack" target="_blank" rel="noopener">samples-stack</a>
+          </div>
+          <div class="menu-group">
+            <span class="menu-sub">Sites</span>
+            <a href="https://github.com/abap2UI5/docs" target="_blank" rel="noopener">docs</a>
+            <a href="https://github.com/abap2UI5/playground" target="_blank" rel="noopener">playground</a>
+          </div>
+          <div class="menu-group">
+            <span class="menu-sub">Tools</span>
+            <a href="https://github.com/abap2UI5/linter" target="_blank" rel="noopener">linter</a>
+            <a href="https://github.com/abap2UI5/vscode-extension" target="_blank" rel="noopener">vscode-extension</a>
+            <a href="https://github.com/abap2UI5/mcp-server" target="_blank" rel="noopener">mcp-server</a>
+            <a href="https://github.com/abap2UI5/app-template" target="_blank" rel="noopener">app-template</a>
+          </div>
+          <div class="menu-group">
+            <span class="menu-sub">Add-ons</span>
+            <a href="https://github.com/abap2UI5-addons/popups" target="_blank" rel="noopener">popups</a>
+            <a href="https://github.com/abap2UI5-addons/http-connector" target="_blank" rel="noopener">http-connector</a>
+            <a href="https://github.com/abap2UI5-addons/rfc-connector" target="_blank" rel="noopener">rfc-connector</a>
+            <a href="https://github.com/abap2UI5-addons/lock-manager" target="_blank" rel="noopener">lock-manager</a>
+            <a href="https://github.com/abap2UI5-addons/launchpad-kpi" target="_blank" rel="noopener">launchpad-kpi</a>
+            <a href="https://github.com/abap2UI5-addons/table-maintenance" target="_blank" rel="noopener">table-maintenance</a>
+            <a href="https://github.com/abap2UI5-addons/se16n" target="_blank" rel="noopener">se16n</a>
+            <a href="https://github.com/abap2UI5-addons/custom-controls" target="_blank" rel="noopener">custom-controls</a>
+            <a href="https://github.com/abap2UI5-addons" target="_blank" rel="noopener">All add-ons</a>
+          </div>
+          <div class="menu-group">
+            <span class="menu-sub">Apps</span>
+            <a href="https://github.com/abap2UI5-apps/sql-console" target="_blank" rel="noopener">sql-console</a>
+            <a href="https://github.com/abap2UI5-apps/table-content-loader" target="_blank" rel="noopener">table-content-loader</a>
+            <a href="https://github.com/abap2UI5-apps" target="_blank" rel="noopener">All apps</a>
+          </div>
+        </div>
+      </div>
+    </details>
+  </div>
+</header>
+
+<!-- The workbench, on a row it does not share: on the left what makes
+     something run - undo and redo, Format, the samples browser, Run and the
+     Auto switch that presses it, and the status line that answers them; on
+     the right, after the spacer, what one does with a running app - share it,
+     go to where its code lives, open it on its own. The Source link is always
+     there and merely inactive over code that came from nowhere, so the row
+     does not rearrange itself when a linked file opens. -->
+<div class="toolbar">
   <!-- Icons only, the three of them: the arrows are undo and redo anywhere,
        and a pair of braces is what a code editor puts on its format action.
        They sit where a toolbar keeps them, first. Undo and Redo are enabled
@@ -157,126 +263,7 @@
   <span id="versions" class="versions"></span>
   <button id="about" class="ghost about-button" type="button"
           title="What this is built from" aria-label="About this playground">i</button>
-
-  <!-- The right-hand end, as the sample catalogue's bar ends and every
-       per-sample page's and the documentation's with it: a hairline, then
-       where in this site you are - Documentation, Samples, Playground -, a
-       hairline, LinkedIn and GitHub, then one more button, drawn as a third
-       mark, that opens the rest: the switch for light and dark, the practical
-       links (issues, release notes, install, support), the project's tools and
-       its repositories, by kind. The four documents are read as one bar by
-       somebody moving between them, so this group is the same group in all
-       four (src/catalogue/index.html, tools/sample-pages.mjs, and
-       theme/SiteBar.vue in abap2UI5/docs), kept in step by hand. The menu is
-       a <details>, so it opens and closes with no script; extra.mjs only
-       closes it on a click anywhere else and on Escape. The switch is wired
-       in src/shell/theme.mjs, which keeps aria-checked and the label in step
-       with the theme; its two labels are swapped by CSS over the same media
-       query and data-theme the palette uses, so it says the right thing
-       before the bundle has been evaluated. The marks are inline SVG for the
-       reason the other documents' are: a mark that is an empty square until a
-       stylesheet arrives is worse than one that never needed it. -->
-  <div class="trailer">
-    <!-- The search, then the four sections. THE ONE PLACE WHERE THIS BAR
-         DIFFERS FROM THE OTHER THREE, and deliberately: over there the
-         sections stand against the brand and the search is centred, because
-         nothing else is in the row. This bar is a workbench - undo, format,
-         Samples, Run, Auto, Share, Full screen - and that toolbar owns the
-         middle and the space after the mark. So the group keeps the
-         right-hand end it has always had here, in the same order the others
-         read it in. Everything about the group itself - the four names, the
-         box, the marks, the menu - is identical. -->
-    <span class="search-slot" data-search></span>
-    <nav class="bar-nav">
-      <a href="https://abap2ui5.github.io/docs/" data-text="Home">Home</a>
-      <a href="https://abap2ui5.github.io/docs/get_started/about" data-site="docs" data-scope="https://abap2ui5.github.io/docs/" data-text="Documentation">Documentation</a>
-      <a href="samples/" data-site="samples" title="Every abap2UI5 sample, searchable" data-text="Samples">Samples</a>
-      <span class="here" aria-current="page" data-text="Playground">Playground</span>
-    </nav>
-    <div class="socials">
-      <a class="social" href="https://www.linkedin.com/company/abap2ui5/" target="_blank" rel="noopener"
-         aria-label="abap2UI5 on LinkedIn" title="abap2UI5 on LinkedIn">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/></svg>
-      </a>
-      <a class="social" href="https://github.com/abap2UI5/abap2UI5" target="_blank" rel="noopener"
-         aria-label="abap2UI5 on GitHub" title="abap2UI5 on GitHub">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
-      </a>
-      <details class="extra" id="extra">
-        <summary class="extra-button" title="More: light or dark, and the rest of abap2UI5" aria-label="More: light or dark, and the rest of abap2UI5">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2.2"/><circle cx="12" cy="12" r="2.2"/><circle cx="19" cy="12" r="2.2"/></svg>
-        </summary>
-        <div class="menu">
-          <button id="theme" class="theme" type="button" role="switch" aria-checked="false">
-            <span class="when-light"><span class="glyph" aria-hidden="true">☾</span>Switch to dark</span>
-            <span class="when-dark"><span class="glyph" aria-hidden="true">☀</span>Switch to light</span>
-          </button>
-          <a href="https://github.com/abap2UI5/abap2UI5/issues" target="_blank" rel="noopener">Issues</a>
-          <a href="https://abap2ui5.github.io/docs/resources/changelog">Release notes</a>
-          <a href="https://abap2ui5.github.io/docs/get_started/quickstart">Install with abapGit</a>
-          <a href="https://abap2ui5.github.io/docs/resources/support">Support</a>
-          <a href="https://abap2ui5.github.io/docs/resources/contribution">Contribute</a>
-          <a href="https://abap2ui5.github.io/docs/resources/sponsor">Sponsor</a>
-          <span class="menu-head">Tools</span>
-          <a href="https://github.com/abap2UI5/linter" target="_blank" rel="noopener">Linter</a>
-          <a href="https://abap2ui5.github.io/linter/">Linter rules</a>
-          <a href="https://github.com/abap2UI5/vscode-extension" target="_blank" rel="noopener">VS Code extension</a>
-          <a href="https://abap2ui5.github.io/docs/advanced/mcp_server">MCP server</a>
-          <a href="https://github.com/abap2UI5/app-template" target="_blank" rel="noopener">App template</a>
-          <a href="https://abap2ui5.github.io/docs/resources/addons">Add-ons</a>
-          <span class="menu-head">Repositories</span>
-          <div class="menu-repos">
-            <div class="menu-group">
-              <span class="menu-sub">Framework</span>
-              <a href="https://github.com/abap2UI5/abap2UI5" target="_blank" rel="noopener">abap2UI5</a>
-              <a href="https://github.com/abap2UI5/frontend" target="_blank" rel="noopener">frontend</a>
-              <a href="https://github.com/abap2UI5/abap2UI5-local" target="_blank" rel="noopener">abap2UI5-local</a>
-              <a href="https://github.com/abap2UI5/mirror-ajson" target="_blank" rel="noopener">mirror-ajson</a>
-              <a href="https://github.com/abap2UI5/mirror-srtti" target="_blank" rel="noopener">mirror-srtti</a>
-              <a href="https://github.com/abap2UI5/web-abap2UI5" target="_blank" rel="noopener">web-abap2UI5</a>
-            </div>
-            <div class="menu-group">
-              <span class="menu-sub">Samples</span>
-              <a href="https://github.com/abap2UI5/samples" target="_blank" rel="noopener">samples</a>
-              <a href="https://github.com/abap2UI5/samples-controls" target="_blank" rel="noopener">samples-controls</a>
-              <a href="https://github.com/abap2UI5/samples-stack" target="_blank" rel="noopener">samples-stack</a>
-            </div>
-            <div class="menu-group">
-              <span class="menu-sub">Sites</span>
-              <a href="https://github.com/abap2UI5/docs" target="_blank" rel="noopener">docs</a>
-              <a href="https://github.com/abap2UI5/playground" target="_blank" rel="noopener">playground</a>
-            </div>
-            <div class="menu-group">
-              <span class="menu-sub">Tools</span>
-              <a href="https://github.com/abap2UI5/linter" target="_blank" rel="noopener">linter</a>
-              <a href="https://github.com/abap2UI5/vscode-extension" target="_blank" rel="noopener">vscode-extension</a>
-              <a href="https://github.com/abap2UI5/mcp-server" target="_blank" rel="noopener">mcp-server</a>
-              <a href="https://github.com/abap2UI5/app-template" target="_blank" rel="noopener">app-template</a>
-            </div>
-            <div class="menu-group">
-              <span class="menu-sub">Add-ons</span>
-              <a href="https://github.com/abap2UI5-addons/popups" target="_blank" rel="noopener">popups</a>
-              <a href="https://github.com/abap2UI5-addons/http-connector" target="_blank" rel="noopener">http-connector</a>
-              <a href="https://github.com/abap2UI5-addons/rfc-connector" target="_blank" rel="noopener">rfc-connector</a>
-              <a href="https://github.com/abap2UI5-addons/lock-manager" target="_blank" rel="noopener">lock-manager</a>
-              <a href="https://github.com/abap2UI5-addons/launchpad-kpi" target="_blank" rel="noopener">launchpad-kpi</a>
-              <a href="https://github.com/abap2UI5-addons/table-maintenance" target="_blank" rel="noopener">table-maintenance</a>
-              <a href="https://github.com/abap2UI5-addons/se16n" target="_blank" rel="noopener">se16n</a>
-              <a href="https://github.com/abap2UI5-addons/custom-controls" target="_blank" rel="noopener">custom-controls</a>
-              <a href="https://github.com/abap2UI5-addons" target="_blank" rel="noopener">All add-ons</a>
-            </div>
-            <div class="menu-group">
-              <span class="menu-sub">Apps</span>
-              <a href="https://github.com/abap2UI5-apps/sql-console" target="_blank" rel="noopener">sql-console</a>
-              <a href="https://github.com/abap2UI5-apps/table-content-loader" target="_blank" rel="noopener">table-content-loader</a>
-              <a href="https://github.com/abap2UI5-apps" target="_blank" rel="noopener">All apps</a>
-            </div>
-          </div>
-        </div>
-      </details>
-    </div>
-  </div>
-</header>
+</div>
 
 <dialog id="about-dialog" class="about">
   <form method="dialog" class="about-head">

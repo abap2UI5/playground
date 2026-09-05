@@ -117,5 +117,148 @@ export function keepSiteLinksCurrent(root = document) {
   });
   root.addEventListener("click", (e) => {
     if (e.target.closest?.("a[data-site]")) lift();
+    /* ...and, AFTER the lift, the record that says where the reader is being
+     * sent, so the page that arrives can put them back where they were in it
+     * rather than at the top of it. `data-back` rather than every link in the
+     * bar: the Playground item opens a workbench whose URL carries the code in
+     * the editor, which is not a position to come back to. */
+    const back = e.target.closest?.("a[data-back]");
+    if (back) {
+      rememberScroll();
+      handOff(back.href);
+    }
   }, true);
+  /* The other moment the offset can be lost: a reader who leaves by any route
+   * that is not one of those links. Cheap, and it is the last chance. */
+  addEventListener("pagehide", () => rememberScroll());
+  restoreScroll();
+}
+
+/* ── WHERE ON THE PAGE, not only which page ─────────────────────────────────
+ *
+ * The links above come back to the page the reader left. They came back to the
+ * TOP of it, which on the catalogue - 770 rows, and the whole reason somebody
+ * scrolls at all - is most of the way to not having been remembered: the
+ * reader who was at sample 400, looked something up in the manual and pressed
+ * Samples, arrived at sample 1.
+ *
+ * So the offset is written down per path, and restored on ARRIVAL BY THE BAR
+ * and nowhere else. That last part is the design. A page that restored its
+ * offset on every load would fight the browser, which already does it for back
+ * and forward, and would surprise a reader who followed an ordinary link to a
+ * page they happen to have read before. The bar writes one record - "I am
+ * sending you back to X" - and the page that IS X, arriving within seconds,
+ * honours it. Everything else ignores it.
+ *
+ * The counterpart is theme/site-memory.js in abap2UI5/docs: same three keys,
+ * same checks, same half of the bar. Change one, change the other.
+ */
+
+const SCROLL_KEY = "abap2ui5-playground:scroll";
+const HANDOFF_KEY = "abap2ui5-playground:returning";
+/* Enough paths to move between the four sections without losing one, and few
+ * enough that the value stays a few hundred bytes. */
+const SCROLL_MAX = 12;
+/* A click and the page it opens are one navigation. Half a minute is a slow
+ * connection; older than that is a journey that ended some other way. */
+const HANDOFF_TTL = 30_000;
+
+/** This document, as the scroll map keys it - the hash left out, because it is
+ *  one page wherever in it the reader entered. */
+const path = () => location.pathname + location.search;
+
+const readMap = () => {
+  try {
+    const map = JSON.parse(readStored(SCROLL_KEY) || "{}");
+    return map && typeof map === "object" && !Array.isArray(map) ? map : {};
+  } catch {
+    return {};
+  }
+};
+
+/** Write down how far down this page the reader is. */
+export function rememberScroll(y = scrollY, at = path()) {
+  if (!Number.isFinite(y) || y < 0) return;
+  const map = readMap();
+  /* Re-inserted, so the key order is oldest first and the oldest is what falls
+   * off the end. */
+  delete map[at];
+  map[at] = Math.round(y);
+  for (const old of Object.keys(map).slice(0, -SCROLL_MAX)) delete map[old];
+  writeStored(SCROLL_KEY, JSON.stringify(map));
+}
+
+/** The offset stored for a path, or 0. Checked, not followed: anything on this
+ *  origin can write there, and scrollTo takes whatever it is given. */
+export function scrollOf(at = path()) {
+  const y = readMap()[at];
+  return Number.isFinite(y) && y >= 0 && y < 1e7 ? y : 0;
+}
+
+/** "The reader is being sent to `href`" - written by a bar link as it is
+ *  clicked. A link to another host shares no storage, so it writes nothing. */
+export function handOff(href) {
+  if (!href) return;
+  try {
+    const to = new URL(href, location.href);
+    if (to.origin !== location.origin) return;
+    writeStored(HANDOFF_KEY, JSON.stringify({ to: to.pathname + to.search, at: Date.now() }));
+  } catch {
+    /* Not a URL. Nothing is restored, which is the behaviour without any of
+     * this and not a broken one. */
+  }
+}
+
+/**
+ * Put the reader back where they were, but only if the bar just sent them
+ * here. Reading the record CONSUMES it: it describes one arrival, and a second
+ * read would be a later navigation inheriting somebody else's destination.
+ */
+export function restoreScroll() {
+  let record = null;
+  try {
+    record = JSON.parse(readStored(HANDOFF_KEY) || "null");
+  } catch {
+    record = null;
+  }
+  writeStored(HANDOFF_KEY, "");
+  if (!record || typeof record.to !== "string" || typeof record.at !== "number") return;
+  const age = Date.now() - record.at;
+  /* Backwards too: a clock that moved, or a timestamp written into the future,
+   * is not an age this trusts. */
+  if (!(age >= 0 && age < HANDOFF_TTL)) return;
+  /* The record has to name THIS page. It is written before a navigation that
+   * may never happen - a middle click, a reader who went somewhere else - so
+   * arriving anywhere but at `to` means it was not this journey. */
+  if (record.to !== path()) return;
+  /* A destination the reader named beats one this remembered. */
+  if (location.hash) return;
+  const y = scrollOf(record.to);
+  if (y > 0) settle(y);
+}
+
+/**
+ * Scroll to `y`, and keep scrolling to it until it takes.
+ *
+ * One `scrollTo` is not enough on the page this exists for: the catalogue
+ * draws its 770 rows from a fetch, so at the moment this runs the document is
+ * a header and nothing else, and the browser clamps an offset a short document
+ * cannot reach - to zero. It went to the top, which is exactly what it is here
+ * to stop. So it is re-applied as the page grows, for up to three seconds.
+ *
+ * It stops the moment the offset takes, and the moment the READER moves: a
+ * scroll that was not this one is the reader saying where they want to be,
+ * and it wins. Without that a page shorter than the stored offset would hold
+ * them at the bottom of it for three seconds.
+ */
+function settle(y) {
+  const until = Date.now() + 3000;
+  let mine = -1;
+  const put = () => {
+    if (mine >= 0 && Math.round(scrollY) !== mine) return;
+    scrollTo(0, y);
+    mine = Math.round(scrollY);
+    if (mine !== y && Date.now() < until) requestAnimationFrame(put);
+  };
+  requestAnimationFrame(put);
 }

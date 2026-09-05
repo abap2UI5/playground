@@ -228,6 +228,69 @@ const MEMORY_SCRIPT = `<script>
     document.addEventListener("click", function (e) {
       if (e.target.closest && e.target.closest("a[data-site]")) lift();
     }, true);
+
+    /* Where on the page, not only which page - the hand copy of the same block
+       in src/shell/site-memory.mjs. A bar link writes down how far down this
+       page the reader is and where they are being sent; the page that arrives
+       within seconds, and only that page, puts them back. Leaving a sample for
+       the catalogue is the journey this exists for: a list of 770 rows that
+       came back at row 1 had not really remembered anything. */
+    var SCROLL = "abap2ui5-playground:scroll";
+    var BACK = "abap2ui5-playground:returning";
+    var path = function () { return location.pathname + location.search; };
+    var map = function () {
+      try {
+        var m = JSON.parse(localStorage.getItem(SCROLL) || "{}");
+        return m && typeof m === "object" && !(m instanceof Array) ? m : {};
+      } catch (e) { return {}; }
+    };
+    var note = function () {
+      try {
+        var m = map(), keys, i;
+        delete m[path()];
+        m[path()] = Math.round(scrollY);
+        keys = Object.keys(m);
+        for (i = 0; i < keys.length - 12; i++) delete m[keys[i]];
+        localStorage.setItem(SCROLL, JSON.stringify(m));
+      } catch (e) { /* a refused or full storage: the reader lands at the top */ }
+    };
+    document.addEventListener("click", function (e) {
+      var a = e.target.closest && e.target.closest("a[data-back]");
+      if (!a) return;
+      note();
+      try {
+        var to = new URL(a.href, location.href);
+        if (to.origin !== location.origin) return;
+        localStorage.setItem(BACK, JSON.stringify({ to: to.pathname + to.search, at: Date.now() }));
+      } catch (e2) { /* not a URL, so nothing is restored */ }
+    }, true);
+    addEventListener("pagehide", note);
+    (function () {
+      var r = null, age, y;
+      try {
+        r = JSON.parse(localStorage.getItem(BACK) || "null");
+        localStorage.setItem(BACK, "");
+      } catch (e) { return; }
+      if (!r || typeof r.to !== "string" || typeof r.at !== "number") return;
+      age = Date.now() - r.at;
+      /* Recent, about THIS page, and not overruled by a hash the reader named. */
+      if (!(age >= 0 && age < 30000) || r.to !== path() || location.hash) return;
+      y = map()[r.to];
+      if (typeof y !== "number" || !(y > 0) || y >= 1e7) return;
+      /* Re-applied until it takes, for up to three seconds: a page still
+         drawing is a page too short to reach the offset, and the browser
+         clamps that to the top - which is what this is here to stop. It stops
+         the moment it takes and the moment the READER moves, because a scroll
+         that was not this one wins. */
+      var until = Date.now() + 3000, mine = -1;
+      var put = function () {
+        if (mine >= 0 && Math.round(scrollY) !== mine) return;
+        scrollTo(0, y);
+        mine = Math.round(scrollY);
+        if (mine !== y && Date.now() < until) requestAnimationFrame(put);
+      };
+      requestAnimationFrame(put);
+    })();
   })();
 </script>`;
 
@@ -352,10 +415,10 @@ const bar = (up) => `<header class="bar">
     <span>abap2UI5</span>
   </a>
   <nav class="bar-nav">
-    <a href="https://abap2ui5.github.io/docs/" data-text="Home">Home</a>
-    <a href="https://abap2ui5.github.io/docs/get_started/about" data-site="docs" data-scope="https://abap2ui5.github.io/docs/" data-text="Documentation">Documentation</a>
-    <a href="${up}samples/" aria-current="page" data-text="Samples">Samples</a>
-    <a href="${up}" title="Write ABAP and run it in the browser" data-text="Playground">Playground</a>
+    <a href="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3.6 10.9 12 4.2l8.4 6.7v8.3a1 1 0 0 1-1 1h-4.3v-6.1H8.9v6.1H4.6a1 1 0 0 1-1-1z"/></svg><span data-text="Home">Home</span></a>
+    <a href="https://abap2ui5.github.io/docs/get_started/about" data-site="docs" data-scope="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 7.2C10.5 5.9 8.5 5.2 6 5.2H3.3v11.9H6c2.5 0 4.5.7 6 1.9 1.5-1.2 3.5-1.9 6-1.9h2.7V5.2H18c-2.5 0-4.5.7-6 1.9z"/><path d="M12 7.2v11.8"/></svg><span data-text="Documentation">Documentation</span></a>
+    <a href="${up}samples/" aria-current="page" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.2" y="4.8" width="17.6" height="14.4" rx="2"/><path d="M3.2 9.4h17.6M8.5 9.4v9.8"/></svg><span data-text="Samples">Samples</span></a>
+    <a href="${up}" title="Write ABAP and run it in the browser"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M10.2 8.4v7.2a.5.5 0 0 0 .76.43l5.8-3.6a.5.5 0 0 0 0-.86l-5.8-3.6a.5.5 0 0 0-.76.43z" fill="currentColor" stroke="none"/></svg><span data-text="Playground">Playground</span></a>
   </nav>
   <span class="search-slot" data-search></span>
   ${SOCIALS}
@@ -409,7 +472,18 @@ h2 { font-size: 15px; margin: 26px 0 8px; }
  * as the catalogue. Unpressed it is a band and not the frame's full 420
  * pixels: a demo nobody asked for should cost the page one line of its
  * scroll, not a screen of empty box on the way past. */
-.demo { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 0; background: var(--bg); }
+/* THE APP IS READ AS A WINDOW, NOT AS A STRIP. The column is 1160px wide and
+ * the demo used to be 420px tall in it - 2.8:1, a letterbox, in which a UI5
+ * page with a header and a list had room for about four rows before it started
+ * scrolling inside a box the reader could not resize. Taller, and no wider
+ * than an app is usually designed for, comes to about 5:4: the shape of a
+ * window, which is the shape of the thing inside it. The block keeps the
+ * column's left edge - it is a part of the page, not an island in it. */
+.demo {
+  border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+  margin: 0; background: var(--bg);
+  max-width: 820px;
+}
 .demo-head {
   display: flex; flex-wrap: wrap; gap: 2px 16px; justify-content: space-between; align-items: baseline;
   padding: 7px 13px; font-size: 12px; color: var(--fg-dim);
@@ -595,7 +669,7 @@ function samplePage(row, ctx) {
       <span>The sample running, in this page — the app on its own, with no editor over it.</span>
       ${run}
     </div>
-    <div class="abap2ui5-demo" data-src="${esc(row.raw)}" data-view="app" data-height="420"
+    <div class="abap2ui5-demo" data-src="${esc(row.raw)}" data-view="app" data-height="620"
          data-label="Run it in the browser"></div>
   </div>
   <p class="note demo-note">

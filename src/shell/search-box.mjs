@@ -23,7 +23,7 @@
  * Nothing is fetched until somebody types: the index is 700 kB (180 over the
  * wire) and a reader who never searches must not pay for it.
  */
-import { search, grouped, highlight, loadIndex } from "./search-engine.mjs";
+import { search, grouped, highlight, loadIndex, rememberQuery, recallQuery } from "./search-engine.mjs";
 
 /* The index is published by the documentation, on the origin all four
  * documents share. Absolute, because these pages are served from three
@@ -144,7 +144,13 @@ export function mountSearch(host) {
 
   async function open() {
     scrim.hidden = false;
+    /* The last thing that was searched for, if a hit was opened recently
+       (search-engine.mjs). Selected, not merely filled in: the reader who
+       wants it presses Enter or arrows, and the reader who wants something
+       else types over it without reaching for Backspace. */
+    if (!input.value) input.value = recallQuery();
     input.focus();
+    if (input.value) input.select();
     draw();
     if (entries) return;
     try {
@@ -162,6 +168,17 @@ export function mountSearch(host) {
     input.value = "";
     rows = [];
   }
+
+  /* A hit was opened - by a click, by Enter (which clicks the active row), or
+     by a middle click that opened it in a tab of its own. Written down BEFORE
+     hide(), which empties the field. */
+  function leave() {
+    rememberQuery(input.value);
+    hide();
+  }
+  results.addEventListener("click", (e) => {
+    if (e.target.closest?.("a.search-hit")) leave();
+  });
 
   button.addEventListener("click", open);
   close.addEventListener("click", hide);
