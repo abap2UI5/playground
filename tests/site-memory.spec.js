@@ -145,3 +145,171 @@ test("a sample page carries the same two lines the bundles import", async ({ pag
   expect(await stored(page, SAMPLES_KEY)).toBe(`/samples/${firstPage}`);
   await expect(docsLink(page)).toHaveAttribute("href", DOCS_HREF);
 });
+
+// ---------------------------------------------------------------------------
+// WHERE ON THE PAGE, which is the other half of coming back to it.
+//
+// The item above restored the catalogue and put the reader at row 1 of it. The
+// offset is written per path now, and restored on arrival BY THE BAR and
+// nowhere else - a bar link writes one record saying where it is sending the
+// reader, and the page that is that, arriving within half a minute, honours
+// it. This is the round trip a browser is needed for: a real scroll, a real
+// navigation, and a real scroll position on the other side.
+
+const SCROLL_KEY = "abap2ui5-playground:scroll";
+const BACK_KEY = "abap2ui5-playground:returning";
+
+test("the catalogue comes back to the row the reader was on, not to the top", async ({ page }) => {
+  await page.goto("/samples/");
+  await expect(page.locator("#count")).toContainText("sample");
+  await page.evaluate(() => scrollTo(0, 2400));
+  await expect.poll(() => page.evaluate(() => Math.round(scrollY))).toBeGreaterThan(2000);
+
+  // Out through the bar. Every item that leaves this page writes down how far
+  // down it the reader was, whatever it then does with the href. The
+  // navigation itself is stopped after the fact: the destination is a host
+  // that does not exist in a test run, and what would be on screen instead is
+  // an error page with no localStorage to read. A capture listener added HERE
+  // runs after the one site-memory.mjs registered at boot - same target, same
+  // phase, so registration order decides - which is what makes this the
+  // click's own handler running and only the browser's part of it refused.
+  await page.evaluate(() => document.addEventListener("click", (e) => e.preventDefault(), true));
+  await page.locator(".bar-nav a[data-back]").first().click();
+  expect(JSON.parse(await stored(page, SCROLL_KEY))["/samples/"]).toBeGreaterThan(2000);
+
+  // ...and the record that sends them back, which in life is written by the
+  // documentation's bar pressing Samples. It cannot be written from here: in a
+  // test run the documentation is another host, so that item takes the
+  // different-origin branch and writes nothing - the same limit the header of
+  // this file describes. What IS this repository's to hold is the other end:
+  // the page arrives, sees a record naming it, and puts the reader back.
+  await page.evaluate((k) => localStorage.setItem(k, JSON.stringify({ to: "/samples/", at: Date.now() })), BACK_KEY);
+
+  await page.goto("/samples/");
+  await expect(page.locator("#count")).toContainText("sample");
+  // Polled, because 770 rows arrive from a fetch: at the moment the page asks,
+  // the document is a header and too short to hold the offset at all. That is
+  // the case restoring has to survive, and the reason it is re-applied rather
+  // than done once.
+  await expect.poll(
+    () => page.evaluate(() => Math.round(scrollY)),
+    { message: "the list is where it was left" },
+  ).toBeGreaterThan(2000);
+});
+
+test("an ordinary arrival is left at the top, because nobody said otherwise", async ({ page }) => {
+  // The record is what makes a restore happen. Without one - a link followed
+  // from anywhere else, a bookmark, a reload - the page opens where a page
+  // opens. Restoring here would drop a reader into the middle of a list with
+  // nothing on screen to explain it, and would fight the browser's own back
+  // and forward, which already do this properly.
+  await page.goto("/samples/");
+  await expect(page.locator("#count")).toContainText("sample");
+  await page.evaluate(() => scrollTo(0, 2400));
+  await page.evaluate((k) => localStorage.removeItem(k), BACK_KEY);
+
+  await page.goto("/samples/");
+  await expect(page.locator("#count")).toContainText("sample");
+  expect(await page.evaluate(() => Math.round(scrollY))).toBe(0);
+});
+
+test("a record naming another page is not this page's journey", async ({ page }) => {
+  await page.goto("/samples/");
+  await expect(page.locator("#count")).toContainText("sample");
+  await page.evaluate(([s, b]) => {
+    localStorage.setItem(s, JSON.stringify({ "/samples/": 2400 }));
+    localStorage.setItem(b, JSON.stringify({ to: "/samples/z2ui5_cl_smp_app_001/", at: Date.now() }));
+  }, [SCROLL_KEY, BACK_KEY]);
+
+  await page.goto("/samples/");
+  await expect(page.locator("#count")).toContainText("sample");
+  expect(await page.evaluate(() => Math.round(scrollY))).toBe(0);
+});
+
+test("what the bar stores is an offset, and anything else is ignored", async ({ page }) => {
+  // The key is on an origin four deployments share; scrollTo takes whatever it
+  // is given. None of these is an offset.
+  for (const junk of ['{"/samples/":"9e99"}', '{"/samples/":-500}', "[1,2]", "not json"]) {
+    await page.goto("/samples/");
+    await expect(page.locator("#count")).toContainText("sample");
+    await page.evaluate(([s, b, j]) => {
+      localStorage.setItem(s, j);
+      localStorage.setItem(b, JSON.stringify({ to: "/samples/", at: Date.now() }));
+    }, [SCROLL_KEY, BACK_KEY, junk]);
+
+    await page.goto("/samples/");
+    await expect(page.locator("#count")).toContainText("sample");
+    expect(await page.evaluate(() => Math.round(scrollY)), junk).toBe(0);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// THE LAST THING YOU SEARCHED FOR.
+
+const QUERY_KEY = "abap2ui5-playground:search";
+
+/* The index is ONE document, published by the documentation on the origin all
+   four bars share (/docs/search-index.json) - which in a test run is another
+   host and not there. Two entries are enough for what is being held here: that
+   a hit writes the query down and the next box starts with it. */
+const INDEX = {
+  built: "2026-09-05",
+  entries: [
+    { area: "samples", url: "https://abap2ui5.github.io/playground/samples/z2ui5_cl_smp_app_001/", title: "Table with a growing list", code: "z2ui5_cl_smp_app_001", text: "sap.m.Table" },
+    { area: "docs", url: "https://abap2ui5.github.io/docs/cookbook/tables", title: "Tables", text: "Binding a table" },
+  ],
+};
+
+const withIndex = async (page) => {
+  /* The hit's own destination is a real page on the published site. Nothing
+     here is about what is at the other end - only that opening a hit writes
+     the query down - and a test that reaches the live internet is a test that
+     fails when the network does.
+
+     FIRST, because the index below is on that host too and Playwright matches
+     routes in reverse order of registration: the narrower one has to be the
+     later one, or this catch-all answers the index request with a page. It
+     did, and the box then found nothing to open. */
+  await page.route("https://abap2ui5.github.io/**", (route) =>
+    route.fulfill({ contentType: "text/html", body: "<!doctype html><title>somewhere else</title>" }));
+  await page.route("**/docs/search-index.json", (route) =>
+    route.fulfill({ contentType: "application/json", body: JSON.stringify(INDEX) }));
+};
+
+test("the search box opens with the query the last hit was opened on", async ({ page }) => {
+  await withIndex(page);
+  await page.goto("/samples/");
+  await expect(page.locator("#count")).toContainText("sample");
+
+  await page.locator(".search-button").click();
+  const field = page.locator(".search-panel input");
+  await field.fill("table");
+  await expect(page.locator(".search-hit").first()).toBeVisible();
+  await page.locator(".search-hit").first().click();
+
+  // A hit was opened, so the query was written down - and the next box on this
+  // origin starts with it, selected, so a reader with a different question
+  // types over it rather than reaching for Backspace.
+  await page.goto("/samples/");
+  await expect(page.locator("#count")).toContainText("sample");
+  await page.locator(".search-button").click();
+  await expect(page.locator(".search-panel input")).toHaveValue("table");
+  expect(await page.evaluate(() => [
+    document.querySelector(".search-panel input").selectionStart,
+    document.querySelector(".search-panel input").selectionEnd,
+  ])).toEqual([0, 5]);
+});
+
+test("a box closed without opening anything remembers nothing new", async ({ page }) => {
+  await withIndex(page);
+  await page.goto("/samples/");
+  await expect(page.locator("#count")).toContainText("sample");
+  await page.evaluate((k) => localStorage.removeItem(k), QUERY_KEY);
+
+  await page.locator(".search-button").click();
+  await page.locator(".search-panel input").fill("carousel");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".search-scrim")).toBeHidden();
+
+  expect(await stored(page, QUERY_KEY)).toBe(null);
+});

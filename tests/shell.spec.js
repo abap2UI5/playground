@@ -85,6 +85,7 @@ test("Full screen opens the app on its own in a new tab, carrying the code", asy
   // filled by the app - a bar that is merely transparent would pass a class
   // check and still take the top of the screen.
   await expect(tab.locator(".bar")).toBeHidden();
+  await expect(tab.locator(".toolbar")).toBeHidden();
   const viewport = tab.viewportSize();
   const app = await tab.locator("#app").boundingBox();
   expect(Math.round(app.y), "the app starts at the top of the window").toBe(0);
@@ -100,21 +101,28 @@ test("Full screen opens the app on its own in a new tab, carrying the code", asy
   await tab.close();
 });
 
-test("the bar comes back in the full screen view when something goes wrong", async ({ page }) => {
+test("the toolbar comes back in the full screen view when something goes wrong", async ({ page }) => {
   // A ?src= nobody can follow: the page opens on its sample and says so. In
   // this view the status line is the only channel there is - the log panel
-  // lives in the pane the view hides - so the bar that carries it has to
+  // lives in the pane the view hides - so the row that carries it has to
   // return, or the reader is left with an app that is not the one the link
   // named and nothing anywhere saying why.
+  //
+  // The row that returns is the TOOLBAR. The header is two rows now - the
+  // project's bar, then this page's tools - and the status line is in the
+  // second. The first one stays away: it is the brand, the four sections and
+  // the search, which is the part that had no business being in somebody
+  // else's page in the first place, and it says nothing about what went wrong.
   await page.goto("/?view=full&src=https://example.invalid/zcl_thing.clas.abap");
   await expect(page.locator("#status")).toContainText("could not be followed", { timeout: 120000 });
-  await expect(page.locator(".bar")).toBeVisible();
+  await expect(page.locator(".toolbar")).toBeVisible();
+  await expect(page.locator(".bar")).toBeHidden();
 
   // And it goes again once the trouble does. Run clears the report, so what is
   // on screen afterwards is a running app with nothing over it.
   await page.locator("#run").click();
   await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
-  await expect(page.locator(".bar")).toBeHidden();
+  await expect(page.locator(".toolbar")).toBeHidden();
 });
 
 test("a link nobody wrote opens on the sample instead of failing", async ({ page }) => {
@@ -388,9 +396,9 @@ test("the bar begins and ends as the sample catalogue's bar does", async ({ page
   // where you are - then LinkedIn and GitHub, then the button that opens the
   // rest.
   await expect(page.locator(".bar-nav > *")).toHaveText(["Home", "Documentation", "Samples", "Playground"]);
-  // The same box the other three bars carry. Here it is at the head of the
-  // trailer rather than in the middle of the row: this bar's middle is a
-  // toolbar (AGENTS.md says why).
+  // The same box the other three bars carry, in the same place: the middle of
+  // the row. It used to sit at the right-hand end here, because the workbench
+  // owned the middle - the workbench has a row of its own now.
   await expect(page.locator(".bar .search-button")).toBeVisible();
   await expect(page.locator('.bar-nav [aria-current="page"]')).toHaveText("Playground");
   await expect(page.locator('.bar-nav a[href="samples/"]')).toBeVisible();
@@ -418,14 +426,19 @@ test("the bar begins and ends as the sample catalogue's bar does", async ({ page
   await expect(theme).toBeHidden();
 });
 
-test("the bar keeps to a few rows on a phone", async ({ page }) => {
+test("the header keeps to a few rows on a phone", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 760 });
   await open(page);
 
   // It wrapped to four rows - a fifth of the screen, spent before the editor or
   // the app got any of it. What it must not do is grow back.
+  //
+  // BOTH ROWS, because the header is two now: the project's bar and this
+  // page's toolbar. Measuring only the first would be a check that passes
+  // because it stopped looking at the part that wraps.
   const bar = await page.locator(".bar").boundingBox();
-  expect(bar.height, "the bar is not a fifth of the phone").toBeLessThan(100);
+  const toolbar = await page.locator(".toolbar").boundingBox();
+  expect(bar.height + toolbar.height, "the header is not a fifth of the phone").toBeLessThan(152);
 
   // And nothing that has to be reachable was compacted away with the rows.
   for (const id of ["#undo", "#redo", "#format", "#examples", "#run", "#autorun", "#share", "#source-link", "#status", "#about", ".bar .extra summary"]) {

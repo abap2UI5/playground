@@ -242,11 +242,11 @@ async function boot() {
   // The menu the switch is in opens on its own, being a <details>; this only
   // closes it on a click anywhere else and on Escape (extra.mjs).
   setUpExtra();
-  // Samples and Documentation in the trailer, pointed at the page each of those sites
-  // was last left on (site-memory.mjs) - now, and again whenever that can have
-  // moved while this page stayed open. Nothing is stored for the playground
-  // itself; it only reads. Skipped when embedded, where the trailer is not on
-  // screen at all.
+  // Samples and Documentation in the bar, pointed at the page each of those
+  // sites was last left on, and at how far down it the reader was
+  // (site-memory.mjs) - now, and again whenever that can have moved while this
+  // page stayed open. Nothing is stored for the playground itself; it only
+  // reads. Skipped when embedded, where the bar is not on screen at all.
   if (!embedded) keepSiteLinksCurrent();
   // The search box beside them: one box over the documentation and all ~770
   // samples, over the index the documentation publishes (search-box.mjs).
