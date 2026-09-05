@@ -352,10 +352,10 @@ const bar = (up) => `<header class="bar">
     <span>abap2UI5</span>
   </a>
   <nav class="bar-nav">
-    <a href="https://abap2ui5.github.io/docs/">Home</a>
-    <a href="https://abap2ui5.github.io/docs/get_started/about" data-site="docs" data-scope="https://abap2ui5.github.io/docs/">Documentation</a>
-    <a href="${up}samples/" aria-current="page">Samples</a>
-    <a href="${up}" title="Write ABAP and run it in the browser">Playground</a>
+    <a href="https://abap2ui5.github.io/docs/" data-text="Home">Home</a>
+    <a href="https://abap2ui5.github.io/docs/get_started/about" data-site="docs" data-scope="https://abap2ui5.github.io/docs/" data-text="Documentation">Documentation</a>
+    <a href="${up}samples/" aria-current="page" data-text="Samples">Samples</a>
+    <a href="${up}" title="Write ABAP and run it in the browser" data-text="Playground">Playground</a>
   </nav>
   <span class="search-slot" data-search></span>
   ${SOCIALS}

@@ -137,7 +137,14 @@ a:hover { text-decoration: none; }
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-left: 6px;
+  /* -10, not 6: `.bar` is a flex row with a 16px gap, and that gap counts
+   * between the brand and this group as well. Left at 6 the first word stood
+   * 22px from the brand's hairline here and 6px from it on the documentation -
+   * the same bar, two different measures, which is exactly what a reader
+   * crossing between them notices without being able to say what changed.
+   * 16 - 10 + the link's own 10px padding is the 16px every hairline on this
+   * bar stands from the word beside it. */
+  margin-left: -10px;
 }
 .bar-nav a {
   padding: 5px 10px;
@@ -453,6 +460,29 @@ main {
  * The same values are in the documentation's style.css. */
 .search-slot { display: flex; margin: 0 auto; }
 
+/* THE BOX IS CENTRED ON THE BAR, NOT ON WHAT IS LEFT OVER.
+ *
+ * Auto margins centre it in the free space between the sections and the marks,
+ * and those two groups are nothing like equal - four words against three
+ * glyphs, with the brand in front of them. Measured, it stood 218px right of
+ * the window's centre at every width.
+ *
+ * `.bar` is already positioned (it is sticky), so above the width where the
+ * row is comfortable the box is placed against it and the marks take over
+ * holding the right-hand end. Below that the auto margins stay: an absolutely
+ * placed box in a narrow row sooner or later sits on top of the words. */
+@media (min-width: 1100px) {
+  .search-slot {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    margin: 0;
+  }
+
+  .socials { margin-left: auto; }
+}
+
+
 .search-button {
   display: flex;
   align-items: center;
@@ -589,4 +619,33 @@ main {
 @media (max-width: 820px) {
   .search-button { min-width: 0; flex: none; padding: 0 7px; }
   .search-label, .search-key { display: none; }
+}
+
+/* EVERY ITEM IS AS WIDE AS ITS OWN BOLD SELF, ALWAYS.
+ *
+ * The one you are on is semibold, and semibold is wider - so the moment the
+ * marked item changed, everything after it moved: stepping from Home to
+ * Documentation pushed Samples and Playground 6px right, and the row twitched
+ * under the cursor. It never showed while the marked item was the same word on
+ * every page of a site; with four sections, two of them on one deployment, it
+ * shows on every click.
+ *
+ * So each item carries its own label a second time, in bold, in a
+ * pseudo-element with no height: never seen, it only reserves the width. The
+ * same rule and the same `data-text` attribute as the documentation's bar
+ * (theme/style.css over there). */
+.bar-nav a,
+.bar-nav .here {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+.bar-nav a::after,
+.bar-nav .here::after {
+  content: attr(data-text);
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: 600;
+  pointer-events: none;
 }
