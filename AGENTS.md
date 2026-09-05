@@ -842,7 +842,14 @@ entity too: seventy ports are filed under an entity in another namespace), the
 documentation —, every control the class BUILDS (the linter's answer, each one
 a link into the catalogue's control facet), its libraries, what it needs where
 it cannot run, **the sample running**, **the class itself**, the neighbours
-around it in its group, and back to the search. Real text in the HTML, and
+around it in its group, and back to the search. Beside all of it, from 1100px
+up, an **"On this page"** column — the documentation's outline, in the place
+the documentation puts it, on a page whose right-hand third was empty at desk
+width. It is built by `outline( )` in one pass over the finished markup: the
+`<h2>`s get their ids and the aside gets its rows from the same walk, so a row
+cannot point at a heading that does not exist, and a page with fewer than two
+sections gets none (an outline of one is the same word twice on one screen).
+Real text in the HTML, and
 nothing a crawler has to run to see any of it: the scripts on a page are the
 two-line theme read the other two documents also carry, the bar's menu and
 its switch and the site memory as inline copies of what the bundles import, and the demo

@@ -465,6 +465,59 @@ const CSS = `/* The per-sample pages, beside catalogue.css - written by tools/sa
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --mark: #1d2836; } }
 :root[data-theme="dark"] { --mark: #1d2836; }
 main { padding-bottom: 40px; }
+
+/* ---- the page and its outline ----
+ *
+ * Two columns from 1100px up: the sample, and "On this page" beside it. Below
+ * that the outline goes, rather than stacking above the content - a list of
+ * links between the title and the first section is a wall in front of the
+ * page, and everything it names is one scroll away on a phone anyway.
+ *
+ * The right-hand column was empty at desk width, and the documentation puts
+ * its own outline exactly there; a reader crossing between the two documents
+ * meets the same thing in the same place. The column is 200px, which is what
+ * the longest heading here ("Controls it builds") needs at 13px. */
+.sample { display: block; }
+
+@media (min-width: 1100px) {
+  .sample {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 200px;
+    gap: 0 40px;
+    align-items: start;
+  }
+}
+
+.outline { display: none; }
+
+@media (min-width: 1100px) {
+  .outline {
+    display: block;
+    position: sticky;
+    /* The bar is 46px and sticky; 24px of air under it. */
+    top: 70px;
+    padding-top: 34px;
+    font-size: 13px;
+  }
+}
+
+.outline-head {
+  margin-bottom: 8px;
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.outline nav { display: flex; flex-direction: column; gap: 2px; }
+
+.outline nav a {
+  padding: 4px 0;
+  color: var(--fg-dim);
+  text-decoration: none;
+  line-height: 1.4;
+}
+
+.outline nav a:hover { color: var(--accent); }
 .crumbs { margin: 22px 0 6px; font-size: 12px; color: var(--fg-dim); }
 .crumbs a { color: var(--fg-dim); }
 .sample h1 { font-size: 26px; margin: 0 0 8px; line-height: 1.25; }
@@ -749,6 +802,44 @@ const LINES_SCRIPT = `<script>
 </script>`;
 
 /** One sample's page. */
+
+/**
+ * "On this page", built out of the page's own headings.
+ *
+ * A sample page is a stack of sections - the facts, the controls, the ABAP,
+ * what else is nearby - and on a desk-width window the right-hand third of it
+ * was empty. The documentation puts its outline there, and a reader crossing
+ * from one to the other expects the same thing in the same place; more to the
+ * point, "where is the code" on a page whose code is two screens down is a
+ * question the page can answer without being scrolled.
+ *
+ * The headings are given their ids HERE rather than in the twenty places they
+ * are written, so the outline and the anchors cannot drift apart: one pass
+ * over the finished markup produces both. The id is the heading's own text,
+ * folded to a slug, which is what a reader sees in the address bar after
+ * clicking a row.
+ */
+function outline(html) {
+  const rows = [];
+  const seen = new Set();
+  const withIds = html.replace(/<h2>([\s\S]*?)<\/h2>/g, (whole, inner) => {
+    /* The text a reader sees, with any markup inside the heading dropped. */
+    const text = inner.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+    let id = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "section";
+    while (seen.has(id)) id += "-x";
+    seen.add(id);
+    rows.push({ id, text });
+    return `<h2 id="${id}">${inner}</h2>`;
+  });
+  /* One heading is not an outline - it is the same word twice on one screen. */
+  if (rows.length < 2) return { html: withIds, aside: "" };
+  const aside = `<aside class="outline" aria-label="On this page">
+    <div class="outline-head">On this page</div>
+    <nav>${rows.map((r) => `<a href="#${r.id}">${esc(r.text)}</a>`).join("")}</nav>
+  </aside>`;
+  return { html: withIds, aside };
+}
+
 function samplePage(row, ctx) {
   const { sources, byGroup, floor } = ctx;
   const source = sources.get(row.source);
@@ -895,31 +986,10 @@ function samplePage(row, ctx) {
     isPartOf: { "@type": "WebSite", name: "abap2UI5 sample catalogue", url: `${SITE}samples/` },
   }).replace(/</g, "\\u003c");
 
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(pageTitle)}</title>
-<meta name="description" content="${esc(description)}">
-<link rel="canonical" href="${esc(canonical)}">
-<meta property="og:type" content="article">
-<meta property="og:title" content="${esc(pageTitle)}">
-<meta property="og:description" content="${esc(description)}">
-<meta property="og:url" content="${esc(canonical)}">
-<link rel="icon" href="../../favicon.png">
-<link rel="apple-touch-icon" href="../../apple-touch-icon.png">
-<link rel="stylesheet" href="../catalogue.css">
-<link rel="stylesheet" href="../sample.css">
-${THEME_SCRIPT}
-<script type="application/ld+json">${jsonLd}</script>
-</head>
-<body>
-
-${bar("../../")}
-
-<main class="sample">
-  <p class="crumbs">
+  /* The page's own body, built first so that outline( ) can walk it: the
+     headings get their ids and the aside gets its rows from one pass, which
+     is what keeps a link in the outline pointing at a heading that exists. */
+  const page = outline(`  <p class="crumbs">
     <a href="../">Sample catalogue</a>${source ? ` › <a href="../?src=${esc(row.source)}">${esc(source.title)}</a>` : ""}${row.group ? ` › ${esc(row.group)}` : ""}
   </p>
   <h1>${esc(title)}</h1>
@@ -1012,7 +1082,34 @@ ${bar("../../")}
       : ""
   }
 
-  <p class="note"><a href="../">Search every abap2UI5 sample</a> · <a href="../all/">the full list on one page</a></p>
+  <p class="note"><a href="../">Search every abap2UI5 sample</a> · <a href="../all/">the full list on one page</a></p>`);
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(pageTitle)}</title>
+<meta name="description" content="${esc(description)}">
+<link rel="canonical" href="${esc(canonical)}">
+<meta property="og:type" content="article">
+<meta property="og:title" content="${esc(pageTitle)}">
+<meta property="og:description" content="${esc(description)}">
+<meta property="og:url" content="${esc(canonical)}">
+<link rel="icon" href="../../favicon.png">
+<link rel="apple-touch-icon" href="../../apple-touch-icon.png">
+<link rel="stylesheet" href="../catalogue.css">
+<link rel="stylesheet" href="../sample.css">
+${THEME_SCRIPT}
+<script type="application/ld+json">${jsonLd}</script>
+</head>
+<body>
+
+${bar("../../")}
+
+<main class="sample">
+  <div class="sample-body">${page.html}</div>
+  ${page.aside}
 </main>
 
 ${foot("../../")}
