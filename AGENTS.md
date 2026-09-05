@@ -768,8 +768,10 @@ the playground, which is one nav item away; a bar that called these pages
 
 **The samples pages' right-hand end reads, in this order:** the theme button,
 a hairline, the nav — *Documentation*, *Samples*, *Playground* —, then LinkedIn
-and GitHub, set off by the bar's own gap and no line (a hairline there had 40px
-on one side of it and 12px on the other). The catalogue and every per-sample page carry that
+and GitHub. The line stands 24px from the button and 24px from the first word
+(`.bar-nav::before` in `catalogue.css` says how that adds up); the marks are set
+off from the nav by the bar's own gap and no line, because a line there had
+40px on one side of it and 12px on the other. The catalogue and every per-sample page carry that
 bar the same to the character, bar the hrefs — a reader who opens a sample
 must not see the head change under them — so the per-sample pages wire their
 button with an inline copy of the catalogue's handler (`SWITCH_SCRIPT` in
