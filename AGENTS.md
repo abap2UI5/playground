@@ -921,11 +921,18 @@ the share link, and a reader who presses Back after picking three lines wants
 the page they came from, not the two selections before this one. A link into
 what the 900-line cut left out says so, rather than highlighting nothing.
 
-What it costs is markup: an id and a link per line roughly doubles the
-transferred weight of a page — about 6 KB to 12 KB gzipped on a typical one,
-17 to 28 KB on the largest, 4.8 MB to 9.3 MB over all 771. That is the price
-of an address per line, and it is paid in static documents nobody waits for
-rather than in the bundle somebody came to write ABAP in.
+What it costs is markup, and it is measured: an id and a link per line takes a
+typical page from about 9 KB gzipped to 12 (the median of the 772), the set
+from 7.4 MB to 10.4 — and, the figure that decides something, the Pages
+artifact from 39 MB of sample pages to 55. **That is what moved the whole-site
+budget in `tools/check-size.mjs` from 200 MB to 220**, and the line is
+deliberate rather than a number pushed out of the way: the markup is repeated
+a hundred and ninety thousand times, so what is on it was cut to the two attributes that
+carry meaning (where the link points, and what a screen reader calls it — the
+stylesheet reaches the element as `.ln > a` rather than by a class, which was
+two megabytes on its own). The rest is the price of an address per line, and
+it is paid in static documents nobody waits for rather than in the bundle
+somebody came to write ABAP in.
 
 Four rules hold the set together:
 

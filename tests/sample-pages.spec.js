@@ -185,7 +185,7 @@ test("every line of the class has an address, and the numbers are not in the tex
   expect(entry, "a page prints a class of at least twelve lines").toBeTruthy();
 
   const count = (html.match(/<span class="ln" id="L/g) || []).length;
-  expect(html).toContain('<span class="ln" id="L1"><a class="lnr" href="#L1" aria-label="Line 1"></a>');
+  expect(html).toContain('<span class="ln" id="L1"><a href="#L1" aria-label="Line 1"></a>');
   expect(html).toContain(`<span class="ln" id="L${count}">`);
   expect(html).not.toContain(`<span class="ln" id="L${count + 1}">`);
 
@@ -193,8 +193,13 @@ test("every line of the class has an address, and the numbers are not in the tex
   // EMPTY: a reader who selects the block and copies it gets ABAP they can
   // paste, not the class with nine hundred numbers down its left edge. That is
   // the whole reason the class is printed here rather than linked.
+  // Nothing on the line's link but the two things that carry meaning: where it
+  // points, and what it is called. This markup is repeated once per line of
+  // every class the set prints - 191,000 of them - so an attribute a
+  // stylesheet can do without is two megabytes of Pages artifact.
   expect(html).not.toContain("data-line");
-  for (const [, anchor] of html.matchAll(/<a class="lnr"[^>]*>([^<]*)<\/a>/g)) expect(anchor).toBe("");
+  expect(html).not.toContain('class="lnr"');
+  for (const [, anchor] of html.matchAll(/<a href="#L\d+"[^>]*>([^<]*)<\/a>/g)) expect(anchor).toBe("");
   const css = fs.readFileSync(path.join(DIST, "samples", "sample.css"), "utf8");
   expect(css).toContain("content: counter(line)");
   expect(css).toContain("user-select: none");
@@ -215,10 +220,10 @@ test("a line link marks the line, a shift-click makes a passage, and the button 
   await expect(page.locator(".source-hint")).toBeVisible();
   const history = await page.evaluate(() => history.length);
 
-  await page.locator(".ln#L9 .lnr").click();
+  await page.locator(".ln#L9 a").click();
   await expect(page).toHaveURL(/#L9$/);
   await expect(page.locator(".ln.is-marked")).toHaveCount(1);
-  await page.locator(".ln#L12 .lnr").click({ modifiers: ["Shift"] });
+  await page.locator(".ln#L12 a").click({ modifiers: ["Shift"] });
   await expect(page).toHaveURL(/#L9-L12$/);
   await expect(page.locator(".ln.is-marked")).toHaveCount(4);
   await expect(page.locator(".source-hint")).toHaveText("Lines 9–12");
@@ -246,11 +251,11 @@ test("a line link marks the line, a shift-click makes a passage, and the button 
   // link off - over an opaque background, so a marked line does not get a
   // white column punched down its left edge.
   await page.evaluate(() => { document.querySelector(".source-body").scrollLeft = 300; });
-  const box = await page.locator(".ln#L9 .lnr").boundingBox();
+  const box = await page.locator(".ln#L9 a").boundingBox();
   const pre = await page.locator(".source-body").boundingBox();
   expect(Math.abs(box.x - pre.x)).toBeLessThan(2);
   const line = await page.locator(".ln#L9").evaluate((el) => getComputedStyle(el).backgroundColor);
-  expect(await page.locator(".ln#L9 .lnr").evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(line);
+  expect(await page.locator(".ln#L9 a").evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(line);
 });
 
 test("a link into a class that was cut off says so rather than highlighting nothing", async ({ page }) => {
@@ -275,7 +280,7 @@ test.describe("with the script blocked", () => {
     const marked = await page.locator(".ln#L3").evaluate((el) => getComputedStyle(el).backgroundColor);
     const plain = await page.locator(".ln#L4").evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(marked).not.toBe(plain);
-    expect(await page.locator(".ln#L1 .lnr").evaluate((el) => getComputedStyle(el, "::before").content))
+    expect(await page.locator(".ln#L1 a").evaluate((el) => getComputedStyle(el, "::before").content))
       .toBe("counter(line)");
   });
 });

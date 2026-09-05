@@ -554,13 +554,13 @@ h2 { font-size: 15px; margin: 26px 0 8px; }
 /* scroll-margin clears the bar, which is sticky at 46px and would otherwise
  * be standing on the line a link just jumped to. */
 .ln { display: inline-block; min-width: 100%; padding-right: 14px; background: inherit; counter-increment: line; scroll-margin: 60px 0; }
-.lnr {
+.ln > a {
   position: sticky; left: 0; z-index: 1; display: inline-block;
   min-width: 3ch; padding: 0 14px; text-align: right; background: inherit;
   color: var(--fg-dim); text-decoration: none; user-select: none; -webkit-user-select: none;
 }
-.lnr::before { content: counter(line); }
-.lnr:hover { color: var(--accent); }
+.ln > a::before { content: counter(line); }
+.ln > a:hover { color: var(--accent); }
 .source-body:not(.live) .ln:target, .ln.is-marked { background: var(--mark); }
 .source-tools { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; }
 .source-copy {
@@ -614,11 +614,17 @@ function forPrinting(code) {
  * that draws them is empty, so a reader who selects the block and copies it
  * gets ABAP they can paste. The number is not repeated in an attribute
  * either: the script beside it reads the line off the href it is already
- * written with. */
+ * written with. Nor is there a class on it - the stylesheet reaches it as
+ * `.ln > a`, and there is nothing else it could be. Twelve characters a line
+ * is two megabytes over the 191,000 lines these pages print, which is the
+ * whole argument: this markup is repeated once per line of every class in
+ * three repositories, so everything on it is paid at that scale and only what
+ * is load-bearing is on it. The aria-label is: an empty link with no name is a
+ * link a screen reader cannot announce. */
 const numbered = (text) =>
   highlightAbapLines(text)
     .map((html, i) =>
-      `<span class="ln" id="L${i + 1}"><a class="lnr" href="#L${i + 1}" aria-label="Line ${i + 1}"></a>${html}</span>`)
+      `<span class="ln" id="L${i + 1}"><a href="#L${i + 1}" aria-label="Line ${i + 1}"></a>${html}</span>`)
     .join("\n");
 
 /* The line links, once they are in a browser. #L42 alone is answered by the
@@ -691,7 +697,7 @@ const LINES_SCRIPT = `<script>
     };
 
     pre.addEventListener("click", function (e) {
-      var number = e.target && e.target.closest ? e.target.closest(".lnr") : null;
+      var number = e.target && e.target.closest ? e.target.closest(".ln > a") : null;
       if (!number || e.metaKey || e.ctrlKey) return;
       var line = Number(String(number.getAttribute("href")).slice(2));
       if (!line) return;
