@@ -917,7 +917,11 @@ button.insight-row {
 .menu {
   position: absolute; top: calc(100% + 8px); right: 0; z-index: 50;
   display: flex; flex-direction: column;
-  min-width: 220px; padding: 6px;
+  /* Wide enough for the repositories in two columns below, and never wider
+     than the viewport less the bar's own padding; taller than the viewport
+     it scrolls, rather than running off the bottom of a small window. */
+  width: 372px; max-width: calc(100vw - 24px); padding: 6px;
+  max-height: calc(100vh - 62px); overflow-y: auto;
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -946,6 +950,14 @@ button.insight-row {
   font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
   color: var(--fg-dim);
 }
+/* The repositories, by kind, in two columns: each kind is a small group under
+   a dim heading, kept whole across the column break, in rows a little tighter
+   than the menu's own so twenty-odd links read as a list rather than a wall. */
+.menu-repos { columns: 2; column-gap: 4px; }
+.menu-group { break-inside: avoid; padding-bottom: 4px; }
+.menu-sub { display: block; padding: 6px 10px 2px; font-size: 12px; color: var(--fg-dim); }
+.menu-repos a { padding: 4px 10px; }
+@media (max-width: 420px) { .menu-repos { columns: 1; } }
 /* The switch says what a press does, so it swaps its whole label with the
    theme - over the same media query and data-theme the palette uses, so it
    says the right thing before this bundle has been evaluated; theme.mjs keeps

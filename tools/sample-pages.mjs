@@ -190,21 +190,40 @@ const MEMORY_SCRIPT = `<script>
     localStorage.setItem("abap2ui5-playground:last-samples",
       location.pathname + location.search + location.hash);
   } catch (e) { /* a browser that refuses storage simply forgets where you were */ }
-  for (var a of document.querySelectorAll("a[data-site]")) {
-    try {
-      var last = localStorage.getItem("abap2ui5-playground:last-" + a.dataset.site);
-      if (!last) continue;
-      /* Checked, not assigned: a stored value is whatever anything on this
-         origin put there. Resolved against this origin, then kept only if it
-         is still inside the path the link already points at - which is what
-         leaves "//elsewhere/x", "/docs/../x" and "javascript:…" alone. */
-      var base = new URL(a.getAttribute("href"), location.href);
-      var target = new URL(last, location.origin);
-      if (base.origin !== location.origin || target.origin !== location.origin) continue;
-      if (!target.pathname.startsWith(base.pathname)) continue;
-      a.href = target.pathname + target.search + target.hash;
-    } catch (e) { /* the link keeps the href it was written with */ }
-  }
+  (function () {
+    /* Each link's href as it was WRITTEN - the section it points at - kept
+       from the first lift, because after one the attribute is the page that
+       was restored. */
+    var written = new Map();
+    var lift = function () {
+      for (var a of document.querySelectorAll("a[data-site]")) {
+        try {
+          if (!written.has(a)) written.set(a, a.getAttribute("href"));
+          var last = localStorage.getItem("abap2ui5-playground:last-" + a.dataset.site);
+          if (!last) continue;
+          /* Checked, not assigned: a stored value is whatever anything on this
+             origin put there. Resolved against this origin, then kept only if it
+             is still inside the path the link already points at - which is what
+             leaves "//elsewhere/x", "/docs/../x" and "javascript:…" alone. */
+          var base = new URL(written.get(a), location.href);
+          var target = new URL(last, location.origin);
+          if (base.origin !== location.origin || target.origin !== location.origin) continue;
+          if (!target.pathname.startsWith(base.pathname)) continue;
+          a.href = target.pathname + target.search + target.hash;
+        } catch (e) { /* the link keeps the href it was written with */ }
+      }
+    };
+    /* Now, and again whenever it can have gone stale while this page stayed
+       open - shown again, looked at again, and on the click itself. */
+    lift();
+    addEventListener("pageshow", lift);
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "visible") lift();
+    });
+    document.addEventListener("click", function (e) {
+      if (e.target.closest && e.target.closest("a[data-site]")) lift();
+    }, true);
+  })();
 </script>`;
 
 /* The two marks the playground's own bar ends in (src/shell/index.html) and,
@@ -237,20 +256,67 @@ const SOCIALS = `<div class="socials">
           <span class="when-light"><span class="glyph" aria-hidden="true">☾</span>Switch to dark</span>
           <span class="when-dark"><span class="glyph" aria-hidden="true">☀</span>Switch to light</span>
         </button>
+        <a href="https://github.com/abap2UI5/abap2UI5/issues" target="_blank" rel="noopener">Issues</a>
+        <a href="https://abap2ui5.github.io/docs/resources/changelog">Release notes</a>
+        <a href="https://abap2ui5.github.io/docs/get_started/quickstart">Install with abapGit</a>
+        <a href="https://abap2ui5.github.io/docs/resources/support">Support</a>
+        <a href="https://abap2ui5.github.io/docs/resources/contribution">Contribute</a>
+        <a href="https://abap2ui5.github.io/docs/resources/sponsor">Sponsor</a>
         <span class="menu-head">Tools</span>
         <a href="https://github.com/abap2UI5/linter" target="_blank" rel="noopener">Linter</a>
+        <a href="https://abap2ui5.github.io/linter/">Linter rules</a>
         <a href="https://github.com/abap2UI5/vscode-extension" target="_blank" rel="noopener">VS Code extension</a>
-        <a href="https://abap2ui5.github.io/docs/advanced/mcp_server" target="_blank" rel="noopener">MCP server</a>
+        <a href="https://abap2ui5.github.io/docs/advanced/mcp_server">MCP server</a>
         <a href="https://github.com/abap2UI5/app-template" target="_blank" rel="noopener">App template</a>
-        <a href="https://github.com/abap2UI5-addons" target="_blank" rel="noopener">Add-ons</a>
+        <a href="https://abap2ui5.github.io/docs/resources/addons">Add-ons</a>
         <span class="menu-head">Repositories</span>
-        <a href="https://github.com/abap2UI5/abap2UI5" target="_blank" rel="noopener">abap2UI5</a>
-        <a href="https://github.com/abap2UI5/samples" target="_blank" rel="noopener">samples</a>
-        <a href="https://github.com/abap2UI5/samples-controls" target="_blank" rel="noopener">samples-controls</a>
-        <a href="https://github.com/abap2UI5/samples-stack" target="_blank" rel="noopener">samples-stack</a>
-        <a href="https://github.com/abap2UI5/playground" target="_blank" rel="noopener">playground</a>
-        <a href="https://github.com/abap2UI5/docs" target="_blank" rel="noopener">docs</a>
-        <a href="https://github.com/abap2UI5/abap2UI5/issues" target="_blank" rel="noopener">Issues</a>
+        <div class="menu-repos">
+          <div class="menu-group">
+            <span class="menu-sub">Framework</span>
+            <a href="https://github.com/abap2UI5/abap2UI5" target="_blank" rel="noopener">abap2UI5</a>
+            <a href="https://github.com/abap2UI5/frontend" target="_blank" rel="noopener">frontend</a>
+            <a href="https://github.com/abap2UI5/abap2UI5-local" target="_blank" rel="noopener">abap2UI5-local</a>
+            <a href="https://github.com/abap2UI5/mirror-ajson" target="_blank" rel="noopener">mirror-ajson</a>
+            <a href="https://github.com/abap2UI5/mirror-srtti" target="_blank" rel="noopener">mirror-srtti</a>
+            <a href="https://github.com/abap2UI5/web-abap2UI5" target="_blank" rel="noopener">web-abap2UI5</a>
+          </div>
+          <div class="menu-group">
+            <span class="menu-sub">Samples</span>
+            <a href="https://github.com/abap2UI5/samples" target="_blank" rel="noopener">samples</a>
+            <a href="https://github.com/abap2UI5/samples-controls" target="_blank" rel="noopener">samples-controls</a>
+            <a href="https://github.com/abap2UI5/samples-stack" target="_blank" rel="noopener">samples-stack</a>
+          </div>
+          <div class="menu-group">
+            <span class="menu-sub">Sites</span>
+            <a href="https://github.com/abap2UI5/docs" target="_blank" rel="noopener">docs</a>
+            <a href="https://github.com/abap2UI5/playground" target="_blank" rel="noopener">playground</a>
+          </div>
+          <div class="menu-group">
+            <span class="menu-sub">Tools</span>
+            <a href="https://github.com/abap2UI5/linter" target="_blank" rel="noopener">linter</a>
+            <a href="https://github.com/abap2UI5/vscode-extension" target="_blank" rel="noopener">vscode-extension</a>
+            <a href="https://github.com/abap2UI5/mcp-server" target="_blank" rel="noopener">mcp-server</a>
+            <a href="https://github.com/abap2UI5/app-template" target="_blank" rel="noopener">app-template</a>
+          </div>
+          <div class="menu-group">
+            <span class="menu-sub">Add-ons</span>
+            <a href="https://github.com/abap2UI5-addons/popups" target="_blank" rel="noopener">popups</a>
+            <a href="https://github.com/abap2UI5-addons/http-connector" target="_blank" rel="noopener">http-connector</a>
+            <a href="https://github.com/abap2UI5-addons/rfc-connector" target="_blank" rel="noopener">rfc-connector</a>
+            <a href="https://github.com/abap2UI5-addons/lock-manager" target="_blank" rel="noopener">lock-manager</a>
+            <a href="https://github.com/abap2UI5-addons/launchpad-kpi" target="_blank" rel="noopener">launchpad-kpi</a>
+            <a href="https://github.com/abap2UI5-addons/table-maintenance" target="_blank" rel="noopener">table-maintenance</a>
+            <a href="https://github.com/abap2UI5-addons/se16n" target="_blank" rel="noopener">se16n</a>
+            <a href="https://github.com/abap2UI5-addons/custom-controls" target="_blank" rel="noopener">custom-controls</a>
+            <a href="https://github.com/abap2UI5-addons" target="_blank" rel="noopener">All add-ons</a>
+          </div>
+          <div class="menu-group">
+            <span class="menu-sub">Apps</span>
+            <a href="https://github.com/abap2UI5-apps/sql-console" target="_blank" rel="noopener">sql-console</a>
+            <a href="https://github.com/abap2UI5-apps/table-content-loader" target="_blank" rel="noopener">table-content-loader</a>
+            <a href="https://github.com/abap2UI5-apps" target="_blank" rel="noopener">All apps</a>
+          </div>
+        </div>
       </div>
     </details>
   </div>`;
@@ -271,7 +337,7 @@ const bar = (up) => `<header class="bar">
     <span>abap2UI5</span>
   </a>
   <nav class="bar-nav">
-    <a href="https://abap2ui5.github.io/docs/" data-site="docs" target="_blank" rel="noopener">Documentation</a>
+    <a href="https://abap2ui5.github.io/docs/" data-site="docs">Documentation</a>
     <a href="${up}samples/" aria-current="page">Samples</a>
     <a href="${up}" title="Write ABAP and run it in the browser">Playground</a>
   </nav>
@@ -486,17 +552,20 @@ function samplePage(row, ctx) {
     ...(row.since || []).map((s) => `<code>${esc(s.name)}</code> since ${esc(s.since)}`),
   ].filter(Boolean);
 
-  /* The whole playground, on this sample, in a tab of its own - the round
+  /* The whole playground, on this sample's code, in THIS tab - the round
    * trip the catalogue is built around: `from=catalogue` and `back=` are what
    * turn the source link in that playground into "Back to the catalogue",
    * narrowed to the one search that has exactly one hit (src/shell/main.mjs).
-   * It sits on the demo box rather than above the page, because it is the
-   * answer to "I want more room than this box" and to "I want to change a
-   * line" - the box shows the app alone - and both are things a reader knows
-   * after seeing the box and not before. */
+   * Same tab on purpose, and the label says so: it is a switch to the
+   * playground with the code that is on this page, not a window that opens
+   * beside it - the way back is in the playground's bar, and a reader who
+   * wants a second tab has the middle button. It sits on the demo box rather
+   * than above the page, because it is the answer to "I want more room than
+   * this box" and to "I want to change a line" - the box shows the app alone -
+   * and both are things a reader knows after seeing the box and not before. */
   const run = row.runs
     ? `<a class="run" href="../../?src=${encodeURIComponent(row.raw)}&amp;from=catalogue&amp;back=`
-      + `${encodeURIComponent(`q=${row.class}`)}">Open the full playground ↗</a>`
+      + `${encodeURIComponent(`q=${row.class}`)}">Switch to Playground with this code</a>`
     : "";
 
   /* Only a sample that RUNS here gets a demo. The others are listed, read and

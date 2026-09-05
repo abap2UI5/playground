@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { getSource, MAIN_CLASS, markers, open, setSource } from "./helpers.mjs";
+import { getSource, MAIN_CLASS, markers, open, runSample, sampleFiles, setSource } from "./helpers.mjs";
 
 // The panel under the editor: the problems list, the outline, and the second
 // checker that feeds the first.
@@ -492,6 +492,12 @@ test("an embedded playground keeps the panel away until something goes wrong", a
 
 test("the View tab shows the XML the builder chain makes, and follows the typing", async ({ page }) => {
   await open(page);
+  // The hello world rather than the app the page opens on: one Title with a
+  // literal text, which is the smallest chain there is to read back. Its
+  // file is the one in the editor from here on, not the start page's.
+  const [file] = sampleFiles("hello");
+  const cls = file.replace(/\.clas\.abap$/, "");
+  await runSample(page, "hello");
   await page.locator('[data-insight="view"]').click();
   // The sample's view, one element per line - reconstructed by the abap2UI5
   // linter from the chain, not rendered by the app.
@@ -505,23 +511,24 @@ test("the View tab shows the XML the builder chain makes, and follows the typing
   expect(lines.some((l) => l.startsWith("      <Title "))).toBe(true);
 
   // A keystroke changes the chain, and the preview follows it.
-  await setSource(page, (await getSource(page)).replace("Hello World`", "Hello again`"));
+  await setSource(page, (await getSource(page, file)).replace("Hello World`", "Hello again`"), file);
   await expect(xml).toContainText('text="Hello again"');
 
   // A file that builds no view says so instead of showing nothing.
-  await setSource(page, `CLASS ${MAIN_CLASS} DEFINITION PUBLIC CREATE PUBLIC.
+  await setSource(page, `CLASS ${cls} DEFINITION PUBLIC CREATE PUBLIC.
   PUBLIC SECTION.
     INTERFACES z2ui5_if_app.
 ENDCLASS.
-CLASS ${MAIN_CLASS} IMPLEMENTATION.
+CLASS ${cls} IMPLEMENTATION.
   METHOD z2ui5_if_app~main.
   ENDMETHOD.
-ENDCLASS.`);
+ENDCLASS.`, file);
   await expect(page.locator("#insight-body")).toContainText("builds no view");
 });
 
 test("the panel colours the XML and the JSON it shows", async ({ page }) => {
   await open(page);
+  await runSample(page, "hello");
   await page.locator('[data-insight="view"]').click();
   const xml = page.locator(".view-xml");
   await expect(xml).toContainText("<mvc:View", { timeout: 30000 });

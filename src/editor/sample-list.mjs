@@ -25,8 +25,13 @@
 // `also` names the further classes a sample needs open beside it - an app it
 // calls with `nav_app_call`. The first file is always the app.
 export const SAMPLE_LIST = [
-  { id: "hello", class: "z2ui5_cl_smp_app_493" },
+  // The app the page opens on, first. Basics II rather than the hello world:
+  // an Input, a Text bound to the same attribute, a button whose roundtrip
+  // writes a second Text and confirms itself in a MessageBox - the smallest
+  // app that shows something HAPPEN, where the hello world only shows that
+  // something renders. Both are still one row apart in the samples browser.
   { id: "binding", class: "z2ui5_cl_smp_app_494" },
+  { id: "hello", class: "z2ui5_cl_smp_app_493" },
   { id: "lifecycle", class: "z2ui5_cl_smp_app_495", also: ["z2ui5_cl_smp_app_493"] },
   { id: "roundtrips", class: "z2ui5_cl_smp_app_004" },
   { id: "table", class: "z2ui5_cl_smp_app_019" },

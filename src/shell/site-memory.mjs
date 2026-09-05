@@ -34,6 +34,9 @@ const KEY = {
 /** Where this page is, in the form a link can be set to. */
 const here = () => location.pathname + location.search + location.hash;
 
+/** Each lifted link's href as the markup wrote it - the section it points at. */
+const written = new WeakMap();
+
 /**
  * Write down that the reader is here. `site` is "samples" or "docs" - the
  * section this page belongs to, not the one it links at.
@@ -55,15 +58,19 @@ export function rememberHere(site) {
  */
 export function upgradeSiteLinks(root = document) {
   for (const a of root.querySelectorAll("a[data-site]")) {
+    /* The section, from the link as it was WRITTEN - kept from the first
+     * time round, because after a lift the attribute is the page that was
+     * restored, and a sample's own page is not a section a narrowed list is
+     * inside of. Taking it from the markup rather than from a constant is
+     * what lets this work unchanged on a dev server, where the three sites
+     * sit at other paths - and what makes a link to another HOST (no shared
+     * storage, so nothing to restore) fall through the origin test below. */
+    const home = written.get(a) ?? a.getAttribute("href");
+    written.set(a, home);
     const last = readStored(KEY[a.dataset.site]);
     if (!last) continue;
     try {
-      /* The section, from the link that is already written. Taking it from the
-       * markup rather than from a constant is what lets this work unchanged on
-       * a dev server, where the three sites sit at other paths - and what makes
-       * a link to another HOST (no shared storage, so nothing to restore) fall
-       * through the origin test below. */
-      const base = new URL(a.getAttribute("href"), location.href);
+      const base = new URL(home, location.href);
       if (base.origin !== location.origin) continue;
       const target = new URL(last, location.origin);
       if (target.origin !== location.origin) continue;
@@ -74,4 +81,30 @@ export function upgradeSiteLinks(root = document) {
        * href it was written with. */
     }
   }
+}
+
+/**
+ * Lift the links now, and again whenever they can have gone stale.
+ *
+ * A lift at boot answers a page that was just loaded. A page that stays open
+ * does not stay current: the catalogue narrowed in another tab, a
+ * documentation page read and left, a Back that brought this page out of the
+ * back-forward cache - each moves what the other site last wrote, and a link
+ * lifted once would still carry the position from before, which reads as a
+ * memory that does not work. So the lift is repeated at the moments it can be
+ * behind: when the page is shown again, when the tab is looked at again, and -
+ * the one that cannot be missed - on the click itself, before the browser
+ * follows the href. Capture phase, so nothing that stops the click's
+ * propagation is in front of it.
+ */
+export function keepSiteLinksCurrent(root = document) {
+  const lift = () => upgradeSiteLinks(root);
+  lift();
+  addEventListener("pageshow", lift);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") lift();
+  });
+  root.addEventListener("click", (e) => {
+    if (e.target.closest?.("a[data-site]")) lift();
+  }, true);
 }

@@ -7,8 +7,8 @@ import { open, runSample } from "./helpers.mjs";
 // The samples are abap2UI5/samples' own now (src/editor/sample-list.mjs), and
 // they do not give their controls ids - so these locate what a person locates:
 // a field by its label, a button by its text. `Basics II` is the one with both,
-// which is why the two interaction tests open it rather than the app the page
-// starts on.
+// and since it is also the app the page opens on, the two interaction tests
+// still pick it by name: what they hold is the sample, not the start page.
 
 // The input and the button of the "Data Binding" sample, and the Text the
 // backend writes into.
@@ -21,8 +21,8 @@ test("the class in the editor renders as an app", async ({ page }) => {
 
   // The title comes out of the ABAP view builder, travels as XML through the
   // roundtrip, and is rendered by UI5 - so seeing it means the whole chain works.
-  await expect(app(page).getByText("Hello World, the Smallest App")).toBeVisible();
-  await expect(app(page).getByText("The whole app is what you see below")).toBeVisible();
+  await expect(app(page).getByText("Data Binding: Input and Button")).toBeVisible();
+  await expect(app(page).getByText("connects the public attribute NAME")).toBeVisible();
 });
 
 test("a click in the app runs ABAP and updates the view", async ({ page }) => {
@@ -67,7 +67,7 @@ test("a run loads only from this origin, and nothing 404s", async ({ page }) => 
   });
 
   await open(page);
-  await expect(app(page).getByText("Hello World, the Smallest App")).toBeVisible();
+  await expect(app(page).getByText("Data Binding: Input and Button")).toBeVisible();
 
   expect(external, "the playground must work without a CDN").toEqual([]);
   expect(missing, "a 404 means the build left something out").toEqual([]);
