@@ -1,9 +1,9 @@
 // Light or dark, for the whole page: the bar and the panels, the editor and
 // the app in its frame.
 //
-// The page follows the system until the button at the right-hand end of the
-// bar says otherwise - the same button the sample catalogue's bar carries, in
-// the same group and under the same key, and it behaves the same way: a
+// The page follows the system until the switch in the menu behind the bar's
+// last button says otherwise - the same switch the sample catalogue's bar
+// keeps there, under the same key, and it behaves the same way: a
 // choice is kept between visits, and a choice that equals what the system
 // says anyway is forgotten rather than stored, so a page that was switched
 // back agrees with the system again from then on and follows it when it

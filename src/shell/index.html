@@ -108,15 +108,17 @@
      there and merely inactive over code that came from nowhere, so the bar
      does not rearrange itself when a linked file opens. -->
 <header class="bar">
-  <!-- The mark, then the site and the part of it you are in: the brand the
-       sample catalogue and every per-sample page wear (src/catalogue/index.html,
-       tools/sample-pages.mjs), so somebody moving between them reads one bar
-       rather than three. A span rather than the link it is over there - the
-       playground is already here, and a stray click on it would throw away a
-       page that costs seconds to load. -->
+  <!-- The mark and the name, closed by a hairline (shell.css): the brand the
+       sample catalogue, every per-sample page and the documentation wear
+       (src/catalogue/index.html, tools/sample-pages.mjs, and over there
+       theme/SiteBar.vue), so somebody moving between them reads one bar rather
+       than four. The nav at the far end says which of them you are on, in
+       bold, so the brand does not say it again. A span rather than the link it
+       is over there - the playground is already here, and a stray click on it
+       would throw away a page that costs seconds to load. -->
   <span class="brand">
     <img src="favicon.png" alt="" width="20" height="20">
-    <span>abap2UI5 <b>playground</b></span>
+    <span>abap2UI5</span>
   </span>
 
   <!-- Icons only, the three of them: the arrows are undo and redo anywhere,
@@ -157,35 +159,29 @@
           title="What this is built from" aria-label="About this playground">i</button>
 
   <!-- The right-hand end, as the sample catalogue's bar ends and every
-       per-sample page's with it: where in this site you are, a button for
-       light and dark, a hairline, then LinkedIn and GitHub. The three
-       documents are read as one bar by somebody moving between them, so this
-       group holds the same items in all three (src/catalogue/index.html,
-       tools/sample-pages.mjs; the samples pages read Documentation, Samples,
-       Playground and keep their switch in a menu behind a third mark, with
-       the project's tools and repositories) - Docs is a nav item here
-       rather than the third mark it used to be, because it is one of the
-       three places this site goes and naming it beats a book somebody has to
-       hover. The button is
-       wired in src/shell/theme.mjs, which keeps the label and aria-checked in
-       step with the theme; the sun and the moon are swapped by CSS over the
-       same media query and data-theme the palette uses, so it says the right
-       thing before the bundle has been evaluated. The marks are inline SVG
-       for the reason the other two documents' are: a mark that is an empty
-       square until a stylesheet arrives is worse than one that never needed
-       it, and the copies are kept in step by hand. -->
-  <span class="trailer">
+       per-sample page's and the documentation's with it: a hairline, then
+       where in this site you are - Documentation, Samples, Playground -, a
+       hairline, LinkedIn and GitHub, then one more button, drawn as a third
+       mark, that opens the rest: the switch for light and dark, the project's
+       tools and its repositories. The four documents are read as one bar by
+       somebody moving between them, so this group is the same group in all
+       four (src/catalogue/index.html, tools/sample-pages.mjs, and
+       theme/SiteBar.vue in abap2UI5/docs), kept in step by hand. The menu is
+       a <details>, so it opens and closes with no script; extra.mjs only
+       closes it on a click anywhere else and on Escape. The switch is wired
+       in src/shell/theme.mjs, which keeps aria-checked and the label in step
+       with the theme; its two labels are swapped by CSS over the same media
+       query and data-theme the palette uses, so it says the right thing
+       before the bundle has been evaluated. The marks are inline SVG for the
+       reason the other documents' are: a mark that is an empty square until a
+       stylesheet arrives is worse than one that never needed it. -->
+  <div class="trailer">
     <nav class="bar-nav">
-      <span class="here" aria-current="page">Playground</span>
+      <a href="https://abap2ui5.github.io/docs/" data-site="docs" target="_blank" rel="noopener">Documentation</a>
       <a href="samples/" data-site="samples" title="Every abap2UI5 sample, searchable">Samples</a>
-      <a href="https://abap2ui5.github.io/docs/" data-site="docs" target="_blank" rel="noopener">Docs</a>
+      <span class="here" aria-current="page">Playground</span>
     </nav>
-    <button id="theme" class="theme" type="button" role="switch" aria-checked="false"
-            aria-label="Switch to dark theme" title="Switch to dark theme">
-      <span class="theme-sun" aria-hidden="true">☀</span>
-      <span class="theme-moon" aria-hidden="true">☾</span>
-    </button>
-    <span class="socials">
+    <div class="socials">
       <a class="social" href="https://www.linkedin.com/company/abap2ui5/" target="_blank" rel="noopener"
          aria-label="abap2UI5 on LinkedIn" title="abap2UI5 on LinkedIn">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/></svg>
@@ -194,8 +190,33 @@
          aria-label="abap2UI5 on GitHub" title="abap2UI5 on GitHub">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
       </a>
-    </span>
-  </span>
+      <details class="extra" id="extra">
+        <summary class="extra-button" title="More: light or dark, and the rest of abap2UI5" aria-label="More: light or dark, and the rest of abap2UI5">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2.2"/><circle cx="12" cy="12" r="2.2"/><circle cx="19" cy="12" r="2.2"/></svg>
+        </summary>
+        <div class="menu">
+          <button id="theme" class="theme" type="button" role="switch" aria-checked="false">
+            <span class="when-light"><span class="glyph" aria-hidden="true">☾</span>Switch to dark</span>
+            <span class="when-dark"><span class="glyph" aria-hidden="true">☀</span>Switch to light</span>
+          </button>
+          <span class="menu-head">Tools</span>
+          <a href="https://github.com/abap2UI5/linter" target="_blank" rel="noopener">Linter</a>
+          <a href="https://github.com/abap2UI5/vscode-extension" target="_blank" rel="noopener">VS Code extension</a>
+          <a href="https://abap2ui5.github.io/docs/advanced/mcp_server" target="_blank" rel="noopener">MCP server</a>
+          <a href="https://github.com/abap2UI5/app-template" target="_blank" rel="noopener">App template</a>
+          <a href="https://github.com/abap2UI5-addons" target="_blank" rel="noopener">Add-ons</a>
+          <span class="menu-head">Repositories</span>
+          <a href="https://github.com/abap2UI5/abap2UI5" target="_blank" rel="noopener">abap2UI5</a>
+          <a href="https://github.com/abap2UI5/samples" target="_blank" rel="noopener">samples</a>
+          <a href="https://github.com/abap2UI5/samples-controls" target="_blank" rel="noopener">samples-controls</a>
+          <a href="https://github.com/abap2UI5/samples-stack" target="_blank" rel="noopener">samples-stack</a>
+          <a href="https://github.com/abap2UI5/playground" target="_blank" rel="noopener">playground</a>
+          <a href="https://github.com/abap2UI5/docs" target="_blank" rel="noopener">docs</a>
+          <a href="https://github.com/abap2UI5/abap2UI5/issues" target="_blank" rel="noopener">Issues</a>
+        </div>
+      </details>
+    </div>
+  </div>
 </header>
 
 <dialog id="about-dialog" class="about">
@@ -210,8 +231,8 @@
       page you are looking at is a static file, and everything below happens in
       this tab. What the framework underneath it can do is in the
       <a href="https://abap2ui5.github.io/docs/" target="_blank" rel="noopener">documentation</a>
-      — which is also where the bar's Docs goes, on a window wide enough to
-      carry the nav.
+      — which is also where the bar's Documentation goes, on a window wide
+      enough to carry the nav.
     </p>
 
     <h3>How it works</h3>

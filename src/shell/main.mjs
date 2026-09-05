@@ -53,6 +53,7 @@ import { state } from "./state.mjs";
 import { STALLED, startRuntime } from "./runtime-client.mjs";
 import { readStored, readStoredJson, removeStored, writeStored, writeStoredJson } from "./storage.mjs";
 import { isDark, onThemeChange, setUpTheme } from "./theme.mjs";
+import { setUpExtra } from "./extra.mjs";
 import { describeError, hideOutput, setStatus, showOutput } from "./ui.mjs";
 import { warmUpAppFrame } from "./warm-up.mjs";
 
@@ -237,7 +238,10 @@ async function boot() {
   // embedded playground follows its reader's system rather than a choice
   // made in some other tab (see theme.mjs).
   setUpTheme({ restore: !embedded });
-  // Samples and Docs in the trailer, pointed at the page each of those sites
+  // The menu the switch is in opens on its own, being a <details>; this only
+  // closes it on a click anywhere else and on Escape (extra.mjs).
+  setUpExtra();
+  // Samples and Documentation in the trailer, pointed at the page each of those sites
   // was last left on (site-memory.mjs). Nothing is stored for the playground
   // itself; it only reads. Skipped when embedded, where the trailer is not on
   // screen at all.

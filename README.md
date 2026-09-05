@@ -261,11 +261,12 @@ metadata under `src/`, the `.abapgit.xml` that says so (the shape
 naming the app, how to start it and the link this code came from. Import it
 offline with abapGit, or push it as it stands.
 
-**Light or dark.** The page follows the system until the button at the
-right-hand end of the bar says otherwise — the same switch the
-[sample catalogue](https://abap2ui5.github.io/playground/samples/) keeps in
-the menu behind the last button of its bar, after LinkedIn and GitHub. A
-choice is kept between visits; a choice that agrees with the system
+**Light or dark.** The page follows the system until the switch in the menu
+behind the bar's last button says otherwise — the same menu the
+[sample catalogue](https://abap2ui5.github.io/playground/samples/) and the
+documentation carry, after LinkedIn and GitHub, with the project's tools and
+repositories under the switch. A choice is kept between visits; a choice that
+agrees with the system
 is forgotten rather than stored, so a page switched back follows the system
 again from then on. The button reaches the editor and the running app as well,
 without restarting it.

@@ -378,21 +378,39 @@ test("on a phone Run brings the app forward - unless there is no app to bring", 
 test("the bar begins and ends as the sample catalogue's bar does", async ({ page }) => {
   await open(page);
 
-  // The same brand, one word changed: the mark, the site, and the part of it
-  // you are in (src/catalogue/index.html, tools/sample-pages.mjs).
-  await expect(page.locator(".brand")).toHaveText("abap2UI5 playground");
+  // The same brand: the mark and the name, and nothing more - the nav says
+  // which part of the site this is (src/catalogue/index.html,
+  // tools/sample-pages.mjs).
+  await expect(page.locator(".brand")).toHaveText("abap2UI5");
   await expect(page.locator(".brand img")).toBeVisible();
 
-  // And the same far end: where in the site you are, the theme button, then
-  // LinkedIn and GitHub. The documentation is a nav item here rather than the
-  // third mark it used to be.
-  await expect(page.locator(".bar-nav > *")).toHaveText(["Playground", "Samples", "Docs"]);
+  // And the same far end: Documentation, Samples and where you are, then
+  // LinkedIn and GitHub, then the button that opens the rest.
+  await expect(page.locator(".bar-nav > *")).toHaveText(["Documentation", "Samples", "Playground"]);
   await expect(page.locator('.bar-nav [aria-current="page"]')).toHaveText("Playground");
   await expect(page.locator('.bar-nav a[href="samples/"]')).toBeVisible();
-  await expect(page.locator("#theme")).toBeVisible();
+  await expect(page.locator('.bar-nav a[data-site="docs"]')).toHaveText("Documentation");
   await expect(page.locator(".bar .social")).toHaveCount(2);
   await expect(page.locator('.bar .social[href*="linkedin.com/company/abap2ui5"]')).toBeVisible();
   await expect(page.locator('.bar .social[href*="github.com/abap2UI5"]')).toBeVisible();
+  // The menu: closed until pressed, the theme switch and the project's links in
+  // it, closed again on Escape and on a click anywhere else.
+  const extra = page.locator(".bar .extra");
+  const theme = page.locator("#theme");
+  await expect(extra.locator("summary")).toBeVisible();
+  await expect(theme).toBeHidden();
+  await extra.locator("summary").click();
+  await expect(theme).toBeVisible();
+  expect(await extra.locator(".menu a").count()).toBeGreaterThanOrEqual(10);
+  for (const part of ["github.com/abap2UI5/linter", "github.com/abap2UI5/vscode-extension", "github.com/abap2UI5-addons"]) {
+    await expect(extra.locator(`.menu a[href*="${part}"]`)).toBeVisible();
+  }
+  await page.keyboard.press("Escape");
+  await expect(theme).toBeHidden();
+  await extra.locator("summary").click();
+  await expect(theme).toBeVisible();
+  await page.locator("#status").click();
+  await expect(theme).toBeHidden();
 });
 
 test("the bar keeps to a few rows on a phone", async ({ page }) => {
@@ -405,9 +423,12 @@ test("the bar keeps to a few rows on a phone", async ({ page }) => {
   expect(bar.height, "the bar is not a fifth of the phone").toBeLessThan(100);
 
   // And nothing that has to be reachable was compacted away with the rows.
-  for (const id of ["#undo", "#redo", "#format", "#examples", "#run", "#autorun", "#share", "#source-link", "#status", "#about", "#theme"]) {
+  for (const id of ["#undo", "#redo", "#format", "#examples", "#run", "#autorun", "#share", "#source-link", "#status", "#about", ".bar .extra summary"]) {
     await expect(page.locator(id)).toBeVisible();
   }
+  // The theme switch is one press further, in the menu - reachable, not gone.
+  await page.locator(".bar .extra summary").click();
+  await expect(page.locator("#theme")).toBeVisible();
 });
 
 test("both panes stay visible when a wide window gets narrow and wide again", async ({ page }) => {
@@ -451,6 +472,8 @@ test("the switch in the bar overrides the system theme, and is forgotten again w
   await open(page);
   const html = page.locator("html");
   const theme = page.locator("#theme");
+  // In the menu behind the bar's last button, which a reload closes again.
+  const openMenu = () => page.locator(".bar .extra summary").click();
   const editor = page.locator(".monaco-editor").first();
   const stored = () => page.evaluate(() => localStorage.getItem("abap2ui5-playground:theme"));
   const chosen = () => page.evaluate(() => document.documentElement.getAttribute("data-theme"));
@@ -468,6 +491,7 @@ test("the switch in the bar overrides the system theme, and is forgotten again w
   // One click: the page, the editor and the running app go dark - the app
   // told rather than restarted, as for a system change - and the choice is
   // kept for next time.
+  await openMenu();
   await theme.click();
   await expect(html).toHaveAttribute("data-theme", "dark");
   await expect(theme).toHaveAttribute("aria-checked", "true");
@@ -486,6 +510,7 @@ test("the switch in the bar overrides the system theme, and is forgotten again w
 
   // Switching back to what the system says is not a choice to keep: the
   // page follows the system again, and nothing is stored.
+  await openMenu();
   await theme.click();
   expect(await chosen()).toBeNull();
   expect(await stored()).toBeNull();
