@@ -15,10 +15,22 @@
 // what this falls back to at every step below - nothing here ever makes a link
 // worse than the one that was written.
 //
-// THE PLAYGROUND IS NOT REMEMBERED, only consulted. Its URL carries the code
-// in the editor (?src=...), and a Playground item that reopened yesterday's
-// sample instead of an empty editor would be a different promise from the one
-// the word makes. Samples and docs are places; the playground is a workbench.
+// THE PLAYGROUND IS REMEMBERED TOO, and it did not used to be. The reasoning
+// against it was that its URL carries the code in the editor, so an item that
+// reopened yesterday's sample would be a different promise from the one the
+// word makes: samples and docs are places, the playground is a workbench.
+//
+// What that argument missed is the case it creates. A reader who opens a
+// SAMPLE in the playground has code that is not a draft - a sample that was
+// picked and read is deliberately not stored (main.mjs) - so pressing
+// Documentation and then Playground threw it away and started them on the
+// default sample. Their own edits survived that trip; the sample they were
+// reading did not, and nothing on the screen said why.
+//
+// So the workbench is a place after all. Two things are still never written:
+// an EMBEDDED playground, which is furniture in somebody else's page, and an
+// app-only view (?view=app, ?view=full), which is a running app rather than a
+// place to come back to.
 import { readStored, writeStored } from "./storage.mjs";
 
 /* The playground's namespace, for a key the documentation site writes too.
@@ -29,6 +41,7 @@ import { readStored, writeStored } from "./storage.mjs";
 const KEY = {
   samples: "abap2ui5-playground:last-samples",
   docs: "abap2ui5-playground:last-docs",
+  playground: "abap2ui5-playground:last-playground",
 };
 
 /** Where this page is, in the form a link can be set to. */
