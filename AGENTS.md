@@ -759,31 +759,36 @@ exactly one hit. A `?src=` link from anywhere else still offers the GitHub
 page, which is what that reader wants.
 
 **The bar names the part of the site you are in.** On `/samples/` and on every
-per-sample page the brand is the mark and *abap2UI5* — nothing more, because
-the nav's Samples carries `aria-current`, which is what makes it the bold item
-(`catalogue.css`) and what a screen reader announces, and a brand that said
-*samples* too said it twice. The brand links to the catalogue rather than to
+per-sample page the brand is the mark and *abap2UI5*, closed by a hairline
+(`.brand::after`, 16px from the name like the two lines at the other end) —
+nothing more, because the nav's Samples carries `aria-current`, which is what
+makes it the bold item (`catalogue.css`) and what a screen reader announces,
+and a brand that said *samples* too said it twice. The brand links to the catalogue rather than to
 the playground, which is one nav item away; a bar that called these pages
 "playground" was naming the neighbour rather than the room.
 
-**The samples pages' right-hand end reads, in this order:** the theme button,
-a hairline, the nav — *Documentation*, *Samples*, *Playground* —, a hairline,
-then LinkedIn and GitHub. Each line stands 16px from whatever is on either
-side of it — the button's edge, the words, the marks — because a line nearer
-to one neighbour reads as belonging to it; `catalogue.css` says how that adds
-up out of the bar's gap, a link's padding, the nav's gap and the mark's box
-(the one before the marks used to have 40px on one side and 12px on the
-other). The catalogue and every per-sample page carry that
-bar the same to the character, bar the hrefs — a reader who opens a sample
-must not see the head change under them — so the per-sample pages wire their
-button with an inline copy of the catalogue's handler (`SWITCH_SCRIPT` in
-`tools/sample-pages.mjs`, kept in step with `setUpTheme()` in `catalogue.mjs`
-by hand, as the site memory is). The playground's own bar carries the same
-items in its older order (`src/shell/index.html`, `src/shell/shell.css`):
-the nav — *Playground* as the current item, a span rather than a link, because
-it is the page you are on and a stray click on it would throw away a page that
-costs seconds to load —, then the button, a hairline, then the marks; the
-documentation is *Docs* there and on the documentation site's own bar. Three
+**The samples pages' right-hand end reads, in this order:** a hairline, the
+nav — *Documentation*, *Samples*, *Playground* —, a hairline, LinkedIn and
+GitHub, then one more button, drawn as a third mark, that opens **the menu**:
+the light-or-dark switch, then the project's tools (linter, VS Code extension,
+MCP server, app template, add-ons) and its repositories on GitHub — the list
+the documentation's own Links menu carries. The menu is a `<details>`, so it
+opens and closes with no script; `setUpExtra()` in `catalogue.mjs` closes it on
+a click outside it and on Escape. Each hairline stands 16px from the words and
+the marks beside it, because a line nearer to one neighbour reads as belonging
+to it; `catalogue.css` says how that adds up out of the bar's gap, a link's
+padding, the nav's gap and the mark's box. The catalogue and every per-sample
+page carry that bar the same to the character, bar the hrefs — a reader who
+opens a sample must not see the head change under them — so the per-sample
+pages wire their menu and their switch with an inline copy of the catalogue's
+handlers (`MENU_SCRIPT` in `tools/sample-pages.mjs`, kept in step with
+`setUpExtra()` and `setUpTheme()` by hand, as the site memory is). The
+playground's own bar (`src/shell/index.html`, `src/shell/shell.css`) has no
+menu and keeps its switch in the bar itself: the nav — *Playground* as the
+current item, a span rather than a link, because it is the page you are on and
+a stray click on it would throw away a page that costs seconds to load —, then
+the button, a hairline, then the marks; the documentation is *Docs* there and
+on the documentation site's own bar. Three
 documents carry the two marks by hand
 (`src/shell/index.html`, `src/catalogue/index.html`,
 `tools/sample-pages.mjs`): inline SVG, because a mark that is an empty square
@@ -811,8 +816,8 @@ a link into the catalogue's control facet), its libraries, what it needs where
 it cannot run, **the sample running**, **the class itself**, the neighbours
 around it in its group, and back to the search. Real text in the HTML, and
 nothing a crawler has to run to see any of it: the scripts on a page are the
-two-line theme read the other two documents also carry, the theme switch and
-the site memory as inline copies of what the bundles import, and the demo
+two-line theme read the other two documents also carry, the bar's menu and
+its switch and the site memory as inline copies of what the bundles import, and the demo
 loader below, and none of them writes a word of it. `sample.css` is written beside them and
 loaded next to `catalogue.css`, which is the frame: these are the catalogue's
 pages, and a second palette would drift from it on the first change to either.

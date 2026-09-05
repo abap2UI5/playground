@@ -265,14 +265,18 @@ test("a page renders as the catalogue's own, and its links work", async ({ page 
   await expect(here).toBeVisible();
   await expect(here).toHaveAttribute("aria-current", "page");
   expect(await here.evaluate((el) => getComputedStyle(el).fontWeight)).toBe("600");
-  // The theme button opens the right-hand group as it does on the catalogue -
-  // and it works here too, without a bundle: a press turns the page dark and
-  // is kept under the site's one key; a press back to what the system says is
-  // forgotten rather than stored, the rule the other two documents follow.
+  // The theme switch is in the menu behind the bar's last button, as on the
+  // catalogue - and both work here too, without a bundle: the menu opens on
+  // its button and closes on a click anywhere else; a press on the switch turns
+  // the page dark and is kept under the site's one key; a press back to what
+  // the system says is forgotten rather than stored, the rule the other two
+  // documents follow.
   await page.emulateMedia({ colorScheme: "light" });
+  const more = page.locator(".bar .extra");
   const theme = page.locator("#theme");
+  await expect(theme).toBeHidden();
+  await more.locator("summary").click();
   await expect(theme).toBeVisible();
-  expect(await theme.evaluate((el) => el.nextElementSibling?.classList.contains("bar-nav"))).toBe(true);
   const stored = () => page.evaluate(() => localStorage.getItem("abap2ui5-playground:theme"));
   await theme.click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -280,6 +284,8 @@ test("a page renders as the catalogue's own, and its links work", async ({ page 
   await theme.click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   expect(await stored()).toBe(null);
+  await page.locator("h1").click();
+  await expect(theme).toBeHidden();
   // And it ends where the playground's own bar ends: LinkedIn, then GitHub.
   await expect(page.locator(".bar .social")).toHaveCount(2);
   await expect(page.locator('.bar .social[href*="linkedin.com"]')).toBeVisible();

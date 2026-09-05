@@ -97,6 +97,24 @@ function setUpTheme() {
   });
 }
 
+/* The menu behind the bar's last button is a <details>, so it opens and closes
+ * on its own; this only closes it the two ways a menu is expected to close and
+ * a <details> does not - a click anywhere outside it, and Escape, which also
+ * hands focus back to the button. The per-sample pages carry the same lines
+ * inline (tools/sample-pages.mjs). */
+function setUpExtra() {
+  const extra = el.extra;
+  document.addEventListener("click", (e) => {
+    if (extra.open && !extra.contains(e.target)) extra.open = false;
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && extra.open) {
+      extra.open = false;
+      extra.querySelector("summary").focus();
+    }
+  });
+}
+
 /* ------------------------------------------------------------------- data */
 
 function prepare(data) {
@@ -344,10 +362,11 @@ async function start() {
   for (const [key, id] of [
     ["q", "q"], ["source", "f-source"], ["control", "f-control"], ["library", "f-library"],
     ["release", "f-release"], ["runs", "f-runs"], ["results", "results"], ["count", "count"],
-    ["clear", "clear"], ["theme", "theme"], ["built", "built"],
+    ["clear", "clear"], ["theme", "theme"], ["extra", "extra"], ["built", "built"],
   ]) el[key] = $(id);
 
   setUpTheme();
+  setUpExtra();
   /* The bar, before the catalogue itself: where the reader is right now - this
    * URL, filters and all - and where the documentation was last left. Both
    * belong to the bar rather than to the list, so neither waits on the fetch
