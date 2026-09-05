@@ -273,7 +273,7 @@ test("the bar ends where the playground's own bar ends", async ({ page }) => {
   await expect(theme).toBeVisible();
   expect(await more.locator(".menu a").count()).toBeGreaterThanOrEqual(10);
   for (const part of ["github.com/abap2UI5/linter", "github.com/abap2UI5/vscode-extension", "github.com/abap2UI5-addons"]) {
-    await expect(more.locator(`.menu a[href*="${part}"]`)).toBeVisible();
+    await expect(more.locator(`.menu a[href*="${part}"]`).first()).toBeVisible();
   }
   await page.keyboard.press("Escape");
   await expect(theme).toBeHidden();

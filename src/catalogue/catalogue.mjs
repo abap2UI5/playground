@@ -23,7 +23,7 @@
 // The round trip is still the point: find it here, read it there, run it, come
 // back and keep looking.
 import { cmpVersion } from "../shell/ui5-libs.mjs";
-import { rememberHere, upgradeSiteLinks } from "../shell/site-memory.mjs";
+import { rememberHere, keepSiteLinksCurrent } from "../shell/site-memory.mjs";
 
 const $ = (id) => document.getElementById(id);
 
@@ -372,7 +372,7 @@ async function start() {
    * belong to the bar rather than to the list, so neither waits on the fetch
    * below and neither is lost when it fails. */
   rememberHere("samples");
-  upgradeSiteLinks();
+  keepSiteLinksCurrent();
 
   let data;
   try {

@@ -403,7 +403,7 @@ test("the bar begins and ends as the sample catalogue's bar does", async ({ page
   await expect(theme).toBeVisible();
   expect(await extra.locator(".menu a").count()).toBeGreaterThanOrEqual(10);
   for (const part of ["github.com/abap2UI5/linter", "github.com/abap2UI5/vscode-extension", "github.com/abap2UI5-addons"]) {
-    await expect(extra.locator(`.menu a[href*="${part}"]`)).toBeVisible();
+    await expect(extra.locator(`.menu a[href*="${part}"]`).first()).toBeVisible();
   }
   await page.keyboard.press("Escape");
   await expect(theme).toBeHidden();
@@ -445,8 +445,10 @@ test("both panes stay visible when a wide window gets narrow and wide again", as
 test("the app follows the system theme, and a change does not restart it", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await open(page);
-  // A sample with a field in it, so there is something a restart would lose.
-  await runSample(page, OTHER.id);
+  // A sample with a field in it, so there is something a restart would lose -
+  // by name, not "the other one": the page opens on it now, and the other
+  // one is the hello world, which has nothing to type into.
+  await runSample(page, "binding");
 
   // The frame is started in UI5's dark theme, matching the rest of the page.
   await expect(page.locator("#app")).toHaveAttribute("src", /sap-ui-theme=sap_horizon_dark/);

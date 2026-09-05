@@ -382,9 +382,10 @@ test("entries the playground cannot run are listed, say why, cannot be clicked, 
   // A sample the page carries links to the same file a catalogued row would:
   // they ARE catalogue entries, in abap2UI5/samples, and the only thing
   // different about them is that they travelled with the page.
+  const carried = SAMPLES[0];
   await expect(
-    page.locator(".example-item", { has: page.locator('[data-sample="hello"]') }).locator(".example-github"),
-  ).toHaveAttribute("href", SAMPLES[0].github);
+    page.locator(".example-item", { has: page.locator(`[data-sample="${carried.id}"]`) }).locator(".example-github"),
+  ).toHaveAttribute("href", carried.github);
   for (const href of await page.locator(".example-github").evaluateAll((as) => as.map((a) => a.href))) {
     expect(href, "every row links to ABAP, not to the code that carries it").toMatch(/\.clas\.abap$/);
   }

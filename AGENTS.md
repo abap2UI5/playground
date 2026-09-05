@@ -211,7 +211,14 @@ code:
   that list at low priority, into the HTTP cache the frame's own requests hit
   (Pages serves with a ten-minute max-age; the test server on purpose does
   not, so `tests/app.spec.js` holds the asking, not the hitting). The list
-  mirrors what the frame loads first and may go stale harmlessly.
+  mirrors what the frame loads first and may go stale harmlessly — it grew
+  by `sap.ui.layout`'s English message bundle when the page started opening
+  on Basics II, whose form is laid out with that library. The lazy preload
+  carries the code and not the texts, and UI5 fetches a lazy library's texts
+  with a **synchronous** request, which Chromium sends past the service
+  worker: the HTTP cache the warm-up primes is the only cache that answers
+  it. `tests/worker.spec.js` names it as the one request under `app/` a
+  second visit's first app still makes, and holds the rest to the worker.
 - **The service worker** (`src/shell/sw.js`, `tests/worker.spec.js`). Cache
   first, over an allow list, in a cache named after the build. Its own comment
   is the long form: what it caches (the core assets and the chunks by name,
@@ -766,11 +773,11 @@ documentation are facts in its list of facts. The one row that keeps a link of
 its own is one with no page written for it: it links to the class on GitHub,
 because that is all there is.
 
-**The round trip is the point.** *Open the full playground* on a sample's demo
-box goes to `../../?src=<raw>&from=catalogue&back=q=<class>`, and
-`showSourceLink()` in `src/shell/main.mjs` turns that into *Back to the
-catalogue* in the bar — in the same tab, narrowed to the sample they came from,
-instead of pointing at the file on GitHub. Find it here, read it there, run it, come back and keep
+**The round trip is the point.** *Switch to Playground with this code* on a
+sample's demo box goes to `../../?src=<raw>&from=catalogue&back=q=<class>` — in
+this tab, which the label says — and `showSourceLink()` in `src/shell/main.mjs`
+turns that into *Back to the catalogue* in the bar, narrowed to the sample they
+came from, instead of pointing at the file on GitHub. Find it here, read it there, run it, come back and keep
 looking. A static page cannot know the search a reader had, which is the one
 thing this lost when Run moved off the card; `q=<class>` is the search with
 exactly one hit. A `?src=` link from anywhere else still offers the GitHub
@@ -848,8 +855,8 @@ until it is pressed, which is that loader's own rule and the only one that
 scales: a playground is a whole ABAP runtime plus an abaplint parse of nine
 hundred sources, and 770 pages that booted one on sight would be 770 pages
 nobody waits for. Only samples that `run` here get a box — a start button that
-could only ever fail is not an offer — and the box carries *Open the full
-playground ↗* for a reader who wants the whole window. It is also why the page
+could only ever fail is not an offer — and the box carries *Switch to
+Playground with this code* for a reader who wants the whole window. It is also why the page
 no longer opens with a row of buttons: Run runs it here now, and the two links
 beside it were links in front of the answer.
 
@@ -858,8 +865,8 @@ nothing else** — no editor, no toolbar, no status line — in a box smaller th
 the one an editor beside it needed. A page that prints the whole class two
 screens down does not need a second copy of it inside a frame, and a strip of
 the playground's own furniture across the top of it is furniture rather than
-answer. The editor is on the box, in *Open the full playground ↗*, which is
-where a reader who wants to change a line goes anyway. 420 is what the demo is
+answer. The editor is on the box, in *Switch to Playground with this code*,
+which is where a reader who wants to change a line goes anyway. 420 is what the demo is
 read at rather than a floor it grows from: an abap2UI5 app is a `Shell` around
 a `Page` laid out at 100% of its box, so it never overflows one and the
 loader's grow-on-overflow never fires (`src/embed/abap2ui5-embed.js` says why
@@ -1014,7 +1021,10 @@ each mechanism below.
 
 **The bar exists four times, by hand** — `src/shell/index.html`,
 `src/catalogue/index.html`, `tools/sample-pages.mjs` and, over there,
-`theme/SiteBar.vue` with `theme/style.css`. So does the palette
+`theme/SiteBar.vue` with `theme/style.css` — and so does the menu behind its
+last button: the switch, the practical links (issues, release notes, install,
+support, contribute, sponsor), the tools, then the repositories by kind in two
+columns. So does the palette
 (`src/shell/shell.css` is the original; `catalogue.css` says it is a copy and
 why). A shared partial would be a build step in front of a page whose whole
 point is that it is a file, and a shared stylesheet across two repositories
@@ -1026,7 +1036,7 @@ them together.
 | | |
 |---|---|
 | the theme | `abap2ui5-playground:theme`, read before the first paint by the inline script at the top of all three documents here and by a head script over there. The switch in any of the four bars turns all four |
-| where you were | `src/shell/site-memory.mjs`, imported by the shell and the catalogue bundles and carried as an inline copy by the per-sample pages, which have no bundle. Every samples page writes its own path down — the catalogue's *with its filters*, because the filters are the page there — and the Samples item on the other bars is lifted to it. A stored value is **checked, not followed**: resolved against this origin and kept only if it is still inside the href the markup carries, so a poisoned or stale key costs a restored position and nothing else |
+| where you were | `src/shell/site-memory.mjs`, imported by the shell and the catalogue bundles and carried as an inline copy by the per-sample pages, which have no bundle. Every samples page writes its own path down — the catalogue's *with its filters*, because the filters are the page there — and the Samples item on the other bars is lifted to it: at boot, again when the page is shown or the tab looked at again, and on the click itself (`keepSiteLinksCurrent()`), because a link lifted once and left open carries the position from before. A stored value is **checked, not followed**: resolved against this origin and kept only if it is still inside the href the markup carries, so a poisoned or stale key costs a restored position and nothing else. All three items open in the same tab — the sites are one site, and a bar that opened one of them in a second window was the one asymmetry between the four bars |
 
 The playground is consulted by both and remembered by neither: its URL carries
 the code in the editor, so an item that reopened yesterday's sample would be a

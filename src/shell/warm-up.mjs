@@ -35,6 +35,16 @@ export const appFirstLoad = (theme) => [
   "app/resources/sap/m/library-preload.js",
   `app/resources/sap/m/themes/${theme}/library.css?sap-ui-dist-version=${UI5_VERSION}`,
   "app/resources/sap/ui/layout/library-preload-lazy.js",
+  // The layout library's texts, which the lazy preload above does not carry:
+  // the app the page opens on lays its form out with sap.ui.layout, and UI5
+  // loads a lazy library's message bundle with a SYNCHRONOUS request - which
+  // Chromium sends past the service worker, so this is the one file of the
+  // frame's first load only the browser's HTTP cache can answer, and this
+  // warm-up is what puts it there. English, because the list is static and
+  // the frame follows the browser's language: a reader in another language
+  // fetches theirs, once per ten minutes at most. tests/worker.spec.js names
+  // it as the one request under app/ a second visit still makes.
+  "app/resources/sap/ui/layout/messagebundle_en.properties",
   "app/resources/sap/ui/unified/library-preload-lazy.js",
 ];
 

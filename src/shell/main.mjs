@@ -44,7 +44,7 @@ import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
 import { setTestResults, setUpInsight, showInsight, updateInsight } from "./insight.mjs";
 import { restoreCheckerSettings } from "./checker-settings.mjs";
 import { setUpSplitter, setUpTabs } from "./layout.mjs";
-import { upgradeSiteLinks } from "./site-memory.mjs";
+import { keepSiteLinksCurrent } from "./site-memory.mjs";
 import { announceAppHeight, announceReady, announceStatus, startEmbedMessages } from "./embed.mjs";
 import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
 import { openShare, setUpShareDialog } from "./share-dialog.mjs";
@@ -242,10 +242,11 @@ async function boot() {
   // closes it on a click anywhere else and on Escape (extra.mjs).
   setUpExtra();
   // Samples and Documentation in the trailer, pointed at the page each of those sites
-  // was last left on (site-memory.mjs). Nothing is stored for the playground
+  // was last left on (site-memory.mjs) - now, and again whenever that can have
+  // moved while this page stayed open. Nothing is stored for the playground
   // itself; it only reads. Skipped when embedded, where the trailer is not on
   // screen at all.
-  if (!embedded) upgradeSiteLinks();
+  if (!embedded) keepSiteLinksCurrent();
   setUpAutorun({ restore: !embedded });
   setUpSplitter();
   setUpAbout();

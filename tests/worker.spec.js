@@ -148,8 +148,22 @@ test("the app frame's stylesheets and component come out of the cache as well", 
   expect(kept.some((p) => p.startsWith("/app/manifest.json"))).toBe(true);
 
   // The document itself is the one thing under app/ that goes to the network
-  // (through the worker, which asks the network first - see the test above).
-  expect([...fetched].filter((p) => p.startsWith("/app/")).map((p) => p.split("?")[0]).filter((p) => p !== "/app/index.html")).toEqual([]);
+  // (through the worker, which asks the network first - see the test above) -
+  // plus the one request Chromium sends past every worker: a synchronous
+  // XMLHttpRequest, which is how UI5 loads the texts of a library it pulls in
+  // lazily, and the start app's form pulls in sap.ui.layout. The worker holds
+  // that file too (the warm-up list carries it, so it is precached), and an
+  // async request for it comes out of the cache - only the sync one does not,
+  // and no worker can change that. In production the browser's own HTTP
+  // cache answers it, primed by the warm-up under Pages' ten-minute max-age;
+  // this server sends no cache headers on purpose (tests/app.spec.js), so
+  // here it is the one request under app/ a second visit makes. Held to
+  // exactly that one, by name: a second one is a regression.
+  const syncOnly = ["/app/resources/sap/ui/layout/messagebundle_en.properties"];
+  expect(
+    [...fetched].filter((p) => p.startsWith("/app/")).map((p) => p.split("?")[0])
+      .filter((p) => p !== "/app/index.html" && !syncOnly.includes(p)),
+  ).toEqual([]);
 });
 
 test("the playground opens and runs with no network, on what the last visit left in the cache", async ({ page, context }) => {
