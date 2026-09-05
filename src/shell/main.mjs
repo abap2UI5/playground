@@ -45,6 +45,7 @@ import { setTestResults, setUpInsight, showInsight, updateInsight } from "./insi
 import { restoreCheckerSettings } from "./checker-settings.mjs";
 import { setUpSplitter, setUpTabs } from "./layout.mjs";
 import { keepSiteLinksCurrent } from "./site-memory.mjs";
+import { setUpSearch } from "./search-box.mjs";
 import { announceAppHeight, announceReady, announceStatus, startEmbedMessages } from "./embed.mjs";
 import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
 import { openShare, setUpShareDialog } from "./share-dialog.mjs";
@@ -247,6 +248,11 @@ async function boot() {
   // itself; it only reads. Skipped when embedded, where the trailer is not on
   // screen at all.
   if (!embedded) keepSiteLinksCurrent();
+  // The search box beside them: one box over the documentation and all ~770
+  // samples, over the index the documentation publishes (search-box.mjs).
+  // Not when embedded - an embedded playground is furniture in somebody
+  // else's page, and a dialog that covers it belongs to nobody.
+  if (!embedded) setUpSearch();
   setUpAutorun({ restore: !embedded });
   setUpSplitter();
   setUpAbout();

@@ -44,7 +44,12 @@ async function openPlayground(page) {
 }
 
 const samplesLink = (page) => page.locator('.bar-nav a[data-site="samples"]');
+/* The Documentation item, which is the one the docs key lifts. It is written
+   at the first page of the manual and restores anywhere inside /docs/ - the
+   `data-scope` attribute on it is what separates those two (site-memory.mjs).
+   Home is a link to the front page and is never lifted. */
 const docsLink = (page) => page.locator('.bar-nav a[data-site="docs"]');
+const DOCS_HREF = "https://abap2ui5.github.io/docs/get_started/about";
 
 test("the catalogue writes down the page it is on, filters and all", async ({ page }) => {
   await page.goto("/samples/?q=table");
@@ -115,7 +120,7 @@ test("a site on another origin shares no storage, so its item is left alone", as
   await openPlayground(page);
   // The documentation is abap2ui5.github.io in a test run served from
   // localhost, which is exactly the case the origin check exists for.
-  await expect(docsLink(page)).toHaveAttribute("href", "https://abap2ui5.github.io/docs/");
+  await expect(docsLink(page)).toHaveAttribute("href", DOCS_HREF);
 });
 
 test("the playground itself is consulted and never remembered", async ({ page }) => {
@@ -138,5 +143,5 @@ test("a sample page carries the same two lines the bundles import", async ({ pag
   // (tools/sample-pages.mjs), so it is checked on its own: it writes, and it
   // refuses the same values.
   expect(await stored(page, SAMPLES_KEY)).toBe(`/samples/${firstPage}`);
-  await expect(docsLink(page)).toHaveAttribute("href", "https://abap2ui5.github.io/docs/");
+  await expect(docsLink(page)).toHaveAttribute("href", DOCS_HREF);
 });

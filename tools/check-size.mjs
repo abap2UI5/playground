@@ -50,6 +50,12 @@ const TRANSFERRED = [
    * compresses hard: it is 770 near-identical objects. */
   { file: "samples/apps.json", limit: 0.25 * MB, note: "the sample catalogue's index, 770 samples" },
   { file: "samples/catalogue.mjs", limit: 0.02 * MB, note: "the catalogue page itself" },
+  /* The bar's search box, loaded by the catalogue and by every per-sample
+   * page - so it is one file for 773 documents, and the budget is on the file
+   * rather than on the sum. What it searches is not in here: the index is
+   * fetched from the documentation's deployment, and only once somebody
+   * types. */
+  { file: "samples/search.mjs", limit: 0.012 * MB, note: "the search box in the bar" },
 ];
 
 // The whole site. Most of it is UI5, which is fetched a bundle at a time and

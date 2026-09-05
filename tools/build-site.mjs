@@ -312,8 +312,16 @@ for (const name of ["favicon.png", "apple-touch-icon.png", "icon-192.png", "icon
 //
 // dist/samples/apps.json is written by tools/build-catalogue.mjs, which runs
 // before this and owns that directory's data.
+//
+// The search box is the SECOND entry point here, and its own file on purpose:
+// the catalogue loads it and so does every one of the 772 per-sample pages,
+// which have no bundle of their own. One module beside them is fetched once
+// and cached for every page after it; inlined it would be written 773 times.
 await esbuild.build({
-  entryPoints: [{ in: path.join(ROOT, "src", "catalogue", "catalogue.mjs"), out: "catalogue" }],
+  entryPoints: [
+    { in: path.join(ROOT, "src", "catalogue", "catalogue.mjs"), out: "catalogue" },
+    { in: path.join(ROOT, "src", "catalogue", "search-entry.mjs"), out: "search" },
+  ],
   outdir: path.join(DIST, "samples"),
   outExtension: { ".js": ".mjs" },
   bundle: true,
@@ -328,6 +336,7 @@ for (const name of ["index.html", "catalogue.css"]) {
   fs.copyFileSync(path.join(ROOT, "src", "catalogue", name), path.join(DIST, "samples", name));
 }
 log(`samples/catalogue.mjs (${kb(path.join(DIST, "samples", "catalogue.mjs"))})`);
+log(`samples/search.mjs (${kb(path.join(DIST, "samples", "search.mjs"))})`);
 
 // A same-origin ABAP file, so ?src= can be exercised without depending on
 // somebody else's host being up. It is also the smallest possible worked

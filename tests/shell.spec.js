@@ -384,9 +384,14 @@ test("the bar begins and ends as the sample catalogue's bar does", async ({ page
   await expect(page.locator(".brand")).toHaveText("abap2UI5");
   await expect(page.locator(".brand img")).toBeVisible();
 
-  // And the same far end: Documentation, Samples and where you are, then
-  // LinkedIn and GitHub, then the button that opens the rest.
-  await expect(page.locator(".bar-nav > *")).toHaveText(["Documentation", "Samples", "Playground"]);
+  // And the same far end: the four sections - Home, Documentation, Samples and
+  // where you are - then LinkedIn and GitHub, then the button that opens the
+  // rest.
+  await expect(page.locator(".bar-nav > *")).toHaveText(["Home", "Documentation", "Samples", "Playground"]);
+  // The same box the other three bars carry. Here it is at the head of the
+  // trailer rather than in the middle of the row: this bar's middle is a
+  // toolbar (AGENTS.md says why).
+  await expect(page.locator(".bar .search-button")).toBeVisible();
   await expect(page.locator('.bar-nav [aria-current="page"]')).toHaveText("Playground");
   await expect(page.locator('.bar-nav a[href="samples/"]')).toBeVisible();
   await expect(page.locator('.bar-nav a[data-site="docs"]')).toHaveText("Documentation");

@@ -260,7 +260,8 @@ test("a page renders as the catalogue's own, and its links work", async ({ page 
   // which is what makes it the bold one and what a screen reader announces.
   await expect(page.locator(".brand")).toHaveText("abap2UI5");
   await expect(page.locator(".brand")).toHaveAttribute("href", "../../samples/");
-  await expect(page.locator(".bar-nav > *")).toHaveText(["Documentation", "Samples", "Playground"]);
+  await expect(page.locator(".bar-nav > *")).toHaveText(["Home", "Documentation", "Samples", "Playground"]);
+  await expect(page.locator(".bar .search-button")).toBeVisible();
   const here = page.locator(".bar-nav a", { hasText: "Samples" });
   await expect(here).toBeVisible();
   await expect(here).toHaveAttribute("aria-current", "page");

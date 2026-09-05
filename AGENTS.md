@@ -18,13 +18,13 @@ them before touching `tools/` or `src/runtime`.
 
 | Path | Purpose |
 | --- | --- |
-| `src/shell/` | The page: boot and Run (`main.mjs`, which also owns the **Auto** switch beside Run - the debounce, the stored setting and the three reasons Run may be inactive), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the samples browser over the sample catalogue (`examples.mjs`, reading the built index — a near-full-screen modal with the filters and the catalogue's three facets down its side), which UI5 library a control ships in (`ui5-libs.mjs`) beside the closed list of the ones this site carries (`ui5-libraries.mjs`), the bottom panel (`insight.mjs`), the syntax colour it prints XML and JSON in (`highlight.mjs`) and the View tab's edit mode - the builder chain read back out of the ABAP (`chain-read.mjs`), the edited document matched against the one that was shown (`view-edit.mjs`), the change put back as an edit to the ABAP that is there (`chain-patch.mjs`) and, when it cannot be, the chain written again in the house layout (`chain-write.mjs`), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch in the menu behind the bar's last button, applied as `data-theme` on `<html>` and handed to the editor and the app frame; `extra.mjs` is the six lines that close that menu), where the reader was on each of the neighbouring sites (`site-memory.mjs` — see "One site in three places" below), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
+| `src/shell/` | The page: boot and Run (`main.mjs`, which also owns the **Auto** switch beside Run - the debounce, the stored setting and the three reasons Run may be inactive), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the samples browser over the sample catalogue (`examples.mjs`, reading the built index — a near-full-screen modal with the filters and the catalogue's three facets down its side), which UI5 library a control ships in (`ui5-libs.mjs`) beside the closed list of the ones this site carries (`ui5-libraries.mjs`), the bottom panel (`insight.mjs`), the syntax colour it prints XML and JSON in (`highlight.mjs`) and the View tab's edit mode - the builder chain read back out of the ABAP (`chain-read.mjs`), the edited document matched against the one that was shown (`view-edit.mjs`), the change put back as an edit to the ABAP that is there (`chain-patch.mjs`) and, when it cannot be, the chain written again in the house layout (`chain-write.mjs`), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch in the menu behind the bar's last button, applied as `data-theme` on `<html>` and handed to the editor and the app frame; `extra.mjs` is the six lines that close that menu), where the reader was on each of the neighbouring sites (`site-memory.mjs` — see "One site in three places" below), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the search box in the bar and the matcher under it (`search-box.mjs`, `search-engine.mjs` — one box over the documentation AND every sample, see "One site in three places" below), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
 | `src/editor/` | Monaco plus the abaplint registry — in a worker: `registry-core.mjs` and `transpile-core.mjs` are abaplint and the single-object transpile as they run there, `registry-worker.mjs` the worker's entry, `registry.mjs` the page's client with a promise in front of everything, `providers.mjs` Monaco's language providers answered over it — the abap2UI5 linter wrapper (`abap2ui5-lint.mjs`), the file set, and the samples the page carries - `sample-list.mjs`, which is nothing but the class names of a handful of apps in **abap2UI5/samples**, and `samples.mjs`, which pairs what the build resolved them into (`build/samples/`) with the ABAP itself |
 | `src/runtime/` | The ABAP side of the page: the framework entry (`index.mjs`, `roundtrip()` and `defineClasses()`), `worker.mjs` around it, which is the bundle's entry and answers those over `postMessage` when it runs as the worker the page starts, the sql.js database (`db-setup.mjs`), and the browser shims for Node modules |
 | `src/abap/` | The playground's own ABAP - `zcl_pg_bridge` and nothing else; it travels through the same downport and transpile as the framework. There was a `zcl_pg_hello` beside it, a copy of the hello world in **abap2UI5/samples**; the runtime tests drive the framework's own `z2ui5_cl_ui5_app_hi_world` instead, so this repository holds no app of its own to keep in step with one somebody else maintains |
 | `src/examples/` | ABAP served as static files, so `?src=` has same-origin targets and the link tests depend on no foreign host |
 | `src/embed/` | The embed loader (`abap2ui5-embed.js`) and a worked example page; copied verbatim to `dist/embed/` |
-| `src/catalogue/` | The sample catalogue at `/samples/`: one page, one stylesheet, one module, over the index `tools/build-catalogue.mjs` writes. Its own document and its own bundle - see "The sample catalogue" below |
+| `src/catalogue/` | The sample catalogue at `/samples/`: one page, one stylesheet, one module, over the index `tools/build-catalogue.mjs` writes. Its own document and its own bundle - see "The sample catalogue" below. `search-entry.mjs` is the second bundle out of this directory: the bar's search box, as the one file the catalogue and all 772 per-sample pages load |
 | `tools/` | The build (`build.mjs`, which drives `fetch-deps`, `build-framework`, `build-ui5`, `build-catalogue` — which writes the index and, through `sample-pages.mjs`, one static page per sample plus the sitemap, with the ABAP on those pages fetched by `sample-sources.mjs` and coloured by `abap-highlight.mjs` —, `build-site`), the size budget (`check-size`) and the dev server (`serve`) |
 | `tests/` | Playwright specs — the only test layer; everything is tested through a real browser against the built `dist/` |
 
@@ -1019,6 +1019,21 @@ same palette, the same measure. The documentation lives in
 [abap2UI5/docs](https://github.com/abap2UI5/docs), which carries its half of
 each mechanism below.
 
+**What the bar carries, left to right.** The mark and the name, then the four
+sections of the project — **Home**, **Documentation**, **Samples**,
+**Playground** — then the search box, then the two marks and the menu behind
+the last button. Home and Documentation are two pages of the documentation's
+deployment; Samples and Playground are here.
+
+**This repository's own bar is the exception, in one respect only.** On the
+catalogue and the per-sample pages the sections stand against the brand and the
+search is centred, exactly as over there. The playground's own bar cannot do
+that: it is a workbench — undo, format, Samples, Run, Auto, Share, Full screen
+— and that toolbar owns the middle and the space after the mark. So there the
+group (search, four sections, marks, menu) keeps the right-hand end it has
+always had, in the same order and drawn with the same values. Everything about
+the group itself is identical; only where the row puts it is not.
+
 **The bar exists four times, by hand** — `src/shell/index.html`,
 `src/catalogue/index.html`, `tools/sample-pages.mjs` and, over there,
 `theme/SiteBar.vue` with `theme/style.css` — and so does the menu behind its
@@ -1030,6 +1045,29 @@ why). A shared partial would be a build step in front of a page whose whole
 point is that it is a file, and a shared stylesheet across two repositories
 that deploy separately would be a request in front of the first paint. Change
 them together.
+
+**The search box is not a fourth copy, and its index is not a copy at all.**
+The box is `src/shell/search-box.mjs` — plain DOM, because two of the three
+documents here have no framework and one of them is written 772 times by a
+build script. The playground's bundle imports it; the catalogue and every
+per-sample page load it as `dist/samples/search.mjs`, one module for all 773
+documents, bundled from `src/catalogue/search-entry.mjs` and budgeted in
+`tools/check-size.mjs`. `src/shell/search-engine.mjs` (the matching) IS a copy
+— of `docs/.vitepress/theme/search-engine.js` over there, kept in step by hand
+like the palette.
+
+What it searches is one generated document, `/docs/search-index.json`: every
+page of the documentation, and every entry of the three sample catalogues. The
+documentation builds it (`scripts/generate-search.mjs` over there) and all four
+bars fetch it from the shared origin, lazily, on the first keystroke. Two
+copies of that data would be two answers to one query, which is why this one
+thing is fetched rather than copied.
+
+**The catalogue keeps its own search field, and that is not a duplicate.** That
+field is a FILTER: it narrows the 770 rows in front of you, works with the
+three facets beside it, and writes a URL that can be shared. The box in the bar
+answers a different question — "where is X in this project" — from any of the
+four bars, and leaves the page to answer it.
 
 **One origin means one localStorage**, which two things rely on:
 

@@ -248,9 +248,10 @@ test("the bar ends where the playground's own bar ends", async ({ page }) => {
   // so the brand does not say it again.
   await expect(page.locator(".brand")).toHaveText("abap2UI5");
   await expect(page.locator(".brand img")).toBeVisible();
-  // At the other, in this order: Documentation, Samples and Playground, then
-  // the two marks, then the button that opens the rest.
-  await expect(page.locator(".bar-nav > *")).toHaveText(["Documentation", "Samples", "Playground"]);
+  // Next to it, in this order: the four sections of the project, then the
+  // search box, then the two marks, then the button that opens the rest.
+  await expect(page.locator(".bar-nav > *")).toHaveText(["Home", "Documentation", "Samples", "Playground"]);
+  await expect(page.locator(".bar .search-button")).toBeVisible();
   await expect(page.locator('.bar-nav [aria-current="page"]')).toHaveText("Samples");
   await expect(page.locator('.bar-nav a[data-site="docs"]')).toHaveText("Documentation");
   // The way off this site is two marks at the end of the bar, the same two the

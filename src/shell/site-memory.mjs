@@ -70,7 +70,18 @@ export function upgradeSiteLinks(root = document) {
     const last = readStored(KEY[a.dataset.site]);
     if (!last) continue;
     try {
-      const base = new URL(home, location.href);
+      /* What the stored value has to be INSIDE is normally the link's own
+       * href, and for the Samples item it still is. The Documentation item is
+       * the exception the `data-scope` attribute exists for: it opens the
+       * first page of the manual rather than its front page, so a stored
+       * /docs/cookbook/... is not inside its href and every restore would
+       * fall back. The scope is the section - /docs/ - while the href stays
+       * the page a reader with nothing stored should land on.
+       *
+       * It is an attribute of the MARKUP, not of the stored value, so this
+       * widens nothing: what may be restored is still declared by the
+       * document and still checked against this origin below. */
+      const base = new URL(a.dataset.scope || home, location.href);
       if (base.origin !== location.origin) continue;
       const target = new URL(last, location.origin);
       if (target.origin !== location.origin) continue;
