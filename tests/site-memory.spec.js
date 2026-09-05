@@ -30,6 +30,7 @@ import path from "node:path";
 
 const SAMPLES_KEY = "abap2ui5-playground:last-samples";
 const DOCS_KEY = "abap2ui5-playground:last-docs";
+const PLAYGROUND_KEY = "abap2ui5-playground:last-playground";
 
 const DIST = path.join(process.cwd(), "dist");
 const index = JSON.parse(fs.readFileSync(path.join(DIST, "samples", "apps.json"), "utf8"));
@@ -123,15 +124,39 @@ test("a site on another origin shares no storage, so its item is left alone", as
   await expect(docsLink(page)).toHaveAttribute("href", DOCS_HREF);
 });
 
-test("the playground itself is consulted and never remembered", async ({ page }) => {
+test("the playground writes itself down too, URL and all", async ({ page }) => {
+  // It used to be consulted and never remembered, on the grounds that its URL
+  // carries the code in the editor rather than a place. What that missed is
+  // the case it creates: a reader with a SAMPLE open here has code that is not
+  // a draft and is not stored as one, so pressing Documentation and then
+  // Playground threw it away and started them on the default sample. The URL
+  // is what carries it, so the URL is what is written down.
   await page.goto("/samples/");
   await openPlayground(page);
 
-  // Its URL carries the code in the editor, and an item that reopened
-  // yesterday's sample would be a different promise from the one the word
-  // makes. Nothing under the two keys names the playground.
   expect(await stored(page, SAMPLES_KEY)).toBe("/samples/");
   expect(await stored(page, DOCS_KEY)).toBe(null);
+  /* `openPlayground` goes to "/", which is the URL a reader arrives on. */
+  expect(await stored(page, PLAYGROUND_KEY)).toBe("/");
+});
+
+test("a sample opened in the playground is what the item comes back to", async ({ page }) => {
+  const src = "https://raw.githubusercontent.com/abap2UI5/samples/main/x.clas.abap";
+  await page.goto(`/index.html?src=${encodeURIComponent(src)}`);
+  await expect(page.locator(".bar-nav")).toBeVisible();
+  await expect.poll(() => stored(page, PLAYGROUND_KEY)).toContain("src=");
+});
+
+test("an embedded playground is furniture in somebody else's page, and writes nothing", async ({ page }) => {
+  await page.goto("/index.html?embed=1");
+  await page.waitForTimeout(1500);
+  expect(await stored(page, PLAYGROUND_KEY)).toBe(null);
+});
+
+test("an app-only view is a running app, not a place to come back to", async ({ page }) => {
+  await page.goto("/index.html?view=app");
+  await page.waitForTimeout(1500);
+  expect(await stored(page, PLAYGROUND_KEY)).toBe(null);
 });
 
 test("a sample page carries the same two lines the bundles import", async ({ page }) => {

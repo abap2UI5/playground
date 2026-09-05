@@ -1137,9 +1137,19 @@ four bars, and leaves the page to answer it.
 | where **on** the page you were | The same file, keys `:scroll` (a small map of path → offset, the twelve most recent) and `:returning`. The item above came back to the page and to the TOP of it, which on a list of 770 rows is most of the way to not having remembered anything. Restored **on arrival by the bar and nowhere else**: a `data-back` link writes down how far down this page the reader is and one record saying where they are being sent, and the page that *is* that, arriving within half a minute and with no hash of its own, honours it. Restoring on every load would fight the browser's own back-and-forward restoration and would drop a reader who followed an ordinary link into the middle of a page. Checked the same way a stored path is — `scrollTo` takes whatever it is given |
 | the last thing you searched for | `src/shell/search-engine.mjs`, key `:search`, described above. Checked: a string, short, and less than half an hour old |
 
-The playground is consulted by both and remembered by neither: its URL carries
-the code in the editor, so an item that reopened yesterday's sample would be a
-different promise from the one the word makes.
+**The playground is remembered too**, under `:last-playground`, and it did not
+use to be. The argument against was that its URL carries the code in the editor
+rather than a place — samples and docs are places, the playground is a
+workbench. What that missed is the case it creates: a reader who opens a SAMPLE
+here has code that is **not a draft**, and a sample that was picked and read is
+deliberately not stored, so pressing Documentation and then Playground threw it
+away and started them on the default sample. Their own edits survived that
+trip; the sample they were reading did not, and nothing on the screen said why.
+The URL is what carries it, so the URL is what is written down — on `pagehide`
+and whenever the tab is hidden, because neither is promised on its own. Two
+views never write: an **embedded** playground (furniture in somebody else's
+page) and an **app-only** one (`?view=app`, `?view=full` — a running app, not a
+place to come back to).
 
 `tests/site-memory.spec.js` holds the round trip and the values that must be
 refused. The documentation half cannot be reached from here — it is another
