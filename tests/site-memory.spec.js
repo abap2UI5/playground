@@ -260,9 +260,21 @@ const INDEX = {
   ],
 };
 
-const withIndex = (page) =>
-  page.route("**/docs/search-index.json", (route) =>
+const withIndex = async (page) => {
+  /* The hit's own destination is a real page on the published site. Nothing
+     here is about what is at the other end - only that opening a hit writes
+     the query down - and a test that reaches the live internet is a test that
+     fails when the network does.
+
+     FIRST, because the index below is on that host too and Playwright matches
+     routes in reverse order of registration: the narrower one has to be the
+     later one, or this catch-all answers the index request with a page. It
+     did, and the box then found nothing to open. */
+  await page.route("https://abap2ui5.github.io/**", (route) =>
+    route.fulfill({ contentType: "text/html", body: "<!doctype html><title>somewhere else</title>" }));
+  await page.route("**/docs/search-index.json", (route) =>
     route.fulfill({ contentType: "application/json", body: JSON.stringify(INDEX) }));
+};
 
 test("the search box opens with the query the last hit was opened on", async ({ page }) => {
   await withIndex(page);
