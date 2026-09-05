@@ -103,7 +103,10 @@ function line(text) {
   return out + esc(text.slice(at));
 }
 
-/** The class as HTML: escaped, coloured, and otherwise exactly as committed. */
-export function highlightAbap(code) {
-  return String(code).split("\n").map(line).join("\n");
+/* The class as HTML: escaped, coloured, and otherwise exactly as committed -
+ * one string per line, because the page wraps each of them in an element of
+ * its own (an id and a numbered link, so a passage of a sample has an
+ * address). Joining them back with "\n" is the whole of the old shape. */
+export function highlightAbapLines(code) {
+  return String(code).split("\n").map(line);
 }
