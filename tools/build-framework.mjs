@@ -23,6 +23,7 @@ import {
   nodeStubPlugin,
   percentEncodedPlugin,
 } from "./esbuild-plugins.mjs";
+import { patchTranspilerReturning } from "./patch-transpiler-returning.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DEPS = path.join(ROOT, "deps");
@@ -34,6 +35,11 @@ const PG_ABAP = path.join(ROOT, "src", "abap");
 // count as current, or a deleted dist/ would be "cached" into a missing site.
 const FRAMEWORK_BUNDLE = path.join(ROOT, "dist", "runtime", "framework.mjs");
 const WASM_COPY = path.join(ROOT, "dist", "runtime", "sql-wasm.wasm");
+
+// The transpile below and the one the page runs in the browser come out of the
+// same installed package, so the shim is applied once, here and in build-site,
+// before either reads it - see tools/patch-transpiler-returning.mjs.
+patchTranspilerReturning();
 
 const log = (m) => console.log(`build-framework: ${m}`);
 const run = (cmd, args) =>
@@ -86,6 +92,10 @@ function outputHash() {
     for (const file of walk(dir).sort()) h.update(path.relative(ROOT, file)).update(fs.readFileSync(file));
   }
   h.update(fs.readFileSync(path.join(ROOT, "tools", "esbuild-plugins.mjs")));
+  // The transpiler shim changes what the transpile emits without changing the
+  // pinned version this hash otherwise reads, so its bytes go in explicitly -
+  // otherwise a cache from before it was added is reused as current.
+  h.update(fs.readFileSync(path.join(ROOT, "tools", "patch-transpiler-returning.mjs")));
   h.update(fs.readFileSync(fileURLToPath(import.meta.url)));
   // Debug builds differ from published ones in exactly this, and swapping
   // between them has to rebuild rather than reuse.

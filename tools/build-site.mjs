@@ -13,6 +13,12 @@ import * as esbuild from "esbuild";
 import { abap2ui5LinterPlugin, nodeStubPlugin } from "./esbuild-plugins.mjs";
 import { appFirstLoad } from "../src/shell/warm-up.mjs";
 import { SAMPLE_LIST, SAMPLE_REPO } from "../src/editor/sample-list.mjs";
+import { patchTranspilerReturning } from "./patch-transpiler-returning.mjs";
+
+// The registry worker bundled below IS the transpiler the reader's browser
+// runs, so the shim goes on before esbuild reads the package - see
+// tools/patch-transpiler-returning.mjs.
+patchTranspilerReturning();
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "src", "shell");
