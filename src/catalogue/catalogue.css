@@ -319,6 +319,42 @@ main {
 .masthead p { margin: 0 0 10px; color: var(--fg-dim); }
 .masthead b { color: var(--fg); }
 
+/* ------------------------------------------------------------- on paper */
+/* A sample page is printed and saved as a PDF like any other reference, and
+   nothing here had ever said how: the bar came out across page one, "On this
+   page" stood beside a column squeezed into what was left, and the demo -
+   an app in an iframe that a sheet of paper cannot run - took a page of its
+   own. What is kept is the page: the trail, the title, what it builds, and
+   the ABAP. A listing is not split across two sheets if it fits on one, and a
+   heading is not the last thing on a sheet. */
+@media print {
+  .bar, .outline, .demo, .source-copy, .search-scrim, .controls, .side-scrim { display: none !important; }
+  html { scroll-padding-top: 0; }
+  body { background: #fff; }
+  main, .sample, .sample-body { display: block; max-width: none; margin: 0; padding: 0; }
+  a { color: inherit; }
+  pre, table, figure, img, .card { break-inside: avoid; page-break-inside: avoid; }
+  h1, h2, h3 { break-after: avoid; page-break-after: avoid; }
+  pre { white-space: pre-wrap; word-break: break-word; }
+}
+
+/* ---------------------------------------------- less movement, if asked */
+/* The drawer slides, the cards lift, the outline's mark moves. None of it
+   carries meaning, and for a reader with a vestibular disorder motion on a
+   screen is not a matter of taste. The system already asks them and the
+   browser passes the answer on; nothing here was listening. The blanket form,
+   because a rule that has to be remembered every time something new animates
+   is a rule that will be forgotten - and nothing on these pages waits for
+   `transitionend`, so what they DO is unchanged. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* -------------------------------------------------------------- controls */
 
 /* AN ANCHOR LANDS BELOW THE BAR, not underneath it. The bar is sticky and
@@ -418,6 +454,15 @@ html { scroll-padding-top: 62px; }
   gap: 7px;
   /* The card is a link, and the title carries it - see below. */
   position: relative;
+  /* AND IT MAY BE NARROWER THAN ITS LONGEST WORD. A grid item's minimum is
+     its min-content width, and one column holds all 771 cards - so the single
+     widest card set the track for every one of them. "This example uses the
+     'sapUxAPObjectPageSubSection'…" made that track 383px, which no 390px
+     screen can hold, and the whole catalogue scrolled sideways: cards,
+     filters, masthead and all. The lines that can carry such a word are
+     allowed to break (below); this is what lets the CARD stop insisting on
+     the width it would need if they did not. */
+  min-width: 0;
 }
 .card:hover { border-color: var(--accent); }
 
@@ -434,13 +479,16 @@ html { scroll-padding-top: 62px; }
 .card h3 a:focus-visible::after { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .card .sub { margin: 0; font-size: 13px; color: var(--fg-dim); }
-/* A CLASS NAME IS NOT A WORD, and may be broken when it has to be. A card's
-   subtitle is `z2ui5_cl_smp_app_493` and a row of the full list is the same,
-   and a line-breaker treats either as one token - so on a 320px screen one of
-   them gave its card a minimum width the grid could not meet and the WHOLE
-   catalogue scrolled sideways, cards and filters and all. Breaking is allowed
-   only where it is needed: a name that fits is never broken. */
-.card h3, .card .sub, .all-groups li { overflow-wrap: break-word; }
+/* A CLASS NAME IS NOT A WORD, and may be broken when it has to be. The line
+   under a card IS the class - z2ui5_cl_smpc_app_001, 21 characters set in the
+   mono face - and a line-breaker treats it as one token, so it gave 636 of the
+   771 cards a minimum width of 383px. A grid track cannot meet that on a
+   390px screen, and the whole catalogue scrolled sideways: cards, filters,
+   masthead and all. Measured by asking each card for its min-content width
+   rather than by eye, which is why it took three goes to find the right line.
+   Breaking is allowed only where it is needed: a name that fits is never
+   broken. */
+.card h3, .card .sub, .card .who, .all-groups li { overflow-wrap: break-word; }
 .card .who {
   font: 11px/1.4 var(--font-mono);
   color: var(--fg-dim);
