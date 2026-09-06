@@ -101,15 +101,26 @@ export function mountSearch(host) {
   const keys = el("div", "search-keys");
   const hint = (text, keyNames, endOfRow) => {
     const span = el("span", endOfRow ? "search-keys-end" : null);
-    for (const k of keyNames) span.append(el("kbd", null, k));
+    keyNames.forEach((k, i) => {
+      /* "or" between alternatives, nothing between the two arrows: a row that
+         read "/Ctrl K from anywhere" names one key nobody has. The separator
+         is only ever needed at the end of the row, where the two ways in are
+         listed, so it is the "or" that belongs there and not a comma. */
+      if (i) span.append(document.createTextNode(endOfRow ? " or " : ""));
+      span.append(el("kbd", null, k));
+    });
     span.append(document.createTextNode(text));
     return span;
   };
+  /* \u2318 on an Apple keyboard and Ctrl on every other one. The handler takes
+     either (`metaKey || ctrlKey`); naming one of them to everybody is an
+     instruction that does not work for half the readers. */
+  const apple = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || "");
   keys.append(
     hint(" to move", ["\u2191", "\u2193"]),
     hint(" to open", ["\u21B5"]),
     hint(" to close", ["esc"]),
-    hint(" from anywhere", ["/"], true),
+    hint(" from anywhere", ["/", apple ? "\u2318K" : "Ctrl K"], true),
   );
 
   panel.append(field, results, keys);
@@ -209,6 +220,27 @@ export function mountSearch(host) {
 
   const mark = () => rows.forEach((row, i) => row.classList.toggle("active", i === active));
 
+  /**
+   * The arrow keys move the mark AND bring the row into view.
+   *
+   * They moved the mark alone, and the list did not follow: eight rows a group
+   * over four groups is more than the panel holds, so walking down with the
+   * keyboard marked rows nobody could see, and the reader was pressing Enter
+   * on something off the bottom of the box.
+   *
+   * `block: "nearest"` rather than a centring scroll: it moves the list by the
+   * one row that is needed and leaves it alone while the mark is already on
+   * screen, which is what makes a long walk down read as a list scrolling
+   * rather than as a list jumping. Only from HERE - the mouse sets `active`
+   * too, and a list that scrolled under the pointer would move the row out
+   * from under it.
+   */
+  function move(step) {
+    active = Math.min(Math.max(active + step, 0), rows.length - 1);
+    mark();
+    rows[active]?.scrollIntoView({ block: "nearest" });
+  }
+
   async function open() {
     scrim.hidden = false;
     /* The last thing that was searched for, if a hit was opened recently
@@ -265,8 +297,8 @@ export function mountSearch(host) {
       return;
     }
     if (e.key === "Escape") { e.preventDefault(); hide(); }
-    else if (e.key === "ArrowDown") { e.preventDefault(); active = Math.min(active + 1, rows.length - 1); mark(); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); active = Math.max(active - 1, 0); mark(); }
+    else if (e.key === "ArrowDown") { e.preventDefault(); move(1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); move(-1); }
     else if (e.key === "Enter" && rows[active]) { e.preventDefault(); rows[active].click(); }
   });
 }

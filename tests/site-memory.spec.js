@@ -338,3 +338,66 @@ test("a box closed without opening anything remembers nothing new", async ({ pag
 
   expect(await stored(page, QUERY_KEY)).toBe(null);
 });
+
+// ---------------------------------------------------------------------------
+// THE ARROW KEYS BRING THE LIST WITH THEM.
+//
+// They moved the mark alone: eight rows a group over four groups is more than
+// the panel holds, so walking down with the keyboard marked rows nobody could
+// see, and Enter opened something off the bottom of the box.
+
+test("walking down with the arrow keys scrolls the list", async ({ page }) => {
+  /* A list longer than the panel, which the two-row index above is not: this
+     is about what happens when there is more than fits, so the fixture has to
+     be more than fits. */
+  await page.route("https://abap2ui5.github.io/**", (route) =>
+    route.fulfill({ contentType: "text/html", body: "<!doctype html><title>somewhere else</title>" }));
+  await page.route("**/docs/search-index.json", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        built: "2026-09-06",
+        entries: Array.from({ length: 40 }, (_, i) => ({
+          area: "samples",
+          group: "Controls",
+          url: `https://abap2ui5.github.io/playground/samples/z2ui5_cl_smpc_app_${100 + i}/`,
+          title: `Table ${i}`,
+          code: `z2ui5_cl_smpc_app_${100 + i}`,
+          text: "a table sample",
+        })),
+      }),
+    }));
+  await page.goto("/samples/");
+  await expect(page.locator("#count")).toContainText("sample");
+
+  await page.locator(".search-button").click();
+  await page.locator(".search-panel input").fill("table");
+  await expect(page.locator(".search-hit").first()).toBeVisible();
+
+  const results = page.locator(".search-results");
+  expect(await results.evaluate((e) => e.scrollTop)).toBe(0);
+  for (let i = 0; i < 7; i++) await page.keyboard.press("ArrowDown");
+
+  expect(await results.evaluate((e) => e.scrollTop)).toBeGreaterThan(0);
+  // ...and the marked row is inside the box, which is the point of the scroll.
+  expect(await page.evaluate(() => {
+    const row = document.querySelector(".search-hit.active").getBoundingClientRect();
+    const box = document.querySelector(".search-results").getBoundingClientRect();
+    return row.top >= box.top - 1 && row.bottom <= box.bottom + 1;
+  })).toBe(true);
+});
+
+test("the key row names a shortcut that works on this keyboard", async ({ page }) => {
+  // The row said the Apple modifier to everybody, which on Windows and Linux
+  // is an instruction that does nothing. The handler has always taken either.
+  await withIndex(page);
+  await page.goto("/samples/");
+  await expect(page.locator("#count")).toContainText("sample");
+  await page.locator(".search-button").click();
+
+  const keys = await page.locator(".search-keys").innerText();
+  expect(keys).toContain("to move");
+  expect(keys).toMatch(/(Ctrl K|\u2318K)/);
+  // and the two ways in read as two, not as one key nobody has
+  expect(keys).toContain(" or ");
+});
