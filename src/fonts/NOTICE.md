@@ -1,0 +1,28 @@
+# Inter
+
+The two files beside this notice are the Latin subsets of **Inter**, by Rasmus
+Andersson — `inter-roman-latin.woff2` and `inter-italic-latin.woff2`, variable
+weight 100–900.
+
+Inter is licensed under the **SIL Open Font License, Version 1.1**. The licence
+text and the font itself: <https://github.com/rsms/inter>.
+
+## Why they are committed here rather than fetched
+
+Four abap2UI5 deployments share one bar, one palette and one type stack
+(`--font-ui`, and `--vp-font-family-base` on the documentation, which
+`check:design` holds equal). They used to name `system-ui` first, which is to
+say each reader's own face: SF Pro on macOS, Segoe UI on Windows, whatever is
+installed on Linux. That is a defensible choice and it was ours for a long
+time; what it cost is that the same page is a different page on every desk,
+and a line that fits on one row for the author wraps for half the readers.
+
+So: one face for everybody. Not SF Pro — that is Apple's and may not be
+redistributed — but the nearest thing that may be, which is Inter.
+
+Self-hosted, and only the Latin subsets. `@import` from a font CDN would be a
+request to somebody else's host in front of the first paint, which is the same
+argument that keeps the palette copied between these repositories instead of
+fetched. Anything outside `U+0000-00FF` falls back through the stack to the
+reader's own face, which is what the `unicode-range` on each `@font-face` is
+for.

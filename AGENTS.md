@@ -1082,6 +1082,29 @@ same palette, the same measure. The documentation lives in
 [abap2UI5/docs](https://github.com/abap2UI5/docs), which carries its half of
 each mechanism below.
 
+**The type is Inter, self-hosted, and it is a shared value like the palette.**
+`--font-ui` in `src/catalogue/catalogue.css` and `src/shell/shell.css` names it,
+`--vp-font-family-base` in the documentation's `theme/style.css` names the same
+string, and `check:design` over there holds the two equal — so changing it means
+changing it in three files and landing the playground first, or the
+documentation's deploy goes red in between.
+
+It used to lead with `system-ui`, which is to say each reader's own face: SF
+Pro on macOS, Segoe UI on Windows, whatever is installed on Linux. That is
+defensible and it was the choice for a long time; what it cost is that the same
+page is a different page on every desk — the documentation's home page headline
+sits on one line in SF Pro and wraps in a Linux browser's fallback. SF Pro
+itself may not be redistributed, so what is shipped is the nearest face that
+may be: Inter, the two Latin subsets, from `src/fonts/` to `dist/fonts/`, with
+the old stack behind it as the fallback. `src/fonts/NOTICE.md` carries the
+licence and the reasoning; the two files are in the service worker's core list,
+so an installed playground opened offline is the page that was installed.
+
+The one number to know: `dist/fonts/` is where both stylesheets reach by the
+same relative `../fonts/…`, because both sit exactly one directory down. The
+shell's bundle marks `*.woff2` external for that reason — bundled, esbuild
+would copy the files a second time under hashed names beside `assets/`.
+
 **What the bar carries, left to right.** The mark and the name, then the four
 sections of the project — **Home**, **Documentation**, **Samples**,
 **Playground** — then the search box, then the two marks and the menu behind

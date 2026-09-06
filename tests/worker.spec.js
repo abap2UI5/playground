@@ -99,6 +99,10 @@ test("the documents are answered from the network first, and the cache is only t
         entry === "/runtime/framework.mjs" ||
         entry === "/runtime/sql-wasm.wasm" ||
         entry === "/index.html" ||
+        // The type, precached like the rest of the core: an installed
+        // playground opened offline is the page that was installed, not the
+        // one the reader's own font stack draws.
+        /^\/fonts\/inter-(roman|italic)-latin\.woff2$/.test(entry) ||
         /^\/assets\/[\w.-]+\.(ttf|mjs)$/.test(entry) ||
         entry.startsWith("/app/"),
       `${entry} is in the cache and is not on the allow list`,
