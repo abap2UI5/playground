@@ -853,9 +853,10 @@ cannot point at a heading that does not exist, and a page with fewer than two
 sections gets none (an outline of one is the same word twice on one screen).
 The column also MARKS the section being read, the way the manual's does - the
 entry at full strength instead of dimmed and a 2px bar in the accent on the
-hairline beside it - by the rule VitePress uses: the last heading whose top has
-passed under the bar, with the end of the page marking the last row whether or
-not its heading ever got there. `OUTLINE_SCRIPT` sets the class; the bar is a
+hairline beside it - by the rule VitePress uses, case for case: NOTHING at the
+top of the page (a reader looking at the title is not in a section yet), the
+last row at the bottom, and otherwise the last heading whose top has passed
+under the bar, or none if no heading has. `OUTLINE_SCRIPT` sets the class; the bar is a
 pseudo-element on the row rather than one element sliding between rows, which
 is the only place this deliberately differs from over there.
 Real text in the HTML, and

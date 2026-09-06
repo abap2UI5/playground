@@ -761,13 +761,21 @@ const numbered = (text) =>
  * listing long, an outline that never changes is a table of contents; one that
  * moves is a position.
  *
- * The rule is the one VitePress uses: the current section is the LAST heading
- * whose top has passed under the bar. Not the nearest to the middle of the
- * screen, which flickers between two headings on a slow scroll, and not the
- * first one visible, which marks the section you are leaving. The bottom of
- * the page is the exception - the last heading may never reach the line if its
- * section is short, so a scroll that has hit the end marks the last row
- * regardless.
+ * The rule is the one VitePress uses, and it is copied case for case out of
+ * `theme-default/composables/outline.js`:
+ *
+ *   - at the very top of the page (scrollY < 1), NOTHING is marked. A reader
+ *     looking at the title is not inside a section yet, and a bar against the
+ *     first row there claims they are. This case was missing at first and is
+ *     the whole reason the two outlines still differed after everything else
+ *     matched: the manual marked nothing at the top and these pages marked
+ *     row one.
+ *   - at the bottom, the LAST row - a short final section may never push its
+ *     heading over the line.
+ *   - otherwise the last heading whose top has passed under the bar, and none
+ *     if no heading has. Not the nearest to the middle of the screen, which
+ *     flickers between two headings on a slow scroll, and not the first one
+ *     visible, which marks the section being left.
  *
  * Read on rAF rather than per scroll event: this measures every heading, and
  * scroll fires per frame anyway.
@@ -791,18 +799,22 @@ const OUTLINE_SCRIPT = `<script>
     var at = -1;
 
     function mark() {
-      var last = 0;
-      for (var i = 0; i < heads.length; i++) {
-        if (heads[i].getBoundingClientRect().top <= LINE) last = i;
-      }
-      /* Scrolled to the end: the final section is the one being read, whether
-         or not its heading ever crossed the line. */
-      if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 2) {
-        last = heads.length - 1;
+      /* -1 is "no section", and it is the STARTING value rather than row 0:
+         above the first heading there is no section to be in. */
+      var last = -1;
+      if (window.scrollY >= 1) {
+        for (var i = 0; i < heads.length; i++) {
+          if (heads[i].getBoundingClientRect().top <= LINE) last = i;
+        }
+        /* Scrolled to the end: the final section is the one being read,
+           whether or not its heading ever crossed the line. */
+        if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 2) {
+          last = heads.length - 1;
+        }
       }
       if (last === at) return;
       if (at > -1) links[at].classList.remove("here");
-      links[last].classList.add("here");
+      if (last > -1) links[last].classList.add("here");
       at = last;
     }
 
