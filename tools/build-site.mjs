@@ -294,6 +294,14 @@ const result = await esbuild.build({
   // into build/samples/, and reached through the import module it writes there
   // - see src/editor/samples.mjs, which is the only importer.
   loader: { ".ttf": "file", ".abap": "text" },
+  // ...and Inter is NOT one of the things this bundle carries. The two urls in
+  // shell.css point at `../fonts/`, which from the stylesheet's place in the
+  // build (`assets/shell.css`) is `dist/fonts/` - the one copy the catalogue's
+  // stylesheet reaches by the same relative path. Left external so the url
+  // survives verbatim; bundled, esbuild would copy the file a second time,
+  // beside this bundle and under a hashed name, and the two documents would
+  // then fetch two identical fonts.
+  external: ["*.woff2"],
   // The linter plugin goes first: it claims `fs` and `path` for the abap2UI5
   // linter alone, and leaves every other importer to the ordinary stubs.
   plugins: [abap2ui5LinterPlugin(ROOT), nodeStubPlugin(ROOT)],
@@ -340,6 +348,25 @@ await esbuild.build({
 });
 for (const name of ["index.html", "catalogue.css"]) {
   fs.copyFileSync(path.join(ROOT, "src", "catalogue", name), path.join(DIST, "samples", name));
+}
+
+/* THE TYPE, ONE COPY FOR THE WHOLE SITE.
+ *
+ * `dist/fonts/`, because both stylesheets that name Inter sit exactly one
+ * directory down - `assets/shell.css` and `samples/catalogue.css` - so the one
+ * relative url `../fonts/…` in each of them reaches the same two files. A url
+ * in a stylesheet resolves against the STYLESHEET, not against the page, which
+ * is why this also works from `/samples/<class>/`, three levels down, without
+ * a second copy or an absolute path that would have to know whether the site
+ * is at `/` or at `/playground/`.
+ *
+ * src/fonts/NOTICE.md says which files these are, under which licence, and why
+ * they are committed rather than fetched from a font CDN. */
+fs.mkdirSync(path.join(DIST, "fonts"), { recursive: true });
+for (const name of fs.readdirSync(path.join(ROOT, "src", "fonts"))) {
+  if (!name.endsWith(".woff2")) continue;
+  fs.copyFileSync(path.join(ROOT, "src", "fonts", name), path.join(DIST, "fonts", name));
+  log(`fonts/${name} (${kb(path.join(DIST, "fonts", name))})`);
 }
 log(`samples/catalogue.mjs (${kb(path.join(DIST, "samples", "catalogue.mjs"))})`);
 log(`samples/search.mjs (${kb(path.join(DIST, "samples", "search.mjs"))})`);
@@ -408,6 +435,12 @@ function writeServiceWorker() {
     "editor/corpus.json",
     "runtime/framework.mjs",
     "runtime/sql-wasm.wasm",
+    // The type. Not hashed in its name and not under assets/, so it is listed
+    // here like the rest: without it an installed playground opened offline
+    // falls back through the stack to the reader's own face, which is a
+    // different page from the one they installed.
+    "fonts/inter-roman-latin.woff2",
+    "fonts/inter-italic-latin.woff2",
   ];
   const core = [
     ...fs.readdirSync(ASSETS).sort().map((name) => `assets/${name}`),

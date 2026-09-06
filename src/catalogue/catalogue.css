@@ -9,6 +9,48 @@
  * Light is defined on bare :root, dark twice - under the media query for a
  * reader who has expressed no choice, and under [data-theme="dark"] for one
  * who has, so the switch wins in both directions. */
+/* ---- the type, one face for every reader --------------------------------
+ *
+ * Inter, self-hosted, Latin only. Four deployments share this stack (the
+ * documentation calls it `--vp-font-family-base`; check:design holds the two
+ * equal), and it used to lead with `system-ui` - each reader's own face. That
+ * meant the same page was a different page on every desk: a headline that sits
+ * on one line for the author wraps for half the readers, and nothing about the
+ * design could be relied on further than the machine it was drawn on.
+ *
+ * Not SF Pro, which is what a Mac would have given us and is Apple's to
+ * license. Inter is the nearest face that may be redistributed, and it is what
+ * this project can put in front of everybody equally.
+ *
+ * `system-ui` and the rest stay behind it as the fallback, so a reader whose
+ * browser never gets the file sees exactly what they saw before. The
+ * `unicode-range` is the Latin block: anything outside it is not in these two
+ * files and falls through the same way, which is also why only 66 kB - plus
+ * the italic, on a page that has any - is ever fetched.
+ *
+ * src/fonts/NOTICE.md: which files, which licence, and why they are committed
+ * here rather than fetched from a font CDN. */
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../fonts/inter-roman-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191,
+    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: Inter;
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../fonts/inter-italic-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191,
+    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
   --bg: #ffffff;
   --bg-sunken: #f4f5f7;
@@ -35,7 +77,7 @@
   --radius-control: 5px;
   --radius-surface: 8px;
 
-  --font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-ui: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono", monospace;
   /* The syntax colours the per-sample pages print ABAP in - the same scheme
    * the playground's bottom panel uses for XML and JSON (src/shell/shell.css,
