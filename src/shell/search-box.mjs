@@ -68,7 +68,20 @@ export function mountSearch(host) {
   button.type = "button";
   button.setAttribute("aria-label", "Search the documentation and the samples");
   button.innerHTML = GLYPH;
-  button.append(el("span", "search-label", "Search"), el("kbd", "search-key", "/"));
+  /* BOTH KEYS, ON THE BOX ITSELF. The panel's foot has always said "/ or ⌘K
+     from anywhere" - and it says it to a reader who has already found the
+     panel. The box is what a reader looks at when they are wondering how to
+     open it, and it advertised one of the two. `⌘K` is the combination people
+     arrive expecting, because every documentation site they have used shows
+     it; `/` is the one key that needs no modifier. The platform decides which
+     of ⌘ and Ctrl is named, exactly as the foot does - naming one of them to
+     everybody is an instruction that does not work for half the readers. */
+  const onApple = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || "");
+  button.append(
+    el("span", "search-label", "Search"),
+    el("kbd", "search-key", "/"),
+    el("kbd", "search-key search-key-combo", onApple ? "\u2318K" : "Ctrl K"),
+  );
   host.append(button);
 
   /* ---- the panel, built once and kept hidden ---- */
