@@ -589,6 +589,20 @@ main {
   outline: none;
 }
 .search-field input::-webkit-search-cancel-button { display: none; }
+
+/* A ring on what you TAB to inside the box - the result links and the Esc
+   button - because there a ring is the only thing that says where you are.
+   Not on the input: it is focused the moment the box opens, so the ring would
+   fire on every open and say what the caret already says.
+   The documentation's box draws exactly this (`.a2ui5-search-scrim` in
+   theme/style.css); the pair was made identical by adding it here rather than
+   by dropping it there. */
+.search-scrim a:focus-visible,
+.search-scrim button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-control);
+}
 .search-close {
   padding: 2px 7px;
   border: 1px solid var(--line);
