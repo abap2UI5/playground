@@ -1172,6 +1172,11 @@ button.insight-row {
    the theme switch is in it and GitHub is one of its rows. */
 @media (max-width: 620px) {
   .bar { gap: 10px; padding: 0 12px; }
+}
+
+/* The name beside the mark and the two marks on the right, at the width the
+   row needs them gone - the second of the two windows above. */
+@media (max-width: 760px) {
   .brand span { display: none; }
   .social { display: none; }
 }
@@ -1338,6 +1343,12 @@ button.insight-row {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
 }
+
+/* The second cap - the ⌘K/Ctrl K one - is the first thing to go when the bar
+   is tight: the box has a minimum, and a reader on a narrow screen has a
+   touch keyboard with no ⌘ on it anyway. The slash stays to the end. */
+@media (max-width: 1000px) { .search-key-combo { display: none; } }
+
 
 /* ---- what it opens ----
  * Near the top rather than centred: the results are read downwards, and a
@@ -1515,8 +1526,12 @@ button.insight-row {
   .search-keys-end { display: none; }
 }
 
-/* On a narrow bar the field is a glyph. */
-@media (max-width: 820px) {
+/* On a narrow bar the field is a glyph - and "narrow" is where the row stops
+   fitting, not a round number. At 820 there were two windows where the bar was
+   simply wider than the screen and the whole page scrolled sideways: 933px of
+   bar at 900 and at 860, 744 at 740 down to 660. The same two windows on the
+   catalogue and on the manual, because all three wear this bar. */
+@media (max-width: 940px) {
   .search-button { min-width: 0; flex: none; padding: 0 7px; }
   .search-label, .search-key { display: none; }
 }

@@ -1111,9 +1111,15 @@ function samplePage(row, ctx) {
   /* The page's own body, built first so that outline( ) can walk it: the
      headings get their ids and the aside gets its rows from one pass, which
      is what keeps a link in the outline pointing at a heading that exists. */
-  const page = outline(`  <p class="crumbs">
+  /* A trail is navigation, not a paragraph of links: a screen reader
+     announced "Sample catalogue › Controls › sap.m" as prose, and a reader who
+     moves by landmark could reach the outline and not the way back out. The
+     element changes and nothing else does - the margin, the size and the
+     colour are the class's, in sample.css. The manual's own trail says the
+     same thing now. */
+  const page = outline(`  <nav class="crumbs" aria-label="Breadcrumb">
     <a href="../">Sample catalogue</a>${source ? ` › <a href="../?src=${esc(row.source)}">${esc(source.title)}</a>` : ""}${row.group ? ` › ${esc(row.group)}` : ""}
-  </p>
+  </nav>
   <h1>${esc(title)}</h1>
   ${lede ? `<p class="lede">${esc(lede)}</p>` : ""}
   <p class="who">${esc(row.class.toUpperCase())}</p>
@@ -1290,7 +1296,7 @@ ${THEME_SCRIPT}
 ${bar("../../")}
 
 <main class="all-groups">
-  <p class="crumbs"><a href="../">Sample catalogue</a> › the full list</p>
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../">Sample catalogue</a> › the full list</nav>
   <h1>Every abap2UI5 sample</h1>
   <p class="note">
     All ${rows.length} of them, in the order the three repositories keep them, each with a page of

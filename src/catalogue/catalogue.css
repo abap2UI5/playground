@@ -319,7 +319,56 @@ main {
 .masthead p { margin: 0 0 10px; color: var(--fg-dim); }
 .masthead b { color: var(--fg); }
 
+/* ------------------------------------------------------------- on paper */
+/* A sample page is printed and saved as a PDF like any other reference, and
+   nothing here had ever said how: the bar came out across page one, "On this
+   page" stood beside a column squeezed into what was left, and the demo -
+   an app in an iframe that a sheet of paper cannot run - took a page of its
+   own. What is kept is the page: the trail, the title, what it builds, and
+   the ABAP. A listing is not split across two sheets if it fits on one, and a
+   heading is not the last thing on a sheet. */
+@media print {
+  .bar, .outline, .demo, .source-copy, .search-scrim, .controls, .side-scrim { display: none !important; }
+  html { scroll-padding-top: 0; }
+  body { background: #fff; }
+  main, .sample, .sample-body { display: block; max-width: none; margin: 0; padding: 0; }
+  a { color: inherit; }
+  pre, table, figure, img, .card { break-inside: avoid; page-break-inside: avoid; }
+  h1, h2, h3 { break-after: avoid; page-break-after: avoid; }
+  pre { white-space: pre-wrap; word-break: break-word; }
+}
+
+/* ---------------------------------------------- less movement, if asked */
+/* The drawer slides, the cards lift, the outline's mark moves. None of it
+   carries meaning, and for a reader with a vestibular disorder motion on a
+   screen is not a matter of taste. The system already asks them and the
+   browser passes the answer on; nothing here was listening. The blanket form,
+   because a rule that has to be remembered every time something new animates
+   is a rule that will be forgotten - and nothing on these pages waits for
+   `transitionend`, so what they DO is unchanged. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* -------------------------------------------------------------- controls */
+
+/* AN ANCHOR LANDS BELOW THE BAR, not underneath it. The bar is sticky and
+   46px tall, and a browser scrolls an anchor to the very top of the viewport -
+   so a row of "On this page", or a link somebody shared to `#a-section`, put
+   the heading you asked for exactly under the bar. Measured: heading at 0, bar
+   to 46; the reader arrived at their section with its title hidden and the
+   paragraph below it looking like the beginning.
+
+   `scroll-padding-top` on the scrolling element covers all three ways of
+   getting there: the browser's own anchor navigation, `scrollIntoView`, and a
+   page opened with a hash already in the url. 46 for the bar, 16 so the
+   heading is not touching it. */
+html { scroll-padding-top: 62px; }
 
 .controls {
   position: sticky;
@@ -405,6 +454,15 @@ main {
   gap: 7px;
   /* The card is a link, and the title carries it - see below. */
   position: relative;
+  /* AND IT MAY BE NARROWER THAN ITS LONGEST WORD. A grid item's minimum is
+     its min-content width, and one column holds all 771 cards - so the single
+     widest card set the track for every one of them. "This example uses the
+     'sapUxAPObjectPageSubSection'…" made that track 383px, which no 390px
+     screen can hold, and the whole catalogue scrolled sideways: cards,
+     filters, masthead and all. The lines that can carry such a word are
+     allowed to break (below); this is what lets the CARD stop insisting on
+     the width it would need if they did not. */
+  min-width: 0;
 }
 .card:hover { border-color: var(--accent); }
 
@@ -421,6 +479,16 @@ main {
 .card h3 a:focus-visible::after { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .card .sub { margin: 0; font-size: 13px; color: var(--fg-dim); }
+/* A CLASS NAME IS NOT A WORD, and may be broken when it has to be. The line
+   under a card IS the class - z2ui5_cl_smpc_app_001, 21 characters set in the
+   mono face - and a line-breaker treats it as one token, so it gave 636 of the
+   771 cards a minimum width of 383px. A grid track cannot meet that on a
+   390px screen, and the whole catalogue scrolled sideways: cards, filters,
+   masthead and all. Measured by asking each card for its min-content width
+   rather than by eye, which is why it took three goes to find the right line.
+   Breaking is allowed only where it is needed: a name that fits is never
+   broken. */
+.card h3, .card .sub, .card .who, .all-groups li { overflow-wrap: break-word; }
 .card .who {
   font: 11px/1.4 var(--font-mono);
   color: var(--fg-dim);
@@ -489,15 +557,14 @@ main {
 
 @media (max-width: 620px) {
   .bar { gap: 10px; padding: 0 12px; }
-  .brand span { display: none; }
-  /* On a phone the bar is what is paid for before anything is read, and the
-     nav is the half of it somebody came for. The marks go, as they go from
-     the playground's own bar at 820px; the menu stays, because the theme
-     switch is in it and GitHub is one of its rows. */
-  .social { display: none; }
   main { padding: 0 12px 40px; }
   .masthead { padding: 22px 0 16px; }
   .masthead h1 { font-size: 22px; }
+  /* `max-width` alone does not do it: a flex item's `min-width` is `auto`,
+     which is the width of its widest OPTION - "sap.ui.commons (deprecated)" -
+     so the filter row pushed the whole catalogue 19px wider than a 390px
+     screen and every card went with it. */
+  .facet, .facet select { min-width: 0; }
   .facet select { max-width: 100%; }
   .cards { grid-template-columns: 1fr; }
 }
@@ -572,6 +639,12 @@ main {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
 }
+
+/* The second cap - the ⌘K/Ctrl K one - is the first thing to go when the bar
+   is tight: the box has a minimum, and a reader on a narrow screen has a
+   touch keyboard with no ⌘ on it anyway. The slash stays to the end. */
+@media (max-width: 1000px) { .search-key-combo { display: none; } }
+
 
 /* ---- what it opens ----
  * Near the top rather than centred: the results are read downwards, and a
@@ -764,9 +837,25 @@ main {
 }
 
 /* On a narrow bar the field is a glyph. */
-@media (max-width: 820px) {
+/* THE BAR HAS TO FIT, AND BETWEEN THESE STEPS IT DID NOT. Its parts carry
+   minimums - the search box asks for 220px, the four sections carry their
+   words, the wordmark carries the name - and they were dropped at 820 and at
+   620, which left two windows where the row was simply wider than the screen
+   and the WHOLE PAGE scrolled sideways: 933px of bar at 900 and at 850, 744
+   at 700 and at 640. Measured on the catalogue, a sample page and the manual,
+   all three the same, because all three wear this bar.
+   The steps are where the row actually stops fitting now: the search box
+   collapses to its glyph at 940, and the wordmark's name and the two marks go
+   at 760. Nothing new is hidden - the same things go, sooner. */
+@media (max-width: 940px) {
   .search-button { min-width: 0; flex: none; padding: 0 7px; }
   .search-label, .search-key { display: none; }
+}
+@media (max-width: 760px) {
+  .brand span { display: none; }
+  /* The marks go; the menu stays, because the theme switch is in it and
+     GitHub is one of its rows. */
+  .social { display: none; }
 }
 
 /* EVERY ITEM IS AS WIDE AS ITS OWN BOLD SELF, ALWAYS.
