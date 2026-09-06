@@ -321,6 +321,19 @@ main {
 
 /* -------------------------------------------------------------- controls */
 
+/* AN ANCHOR LANDS BELOW THE BAR, not underneath it. The bar is sticky and
+   46px tall, and a browser scrolls an anchor to the very top of the viewport -
+   so a row of "On this page", or a link somebody shared to `#a-section`, put
+   the heading you asked for exactly under the bar. Measured: heading at 0, bar
+   to 46; the reader arrived at their section with its title hidden and the
+   paragraph below it looking like the beginning.
+
+   `scroll-padding-top` on the scrolling element covers all three ways of
+   getting there: the browser's own anchor navigation, `scrollIntoView`, and a
+   page opened with a hash already in the url. 46 for the bar, 16 so the
+   heading is not touching it. */
+html { scroll-padding-top: 62px; }
+
 .controls {
   position: sticky;
   top: 46px;
@@ -421,6 +434,13 @@ main {
 .card h3 a:focus-visible::after { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .card .sub { margin: 0; font-size: 13px; color: var(--fg-dim); }
+/* A CLASS NAME IS NOT A WORD, and may be broken when it has to be. A card's
+   subtitle is `z2ui5_cl_smp_app_493` and a row of the full list is the same,
+   and a line-breaker treats either as one token - so on a 320px screen one of
+   them gave its card a minimum width the grid could not meet and the WHOLE
+   catalogue scrolled sideways, cards and filters and all. Breaking is allowed
+   only where it is needed: a name that fits is never broken. */
+.card h3, .card .sub, .all-groups li { overflow-wrap: break-word; }
 .card .who {
   font: 11px/1.4 var(--font-mono);
   color: var(--fg-dim);
@@ -498,6 +518,11 @@ main {
   main { padding: 0 12px 40px; }
   .masthead { padding: 22px 0 16px; }
   .masthead h1 { font-size: 22px; }
+  /* `max-width` alone does not do it: a flex item's `min-width` is `auto`,
+     which is the width of its widest OPTION - "sap.ui.commons (deprecated)" -
+     so the filter row pushed the whole catalogue 19px wider than a 390px
+     screen and every card went with it. */
+  .facet, .facet select { min-width: 0; }
   .facet select { max-width: 100%; }
   .cards { grid-template-columns: 1fr; }
 }
