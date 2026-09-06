@@ -464,7 +464,17 @@ const CSS = `/* The per-sample pages, beside catalogue.css - written by tools/sa
 :root { --mark: #e6f0fb; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --mark: #1d2836; } }
 :root[data-theme="dark"] { --mark: #1d2836; }
-main { padding-bottom: 40px; }
+/* The first line of text starts where the documentation's does, and so does
+   "On this page": 48px under the bar, which is the number the VPDoc padding
+   sets over there. It was 22 here - the crumb line began 26px higher than a
+   manual page's title, and the outline began 10px lower than the manual's, so
+   two pages a reader steps between started in three different places. Raising
+   the documentation to meet THIS page instead would leave 22px between a
+   sticky bar and a heading, which is not air, it is a collision waiting for a
+   scroll.
+   (No backticks in here: this is inside a template literal, and one would end
+   the string mid-sentence. It did, again.) */
+main { padding-top: 26px; padding-bottom: 40px; }
 
 /* ---- the page and its outline ----
  *
@@ -482,7 +492,7 @@ main { padding-bottom: 40px; }
 @media (min-width: 1100px) {
   .sample {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 200px;
+    grid-template-columns: minmax(0, 1fr) 225px;
     gap: 0 40px;
     align-items: start;
   }
@@ -496,7 +506,13 @@ main { padding-bottom: 40px; }
     position: sticky;
     /* The bar is 46px and sticky; 24px of air under it. */
     top: 70px;
-    padding-top: 34px;
+    /* Level with the crumb line, which is the page's first text - the
+       documentation's outline is level with its own first line the same way. */
+    padding-top: 22px;
+    /* The hairline the documentation draws down the left of its outline. The
+       column grows by the 24px the rule needs, so the words keep their width. */
+    border-left: 1px solid var(--line);
+    padding-left: 24px;
     font-size: 13px;
   }
 }

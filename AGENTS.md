@@ -844,8 +844,10 @@ a link into the catalogue's control facet), its libraries, what it needs where
 it cannot run, **the sample running**, **the class itself**, the neighbours
 around it in its group, and back to the search. Beside all of it, from 1100px
 up, an **"On this page"** column — the documentation's outline, in the place
-the documentation puts it, on a page whose right-hand third was empty at desk
-width. It is built by `outline( )` in one pass over the finished markup: the
+the documentation puts it, down to the hairline on its left and the height its
+first row starts at: a manual page's title and outline both begin 94px under
+the bar, and these pages begin their crumb line and their outline there too, so
+two pages a reader steps between do not start in three different places. It is built by `outline( )` in one pass over the finished markup: the
 `<h2>`s get their ids and the aside gets its rows from the same walk, so a row
 cannot point at a heading that does not exist, and a page with fewer than two
 sections gets none (an outline of one is the same word twice on one screen).
