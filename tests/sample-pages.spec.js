@@ -157,7 +157,15 @@ test("the outline marks the section being read, and moves with the scroll", asyn
   await page.goto(`/samples/${entry.page}`);
 
   const here = page.locator(".outline nav a.here");
-  // Exactly one, always - a second bar is two positions at once.
+
+  // AT THE TOP, NOTHING. A reader looking at the title is not inside a section
+  // yet, and this is the manual's own rule - `scrollY < 1` activates no link
+  // in vitepress/theme-default/composables/outline.js. These pages marked row
+  // one there until it was checked against the real thing.
+  await expect(here).toHaveCount(0);
+
+  await page.evaluate(() => scrollTo(0, 400));
+  // Exactly one from then on - a second bar is two positions at once.
   await expect(here).toHaveCount(1);
   const first = await here.textContent();
 
