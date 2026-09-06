@@ -350,6 +350,20 @@ for (const name of ["index.html", "catalogue.css"]) {
   fs.copyFileSync(path.join(ROOT, "src", "catalogue", name), path.join(DIST, "samples", name));
 }
 
+/* THE HIGHLIGHTER, PUBLISHED - the file that decides which words in a class
+ * are red and which are green, beside the pages it decides it for.
+ *
+ * It is a build-time module here: tools/sample-pages.mjs calls it and writes
+ * the answer into all 772 pages, so nothing on the site loads it. What it is
+ * published FOR is the documentation, which prints the same ABAP and now sets
+ * it with this file rather than with a scheme of its own - the same borrow the
+ * bar and search.mjs already are. Copied rather than bundled: it is one
+ * function, it imports nothing, and what the manual should be reading is the
+ * file itself. */
+fs.copyFileSync(path.join(ROOT, "tools", "abap-highlight.mjs"),
+  path.join(DIST, "samples", "abap-highlight.mjs"));
+log(`samples/abap-highlight.mjs (${kb(path.join(DIST, "samples", "abap-highlight.mjs"))})`);
+
 /* THE TYPE, ONE COPY FOR THE WHOLE SITE.
  *
  * `dist/fonts/`, because both stylesheets that name Inter sit exactly one

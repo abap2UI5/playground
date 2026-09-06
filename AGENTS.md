@@ -1082,6 +1082,19 @@ same palette, the same measure. The documentation lives in
 [abap2UI5/docs](https://github.com/abap2UI5/docs), which carries its half of
 each mechanism below.
 
+**The ABAP highlighter is published, and the documentation reads it.**
+`tools/abap-highlight.mjs` is a build-time module here — `tools/sample-pages.mjs`
+calls it and writes the answer into all 772 pages, so nothing on this site loads
+it. The build copies it to `dist/samples/abap-highlight.mjs` anyway, because the
+documentation prints the same ABAP and now colours it with **this file** rather
+than with a scheme of its own. It is the same borrow the bar and `search.mjs`
+already are: one implementation, not two that agree until they don't.
+
+So it is a published surface. Changing what it colours changes the manual as
+well as these pages, which is the point — but a rename or a change to the
+exported shape (`highlightAbapLines(code) → string[]`, one entry per line, HTML
+escaped) breaks a build in the other repository.
+
 **The type is Inter, self-hosted, and it is a shared value like the palette.**
 `--font-ui` in `src/catalogue/catalogue.css` and `src/shell/shell.css` names it,
 `--vp-font-family-base` in the documentation's `theme/style.css` names the same
