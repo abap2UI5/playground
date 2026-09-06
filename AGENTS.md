@@ -851,6 +851,13 @@ two pages a reader steps between do not start in three different places. It is b
 `<h2>`s get their ids and the aside gets its rows from the same walk, so a row
 cannot point at a heading that does not exist, and a page with fewer than two
 sections gets none (an outline of one is the same word twice on one screen).
+The column also MARKS the section being read, the way the manual's does - the
+entry at full strength instead of dimmed and a 2px bar in the accent on the
+hairline beside it - by the rule VitePress uses: the last heading whose top has
+passed under the bar, with the end of the page marking the last row whether or
+not its heading ever got there. `OUTLINE_SCRIPT` sets the class; the bar is a
+pseudo-element on the row rather than one element sliding between rows, which
+is the only place this deliberately differs from over there.
 Real text in the HTML, and
 nothing a crawler has to run to see any of it: the scripts on a page are the
 two-line theme read the other two documents also carry, the bar's menu and

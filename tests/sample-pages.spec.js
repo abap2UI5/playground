@@ -147,6 +147,49 @@ test("the demo box mounts a playground in the page, and not before it is pressed
   await expect(inside.locator("#app")).toBeVisible();
 });
 
+test("the outline marks the section being read, and moves with the scroll", async ({ page }) => {
+  // The documentation's outline has always done this - the entry at full
+  // strength and a bar in the accent beside it - and these pages listed the
+  // same headings with nothing saying which one had been reached. The rule is
+  // VitePress's: the LAST heading whose top has passed under the bar, with the
+  // end of the page marking the last row whether or not its heading got there.
+  const entry = paged.find((e) => e.runs && e.source === "learn") || paged.find((e) => e.runs);
+  await page.goto(`/samples/${entry.page}`);
+
+  const here = page.locator(".outline nav a.here");
+  // Exactly one, always - a second bar is two positions at once.
+  await expect(here).toHaveCount(1);
+  const first = await here.textContent();
+
+  // A bar, on the hairline, in the accent: the same 2px the manual draws.
+  const geometry = await here.evaluate((el) => {
+    const b = getComputedStyle(el, "::before");
+    return { width: b.width, height: b.height, left: b.left };
+  });
+  expect(geometry).toMatchObject({ width: "2px", height: "18px", left: "-25px" });
+  // Polled rather than read once: the bar FADES in, so a single read lands
+  // mid-transition and asserts a number that is true for 200ms and never
+  // again. This test failed on 0.802284 before it was written this way.
+  await expect
+    .poll(() => here.evaluate((el) => getComputedStyle(el, "::before").opacity))
+    .toBe("1");
+
+  // ...and it moves. The end of the page is the last row by definition, so it
+  // is the one case that needs no arithmetic about where a heading landed.
+  await page.evaluate(() => scrollTo(0, document.body.scrollHeight));
+  await expect(here).toHaveCount(1);
+  const last = await page.locator(".outline nav a").last().textContent();
+  await expect(here).toHaveText(last);
+  expect(last).not.toBe(first);
+
+  // An inactive row carries no bar - polled, because the row that just LOST
+  // the class is fading out while this runs.
+  const idle = page.locator(".outline nav a:not(.here)").first();
+  await expect
+    .poll(() => idle.evaluate((el) => getComputedStyle(el, "::before").opacity))
+    .toBe("0");
+});
+
 test("a sample page prints the class itself, coloured and escaped", async ({ page }) => {
   // The class IS the sample, so it is on the page rather than one click away
   // on GitHub - fetched at build time (tools/sample-sources.mjs) and coloured

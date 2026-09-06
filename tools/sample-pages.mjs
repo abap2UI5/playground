@@ -534,6 +534,33 @@ main { padding-top: 26px; padding-bottom: 40px; }
 }
 
 .outline nav a:hover { color: var(--accent); }
+
+/* The section you are in, marked the way the documentation marks it: the
+   entry at full strength instead of dimmed, and a 2px bar in the accent
+   standing on the hairline beside it. OUTLINE_SCRIPT sets the class.
+
+   The bar is a pseudo-element on the row rather than one element that slides
+   between rows, which is what the documentation does - the slide needs a
+   measured offset per row and buys a quarter-second of animation. -25px is
+   the 24px of padding plus the 1px rule, so it lands ON the hairline. */
+.outline nav a { position: relative; }
+
+.outline nav a::before {
+  content: "";
+  position: absolute;
+  left: -25px;
+  top: 50%;
+  margin-top: -9px;
+  width: 2px;
+  height: 18px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity .2s;
+}
+
+.outline nav a.here { color: var(--fg); }
+.outline nav a.here::before { opacity: 1; }
 .crumbs { margin: 22px 0 6px; font-size: 12px; color: var(--fg-dim); }
 .crumbs a { color: var(--fg-dim); }
 .sample h1 { font-size: 26px; margin: 0 0 8px; line-height: 1.25; }
@@ -725,6 +752,73 @@ const numbered = (text) =>
  * in a new tab, which is a link doing what a link does.
  *
  * At the end of the body, and only on a page that prints a class. */
+/* WHICH SECTION YOU ARE IN, in the outline on the right.
+ *
+ * The documentation's outline has always marked it - a 2px bar in the accent
+ * against the hairline, and the entry's text at full strength instead of
+ * dimmed - and these pages listed the same headings with nothing saying which
+ * one you had reached. On a sample page that is five sections and a class
+ * listing long, an outline that never changes is a table of contents; one that
+ * moves is a position.
+ *
+ * The rule is the one VitePress uses: the current section is the LAST heading
+ * whose top has passed under the bar. Not the nearest to the middle of the
+ * screen, which flickers between two headings on a slow scroll, and not the
+ * first one visible, which marks the section you are leaving. The bottom of
+ * the page is the exception - the last heading may never reach the line if its
+ * section is short, so a scroll that has hit the end marks the last row
+ * regardless.
+ *
+ * Read on rAF rather than per scroll event: this measures every heading, and
+ * scroll fires per frame anyway.
+ *
+ * The hash is NOT written. Clicking a row sets one, and that is a reader
+ * asking for an address; scrolling past a heading is not, and a history entry
+ * per section makes Back walk the page instead of leaving it. */
+const OUTLINE_SCRIPT = `<script>
+  (function () {
+    var nav = document.querySelector(".outline nav");
+    if (!nav) return;
+    var links = [].slice.call(nav.querySelectorAll("a"));
+    var heads = links.map(function (a) {
+      return document.getElementById(decodeURIComponent(a.getAttribute("href").slice(1)));
+    });
+    if (!heads.length || heads.indexOf(null) > -1) return;
+
+    /* The bar is 46px and sticky, plus the air a heading needs under it before
+       it counts as reached. The same number the outline's own \`top\` uses. */
+    var LINE = 70;
+    var at = -1;
+
+    function mark() {
+      var last = 0;
+      for (var i = 0; i < heads.length; i++) {
+        if (heads[i].getBoundingClientRect().top <= LINE) last = i;
+      }
+      /* Scrolled to the end: the final section is the one being read, whether
+         or not its heading ever crossed the line. */
+      if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 2) {
+        last = heads.length - 1;
+      }
+      if (last === at) return;
+      if (at > -1) links[at].classList.remove("here");
+      links[last].classList.add("here");
+      at = last;
+    }
+
+    var pending = false;
+    function schedule() {
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(function () { pending = false; mark(); });
+    }
+
+    mark();
+    addEventListener("scroll", schedule, { passive: true });
+    addEventListener("resize", schedule, { passive: true });
+  })();
+</script>`;
+
 const LINES_SCRIPT = `<script>
   (function () {
     var pre = document.querySelector(".source-body");
@@ -1132,6 +1226,7 @@ ${foot("../../")}
 ${MENU_SCRIPT}
 ${MEMORY_SCRIPT}
 ${SEARCH_SCRIPT("../../")}
+${OUTLINE_SCRIPT}
 ${code ? LINES_SCRIPT : ""}
 </body>
 </html>
