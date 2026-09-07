@@ -163,6 +163,12 @@ a:hover { text-decoration: none; }
   text-decoration: none;
   font-size: 14px;
   white-space: nowrap;
+  /* The mark and the name are 22px tall between them, and this is a link -
+     the way home from every page of three documents. A target is asked to be
+     24 in both directions, so the two pixels are added where nothing can see
+     them: the bar centres what it holds, the hairline is its own 22, and the
+     text does not move. */
+  padding: 2px 0;
 }
 .brand b { font-weight: 600; }
 /* A hairline after the name, 16px from it as the two lines at the other end
@@ -852,7 +858,21 @@ html { scroll-padding-top: 62px; }
   .search-label, .search-key { display: none; }
 }
 @media (max-width: 760px) {
-  .brand span { display: none; }
+  /* CLIPPED, NOT REMOVED - the rule the four sections below already follow,
+     and the one this line broke. `display: none` takes the word out of the
+     accessibility tree too, and the word is the whole name of the link: from
+     760 down, the way home was announced as a link with nothing in it, on the
+     catalogue, on every sample page and on the manual that borrows this bar.
+     The mark beside it carries `alt=""` on purpose - it is the same name
+     twice - so with the word gone there was nothing left to read. */
+  .brand span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
   /* The marks go; the menu stays, because the theme switch is in it and
      GitHub is one of its rows. */
   .social { display: none; }

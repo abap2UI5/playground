@@ -427,7 +427,7 @@ const bar = (up) => `<header class="bar">
     <img src="${up}favicon.png" alt="" width="20" height="20">
     <span>abap2UI5</span>
   </a>
-  <nav class="bar-nav">
+  <nav class="bar-nav" aria-label="Main">
     <a href="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3.6 10.9 12 4.2l8.4 6.7v8.3a1 1 0 0 1-1 1h-4.3v-6.1H8.9v6.1H4.6a1 1 0 0 1-1-1z"/></svg><span data-text="Home">Home</span></a>
     <a href="https://abap2ui5.github.io/docs/get_started/about" data-site="docs" data-scope="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 7.2C10.5 5.9 8.5 5.2 6 5.2H3.3v11.9H6c2.5 0 4.5.7 6 1.9 1.5-1.2 3.5-1.9 6-1.9h2.7V5.2H18c-2.5 0-4.5.7-6 1.9z"/><path d="M12 7.2v11.8"/></svg><span data-text="Documentation">Documentation</span></a>
     <a href="${up}samples/" aria-current="page" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.2" y="4.8" width="17.6" height="14.4" rx="2"/><path d="M3.2 9.4h17.6M8.5 9.4v9.8"/></svg><span data-text="Samples">Samples</span></a>
@@ -729,7 +729,10 @@ function forPrinting(code) {
  * whole argument: this markup is repeated once per line of every class in
  * three repositories, so everything on it is paid at that scale and only what
  * is load-bearing is on it. The aria-label is: an empty link with no name is a
- * link a screen reader cannot announce. */
+ * link a screen reader cannot announce. What is NOT on it is `tabindex="-1"`,
+ * which these links want and which the script below sets instead: 19 bytes a
+ * line is 3.6 MB over 191,000 lines, and this is the one place where a thing
+ * that costs nothing anywhere else costs megabytes. */
 const numbered = (text) =>
   highlightAbapLines(text)
     .map((html, i) =>
@@ -740,6 +743,19 @@ const numbered = (text) =>
  * stylesheet (:target) and needs none of this; what needs a script is the
  * RANGE - #L42-L58 is a fragment no element has an id for - the shift-click
  * that composes one, and the button that hands the result over.
+ *
+ * IT ALSO TAKES THE GUTTER OUT OF THE TAB ORDER, which is the one line in it
+ * that is not about ranges. Every line of a class is a link, so a reader on a
+ * keyboard pressed Tab fifty times to get past one listing: 52 of this page's
+ * 94 stops were line numbers, and 55 of a manual chapter's 124. The gutter is
+ * a POINTER affordance - the number is drawn by the stylesheet and the link
+ * under it is how a mouse picks a line up - and nothing is lost by it: the
+ * link still answers a click, #L42 still opens where it always did, and a
+ * screen reader still meets it in the page, because a browse cursor is not
+ * the tab order. Set by the script rather than written into the markup
+ * because as an attribute it is 3.6 MB across 191,000 lines; here it is one
+ * loop per page, and the comment explaining it is up here, where it is not
+ * paid 771 times.
  *
  * The address bar is the share link, so the selection is written to it with
  * `replaceState` rather than pushed: a reader who presses Back after picking
@@ -851,6 +867,10 @@ const LINES_SCRIPT = `<script>
     /* The line a shift-click extends from: the last one picked on its own. */
     var anchor = 0;
 
+    /* The gutter is not fifty tab stops (see above). */
+    var gutter = document.querySelectorAll(".ln > a");
+    for (var gi = 0; gi < gutter.length; gi++) gutter[gi].tabIndex = -1;
+
     var picked = function () {
       var m = HASH.exec(location.hash);
       if (!m) return null;
@@ -957,7 +977,7 @@ function outline(html) {
   if (rows.length < 2) return { html: withIds, aside: "" };
   const aside = `<aside class="outline" aria-label="On this page">
     <div class="outline-head">On this page</div>
-    <nav>${rows.map((r) => `<a href="#${r.id}">${esc(r.text)}</a>`).join("")}</nav>
+    <nav aria-label="On this page">${rows.map((r) => `<a href="#${r.id}">${esc(r.text)}</a>`).join("")}</nav>
   </aside>`;
   return { html: withIds, aside };
 }

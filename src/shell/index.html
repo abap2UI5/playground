@@ -125,7 +125,10 @@
        against the right-hand end of a toolbar, which made it the one bar of
        the four that read differently. Everything this PAGE does is a row of
        its own now, below. -->
-  <nav class="bar-nav">
+  <!-- A landmark with no name is one of several called "navigation": this bar,
+       the chapter menu on the manual, the trail above a title and the outline
+       beside it. The other three say which they are; this one did not. -->
+  <nav class="bar-nav" aria-label="Main">
     <a href="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3.6 10.9 12 4.2l8.4 6.7v8.3a1 1 0 0 1-1 1h-4.3v-6.1H8.9v6.1H4.6a1 1 0 0 1-1-1z"/></svg><span data-text="Home">Home</span></a>
     <a href="https://abap2ui5.github.io/docs/get_started/about" data-site="docs" data-scope="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 7.2C10.5 5.9 8.5 5.2 6 5.2H3.3v11.9H6c2.5 0 4.5.7 6 1.9 1.5-1.2 3.5-1.9 6-1.9h2.7V5.2H18c-2.5 0-4.5.7-6 1.9z"/><path d="M12 7.2v11.8"/></svg><span data-text="Documentation">Documentation</span></a>
     <a href="samples/" data-site="samples" title="Every abap2UI5 sample, searchable" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.2" y="4.8" width="17.6" height="14.4" rx="2"/><path d="M3.2 9.4h17.6M8.5 9.4v9.8"/></svg><span data-text="Samples">Samples</span></a>
@@ -460,7 +463,7 @@
 </dialog>
 
 <main class="panes" id="panes">
-  <nav class="tabs" role="tablist">
+  <nav class="tabs" role="tablist" aria-label="Panes">
     <button class="tab is-active" data-pane="left" role="tab" aria-selected="true"
             aria-controls="pane-left">ABAP</button>
     <button class="tab" data-pane="right" role="tab" aria-selected="false"

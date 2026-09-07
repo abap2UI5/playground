@@ -1177,7 +1177,19 @@ button.insight-row {
 /* The name beside the mark and the two marks on the right, at the width the
    row needs them gone - the second of the two windows above. */
 @media (max-width: 760px) {
-  .brand span { display: none; }
+  /* Clipped rather than removed, as on the catalogue (catalogue.css): a name
+     that is not displayed at all is a name a screen reader does not read
+     either. The brand is a span here rather than a link, so nothing is left
+     nameless - but the two bars are read as one bar, and they hide the word
+     the same way. */
+  .brand span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
   .social { display: none; }
 }
 
