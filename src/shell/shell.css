@@ -1337,8 +1337,12 @@ button.insight-row {
  * row is comfortable the box is placed against the bar itself and the marks
  * take over holding the right-hand end. Below that the auto margins stay: an
  * absolutely placed box in a narrow row sooner or later sits on the words.
- * The catalogue's rule, to the pixel (src/catalogue/catalogue.css). */
-@media (min-width: 1100px) {
+ * The catalogue's rule, to the pixel (src/catalogue/catalogue.css) - including
+ * the width, which is 1440 because a box centred on the window does not clear
+ * the four sections until 1414. At 1100 it was drawn on top of them: 60px off
+ * the last section at 1280, here and on every other page of both sites.
+ * See catalogue.css for the arithmetic and for what to re-measure. */
+@media (min-width: 1440px) {
   .search-slot {
     position: absolute;
     left: 50%;

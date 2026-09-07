@@ -601,8 +601,23 @@ html { scroll-padding-top: 62px; }
  * `.bar` is already positioned (it is sticky), so above the width where the
  * row is comfortable the box is placed against it and the marks take over
  * holding the right-hand end. Below that the auto margins stay: an absolutely
- * placed box in a narrow row sooner or later sits on top of the words. */
-@media (min-width: 1100px) {
+ * placed box in a narrow row sooner or later sits on top of the words.
+ *
+ * AND THAT WIDTH IS 1440, NOT 1100, which is the number this rule carried from
+ * before the four sections got their marks. A box centred on the window has
+ * its left edge at w/2 - 110; the four sections end at 597 on the widest of
+ * the two bars; so it clears them at 1414 and not one pixel sooner. Between
+ * 1100 and 1414 it was drawn ON them - at 1280 it took 67px off the last
+ * section, which is the word "Playground" and most of the mark in front of it,
+ * on all 771 sample pages, on the catalogue, on the playground itself and on
+ * all 166 pages of the manual, which borrows this file. 1440 is that
+ * measurement plus the 16px every other pair on this bar keeps between them,
+ * rounded to the next round width.
+ *
+ * If a section is renamed, this number is the thing to re-measure: the check
+ * is that .search-slot's left edge is greater than .bar-nav's right edge at
+ * every width. */
+@media (min-width: 1440px) {
   .search-slot {
     position: absolute;
     left: 50%;

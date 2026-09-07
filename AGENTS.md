@@ -25,7 +25,7 @@ them before touching `tools/` or `src/runtime`.
 | `src/examples/` | ABAP served as static files, so `?src=` has same-origin targets and the link tests depend on no foreign host |
 | `src/embed/` | The embed loader (`abap2ui5-embed.js`) and a worked example page; copied verbatim to `dist/embed/` |
 | `src/catalogue/` | The sample catalogue at `/samples/`: one page, one stylesheet, one module, over the index `tools/build-catalogue.mjs` writes. Its own document and its own bundle - see "The sample catalogue" below. `search-entry.mjs` is the second bundle out of this directory: the bar's search box, as the one file the catalogue and all 772 per-sample pages load |
-| `tools/` | The build (`build.mjs`, which drives `fetch-deps`, `build-framework`, `build-ui5`, `build-catalogue` — which writes the index and, through `sample-pages.mjs`, one static page per sample plus the sitemap, with the ABAP on those pages fetched by `sample-sources.mjs` and coloured by `abap-highlight.mjs` —, `build-site`), the size budget (`check-size`) and the dev server (`serve`) |
+| `tools/` | The build (`build.mjs`, which drives `fetch-deps`, `build-framework`, `build-ui5`, `build-catalogue` — which writes the index and, through `sample-pages.mjs`, one static page per sample plus the full list, the sitemap and `404.html`, with the ABAP on those pages fetched by `sample-sources.mjs` and coloured by `abap-highlight.mjs` —, `build-site`), the size budget (`check-size`) and the dev server (`serve`, which mounts `dist/` at the root, under a subpath and under the deployment's own path, and answers a miss with `404.html` the way GitHub Pages does) |
 | `tests/` | Playwright specs — the only test layer; everything is tested through a real browser against the built `dist/` |
 
 `deps/`, `build/` and `dist/` are generated and gitignored. Never commit them.
@@ -974,11 +974,44 @@ Four rules hold the set together:
   the domain root, which belongs to another repository. `sitemap.xml` is
   discovered by being submitted, or not at all; the links above are what
   actually does the work.
+- **No `lastmod` either**, and that is the same kind of decision. It used to
+  carry the day of the build on all 774 lines, which is not when those pages
+  changed but when they were rebuilt — every deploy, every page. A crawler told
+  that everything changed today, and again tomorrow, is told nothing, and stops
+  reading the field. Nor can this build honestly say more: the manual takes each
+  page's date from the commit that last touched its markdown because the
+  markdown is in that repository, while these pages come from catalogues fetched
+  over the network from three others, and neither the fetch nor this checkout
+  carries that history. `lastmod` is optional in the protocol for this case.
+- **What the page is, said in `ld+json`.** A sample page carries
+  `SoftwareSourceCode` and a `BreadcrumbList` that mirrors the trail drawn above
+  its title — the one piece of this markup a reader sees, as the trail over a
+  search result instead of a bare URL. The full list carries `CollectionPage`
+  with the count (and its own trail), the catalogue carries `CollectionPage`
+  without one — that file is copied verbatim and a count in it would be wrong by
+  the next upstream commit — and the playground itself carries `WebApplication`:
+  free, needs no account and no system, which is the question somebody arriving
+  from a search actually has.
+
+**And the page for an address that is not a page.** `dist/404.html`, which is
+what GitHub Pages serves for anything it cannot find under this deployment;
+before it, that was GitHub's own white page with no bar, no search and no way
+on. It carries the frame, the four sections and the box, and it *guesses*: the
+771 class names and titles are in the page, about 40 KB, and the address is
+scored against them — by the words it still carries once the ones nearly every
+sample shares are dropped (`.../z2ui5_cl_smpc_app_wizard/` finds the Wizard
+samples, `.../all.html` finds the full list), and, when a class-shaped address
+leaves no word behind, by how near the NAME is (`.../z2ui5_cl_smp_app_49/`
+finds the classes one character away). Nothing is fetched to answer, and
+nothing is shown when nothing is close.
 
 `SITE` (overridable with `PG_SITE_URL`) is the one absolute URL on this site,
 and only these pages need it — a canonical link and a sitemap are absolute by
 definition, everything else stays relative so the site still works under any
-path. The pages are **not** in the service worker's allow list: they are static
+path. The 404 is the single exception, and for the same reason: it is served at
+`/playground/samples/<typo>/` and at `/playground/<typo>` alike, so it links
+through `BASE` — `SITE`'s own path — because a relative href there resolves
+against whichever address missed. The pages are **not** in the service worker's allow list: they are static
 documents nobody revisits offline, and 770 of them in a cache is not what
 somebody who came to write ABAP asked for. `tests/sample-pages.spec.js` runs
 against the real index, because a fixture would test a page that was never
