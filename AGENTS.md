@@ -958,6 +958,28 @@ Four rules hold the set together:
   name that is a class name, an `https` source URL — and the catalogue's cards
   link to what was actually written rather than repeating that rule and
   drifting from it.
+- **A title that names THIS page.** Ninety-eight of them used to name several:
+  eight pages said "Binding · abap2UI5 sample", seven said "Table", seven
+  "Message". For a series of samples the catalogue's `title` is the *series* —
+  the sentence saying which one this is, is its `note` — so a result list, a
+  row of browser tabs and a shared link all said the same thing over and over.
+  The note is appended **only where the title collides**, which the writer can
+  see because it holds the whole set; a title carrying both when it does not
+  have to is half as much title. The `<h1>` is untouched: on the page itself
+  the class name and the lead sentence are directly under it.
+- **The printed class is reachable.** It scrolls sideways — 404px of it on the
+  widest sample — and nothing inside it is in the tab order, because the line
+  numbers are links and were deliberately taken out of it. So the block itself
+  is the stop: `tabindex="0"`, `role="region"` and a label naming the class,
+  which is what the manual does to its own listings and its tables.
+- **Nothing pushes the page sideways.** A UI5 name is one word and some of them
+  are 28 characters long — a title carrying the control it is about, a chip
+  that *is* a control name, a documentation link printed as its address in a
+  grid column that would not shrink below its longest unbreakable child. Each
+  of those took the whole page with it on a phone: 98px at 320, still 5 at 414,
+  on pages nobody had opened that narrow. `minmax(0, 1fr)`, `overflow-wrap`
+  and a `max-width` on the chips; the printed class is the one thing still
+  allowed to scroll, and it does that in its own box.
 - **External data, escaped.** Everything on these pages comes from three
   repositories' committed files: every value is escaped into the markup, every
   link is dropped unless it is `https`, and a class name that is not a plain
@@ -1186,6 +1208,20 @@ why). A shared partial would be a build step in front of a page whose whole
 point is that it is a file, and a shared stylesheet across two repositories
 that deploy separately would be a request in front of the first paint. Change
 them together.
+
+**Less motion, if asked — and the one place the blanket form cannot go.** The
+catalogue and the manual answer `prefers-reduced-motion` with
+`*, *::before, *::after`, animations and transitions together, because a rule
+that has to be remembered every time something new animates is a rule that
+will be forgotten. `shell.css` had no answer at all, and it cannot have quite
+that one: Monaco is in that document, and it draws its caret with an
+`alternate` animation run twenty times. Held to one iteration of a hundredth
+of a millisecond, an `alternate` animation ends where its keyframes end, which
+for a caret is invisible — the reader who asked for less motion would have
+been given no cursor. So the shell switches off the **transitions** (it has
+five, and the editor's are no loss) and leaves the animations alone, the
+editor having its own settings for them. An animation of this file's own
+belongs in that block by name.
 
 **The search box is not a fourth copy, and its index is not a copy at all.**
 The box is `src/shell/search-box.mjs` — plain DOM, because two of the three

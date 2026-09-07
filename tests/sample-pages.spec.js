@@ -213,7 +213,11 @@ test("a sample page prints the class itself, coloured and escaped", async ({ pag
      page" column links to. */
   expect(html).toContain('<h2 id="the-abap">The ABAP</h2>');
   expect(html).toContain(entry.raw.split("/").pop());
-  const block = html.slice(html.indexOf('<pre class="source-body">'));
+  /* Found by its class, not by the whole opening tag: that tag has since
+     gained tabindex, a role and a label (see "the printed class can be
+     reached and scrolled with a keyboard" below), and matching it whole made
+     this test fail for a reason that had nothing to do with what it checks. */
+  const block = html.slice(html.indexOf('<pre class="source-body"'));
   expect(block).toContain("<code>");
   // Coloured: the statement words carry a class, and it is the one the
   // playground's own panel prints XML and JSON with.
@@ -490,4 +494,76 @@ test("the catalogue's cards link to the pages", async ({ page }) => {
   const link = page.locator(".card h3 a");
   await expect(link).toHaveText(entry.title);
   await expect(link).toHaveAttribute("href", entry.page);
+});
+
+test("the printed class can be reached and scrolled with a keyboard", async ({ page }) => {
+  /* The class is printed as it was written, so a long chain runs past the
+     right edge and the block scrolls sideways. A mouse gets at that; a
+     keyboard only does if something in the block is in the tab order, and the
+     line numbers are deliberately NOT (one stop per line is worse than none).
+     So the block itself is the stop. The sample with the longest lines, taken
+     from the index rather than named here. */
+  const widest = paged
+    .map((entry) => ({ entry, html: fs.readFileSync(path.join(DIST, "samples", entry.page, "index.html"), "utf8") }))
+    .map(({ entry, html }) => ({ entry, longest: Math.max(0, ...(html.match(/^.*$/gm) || []).map((l) => l.length)) }))
+    .sort((a, b) => b.longest - a.longest)[0].entry;
+
+  await page.setViewportSize({ width: 900, height: 800 });
+  await page.goto(`/samples/${widest.page}`);
+  const pre = page.locator("pre.source-body");
+  await expect(pre).toHaveAttribute("tabindex", "0");
+  await expect(pre).toHaveAttribute("role", "region");
+  // Named, or a screen reader announces "region" and nothing else.
+  await expect(pre).toHaveAttribute("aria-label", new RegExp(widest.class.toUpperCase()));
+
+  expect(await pre.evaluate((el) => el.scrollWidth - el.clientWidth), "this sample scrolls sideways").toBeGreaterThan(0);
+  await pre.focus();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  expect(await pre.evaluate((el) => el.scrollLeft), "the arrow keys move it").toBeGreaterThan(0);
+});
+
+test("no page's title is another page's title", async () => {
+  /* Ninety-eight of them were: eight said "Binding · abap2UI5 sample", seven
+     said "Table". For a series of samples the catalogue's `title` is the
+     SERIES - the sentence saying which one this is, is its `note` - so a
+     result list, a row of tabs and a shared link all said the same thing
+     several times over. Read off the written pages, because that is where the
+     rule that fixes it lives. */
+  const seen = new Map();
+  for (const entry of paged) {
+    const html = fs.readFileSync(path.join(DIST, "samples", entry.page, "index.html"), "utf8");
+    const title = (html.match(/<title>([^<]*)<\/title>/) || [])[1];
+    expect(title, `${entry.page} has a title`).toBeTruthy();
+    seen.set(title, [...(seen.get(title) || []), entry.page]);
+  }
+  const shared = [...seen].filter(([, pages]) => pages.length > 1);
+  expect(shared.map(([title, pages]) => `${title} — ${pages.join(", ")}`)).toEqual([]);
+});
+
+test("nothing on a sample page pushes the page sideways on a phone", async ({ page }) => {
+  /* A UI5 name is one word and some of them are 28 characters long: a title
+     carrying the control it is about, a chip that IS a control name, a
+     documentation link printed as its address in a grid column that would not
+     shrink. Each of them took the whole page with it - 98px at 320. The
+     printed class is allowed to scroll; it does that in its own box. */
+  await page.setViewportSize({ width: 320, height: 800 });
+  const sideways = async (url) => {
+    await page.goto(url);
+    return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  };
+  // The longest title, the most chips, and the longest documentation link -
+  // the three shapes that broke it, whichever samples currently have them.
+  const most = (score) => paged.slice().sort((a, b) => score(b) - score(a))[0];
+  const worst = [
+    most((e) => String(e.title || "").length),
+    most((e) => (e.controls || []).length),
+    most((e) => ((e.docs || [])[0] || "").length),
+  ];
+  for (const entry of worst) {
+    expect(await sideways(`/samples/${entry.page}`), `${entry.page} at 320px`).toBe(0);
+  }
+  for (const url of ["/samples/", "/samples/all/", "/samples/no-such-page/"]) {
+    expect(await sideways(url), `${url} at 320px`).toBe(0);
+  }
 });

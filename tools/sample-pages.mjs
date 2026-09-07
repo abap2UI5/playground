@@ -597,6 +597,18 @@ main { padding-top: 26px; padding-bottom: 40px; }
 .outline nav a.here::before { opacity: 1; }
 .crumbs { margin: 22px 0 6px; font-size: 12px; color: var(--fg-dim); }
 .crumbs a { color: var(--fg-dim); }
+/* A UI5 NAME IS ONE WORD, AND SOME OF THEM ARE 28 CHARACTERS LONG. The titles
+ * on these pages come from three sample repositories and carry the control
+ * they are about - "Object Page with ObjectPageHeaderActionButtons", and the
+ * chips under them are whole names like
+ * sap.suite.ui.microchart.InteractiveDonutChart. A word that does not fit is
+ * not wrapped, it is overflowed: that h1 was 406px wide in a 296px column and
+ * the page slid sideways with it, by 98px at 320 and still by 5 at 414. It is
+ * inherited, so one declaration covers the title, the sentence, the chips and
+ * the neighbours; the printed class is pre-formatted and unaffected, which is
+ * right - that one scrolls in its own box.
+ * (No backticks in here: this stylesheet is a template literal.) */
+.sample, .all-groups { overflow-wrap: break-word; }
 .sample h1 { font-size: 26px; margin: 0 0 8px; line-height: 1.25; }
 .sample .lede { margin: 0 0 4px; font-size: 15px; color: var(--fg); max-width: 74ch; }
 .sample .who { font-family: var(--font-mono); font-size: 12px; color: var(--fg-dim); }
@@ -607,15 +619,31 @@ main { padding-top: 26px; padding-bottom: 40px; }
 }
 .warns b { font-weight: 600; }
 h2 { font-size: 15px; margin: 26px 0 8px; }
-.facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 0; max-width: 74ch; font-size: 13px; }
+/* THE VALUE COLUMN HAS TO BE ALLOWED TO BE NARROW, and 1fr does not allow it:
+ * 1fr is minmax(auto, 1fr), and auto there is the column's MIN-CONTENT width -
+ * the longest thing in it that cannot be broken. One of these rows is a
+ * documentation link printed as its address, up to 60 characters of
+ * unbreakable url, so the column refused to be narrower than 384px and the
+ * whole page went with it: at 390px it scrolled sideways by 6, at 360 by 36,
+ * at 320 by 77. On every one of the 771 sample pages, on every phone.
+ * minmax(0, 1fr) lets the column shrink, and overflow-wrap gives the url
+ * somewhere to break - a class name or an address wrapped over two lines
+ * reads; a page that slides under the thumb does not.
+ * (No backticks in here: this stylesheet is a template literal.) */
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 18px; margin: 0; max-width: 74ch; font-size: 13px; }
 .facts dt { color: var(--fg-dim); }
-.facts dd { margin: 0; }
+.facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .facts code { font-family: var(--font-mono); font-size: 12px; }
 .chips { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; }
 .chips li { margin: 0; }
 .chips a, .chips span {
   display: inline-block; font-family: var(--font-mono); font-size: 12px;
   border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; text-decoration: none;
+  /* A flex item is as wide as its content unless it is told otherwise, and a
+   * wrapping row gives an over-wide pill a line of its own at that width
+   * rather than a narrower pill. Both halves are needed: the cap, and
+   * somewhere for a dotted name with no spaces in it to break. */
+  max-width: 100%; overflow-wrap: anywhere;
 }
 .chips a:hover { border-color: var(--accent); }
 /* The demo. Same card as the class below it - one shape for the sample
@@ -741,10 +769,28 @@ h2 { font-size: 15px; margin: 26px 0 8px; }
 .all-groups li { margin: 0 0 4px; font-size: 13px; break-inside: avoid; }
 @media (max-width: 620px) {
   .all-groups ul { columns: 1; }
-  .facts { grid-template-columns: 1fr; gap: 2px 0; }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px 0; }
   .facts dd { margin-bottom: 8px; }
 }
 `;
+
+/* SCROLLABLE, SO REACHABLE - why `<pre class="source-body">` carries
+ * `tabindex="0"`, a role and a label (samplePage( ) writes it).
+ *
+ * The class is printed as it was written, so a long chain runs past the right
+ * edge and the block scrolls sideways: 404px of it on the widest sample. A
+ * mouse or a trackpad gets at that; a keyboard did not, because nothing inside
+ * the block is in the tab order - the line numbers are links and were
+ * deliberately taken OUT of it, one stop per line being worse than none.
+ * `tabindex="0"` makes the block itself the stop and the arrow keys then
+ * scroll it; the role and the label say what a screen reader has landed in.
+ * The manual does exactly this to its own listings and its tables, down to the
+ * shape of the label ("Listing 1, abap").
+ *
+ * The reasoning is here rather than in the markup for the reason everything
+ * else on these pages is: a comment in the emitted page is written 771 times,
+ * and this one is 600 bytes - half a megabyte of published site.
+ */
 
 /* How much of a class a page prints. Nearly all of them are shorter than this
  * and are printed whole; the tail of samples-controls is not - one of them is
@@ -1051,9 +1097,20 @@ function samplePage(row, ctx) {
    * ABAP" that is worth being found for. The class name is on the page rather
    * than in the title - nobody searches for it, and it costs the title's
    * width. */
+  /* AND IT HAS TO NAME THIS ONE. Ninety-eight of these pages shared a title
+     with another: eight of them were "Binding · abap2UI5 sample", seven
+     "Table", seven "Message". For a series of samples the catalogue's `title`
+     is the series - the sentence that says which one this is, is its `note` -
+     so the title said the same thing eight times, in a result list, in a row
+     of browser tabs and in a shared link. Only where it collides, because a
+     title carrying both is half as much title: the writer knows the whole set
+     and says which ones need the second half (writeSamplePages below). */
+  const label = ctx.needsNote(row) && row.note && row.note !== title
+    ? `${title} — ${cut(row.note, 70)}`
+    : title;
   const pageTitle = row.entity
-    ? `${title} · ${row.entity} in abap2UI5`
-    : `${title} · abap2UI5 sample`;
+    ? `${label} · ${row.entity} in abap2UI5`
+    : `${label} · abap2UI5 sample`;
 
   /* What a search result shows: the sample's own sentence, then what it is,
    * because a description that could be any of 770 rows is worth nothing. */
@@ -1282,7 +1339,7 @@ function samplePage(row, ctx) {
         ${github ? `<a href="${esc(github)}" target="_blank" rel="noopener">Read it on GitHub ↗</a>` : ""}
       </span>
     </div>
-    <pre class="source-body"><code>${numbered(code.text)}</code></pre>
+    <pre class="source-body" tabindex="0" role="region" aria-label="${esc(row.class.toUpperCase())}, ABAP"><code>${numbered(code.text)}</code></pre>
   </div>${
     code.shown < code.lines
       ? `\n  <p class="note source-note">The first ${code.shown} lines of ${code.lines}${
@@ -1697,7 +1754,15 @@ export async function writeSamplePages(index, distDir) {
     if (!byGroup.has(key)) byGroup.set(key, []);
     byGroup.get(key).push(row);
   }
-  const ctx = { sources, byGroup, floor };
+  /* Which titles are not their own. Counted over the whole set, because that
+   * is the only place the answer exists - see samplePage( ) above. */
+  const plainTitle = (row) => {
+    const t = String(row.title || row.class);
+    return row.entity ? `${t} · ${row.entity} in abap2UI5` : `${t} · abap2UI5 sample`;
+  };
+  const howMany = new Map();
+  for (const row of rows) howMany.set(plainTitle(row), (howMany.get(plainTitle(row)) || 0) + 1);
+  const ctx = { sources, byGroup, floor, needsNote: (row) => howMany.get(plainTitle(row)) > 1 };
 
   fs.writeFileSync(path.join(samplesDir, "sample.css"), CSS);
   for (const row of rows) {

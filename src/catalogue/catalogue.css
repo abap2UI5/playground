@@ -342,6 +342,11 @@ main {
   pre, table, figure, img, .card { break-inside: avoid; page-break-inside: avoid; }
   h1, h2, h3 { break-after: avoid; page-break-after: avoid; }
   pre { white-space: pre-wrap; word-break: break-word; }
+  /* No single line of a paragraph left alone at the top or the foot of a
+     sheet - the one thing paper needs said that a screen does not. The
+     manual's print block has said it since it was written; this one was
+     written from that one and this line did not come across. */
+  p, li, blockquote { orphans: 3; widows: 3; }
 }
 
 /* ---------------------------------------------- less movement, if asked */
