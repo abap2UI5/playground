@@ -80,6 +80,11 @@ import { fetchSampleSources } from "./sample-sources.mjs";
  * PG_SITE_URL overrides it for a fork published somewhere else. */
 export const SITE = (process.env.PG_SITE_URL || "https://abap2ui5.github.io/playground/").replace(/\/*$/, "/");
 
+/* Where this deployment sits on its origin - "/playground/". Only the 404
+ * needs it: every other page here is reached at a known depth and links
+ * relatively, which is what lets the whole site be served from anywhere. */
+const BASE = new URL(SITE).pathname;
+
 const log = (m) => console.log(`build-catalogue: ${m}`);
 
 /* WHAT A LINK TO ONE OF THESE PAGES LOOKS LIKE SOMEWHERE ELSE. A sample page
@@ -448,7 +453,10 @@ const SOCIALS = `<div class="socials">
  * loads the same file - so a reader who arrives from there has it already. */
 const SEARCH_SCRIPT = (up) => `<script type="module" src="${up}samples/search.mjs"></script>`;
 
-const bar = (up) => `<header class="bar">
+/* `current` is which of the four the page IS: the catalogue and the sample
+ * pages are Samples, and the 404 below is none of them - a page that is not
+ * there must not tell a screen reader it is the samples page. */
+const bar = (up, current = "samples") => `<header class="bar">
   <a class="brand" href="${up}samples/">
     <img src="${up}favicon.png" alt="" width="20" height="20">
     <span>abap2UI5</span>
@@ -456,7 +464,7 @@ const bar = (up) => `<header class="bar">
   <nav class="bar-nav" aria-label="Main">
     <a href="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3.6 10.9 12 4.2l8.4 6.7v8.3a1 1 0 0 1-1 1h-4.3v-6.1H8.9v6.1H4.6a1 1 0 0 1-1-1z"/></svg><span data-text="Home">Home</span></a>
     <a href="https://abap2ui5.github.io/docs/get_started/about" data-site="docs" data-scope="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 7.2C10.5 5.9 8.5 5.2 6 5.2H3.3v11.9H6c2.5 0 4.5.7 6 1.9 1.5-1.2 3.5-1.9 6-1.9h2.7V5.2H18c-2.5 0-4.5.7-6 1.9z"/><path d="M12 7.2v11.8"/></svg><span data-text="Documentation">Documentation</span></a>
-    <a href="${up}samples/" aria-current="page" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.2" y="4.8" width="17.6" height="14.4" rx="2"/><path d="M3.2 9.4h17.6M8.5 9.4v9.8"/></svg><span data-text="Samples">Samples</span></a>
+    <a href="${up}samples/"${current === "samples" ? ` aria-current="page"` : ""} data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.2" y="4.8" width="17.6" height="14.4" rx="2"/><path d="M3.2 9.4h17.6M8.5 9.4v9.8"/></svg><span data-text="Samples">Samples</span></a>
     <a href="${up}" data-site="playground" title="Write ABAP and run it in the browser"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M10.2 8.4v7.2a.5.5 0 0 0 .76.43l5.8-3.6a.5.5 0 0 0 0-.86l-5.8-3.6a.5.5 0 0 0-.76.43z" fill="currentColor" stroke="none"/></svg><span data-text="Playground">Playground</span></a>
   </nav>
   <span class="search-slot" data-search></span>
@@ -589,6 +597,18 @@ main { padding-top: 26px; padding-bottom: 40px; }
 .outline nav a.here::before { opacity: 1; }
 .crumbs { margin: 22px 0 6px; font-size: 12px; color: var(--fg-dim); }
 .crumbs a { color: var(--fg-dim); }
+/* A UI5 NAME IS ONE WORD, AND SOME OF THEM ARE 28 CHARACTERS LONG. The titles
+ * on these pages come from three sample repositories and carry the control
+ * they are about - "Object Page with ObjectPageHeaderActionButtons", and the
+ * chips under them are whole names like
+ * sap.suite.ui.microchart.InteractiveDonutChart. A word that does not fit is
+ * not wrapped, it is overflowed: that h1 was 406px wide in a 296px column and
+ * the page slid sideways with it, by 98px at 320 and still by 5 at 414. It is
+ * inherited, so one declaration covers the title, the sentence, the chips and
+ * the neighbours; the printed class is pre-formatted and unaffected, which is
+ * right - that one scrolls in its own box.
+ * (No backticks in here: this stylesheet is a template literal.) */
+.sample, .all-groups { overflow-wrap: break-word; }
 .sample h1 { font-size: 26px; margin: 0 0 8px; line-height: 1.25; }
 .sample .lede { margin: 0 0 4px; font-size: 15px; color: var(--fg); max-width: 74ch; }
 .sample .who { font-family: var(--font-mono); font-size: 12px; color: var(--fg-dim); }
@@ -599,15 +619,31 @@ main { padding-top: 26px; padding-bottom: 40px; }
 }
 .warns b { font-weight: 600; }
 h2 { font-size: 15px; margin: 26px 0 8px; }
-.facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 0; max-width: 74ch; font-size: 13px; }
+/* THE VALUE COLUMN HAS TO BE ALLOWED TO BE NARROW, and 1fr does not allow it:
+ * 1fr is minmax(auto, 1fr), and auto there is the column's MIN-CONTENT width -
+ * the longest thing in it that cannot be broken. One of these rows is a
+ * documentation link printed as its address, up to 60 characters of
+ * unbreakable url, so the column refused to be narrower than 384px and the
+ * whole page went with it: at 390px it scrolled sideways by 6, at 360 by 36,
+ * at 320 by 77. On every one of the 771 sample pages, on every phone.
+ * minmax(0, 1fr) lets the column shrink, and overflow-wrap gives the url
+ * somewhere to break - a class name or an address wrapped over two lines
+ * reads; a page that slides under the thumb does not.
+ * (No backticks in here: this stylesheet is a template literal.) */
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 18px; margin: 0; max-width: 74ch; font-size: 13px; }
 .facts dt { color: var(--fg-dim); }
-.facts dd { margin: 0; }
+.facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .facts code { font-family: var(--font-mono); font-size: 12px; }
 .chips { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; }
 .chips li { margin: 0; }
 .chips a, .chips span {
   display: inline-block; font-family: var(--font-mono); font-size: 12px;
   border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; text-decoration: none;
+  /* A flex item is as wide as its content unless it is told otherwise, and a
+   * wrapping row gives an over-wide pill a line of its own at that width
+   * rather than a narrower pill. Both halves are needed: the cap, and
+   * somewhere for a dotted name with no spaces in it to break. */
+  max-width: 100%; overflow-wrap: anywhere;
 }
 .chips a:hover { border-color: var(--accent); }
 /* The demo. Same card as the class below it - one shape for the sample
@@ -733,10 +769,28 @@ h2 { font-size: 15px; margin: 26px 0 8px; }
 .all-groups li { margin: 0 0 4px; font-size: 13px; break-inside: avoid; }
 @media (max-width: 620px) {
   .all-groups ul { columns: 1; }
-  .facts { grid-template-columns: 1fr; gap: 2px 0; }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px 0; }
   .facts dd { margin-bottom: 8px; }
 }
 `;
+
+/* SCROLLABLE, SO REACHABLE - why `<pre class="source-body">` carries
+ * `tabindex="0"`, a role and a label (samplePage( ) writes it).
+ *
+ * The class is printed as it was written, so a long chain runs past the right
+ * edge and the block scrolls sideways: 404px of it on the widest sample. A
+ * mouse or a trackpad gets at that; a keyboard did not, because nothing inside
+ * the block is in the tab order - the line numbers are links and were
+ * deliberately taken OUT of it, one stop per line being worse than none.
+ * `tabindex="0"` makes the block itself the stop and the arrow keys then
+ * scroll it; the role and the label say what a screen reader has landed in.
+ * The manual does exactly this to its own listings and its tables, down to the
+ * shape of the label ("Listing 1, abap").
+ *
+ * The reasoning is here rather than in the markup for the reason everything
+ * else on these pages is: a comment in the emitted page is written 771 times,
+ * and this one is 600 bytes - half a megabyte of published site.
+ */
 
 /* How much of a class a page prints. Nearly all of them are shorter than this
  * and are printed whole; the tail of samples-controls is not - one of them is
@@ -1043,9 +1097,20 @@ function samplePage(row, ctx) {
    * ABAP" that is worth being found for. The class name is on the page rather
    * than in the title - nobody searches for it, and it costs the title's
    * width. */
+  /* AND IT HAS TO NAME THIS ONE. Ninety-eight of these pages shared a title
+     with another: eight of them were "Binding · abap2UI5 sample", seven
+     "Table", seven "Message". For a series of samples the catalogue's `title`
+     is the series - the sentence that says which one this is, is its `note` -
+     so the title said the same thing eight times, in a result list, in a row
+     of browser tabs and in a shared link. Only where it collides, because a
+     title carrying both is half as much title: the writer knows the whole set
+     and says which ones need the second half (writeSamplePages below). */
+  const label = ctx.needsNote(row) && row.note && row.note !== title
+    ? `${title} — ${cut(row.note, 70)}`
+    : title;
   const pageTitle = row.entity
-    ? `${title} · ${row.entity} in abap2UI5`
-    : `${title} · abap2UI5 sample`;
+    ? `${label} · ${row.entity} in abap2UI5`
+    : `${label} · abap2UI5 sample`;
 
   /* What a search result shows: the sample's own sentence, then what it is,
    * because a description that could be any of 770 rows is worth nothing. */
@@ -1165,7 +1230,20 @@ function samplePage(row, ctx) {
   const from = Math.max(0, Math.min(at - 6, group.length - 13));
   const nearby = group.slice(from, from + 13).filter((other) => other.dir !== row.dir);
 
-  const jsonLd = JSON.stringify({
+  /* WHAT THE PAGE IS, and WHERE IT SITS - two blocks, because a search result
+     shows them in two places. The first is the sample itself; the second is
+     the trail that is drawn above the title anyway, and it is the one part of
+     this markup a reader ever sees: a result for a sample shows
+     "abap2UI5 › Sample catalogue › Controls" over its link rather than a bare
+     url, which is the difference between a result somebody places and one they
+     have to guess at. Every step of it is a page that exists - the group is in
+     the visible trail and not here, because it has no address of its own. */
+  const trail = [
+    { name: "Sample catalogue", item: `${SITE}samples/` },
+    ...(source ? [{ name: source.title, item: `${SITE}samples/?src=${encodeURIComponent(row.source)}` }] : []),
+    { name: title, item: canonical },
+  ];
+  const jsonLd = JSON.stringify([{
     "@context": "https://schema.org",
     "@type": "SoftwareSourceCode",
     name: title,
@@ -1175,7 +1253,11 @@ function samplePage(row, ctx) {
     url: canonical,
     keywords: [...(row.keywords || []), ...controls].join(", ") || undefined,
     isPartOf: { "@type": "WebSite", name: "abap2UI5 sample catalogue", url: `${SITE}samples/` },
-  }).replace(/</g, "\\u003c");
+  }, {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: trail.map((step, i) => ({ "@type": "ListItem", position: i + 1, ...step })),
+  }]).replace(/</g, "\\u003c");
 
   /* The page's own body, built first so that outline( ) can walk it: the
      headings get their ids and the aside gets its rows from one pass, which
@@ -1257,7 +1339,7 @@ function samplePage(row, ctx) {
         ${github ? `<a href="${esc(github)}" target="_blank" rel="noopener">Read it on GitHub ↗</a>` : ""}
       </span>
     </div>
-    <pre class="source-body"><code>${numbered(code.text)}</code></pre>
+    <pre class="source-body" tabindex="0" role="region" aria-label="${esc(row.class.toUpperCase())}, ABAP"><code>${numbered(code.text)}</code></pre>
   </div>${
     code.shown < code.lines
       ? `\n  <p class="note source-note">The first ${code.shown} lines of ${code.lines}${
@@ -1359,9 +1441,33 @@ ${social({
   type: "website",
 })}
 <link rel="icon" href="../../favicon.png">
+<link rel="apple-touch-icon" href="../../apple-touch-icon.png">
 <link rel="stylesheet" href="../catalogue.css">
 <link rel="stylesheet" href="../sample.css">
 ${THEME_SCRIPT}
+<script type="application/ld+json">${JSON.stringify([{
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  name: "Every abap2UI5 sample",
+  description: `All ${rows.length} abap2UI5 samples on one page, each one linked to its own page.`,
+  url: `${SITE}samples/all/`,
+  isPartOf: { "@type": "WebSite", name: "abap2UI5 sample catalogue", url: `${SITE}samples/` },
+  /* The count and nothing else. The 771 rows themselves are the page, in
+     markup a crawler already reads; repeating them here as ListItems would
+     add 85 kB to a 144 kB page to say a second time what the links say. */
+  mainEntity: {
+    "@type": "ItemList",
+    name: "abap2UI5 samples",
+    numberOfItems: rows.length,
+  },
+}, {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    { "@type": "ListItem", position: 1, name: "Sample catalogue", item: `${SITE}samples/` },
+    { "@type": "ListItem", position: 2, name: "The full list", item: `${SITE}samples/all/` },
+  ],
+}]).replace(/</g, "\\u003c")}</script>
 </head>
 <body>
 
@@ -1383,6 +1489,205 @@ ${foot("../../")}
 ${MENU_SCRIPT}
 ${MEMORY_SCRIPT}
 ${SEARCH_SCRIPT("../../")}
+</body>
+</html>
+`;
+}
+
+/* ---- THE PAGE FOR AN ADDRESS THAT IS NOT A PAGE ------------------------
+ *
+ * GitHub Pages answers anything it cannot find under this deployment with the
+ * 404.html at the root of the artefact, and this deployment had none. A
+ * mistyped sample, a class that was renamed upstream, a link into
+ * /playground/ that has gone stale: all of them landed on GitHub's own white
+ * page - no bar, no search, no way on. The manual has carried one of these for
+ * a while; this is the same page for the other half of the origin.
+ *
+ * ABSOLUTE URLS, and this is the one page here that needs them. It is served
+ * for /playground/samples/<typo>/ and for /playground/<typo> alike, so a
+ * relative href resolves against whatever address missed - `../../samples/`
+ * from a two-deep miss is right and from a one-deep miss leaves the site. The
+ * base is SITE's own path, which is where every canonical link on these pages
+ * already says this deployment lives.
+ */
+function notFoundPage(rows) {
+  /* WHAT THE ADDRESS ALMOST SAID. Samples get renamed and dropped upstream,
+     and this build removes their pages on the next deploy - every link to one
+     of them, in an issue, a blog post or somebody's bookmarks, lands here. A
+     page that only says "not here" makes the reader go and search for
+     something they had already named.
+     The whole list is IN this page: 771 class names and titles, about 40 kB,
+     so nothing is fetched to answer and the answer arrives with the page. */
+  const near = JSON.stringify(rows.map((row) => [row.dir, row.title])).replace(/</g, "\\u003c");
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Not found · abap2UI5</title>
+<meta name="description" content="This address does not name a page of the abap2UI5 sample catalogue.">
+<!-- Served with a 404 status, which is what a crawler goes by - and said here
+     as well, for the case where it is not (a preview, a mirror, a proxy that
+     rewrites the status). -->
+<meta name="robots" content="noindex">
+<link rel="icon" href="${BASE}favicon.png">
+<link rel="apple-touch-icon" href="${BASE}apple-touch-icon.png">
+<link rel="stylesheet" href="${BASE}samples/catalogue.css">
+<link rel="stylesheet" href="${BASE}samples/sample.css">
+${THEME_SCRIPT}
+</head>
+<body>
+
+${bar(BASE, "none")}
+
+<main class="sample">
+  <div class="sample-body">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="${BASE}samples/">Sample catalogue</a></nav>
+  <h1>This page is not here</h1>
+  <p class="lede">The address does not name a page of this deployment. A sample may have been
+    renamed or dropped by the repository it comes from, or the link that brought you here may
+    simply be old.</p>
+  <p>The <a href="${BASE}samples/">catalogue</a> searches every sample by what it does, by the
+    control it builds and by the release your system runs; <a href="${BASE}samples/all/">the full
+    list</a> is all of them on one page; the <a href="${BASE}">playground</a> runs ABAP in this
+    browser with no system behind it; and the
+    <a href="https://abap2ui5.github.io/docs/get_started/about">documentation</a> is where the
+    project explains itself. The box in the bar searches the manual and every sample at once.</p>
+  <div id="near" hidden><h2>Did you mean</h2><ul class="nearby"></ul></div>
+  </div>
+</main>
+
+${foot(BASE)}
+<script>
+/* WHAT THE ADDRESS ALMOST SAID, ranked here rather than fetched - the list is
+   in this page, see the comment where it is built.
+   Words first: the last parts of the address, minus the ones nearly every
+   sample carries (z2ui5, cl, smp, app), scored against the titles and the
+   class names. That is what answers ".../z2ui5_cl_smpc_app_wizard/" with the
+   Wizard samples and ".../all.html" with the full list.
+   Then, and only for an address shaped like a class, how close the NAME is:
+   ".../z2ui5_cl_smp_app_49/" has no word left to go on, and what it wants is
+   the classes whose names are one character away.
+   (No backticks and no backslashes in here: the whole block is inside a
+   template literal, which eats both.) */
+(function () {
+  var rows = ${near};
+  /* The three pages that are always here, searched with the samples: an
+     address is as easily wrong about one of these as about a class, and
+     /samples/all.html - the full list, at the address it does not have - is a
+     guess this repository has itself made. */
+  var pages = [
+    ["samples/all/", "Every abap2UI5 sample", "the full list, all of them on one page"],
+    ["samples/", "abap2UI5 sample catalogue", "search every sample"],
+    ["", "abap2UI5 Playground", "write ABAP and run it in this browser"]
+  ];
+  var base = ${JSON.stringify(BASE)};
+  var here = decodeURIComponent(location.pathname);
+  var parts = here.slice(here.indexOf(base) === 0 ? base.length : 0)
+    .toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length > 2; });
+  if (!parts.length) return;
+
+  /* A WORD NEARLY EVERY SAMPLE CARRIES SAYS NOTHING. Counted rather than
+     listed: the class prefixes are the three repositories business and change
+     without this file hearing about it. */
+  var words = parts.filter(function (w) {
+    if (w === "samples" || w === "playground" || w === "html" || w === "index") return false;
+    var seen = 0;
+    for (var i = 0; i < rows.length; i++) if (rows[i][0].indexOf(w) >= 0) seen++;
+    return seen * 4 < rows.length;
+  });
+
+  /* A WORD, NOT A RUN OF LETTERS. "here" is inside "Where" and inside "There",
+     and an address that says nothing at all - /playground/nothing-like-this/ -
+     matched a dozen titles that way; the reader is then given a list instead of
+     an honest "no idea". A title word that BEGINS with the word is the match,
+     which still catches the plural and the possessive. */
+  function starts(text, word) {
+    var w = text.toLowerCase().split(/[^a-z0-9]+/);
+    for (var i = 0; i < w.length; i++) if (w[i].indexOf(word) === 0) return true;
+    return false;
+  }
+
+  var scored = [];
+  var byWord = false;
+  if (words.length) {
+    for (var k = 0; k < pages.length; k++) {
+      var page = pages[k];
+      var pageHit = 0;
+      for (var w1 = 0; w1 < words.length; w1++) {
+        var word = words[w1];
+        /* The address and the name, never the sentence beside it: that one is
+           ordinary prose, and "this" or "here" in an address would match it. */
+        if (page[0].indexOf(word) >= 0 || starts(page[1], word)) pageHit += 4;
+      }
+      if (pageHit) scored.push([pageHit + 1, page[0], page[1], page[2]]);
+    }
+    for (var m = 0; m < rows.length; m++) {
+      var hit = 0;
+      byWord = true;
+      for (var w2 = 0; w2 < words.length; w2++) {
+        if (starts(rows[m][1], words[w2])) hit += 3;
+        else if (rows[m][0].indexOf(words[w2]) >= 0) hit += 1;
+      }
+      if (hit) scored.push([hit, "samples/" + rows[m][0] + "/", rows[m][1], rows[m][0].toUpperCase()]);
+    }
+  }
+
+  /* HOW CLOSE TWO CLASS NAMES ARE, for an address that named one and left no
+     word behind. They all begin z2ui5_cl_, so what tells them apart is the
+     tail: what still agrees at the front, plus what agrees at the back, less
+     what is left over in between. The whole segment, not the words above: it
+     is the name that is nearly right, and splitting it on its underscores is
+     what threw the part that was wrong away. */
+  var segs = here.split("/").filter(Boolean);
+  var last = (segs.length ? segs[segs.length - 1] : "").toLowerCase().split(".")[0];
+  if (!scored.length && last.indexOf("z2ui5") === 0) {
+    for (var n = 0; n < rows.length; n++) {
+      var name = rows[n][0];
+      var pre = 0;
+      while (pre < last.length && pre < name.length && last.charAt(pre) === name.charAt(pre)) pre++;
+      var suf = 0;
+      while (suf < last.length - pre && suf < name.length - pre
+             && last.charAt(last.length - 1 - suf) === name.charAt(name.length - 1 - suf)) suf++;
+      if (pre > 8) {
+        scored.push([pre + suf - Math.abs(last.length - name.length),
+                     "samples/" + name + "/", rows[n][1], name.toUpperCase()]);
+      }
+    }
+  }
+  if (!scored.length) return;
+
+  scored.sort(function (a, b) { return b[0] - a[0]; });
+  var box = document.getElementById("near");
+  var list = box.querySelector("ul");
+  var best = scored[0][0];
+  /* Only what is genuinely close. One good answer beats eight, and a list of
+     eight unrelated samples is the same white page with more words on it. Half
+     the best score where the score counts words matched, and one character
+     where it measures how near a name is - on names that differ in their last
+     digit, everything within two is the whole rest of the repository. */
+  var cutoff = byWord ? best / 2 : best - 1;
+  var shown = 0;
+  for (var r = 0; r < scored.length && shown < 8; r++) {
+    if (scored[r][0] < cutoff) break;
+    var li = document.createElement("li");
+    var a = document.createElement("a");
+    a.href = base + scored[r][1];
+    a.textContent = scored[r][2];
+    var who = document.createElement("span");
+    who.textContent = " - " + scored[r][3];
+    li.appendChild(a);
+    li.appendChild(who);
+    list.appendChild(li);
+    shown++;
+  }
+  if (shown) box.hidden = false;
+})();
+</script>
+${MENU_SCRIPT}
+${MEMORY_SCRIPT}
+${SEARCH_SCRIPT(BASE)}
 </body>
 </html>
 `;
@@ -1449,7 +1754,15 @@ export async function writeSamplePages(index, distDir) {
     if (!byGroup.has(key)) byGroup.set(key, []);
     byGroup.get(key).push(row);
   }
-  const ctx = { sources, byGroup, floor };
+  /* Which titles are not their own. Counted over the whole set, because that
+   * is the only place the answer exists - see samplePage( ) above. */
+  const plainTitle = (row) => {
+    const t = String(row.title || row.class);
+    return row.entity ? `${t} · ${row.entity} in abap2UI5` : `${t} · abap2UI5 sample`;
+  };
+  const howMany = new Map();
+  for (const row of rows) howMany.set(plainTitle(row), (howMany.get(plainTitle(row)) || 0) + 1);
+  const ctx = { sources, byGroup, floor, needsNote: (row) => howMany.get(plainTitle(row)) > 1 };
 
   fs.writeFileSync(path.join(samplesDir, "sample.css"), CSS);
   for (const row of rows) {
@@ -1460,9 +1773,28 @@ export async function writeSamplePages(index, distDir) {
   fs.mkdirSync(path.join(samplesDir, "all"), { recursive: true });
   fs.writeFileSync(path.join(samplesDir, "all", "index.html"), allPage(rows, ctx));
 
+  /* The page for an address that is not a page - at the root of the artefact,
+   * which is where GitHub Pages looks for it. */
+  fs.writeFileSync(path.join(distDir, "404.html"), notFoundPage(rows));
+
   /* The sitemap: the two pages that are always here, the full list, and one
-   * line per sample. Absolute URLs, because that is what a sitemap is. */
-  const day = new Date().toISOString().slice(0, 10);
+   * line per sample. Absolute URLs, because that is what a sitemap is.
+   *
+   * AND NO `lastmod`, which this used to stamp with the day of the build on
+   * all 774 lines. That is not when those pages changed, it is when they were
+   * rebuilt - which is every deploy, for every page, whatever moved. A crawler
+   * told that 774 pages changed today, again tomorrow, is being told nothing,
+   * and Google's own guidance is that it stops believing the field rather than
+   * the claim; a sitemap that says only "these pages exist" is worth more than
+   * one that says it with a date nobody can trust.
+   *
+   * Nor can this build honestly say more. The manual takes each page's date
+   * from the commit that last touched its markdown, because the markdown is in
+   * that repository; these pages are generated from catalogues fetched from
+   * three OTHER repositories over the network, and neither the fetch nor this
+   * checkout carries the history that would say when a given sample last
+   * changed. `lastmod` is optional in the sitemap protocol for exactly this
+   * case. */
   const urls = [
     SITE,
     `${SITE}samples/`,
@@ -1472,7 +1804,7 @@ export async function writeSamplePages(index, distDir) {
   fs.writeFileSync(
     path.join(distDir, "sitemap.xml"),
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`
-    + urls.map((url) => `<url><loc>${esc(url)}</loc><lastmod>${day}</lastmod></url>`).join("\n")
+    + urls.map((url) => `<url><loc>${esc(url)}</loc></url>`).join("\n")
     + "\n</urlset>\n",
   );
 

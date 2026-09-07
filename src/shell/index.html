@@ -24,6 +24,38 @@
 <meta name="twitter:title" content="abap2UI5 Playground">
 <meta name="twitter:description" content="Write abap2UI5 apps in the browser: ABAP on the left, the running app on the right, no server involved.">
 <meta name="twitter:image" content="https://abap2ui5.github.io/playground/og-image.png">
+<!-- WHAT THIS PAGE IS, for something that is not a person. A search engine and
+     an assistant both arrive at this address with the same question - is this
+     a marketing page about a tool, or the tool - and the markup that answers it
+     is WebApplication: an application that runs in a browser, needs nothing
+     installed and costs nothing. Every claim below is one this page keeps: the
+     ABAP is transpiled and run here, there is no account and no server, and
+     `price: 0` is the honest number rather than a missing one. The
+     documentation's front door carries the matching SoftwareApplication for
+     abap2UI5 itself; this one is for the playground. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "abap2UI5 Playground",
+  "url": "https://abap2ui5.github.io/playground/",
+  "description": "Write abap2UI5 apps in the browser: ABAP on the left, the running app on the right, no server involved.",
+  "applicationCategory": "DeveloperApplication",
+  "browserRequirements": "Requires a browser with WebAssembly and ES2022 modules",
+  "operatingSystem": "Any",
+  "isAccessibleForFree": true,
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "license": "https://github.com/abap2UI5/playground/blob/main/LICENSE",
+  "featureList": [
+    "Writes and runs ABAP in the browser, with no SAP system behind it",
+    "Renders the app with SAPUI5, the way abap2UI5 renders it on a real system",
+    "Checks the class as you type, with abaplint and the abap2UI5 linter",
+    "Opens any of the abap2UI5 samples, and any ABAP class by URL",
+    "Installs as an app and runs with the network gone"
+  ],
+  "isPartOf": { "@type": "WebSite", "name": "abap2UI5", "url": "https://abap2ui5.github.io/docs/" }
+}
+</script>
 <link rel="stylesheet" href="assets/shell.css">
 <!-- The abap2UI5 mark, as the documentation site wears it - rendered down from
      the docs' logo.png (tools have no ImageMagick here; the PNGs are checked

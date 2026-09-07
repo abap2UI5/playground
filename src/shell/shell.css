@@ -111,6 +111,33 @@
 
 * { box-sizing: border-box; }
 
+/* MOTION, AND THE ONE PLACE THE BLANKET FORM CANNOT GO.
+ *
+ * The catalogue and the manual answer prefers-reduced-motion with
+ * `*, *::before, *::after`, animations and transitions together, and the
+ * argument for the blanket form is that a rule which has to be remembered
+ * every time something new animates is a rule that will be forgotten. This
+ * page had no answer at all, and it cannot have quite that one: Monaco is IN
+ * this document, and Monaco draws its caret with an animation -
+ * `.cursor-smooth`, `.cursor-phase` and `.cursor-expand > .cursor` are
+ * `alternate` animations run twenty times. Held to one iteration of a
+ * hundredth of a millisecond, an `alternate` animation ends where its
+ * keyframes end, which for a caret is invisible: the reader who asked for
+ * less motion would have been given no cursor.
+ *
+ * So the transitions go, all of them - this stylesheet has five and the
+ * editor's are no loss - and the animations are left alone, because the only
+ * animations in this document are the editor's own and it has its own
+ * settings for them. Nothing here waits for `transitionend`, so what these
+ * elements DO is unchanged; they arrive rather than travel. If this file ever
+ * grows an animation of its own, it belongs in here by name. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 html, body {
   height: 100%;
   margin: 0;
@@ -1337,8 +1364,12 @@ button.insight-row {
  * row is comfortable the box is placed against the bar itself and the marks
  * take over holding the right-hand end. Below that the auto margins stay: an
  * absolutely placed box in a narrow row sooner or later sits on the words.
- * The catalogue's rule, to the pixel (src/catalogue/catalogue.css). */
-@media (min-width: 1100px) {
+ * The catalogue's rule, to the pixel (src/catalogue/catalogue.css) - including
+ * the width, which is 1440 because a box centred on the window does not clear
+ * the four sections until 1414. At 1100 it was drawn on top of them: 60px off
+ * the last section at 1280, here and on every other page of both sites.
+ * See catalogue.css for the arithmetic and for what to re-measure. */
+@media (min-width: 1440px) {
   .search-slot {
     position: absolute;
     left: 50%;

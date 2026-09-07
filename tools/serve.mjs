@@ -7,6 +7,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { SITE } from "./sample-pages.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "dist");
 const PORT = Number(process.env.PORT || 8080);
@@ -36,6 +37,26 @@ const TYPES = {
 // the tests can prove that nothing in the page assumes it is at the root.
 const SUBPATH = "/under-a-subpath";
 
+// ...and once more under the path the site is actually published at, which
+// `SITE` names. One page IS tied to it - 404.html is served for any address
+// under the deployment, at any depth, so it is the one page here that links
+// absolutely - and at the root mount every link on it would point nowhere.
+const SITE_PATH = new URL(SITE).pathname;
+
+// ...with ONE exception, and it is not a header: GitHub Pages answers anything
+// it cannot find under a project site with that site's own 404.html, at status
+// 404. Without the same answer here the page would exist in dist/ and be
+// unreachable in every local run and every test - which is how a 404 page
+// quietly stops working.
+const notFound = (res) => {
+  const page = path.join(ROOT, "404.html");
+  if (fs.existsSync(page)) {
+    res.writeHead(404, { "content-type": TYPES[".html"] }).end(fs.readFileSync(page));
+    return;
+  }
+  res.writeHead(404).end("not found");
+};
+
 const server = http.createServer((req, res) => {
   let url;
   try {
@@ -51,7 +72,12 @@ const server = http.createServer((req, res) => {
     res.writeHead(301, { location: `${SUBPATH}/` }).end();
     return;
   }
+  if (url === SITE_PATH.replace(/\/$/, "") && SITE_PATH !== "/") {
+    res.writeHead(301, { location: SITE_PATH }).end();
+    return;
+  }
   if (url.startsWith(`${SUBPATH}/`)) url = url.slice(SUBPATH.length);
+  else if (SITE_PATH !== "/" && url.startsWith(SITE_PATH)) url = url.slice(SITE_PATH.length - 1);
   // Resolve inside ROOT - a request may not escape dist/ via ../
   let file = path.join(ROOT, path.normalize(url).replace(/^(\.\.[/\\])+/, ""));
   if (!file.startsWith(ROOT)) {
@@ -61,12 +87,12 @@ const server = http.createServer((req, res) => {
   try {
     if (fs.statSync(file).isDirectory()) file = path.join(file, "index.html");
   } catch {
-    res.writeHead(404).end("not found");
+    notFound(res);
     return;
   }
   fs.readFile(file, (err, data) => {
     if (err) {
-      res.writeHead(404).end("not found");
+      notFound(res);
       return;
     }
     res.writeHead(200, { "content-type": TYPES[path.extname(file)] || "application/octet-stream" });

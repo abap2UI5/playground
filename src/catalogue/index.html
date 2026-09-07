@@ -26,6 +26,22 @@
 <meta name="twitter:image" content="https://abap2ui5.github.io/playground/og-image.png">
 <link rel="icon" href="../favicon.png">
 <link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<!-- WHAT THIS PAGE IS: a collection, not an article - the one thing a crawler
+     cannot tell from markup that is a search box and a grid the browser fills
+     in. The count is deliberately not here: this file is copied verbatim and
+     the number changes with every upstream commit, and a count that is wrong
+     is worse than none. The full list at all/ carries it, because that build
+     step knows it. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  "name": "abap2UI5 sample catalogue",
+  "url": "https://abap2ui5.github.io/playground/samples/",
+  "description": "Every abap2UI5 sample: the learning path, the UI5 demo kit rebuilt in ABAP, and the samples that need OData, RAP or a launchpad.",
+  "isPartOf": { "@type": "WebSite", "name": "abap2UI5", "url": "https://abap2ui5.github.io/docs/" }
+}
+</script>
 <link rel="stylesheet" href="catalogue.css">
 <!-- The stored theme, before the first paint. Same key and same rule as the
      playground's own inline script (src/shell/theme.mjs): a choice is applied,

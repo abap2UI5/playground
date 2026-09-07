@@ -25,7 +25,7 @@ them before touching `tools/` or `src/runtime`.
 | `src/examples/` | ABAP served as static files, so `?src=` has same-origin targets and the link tests depend on no foreign host |
 | `src/embed/` | The embed loader (`abap2ui5-embed.js`) and a worked example page; copied verbatim to `dist/embed/` |
 | `src/catalogue/` | The sample catalogue at `/samples/`: one page, one stylesheet, one module, over the index `tools/build-catalogue.mjs` writes. Its own document and its own bundle - see "The sample catalogue" below. `search-entry.mjs` is the second bundle out of this directory: the bar's search box, as the one file the catalogue and all 772 per-sample pages load |
-| `tools/` | The build (`build.mjs`, which drives `fetch-deps`, `build-framework`, `build-ui5`, `build-catalogue` — which writes the index and, through `sample-pages.mjs`, one static page per sample plus the sitemap, with the ABAP on those pages fetched by `sample-sources.mjs` and coloured by `abap-highlight.mjs` —, `build-site`), the size budget (`check-size`) and the dev server (`serve`) |
+| `tools/` | The build (`build.mjs`, which drives `fetch-deps`, `build-framework`, `build-ui5`, `build-catalogue` — which writes the index and, through `sample-pages.mjs`, one static page per sample plus the full list, the sitemap and `404.html`, with the ABAP on those pages fetched by `sample-sources.mjs` and coloured by `abap-highlight.mjs` —, `build-site`), the size budget (`check-size`) and the dev server (`serve`, which mounts `dist/` at the root, under a subpath and under the deployment's own path, and answers a miss with `404.html` the way GitHub Pages does) |
 | `tests/` | Playwright specs — the only test layer; everything is tested through a real browser against the built `dist/` |
 
 `deps/`, `build/` and `dist/` are generated and gitignored. Never commit them.
@@ -958,6 +958,28 @@ Four rules hold the set together:
   name that is a class name, an `https` source URL — and the catalogue's cards
   link to what was actually written rather than repeating that rule and
   drifting from it.
+- **A title that names THIS page.** Ninety-eight of them used to name several:
+  eight pages said "Binding · abap2UI5 sample", seven said "Table", seven
+  "Message". For a series of samples the catalogue's `title` is the *series* —
+  the sentence saying which one this is, is its `note` — so a result list, a
+  row of browser tabs and a shared link all said the same thing over and over.
+  The note is appended **only where the title collides**, which the writer can
+  see because it holds the whole set; a title carrying both when it does not
+  have to is half as much title. The `<h1>` is untouched: on the page itself
+  the class name and the lead sentence are directly under it.
+- **The printed class is reachable.** It scrolls sideways — 404px of it on the
+  widest sample — and nothing inside it is in the tab order, because the line
+  numbers are links and were deliberately taken out of it. So the block itself
+  is the stop: `tabindex="0"`, `role="region"` and a label naming the class,
+  which is what the manual does to its own listings and its tables.
+- **Nothing pushes the page sideways.** A UI5 name is one word and some of them
+  are 28 characters long — a title carrying the control it is about, a chip
+  that *is* a control name, a documentation link printed as its address in a
+  grid column that would not shrink below its longest unbreakable child. Each
+  of those took the whole page with it on a phone: 98px at 320, still 5 at 414,
+  on pages nobody had opened that narrow. `minmax(0, 1fr)`, `overflow-wrap`
+  and a `max-width` on the chips; the printed class is the one thing still
+  allowed to scroll, and it does that in its own box.
 - **External data, escaped.** Everything on these pages comes from three
   repositories' committed files: every value is escaped into the markup, every
   link is dropped unless it is `https`, and a class name that is not a plain
@@ -974,11 +996,44 @@ Four rules hold the set together:
   the domain root, which belongs to another repository. `sitemap.xml` is
   discovered by being submitted, or not at all; the links above are what
   actually does the work.
+- **No `lastmod` either**, and that is the same kind of decision. It used to
+  carry the day of the build on all 774 lines, which is not when those pages
+  changed but when they were rebuilt — every deploy, every page. A crawler told
+  that everything changed today, and again tomorrow, is told nothing, and stops
+  reading the field. Nor can this build honestly say more: the manual takes each
+  page's date from the commit that last touched its markdown because the
+  markdown is in that repository, while these pages come from catalogues fetched
+  over the network from three others, and neither the fetch nor this checkout
+  carries that history. `lastmod` is optional in the protocol for this case.
+- **What the page is, said in `ld+json`.** A sample page carries
+  `SoftwareSourceCode` and a `BreadcrumbList` that mirrors the trail drawn above
+  its title — the one piece of this markup a reader sees, as the trail over a
+  search result instead of a bare URL. The full list carries `CollectionPage`
+  with the count (and its own trail), the catalogue carries `CollectionPage`
+  without one — that file is copied verbatim and a count in it would be wrong by
+  the next upstream commit — and the playground itself carries `WebApplication`:
+  free, needs no account and no system, which is the question somebody arriving
+  from a search actually has.
+
+**And the page for an address that is not a page.** `dist/404.html`, which is
+what GitHub Pages serves for anything it cannot find under this deployment;
+before it, that was GitHub's own white page with no bar, no search and no way
+on. It carries the frame, the four sections and the box, and it *guesses*: the
+771 class names and titles are in the page, about 40 KB, and the address is
+scored against them — by the words it still carries once the ones nearly every
+sample shares are dropped (`.../z2ui5_cl_smpc_app_wizard/` finds the Wizard
+samples, `.../all.html` finds the full list), and, when a class-shaped address
+leaves no word behind, by how near the NAME is (`.../z2ui5_cl_smp_app_49/`
+finds the classes one character away). Nothing is fetched to answer, and
+nothing is shown when nothing is close.
 
 `SITE` (overridable with `PG_SITE_URL`) is the one absolute URL on this site,
 and only these pages need it — a canonical link and a sitemap are absolute by
 definition, everything else stays relative so the site still works under any
-path. The pages are **not** in the service worker's allow list: they are static
+path. The 404 is the single exception, and for the same reason: it is served at
+`/playground/samples/<typo>/` and at `/playground/<typo>` alike, so it links
+through `BASE` — `SITE`'s own path — because a relative href there resolves
+against whichever address missed. The pages are **not** in the service worker's allow list: they are static
 documents nobody revisits offline, and 770 of them in a cache is not what
 somebody who came to write ABAP asked for. `tests/sample-pages.spec.js` runs
 against the real index, because a fixture would test a page that was never
@@ -1153,6 +1208,20 @@ why). A shared partial would be a build step in front of a page whose whole
 point is that it is a file, and a shared stylesheet across two repositories
 that deploy separately would be a request in front of the first paint. Change
 them together.
+
+**Less motion, if asked — and the one place the blanket form cannot go.** The
+catalogue and the manual answer `prefers-reduced-motion` with
+`*, *::before, *::after`, animations and transitions together, because a rule
+that has to be remembered every time something new animates is a rule that
+will be forgotten. `shell.css` had no answer at all, and it cannot have quite
+that one: Monaco is in that document, and it draws its caret with an
+`alternate` animation run twenty times. Held to one iteration of a hundredth
+of a millisecond, an `alternate` animation ends where its keyframes end, which
+for a caret is invisible — the reader who asked for less motion would have
+been given no cursor. So the shell switches off the **transitions** (it has
+five, and the editor's are no loss) and leaves the animations alone, the
+editor having its own settings for them. An animation of this file's own
+belongs in that block by name.
 
 **The search box is not a fourth copy, and its index is not a copy at all.**
 The box is `src/shell/search-box.mjs` — plain DOM, because two of the three
