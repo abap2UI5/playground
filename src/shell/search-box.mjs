@@ -276,9 +276,18 @@ export function mountSearch(host) {
   }
 
   function hide() {
+    /* WHERE THE FOCUS GOES WHEN THE PANEL CLOSES. Hiding the box it is in
+       hands the focus to <body>, so the reader's next Tab started again at
+       the top of the page - the whole bar, on every Escape. It goes back to
+       the button that opened it, which is where it came from and what the
+       menu beside it already does. Only if it is in here: closing by a click
+       on the scrim must not take the focus away from wherever that reader
+       actually is. */
+    const leaving = scrim.contains(document.activeElement);
     scrim.hidden = true;
     input.value = "";
     rows = [];
+    if (leaving) button.focus();
   }
 
   /* A hit was opened - by a click, by Enter (which clicks the active row), or
