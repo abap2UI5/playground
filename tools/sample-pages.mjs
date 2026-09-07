@@ -975,10 +975,16 @@ function outline(html) {
   });
   /* One heading is not an outline - it is the same word twice on one screen. */
   if (rows.length < 2) return { html: withIds, aside: "" };
-  const aside = `<aside class="outline" aria-label="On this page">
+  /* A DIV AROUND A NAMED NAV, not an <aside> around one. Both are landmarks,
+     so naming the nav - which is what a reader jumps between - left the page
+     announcing "On this page" twice, once as a complementary region and once
+     as the navigation inside it. The nav is the one that is worth landing on;
+     the box around it is layout, and `.outline` is what every rule here and
+     in the manual's own stylesheet has always addressed. */
+  const aside = `<div class="outline">
     <div class="outline-head">On this page</div>
     <nav aria-label="On this page">${rows.map((r) => `<a href="#${r.id}">${esc(r.text)}</a>`).join("")}</nav>
-  </aside>`;
+  </div>`;
   return { html: withIds, aside };
 }
 
