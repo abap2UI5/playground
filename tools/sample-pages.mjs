@@ -670,8 +670,25 @@ h2 { font-size: 15px; margin: 26px 0 8px; }
 }
 .ln > a::before { content: counter(line); }
 .ln > a:hover { color: var(--accent); }
+/* A THUMB CANNOT PICK A LINE, and should not have to try. Each of these is
+   36x19 with the next one 19px below it - half the size a target is asked to
+   be, at a third of the spacing - so on a touch screen every tap near the
+   gutter was a coin toss between two lines. It is a POINTER affordance: the
+   number is drawn by this stylesheet and the link under it is how a mouse
+   picks a line up. On a coarse pointer the number stays and the link stops
+   answering, which also gives the listing back the 50 taps it was swallowing
+   at its left edge while somebody tried to scroll it. */
+@media (pointer: coarse) {
+  .ln > a { pointer-events: none; }
+}
 .source-body:not(.live) .ln:target, .ln.is-marked { background: var(--mark); }
 .source-tools { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; }
+/* 19px of link is a line of text, which is right for a mouse and under half
+   what a thumb is asked to be given. The height comes from padding rather than
+   from a size, so nothing moves for a reader with a pointer. */
+@media (pointer: coarse) {
+  .source-tools a, .source-copy, .run { padding-top: 4px; padding-bottom: 4px; }
+}
 .source-copy {
   padding: 0; border: 0; background: none; font: inherit; color: var(--accent);
   cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
