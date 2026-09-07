@@ -331,6 +331,16 @@ select:disabled { opacity: .5; }
 .splitter:hover::after,
 .splitter:focus-visible::after,
 .splitter.is-dragging::after { opacity: 1; }
+/* 6px of splitter is a hairline with a cursor over it - and on a touch screen
+   there is no cursor and no hairline to aim at. The hit area is 24 there; the
+   line it draws stays where it was, because `::after` is inset from the edges
+   rather than filling them. Landscape on a phone is where this shows: the two
+   panes are side by side and the handle between them is the only way to give
+   the editor more room. */
+@media (pointer: coarse) {
+  .splitter { flex-basis: 24px; }
+  .splitter::after { inset: 0 11px; }
+}
 
 /* while dragging, the iframe must not swallow the pointer */
 .panes.is-dragging iframe { pointer-events: none; }
@@ -504,6 +514,12 @@ iframe {
   position: relative;
   z-index: 1;
   background: transparent;
+}
+/* 5px of grip is a hairline: fine under a mouse, invisible to a finger, and
+   the one control on this page a touch screen could not hit at all. The line
+   stays 5px - the box around it is what grows. */
+@media (pointer: coarse) {
+  .insight-grip { min-height: 24px; background-clip: content-box; padding: 10px 0; }
 }
 .insight-grip:hover, .insight-grip.is-dragging, .insight-grip:focus-visible {
   background: var(--accent);
@@ -1228,6 +1244,15 @@ button.insight-row {
     position: relative;
     padding-top: 2.1rem;
   }
+  /* AND THE PAGE STOPS SLIDING 1px SIDEWAYS. The editor's own layers are wider
+     than the box they sit in - one of them is sixteen million pixels wide, by
+     design, because that is how its virtual scrolling works - and one pixel of
+     it reached past the screen, which on a phone is a page that wobbles under
+     the thumb. Clipped at the pane, which HERE is the width of the screen: a
+     pane holds one whole view at this size, so nothing that was visible is cut.
+     Not done above this width, where the panes stand side by side and the
+     editor's own popups are allowed to reach over the one beside it. */
+  .pane { overflow: hidden; }
 
   .tabs {
     display: flex;

@@ -857,6 +857,22 @@ html { scroll-padding-top: 62px; }
   .search-button { min-width: 0; flex: none; padding: 0 7px; }
   .search-label, .search-key { display: none; }
 }
+/* THE SMALLEST TYPE ON THE PAGE IS 11px, which is a size for a caption on a
+   desktop and a squint on a phone: the class under a card title and the badges
+   beside it. 12 on a phone - the size the count, the crumbs and the foot
+   already use there - and 11 wherever there is a pointer and a bigger screen. */
+@media (max-width: 620px) {
+  .card .who, .badge { font-size: 12px; }
+}
+/* 13x13 of checkbox is what a browser draws at this font size, and it is the
+   one control on the page a thumb aims AT rather than at the words beside it.
+   The label around it is the target and always was - 235x25, and a tap
+   anywhere on it counts - but the box is what a reader aims for, so it is
+   given the size of one. */
+@media (pointer: coarse) {
+  #f-runs { width: 18px; height: 18px; }
+}
+
 @media (max-width: 760px) {
   /* CLIPPED, NOT REMOVED - the rule the four sections below already follow,
      and the one this line broke. `display: none` takes the word out of the
