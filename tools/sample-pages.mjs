@@ -82,6 +82,32 @@ export const SITE = (process.env.PG_SITE_URL || "https://abap2ui5.github.io/play
 
 const log = (m) => console.log(`build-catalogue: ${m}`);
 
+/* WHAT A LINK TO ONE OF THESE PAGES LOOKS LIKE SOMEWHERE ELSE. A sample page
+ * had `og:type`, a title, a description and a url and nothing else, so Slack,
+ * LinkedIn and a search result drew a card with no picture and no site behind
+ * it; the full list and the catalogue had none of it at all. Same block for
+ * all three, from the same title and description the page already carries -
+ * there is nothing here a reader of the page does not already see.
+ *
+ * One image for 774 pages, at /playground/og-image.png. A card rendered per
+ * sample would be 774 images to build and to keep in step with a title that is
+ * already in the page. */
+const social = ({ title, description, url, type = "article" }) => `<meta property="og:type" content="${type}">
+<meta property="og:site_name" content="abap2UI5">
+<meta property="og:locale" content="en_US">
+<meta property="og:title" content="${esc(title)}">
+<meta property="og:description" content="${esc(description)}">
+<meta property="og:url" content="${esc(url)}">
+<meta property="og:image" content="${SITE}og-image.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="abap2UI5 - Build UI5 Apps Purely in ABAP">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${esc(title)}">
+<meta name="twitter:description" content="${esc(description)}">
+<meta name="twitter:image" content="${SITE}og-image.png">`;
+
 const esc = (value) =>
   String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -1263,10 +1289,7 @@ function samplePage(row, ctx) {
 <title>${esc(pageTitle)}</title>
 <meta name="description" content="${esc(description)}">
 <link rel="canonical" href="${esc(canonical)}">
-<meta property="og:type" content="article">
-<meta property="og:title" content="${esc(pageTitle)}">
-<meta property="og:description" content="${esc(description)}">
-<meta property="og:url" content="${esc(canonical)}">
+${social({ title: pageTitle, description, url: canonical })}
 <link rel="icon" href="../../favicon.png">
 <link rel="apple-touch-icon" href="../../apple-touch-icon.png">
 <link rel="stylesheet" href="../catalogue.css">
@@ -1329,6 +1352,12 @@ function allPage(rows, ctx) {
 <title>Every abap2UI5 sample · the full list</title>
 <meta name="description" content="All ${rows.length} abap2UI5 samples on one page: the learning path, the UI5 demo kit rebuilt in ABAP, and the samples that need OData, RAP or a launchpad — each one linked to its own page.">
 <link rel="canonical" href="${SITE}samples/all/">
+${social({
+  title: "Every abap2UI5 sample · the full list",
+  description: `All ${rows.length} abap2UI5 samples on one page: the learning path, the UI5 demo kit rebuilt in ABAP, and the samples that need OData, RAP or a launchpad - each one linked to its own page.`,
+  url: `${SITE}samples/all/`,
+  type: "website",
+})}
 <link rel="icon" href="../../favicon.png">
 <link rel="stylesheet" href="../catalogue.css">
 <link rel="stylesheet" href="../sample.css">
@@ -1447,13 +1476,66 @@ export async function writeSamplePages(index, distDir) {
     + "\n</urlset>\n",
   );
 
+  /* AND THE SAME CATALOGUE, ADDRESSED TO A MACHINE. An assistant asked to
+   * write abap2UI5 wants two things from this deployment: whether somebody has
+   * already built the thing, and the class that proves it. Both are here - 771
+   * apps, each with a page, the ABAP in full and the words to search it by -
+   * and until now the only way in was to read a 744 kB JSON nobody had been
+   * told about. `llms.txt` is the convention for saying it in one short file;
+   * the documentation publishes one for its prose and points here, and this
+   * one points back. Kept to what a machine cannot guess: the shape of the
+   * index, the addresses that are stable, and the three repositories behind
+   * them. */
+  const bySource = (id) => rows.filter((row) => row.source === id).length;
+  fs.writeFileSync(path.join(samplesDir, "llms.txt"), `# abap2UI5 sample catalogue
+
+> Every abap2UI5 sample in one place: ${rows.length} complete ABAP classes from three
+> repositories, each with its own page, the class printed in full, and - where
+> it needs no SAP system - a button that runs it in this browser. Use it to
+> answer "has somebody already built this?" with a class to read rather than a
+> snippet to trust.
+
+## Read it as data
+
+- [apps.json](${SITE}samples/apps.json): the whole index, one object per sample
+  under \`entries\`: \`class\`, \`title\`, \`summary\`, \`source\` (which repository),
+  \`group\`, \`stage\`, \`keywords\`, the \`controls\` it builds, the \`libraries\` it
+  needs, the oldest UI5 \`release\` it runs on, whether it \`runs\` in the browser,
+  and \`page\` - the directory of its own page here. The top level also lists
+  every \`control\` (${(index.controls || []).length}), \`library\` (${(index.libraries || []).length}) and \`release\` in use.
+- [the full list](${SITE}samples/all/): the same ${rows.length} as one HTML page, grouped,
+  for reading down or linking into.
+- a sample's own page is \`${SITE}samples/<class>/\` - the class in full, what it
+  builds, what it needs, and the link to the source on GitHub.
+- [sitemap.xml](${SITE}sitemap.xml): every page of this deployment.
+
+## Where the samples come from
+
+${(index.sources || []).map((s) => `- [${s.title}](https://github.com/${s.repo}) - ${s.blurb} ${bySource(s.id)} samples; \`SAMPLES.md\` in that repository is the same list in markdown.`).join("\n")}
+
+## What to know before writing ABAP
+
+- An app is ONE class implementing \`z2ui5_if_app\`. Everything enters \`main\`,
+  which dispatches on \`client->check_on_navigated( )\`, \`client->check_on_event( )\`
+  and \`client->check_on_init( )\`.
+- Build the view with \`z2ui5_cl_ui5_view_builder\`; bind with \`client->_bind( )\`,
+  which is bidirectional; every roundtrip is a fresh ABAP session and only the
+  app class survives it, serialized.
+- The prose that explains all of it, written for a machine to page through:
+  [the documentation's llms.txt](https://abap2ui5.github.io/docs/llms.txt), and
+  [llms-full.txt](https://abap2ui5.github.io/docs/llms-full.txt) for the whole
+  manual in one fetch.
+- The framework's own code map:
+  [github.com/abap2UI5/abap2UI5/llms.txt](https://github.com/abap2UI5/abap2UI5/blob/main/llms.txt).
+`);
+
   const bytes = rows.reduce(
     (sum, row) => sum + fs.statSync(path.join(samplesDir, row.dir, "index.html")).size,
     0,
   );
   log(
     `${rows.length} sample pages -> dist/samples/<class>/ (${Math.round(bytes / 1024)} KB), `
-    + `the full list at samples/all/, sitemap.xml with ${urls.length} URLs`
+    + `the full list at samples/all/, llms.txt, sitemap.xml with ${urls.length} URLs`
     + `${skipped > 0 ? ` - ${skipped} entries skipped, no usable class name or source URL` : ""}`,
   );
 }
