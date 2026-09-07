@@ -313,7 +313,13 @@ const result = await esbuild.build({
 writeIndex();
 // The icons and the app manifest - what a tab, a home screen and an install
 // prompt show for this page.
-for (const name of ["favicon.png", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "manifest.webmanifest"]) {
+for (const name of ["favicon.png", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "manifest.webmanifest",
+                    /* The card a link to any page of this deployment shows in
+                       Slack, LinkedIn or a search result. One image for all 774
+                       of them: the alternative is a rendered card per sample,
+                       which is 774 images to build and to keep in step with a
+                       title that is already in the page. */
+                    "og-image.png"]) {
   fs.copyFileSync(path.join(SHELL, name), path.join(DIST, name));
 }
 
