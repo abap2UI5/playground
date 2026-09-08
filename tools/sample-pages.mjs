@@ -69,6 +69,7 @@
 // class name that is not a plain ABAP name gets no directory - a path is not a
 // thing to build out of somebody else's JSON.
 import fs from "fs";
+import { stripHtmlComments } from "./html.mjs";
 import path from "path";
 import { isSapui5Only } from "../src/shell/ui5-libs.mjs";
 import { highlightAbapLines } from "./abap-highlight.mjs";
@@ -209,194 +210,14 @@ const MENU_SCRIPT = `<script>
   })();
 </script>`;
 
-/* Where the reader is, and where the documentation was left - the hand copy of
- * src/shell/site-memory.mjs, which the playground and the catalogue import and
- * these pages cannot, for the reason above. Same keys, same checks, kept in
- * step with that file by hand.
- *
- * At the end of the body as well: this one needs the bar to exist too, and
- * nothing is painted differently by it. */
-const MEMORY_SCRIPT = `<script>
-  try {
-    localStorage.setItem("abap2ui5-playground:last-samples",
-      location.pathname + location.search + location.hash);
-  } catch (e) { /* a browser that refuses storage simply forgets where you were */ }
-  (function () {
-    /* Each link's href as it was WRITTEN - the section it points at - kept
-       from the first lift, because after one the attribute is the page that
-       was restored. */
-    var written = new Map();
-    var lift = function () {
-      for (var a of document.querySelectorAll("a[data-site]")) {
-        try {
-          if (!written.has(a)) written.set(a, a.getAttribute("href"));
-          var last = localStorage.getItem("abap2ui5-playground:last-" + a.dataset.site);
-          if (!last) continue;
-          /* Checked, not assigned: a stored value is whatever anything on this
-             origin put there. Resolved against this origin, then kept only if it
-             is still inside the section the MARKUP declares - the data-scope
-             attribute when the link is written deeper than the section it
-             restores inside (the Documentation item opens the first page of
-             the manual), else the href itself. Which is what leaves
-             "//elsewhere/x", "/docs/../x" and "javascript:…" alone.
-             (No backticks in here: this comment is inside a template
-             literal, and one would end the string mid-sentence. It did.) */
-          var base = new URL(a.dataset.scope || written.get(a), location.href);
-          var target = new URL(last, location.origin);
-          if (base.origin !== location.origin || target.origin !== location.origin) continue;
-          if (!target.pathname.startsWith(base.pathname)) continue;
-          a.href = target.pathname + target.search + target.hash;
-        } catch (e) { /* the link keeps the href it was written with */ }
-      }
-    };
-    /* Now, and again whenever it can have gone stale while this page stayed
-       open - shown again, looked at again, and on the click itself. */
-    lift();
-    addEventListener("pageshow", function (e) {
-      lift();
-      /* A page handed back alive by the back/forward cache is where the
-         reader left it, so the record a bar link wrote on the way out is
-         spent - left there, the next arrival within its half minute would
-         inherit it. */
-      if (e.persisted) {
-        try { localStorage.setItem("abap2ui5-playground:returning", ""); } catch (e2) { /* nothing to spend */ }
-      }
-    });
-    document.addEventListener("visibilitychange", function () {
-      if (document.visibilityState === "visible") lift();
-    });
-    document.addEventListener("click", function (e) {
-      if (e.target.closest && e.target.closest("a[data-site]")) lift();
-    }, true);
-
-    /* THE BAR GOES BACK to a page that is still behind you - the hand copy
-       of returnTo( ) in src/shell/site-memory.mjs, which says why at length.
-       A link builds a new document, and a new playground - the page itself,
-       or the runnable example on the documentation's front door - boots the
-       whole runtime and runs the app from the top; the one thing that hands a
-       running page back alive is the back/forward cache, and it applies to a
-       page the reader has been on. So when the page an item opens is still in
-       this tab's history, this goes to it there, for all four items alike:
-       through the Navigation API where it exists - the nearest entry, either
-       direction, that is the same origin, path and query - and without it,
-       the one case that can be known: this document was opened from that page
-       and nothing has been pushed onto the history since. The item for the
-       page the reader is on is left to the browser. A traversal the browser
-       cannot make, or a step back that goes nowhere, follows the link after a
-       moment; the timer is dropped on pagehide, so a page handed back does
-       not fire it on the way in. */
-    var pageOf = function (u) { return u.origin + u.pathname.replace(/index\\.html$/, "") + u.search; };
-    var arrived = history.length;
-    document.addEventListener("click", function (e) {
-      var a = e.target.closest && e.target.closest(".bar-nav a[href]");
-      if (!a || e.defaultPrevented) return;
-      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-      if (a.target && a.target !== "_self") return;
-      var href = a.href, want, step, key = null, nav = window.navigation, entries, at, d;
-      try { want = pageOf(new URL(href, location.href)); } catch (e2) { return; }
-      if (want === pageOf(new URL(location.href))) return;
-      var is = function (entry) {
-        try { return typeof entry.url === "string" && pageOf(new URL(entry.url)) === want; } catch (e3) { return false; }
-      };
-      if (nav && nav.entries && nav.traverseTo) {
-        entries = nav.entries();
-        at = nav.currentEntry ? nav.currentEntry.index : -1;
-        for (d = 1; d < entries.length && key === null; d++) {
-          if (at - d >= 0 && is(entries[at - d])) key = entries[at - d].key;
-          else if (at + d < entries.length && is(entries[at + d])) key = entries[at + d].key;
-        }
-        if (key === null) return;
-        step = function () { return nav.traverseTo(key).committed; };
-      } else {
-        var from;
-        try { from = pageOf(new URL(document.referrer)); } catch (e4) { return; }
-        if (history.length < 2 || history.length !== arrived || from !== want) return;
-        step = function () { history.back(); };
-      }
-      e.preventDefault();
-      var follow = function () { location.assign(href); };
-      var later = setTimeout(follow, 1500);
-      addEventListener("pagehide", function () { clearTimeout(later); }, { once: true });
-      Promise.resolve().then(step).then(null, function () { clearTimeout(later); follow(); });
-    }, true);
-
-    /* Where on the page, not only which page - the hand copy of the same block
-       in src/shell/site-memory.mjs. A bar link writes down how far down this
-       page the reader is and where they are being sent; the page that arrives
-       within seconds, and only that page, puts them back. Leaving a sample for
-       the catalogue is the journey this exists for: a list of 770 rows that
-       came back at row 1 had not really remembered anything. */
-    var SCROLL = "abap2ui5-playground:scroll";
-    var BACK = "abap2ui5-playground:returning";
-    var path = function () { return location.pathname + location.search; };
-    var map = function () {
-      try {
-        var m = JSON.parse(localStorage.getItem(SCROLL) || "{}");
-        return m && typeof m === "object" && !(m instanceof Array) ? m : {};
-      } catch (e) { return {}; }
-    };
-    var note = function () {
-      try {
-        var m = map(), keys, i;
-        delete m[path()];
-        m[path()] = Math.round(scrollY);
-        keys = Object.keys(m);
-        for (i = 0; i < keys.length - 12; i++) delete m[keys[i]];
-        localStorage.setItem(SCROLL, JSON.stringify(m));
-      } catch (e) { /* a refused or full storage: the reader lands at the top */ }
-    };
-    document.addEventListener("click", function (e) {
-      var a = e.target.closest && e.target.closest("a[data-back]");
-      if (!a) return;
-      note();
-      try {
-        var to = new URL(a.href, location.href);
-        if (to.origin !== location.origin) return;
-        localStorage.setItem(BACK, JSON.stringify({ to: to.pathname + to.search, at: Date.now() }));
-      } catch (e2) { /* not a URL, so nothing is restored */ }
-    }, true);
-    addEventListener("pagehide", note);
-    (function () {
-      var r = null, age, y;
-      try {
-        r = JSON.parse(localStorage.getItem(BACK) || "null");
-        localStorage.setItem(BACK, "");
-      } catch (e) { return; }
-      if (!r || typeof r.to !== "string" || typeof r.at !== "number") return;
-      age = Date.now() - r.at;
-      /* Recent, about THIS page, and not overruled by a hash the reader named. */
-      if (!(age >= 0 && age < 30000) || r.to !== path() || location.hash) return;
-      y = map()[r.to];
-      if (typeof y !== "number" || !(y > 0) || y >= 1e7) return;
-      /* Re-applied until it takes, for up to three seconds: a page still
-         drawing is a page too short to reach the offset, and the browser
-         clamps that to the top - which is what this is here to stop. What
-         cancels it is the READER and nothing else: a wheel, a touch, a key, a
-         pointer. Not a scroll this did not cause - the browser moves that
-         itself while a page loads, to keep what you are looking at steady,
-         and reading that as a reader made the restore give up a little way
-         down. */
-      /* It HOLDS the position for two seconds rather than merely reaching it
-         once: a page that reaches the offset and stops can be scrolled back to
-         the top a frame later by whatever else is still starting up. Safe only
-         because the four events end it on the reader's first move. */
-      var until = Date.now() + 2000, stopped = false;
-      var moved = ["wheel", "touchstart", "keydown", "pointerdown"];
-      var stop = function () {
-        stopped = true;
-        for (var i = 0; i < moved.length; i++) removeEventListener(moved[i], stop, true);
-      };
-      for (var k = 0; k < moved.length; k++) addEventListener(moved[k], stop, { capture: true, passive: true });
-      var put = function () {
-        if (stopped) return;
-        if (Math.round(scrollY) !== y) scrollTo(0, y);
-        if (Date.now() < until) requestAnimationFrame(put);
-        else stop();
-      };
-      requestAnimationFrame(put);
-    })();
-  })();
-</script>`;
+/* Where the reader is and where the documentation was left, the outline and
+ * the line numbers: the three scripts every one of these pages used to carry
+ * INLINE - 15 kB a page, 772 pages, and a hand copy of src/shell/site-memory.mjs
+ * to keep in step by hand - are one module now, samples/page.mjs, built from
+ * src/catalogue/page-entry.mjs beside search.mjs and cached once for all of
+ * them. What stays inline is what has to: the theme, before the first paint,
+ * and the menu, which the documentation borrows from one of these pages. */
+const PAGE_SCRIPT = (up) => `<script type="module" src="${up}samples/page.mjs"></script>`;
 
 /* The two marks the playground's own bar ends in (src/shell/index.html) and,
  * after them, the button and the menu the catalogue's bar ends in
@@ -652,7 +473,7 @@ main { padding-top: 26px; padding-bottom: 40px; }
 
 /* The section you are in, marked the way the documentation marks it: the
    entry at full strength instead of dimmed, and a 2px bar in the accent
-   standing on the hairline beside it. OUTLINE_SCRIPT sets the class.
+   standing on the hairline beside it. src/catalogue/outline.mjs sets the class.
 
    The bar is a pseudo-element on the row rather than one element that slides
    between rows, which is what the documentation does - the slide needs a
@@ -917,209 +738,6 @@ const numbered = (text) =>
       `<span class="ln" id="L${i + 1}"><a href="#L${i + 1}" aria-label="Line ${i + 1}"></a>${html}</span>`)
     .join("\n");
 
-/* The line links, once they are in a browser. #L42 alone is answered by the
- * stylesheet (:target) and needs none of this; what needs a script is the
- * RANGE - #L42-L58 is a fragment no element has an id for - the shift-click
- * that composes one, and the button that hands the result over.
- *
- * IT ALSO TAKES THE GUTTER OUT OF THE TAB ORDER, which is the one line in it
- * that is not about ranges. Every line of a class is a link, so a reader on a
- * keyboard pressed Tab fifty times to get past one listing: 52 of this page's
- * 94 stops were line numbers, and 55 of a manual chapter's 124. The gutter is
- * a POINTER affordance - the number is drawn by the stylesheet and the link
- * under it is how a mouse picks a line up - and nothing is lost by it: the
- * link still answers a click, #L42 still opens where it always did, and a
- * screen reader still meets it in the page, because a browse cursor is not
- * the tab order. Set by the script rather than written into the markup
- * because as an attribute it is 3.6 MB across 191,000 lines; here it is one
- * loop per page, and the comment explaining it is up here, where it is not
- * paid 771 times.
- *
- * The address bar is the share link, so the selection is written to it with
- * `replaceState` rather than pushed: a reader who presses Back after picking
- * three lines wants the page they came from, not the two selections before
- * this one. And because that leaves the document's :target behind, the block
- * is marked `live` the moment this runs and the stylesheet's own rule stops
- * matching - one line highlighted by one mechanism, never two by two.
- *
- * A modified click is left alone: ctrl or cmd on a line number opens that line
- * in a new tab, which is a link doing what a link does.
- *
- * At the end of the body, and only on a page that prints a class. */
-/* WHICH SECTION YOU ARE IN, in the outline on the right.
- *
- * The documentation's outline has always marked it - a 2px bar in the accent
- * against the hairline, and the entry's text at full strength instead of
- * dimmed - and these pages listed the same headings with nothing saying which
- * one you had reached. On a sample page that is five sections and a class
- * listing long, an outline that never changes is a table of contents; one that
- * moves is a position.
- *
- * The rule is the one VitePress uses, and it is copied case for case out of
- * `theme-default/composables/outline.js`:
- *
- *   - at the very top of the page (scrollY < 1), NOTHING is marked. A reader
- *     looking at the title is not inside a section yet, and a bar against the
- *     first row there claims they are. This case was missing at first and is
- *     the whole reason the two outlines still differed after everything else
- *     matched: the manual marked nothing at the top and these pages marked
- *     row one.
- *   - at the bottom, the LAST row - a short final section may never push its
- *     heading over the line.
- *   - otherwise the last heading whose top has passed under the bar, and none
- *     if no heading has. Not the nearest to the middle of the screen, which
- *     flickers between two headings on a slow scroll, and not the first one
- *     visible, which marks the section being left.
- *
- * Read on rAF rather than per scroll event: this measures every heading, and
- * scroll fires per frame anyway.
- *
- * The hash is NOT written. Clicking a row sets one, and that is a reader
- * asking for an address; scrolling past a heading is not, and a history entry
- * per section makes Back walk the page instead of leaving it. */
-const OUTLINE_SCRIPT = `<script>
-  (function () {
-    var nav = document.querySelector(".outline nav");
-    if (!nav) return;
-    var links = [].slice.call(nav.querySelectorAll("a"));
-    var heads = links.map(function (a) {
-      return document.getElementById(decodeURIComponent(a.getAttribute("href").slice(1)));
-    });
-    if (!heads.length || heads.indexOf(null) > -1) return;
-
-    /* The bar is 46px and sticky, plus the air a heading needs under it before
-       it counts as reached. The same number the outline's own \`top\` uses. */
-    var LINE = 70;
-    var at = -1;
-
-    function mark() {
-      /* -1 is "no section", and it is the STARTING value rather than row 0:
-         above the first heading there is no section to be in. */
-      var last = -1;
-      if (window.scrollY >= 1) {
-        for (var i = 0; i < heads.length; i++) {
-          if (heads[i].getBoundingClientRect().top <= LINE) last = i;
-        }
-        /* Scrolled to the end: the final section is the one being read,
-           whether or not its heading ever crossed the line. */
-        if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 2) {
-          last = heads.length - 1;
-        }
-      }
-      if (last === at) return;
-      if (at > -1) links[at].classList.remove("here");
-      if (last > -1) links[last].classList.add("here");
-      at = last;
-    }
-
-    var pending = false;
-    function schedule() {
-      if (pending) return;
-      pending = true;
-      requestAnimationFrame(function () { pending = false; mark(); });
-    }
-
-    mark();
-    addEventListener("scroll", schedule, { passive: true });
-    addEventListener("resize", schedule, { passive: true });
-  })();
-</script>`;
-
-const LINES_SCRIPT = `<script>
-  (function () {
-    var pre = document.querySelector(".source-body");
-    if (!pre) return;
-    var lines = pre.querySelectorAll(".ln");
-    if (!lines.length) return;
-    pre.classList.add("live");
-
-    var hint = document.querySelector(".source-hint");
-    var copy = document.querySelector(".source-copy");
-    var HINT = hint ? hint.textContent : "";
-    var COPY = copy ? copy.textContent : "";
-    /* [0-9] rather than the shorthand: this script is written inside a
-       template literal, where a backslash is an escape before it is
-       anything else - the class would arrive in the page as "d+" and
-       match nothing. (It did.) */
-    var HASH = /^#L([0-9]+)(?:-L([0-9]+))?$/;
-    /* The line a shift-click extends from: the last one picked on its own. */
-    var anchor = 0;
-
-    /* The gutter is not fifty tab stops (see above). */
-    var gutter = document.querySelectorAll(".ln > a");
-    for (var gi = 0; gi < gutter.length; gi++) gutter[gi].tabIndex = -1;
-
-    var picked = function () {
-      var m = HASH.exec(location.hash);
-      if (!m) return null;
-      var a = Number(m[1]);
-      var b = m[2] === undefined ? a : Number(m[2]);
-      return { from: Math.min(a, b), to: Math.max(a, b) };
-    };
-
-    var say = function (text) { if (hint) { hint.textContent = text; hint.hidden = false; } };
-
-    var mark = function (scroll) {
-      for (var i = 0; i < lines.length; i++) lines[i].classList.remove("is-marked");
-      var range = picked();
-      if (copy) copy.hidden = range === null;
-      if (range === null) { say(HINT); return; }
-      var first = null;
-      for (var n = range.from; n <= range.to; n++) {
-        var el = document.getElementById("L" + n);
-        if (!el) continue;
-        el.classList.add("is-marked");
-        if (first === null) first = el;
-      }
-      /* A long class is printed as far as its first 900 lines and no further,
-         so a link into what was cut has to be answered by saying so rather
-         than by silently highlighting nothing. */
-      if (first === null) {
-        say("Line " + range.from + " is not on this page — the first " + lines.length + " lines are printed.");
-        return;
-      }
-      say(range.from === range.to ? "Line " + range.from : "Lines " + range.from + "–" + range.to);
-      if (scroll) first.scrollIntoView({ block: "center" });
-    };
-
-    pre.addEventListener("click", function (e) {
-      var number = e.target && e.target.closest ? e.target.closest(".ln > a") : null;
-      if (!number || e.metaKey || e.ctrlKey) return;
-      var line = Number(String(number.getAttribute("href")).slice(2));
-      if (!line) return;
-      var hash = "#L" + line;
-      if (e.shiftKey && anchor) hash = "#L" + Math.min(anchor, line) + "-L" + Math.max(anchor, line);
-      else anchor = line;
-      e.preventDefault();
-      history.replaceState(null, "", hash);
-      mark(false);
-    });
-
-    addEventListener("hashchange", function () {
-      var range = picked();
-      if (range) anchor = range.from;
-      mark(true);
-    });
-
-    if (copy) {
-      copy.addEventListener("click", function () {
-        var done = function (text) {
-          copy.textContent = text;
-          setTimeout(function () { copy.textContent = COPY; }, 2000);
-        };
-        try {
-          navigator.clipboard.writeText(location.href).then(
-            function () { done("Link copied"); },
-            function () { done("Copy it from the address bar"); });
-        } catch (e) { done("Copy it from the address bar"); }
-      });
-    }
-
-    var start = picked();
-    if (start) anchor = start.from;
-    mark(start !== null);
-  })();
-</script>`;
 
 /** One sample's page. */
 
@@ -1479,10 +1097,8 @@ ${bar("../../")}
 
 ${foot("../../")}
 ${MENU_SCRIPT}
-${MEMORY_SCRIPT}
 ${SEARCH_SCRIPT("../../")}
-${OUTLINE_SCRIPT}
-${code ? LINES_SCRIPT : ""}
+${PAGE_SCRIPT("../../")}
 </body>
 </html>
 `;
@@ -1584,8 +1200,8 @@ ${bar("../../")}
 
 ${foot("../../")}
 ${MENU_SCRIPT}
-${MEMORY_SCRIPT}
 ${SEARCH_SCRIPT("../../")}
+${PAGE_SCRIPT("../../")}
 </body>
 </html>
 `;
@@ -1791,8 +1407,8 @@ ${foot(BASE)}
 })();
 </script>
 ${MENU_SCRIPT}
-${MEMORY_SCRIPT}
 ${SEARCH_SCRIPT(BASE)}
+${PAGE_SCRIPT(BASE)}
 </body>
 </html>
 `;
@@ -1873,14 +1489,14 @@ export async function writeSamplePages(index, distDir) {
   for (const row of rows) {
     const dir = path.join(samplesDir, row.dir);
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, "index.html"), samplePage(row, ctx));
+    fs.writeFileSync(path.join(dir, "index.html"), stripHtmlComments(samplePage(row, ctx)));
   }
   fs.mkdirSync(path.join(samplesDir, "all"), { recursive: true });
-  fs.writeFileSync(path.join(samplesDir, "all", "index.html"), allPage(rows, ctx));
+  fs.writeFileSync(path.join(samplesDir, "all", "index.html"), stripHtmlComments(allPage(rows, ctx)));
 
   /* The page for an address that is not a page - at the root of the artefact,
    * which is where GitHub Pages looks for it. */
-  fs.writeFileSync(path.join(distDir, "404.html"), notFoundPage(rows));
+  fs.writeFileSync(path.join(distDir, "404.html"), stripHtmlComments(notFoundPage(rows)));
 
   /* The sitemap: the two pages that are always here, the full list, and one
    * line per sample. Absolute URLs, because that is what a sitemap is.
