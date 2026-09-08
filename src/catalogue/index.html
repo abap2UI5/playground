@@ -24,6 +24,13 @@
 <meta name="twitter:title" content="abap2UI5 sample catalogue">
 <meta name="twitter:description" content="Every abap2UI5 sample: the learning path, the UI5 demo kit rebuilt in ABAP, and the samples that need OData, RAP or a launchpad. Searchable by control, by library and by the UI5 release your system runs.">
 <meta name="twitter:image" content="https://abap2ui5.github.io/playground/og-image.png">
+<!-- The colour the phone paints its address bar with. The shell has carried
+     these two since it was built; the catalogue and the sample pages had
+     neither, so scrolling from a sample into the playground changed the
+     browser's own chrome from the OS default to abap2UI5's. One origin, one
+     set of colours. -->
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f5f7">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1e2024">
 <link rel="icon" href="../favicon.png">
 <link rel="apple-touch-icon" href="../apple-touch-icon.png">
 <!-- WHAT THIS PAGE IS: a collection, not an article - the one thing a crawler
@@ -55,6 +62,13 @@
 </script>
 </head>
 <body>
+
+<!-- 833 things on this page can take focus: the bar, the filters, and a link
+     for every one of the 771 samples. Reaching the list from the keyboard
+     meant tabbing past the whole header every time. The manual has carried
+     this since its own audit; this is the same link, the same wording and the
+     same first-stop position. -->
+<a class="skip" href="#main">Skip to content</a>
 
 <header class="bar">
   <!-- The mark and the name, nothing more: the nav already says Samples, in
@@ -178,7 +192,7 @@
   </div>
 </header>
 
-<main>
+<main id="main" tabindex="-1">
   <!-- Written into the document rather than drawn by the script: this is what
        a search engine, a reader with no JavaScript and a slow first paint all
        get, and it is the paragraph that says what the page is. -->

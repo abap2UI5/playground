@@ -488,6 +488,23 @@ const foot = (up) => `<footer class="foot">
  * these pages are the catalogue's pages and a second palette would drift from
  * it by the first change to either. */
 const CSS = `/* The per-sample pages, beside catalogue.css - written by tools/sample-pages.mjs. */
+/* ---- the keyboard's way past the header ------------------------------
+   Off-screen until it takes focus, then the first thing on the page. A sample
+   page puts a link on every line of the printed class, so the header was a
+   long way to tab past. Same shape and wording as the manual's, because a
+   reader moving between the two deployments should meet the same control.
+   (No backticks in this comment - it lives inside a template literal.) */
+.skip {
+  position: absolute; left: 8px; top: -60px; z-index: 60;
+  padding: 8px 14px;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); color: var(--fg);
+  font-size: 13px; font-weight: 600; text-decoration: none;
+  transition: top .12s ease;
+}
+.skip:focus { top: 8px; }
+main:focus { outline: none; }
+@media (prefers-reduced-motion: reduce) { .skip { transition: none; } }
 /* The one colour these pages add to the catalogue's palette: the line a link
  * points at. Declared in all three of the palette's blocks, because
  * catalogue.css switches scheme two ways - the media query for a reader who
@@ -1372,6 +1389,8 @@ function samplePage(row, ctx) {
 <meta name="description" content="${esc(description)}">
 <link rel="canonical" href="${esc(canonical)}">
 ${social({ title: pageTitle, description, url: canonical })}
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f5f7">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1e2024">
 <link rel="icon" href="../../favicon.png">
 <link rel="apple-touch-icon" href="../../apple-touch-icon.png">
 <link rel="stylesheet" href="../catalogue.css">
@@ -1381,9 +1400,15 @@ ${THEME_SCRIPT}
 </head>
 <body>
 
+<!-- The keyboard's way in. A sample page puts a link on every line of the
+     printed class and the catalogue puts one on every sample, so the bar and
+     the header were a long way to tab past to reach either. Same link, same
+     wording and same first-stop position as the manual's. -->
+<a class="skip" href="#main">Skip to content</a>
+
 ${bar("../../")}
 
-<main class="sample">
+<main id="main" tabindex="-1" class="sample">
   <div class="sample-body">${page.html}</div>
   ${page.aside}
 </main>
@@ -1440,6 +1465,8 @@ ${social({
   url: `${SITE}samples/all/`,
   type: "website",
 })}
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f5f7">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1e2024">
 <link rel="icon" href="../../favicon.png">
 <link rel="apple-touch-icon" href="../../apple-touch-icon.png">
 <link rel="stylesheet" href="../catalogue.css">
@@ -1471,9 +1498,15 @@ ${THEME_SCRIPT}
 </head>
 <body>
 
+<!-- The keyboard's way in. A sample page puts a link on every line of the
+     printed class and the catalogue puts one on every sample, so the bar and
+     the header were a long way to tab past to reach either. Same link, same
+     wording and same first-stop position as the manual's. -->
+<a class="skip" href="#main">Skip to content</a>
+
 ${bar("../../")}
 
-<main class="all-groups">
+<main id="main" tabindex="-1" class="all-groups">
   <nav class="crumbs" aria-label="Breadcrumb"><a href="../">Sample catalogue</a> › the full list</nav>
   <h1>Every abap2UI5 sample</h1>
   <p class="note">
@@ -1531,6 +1564,8 @@ function notFoundPage(rows) {
      as well, for the case where it is not (a preview, a mirror, a proxy that
      rewrites the status). -->
 <meta name="robots" content="noindex">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f5f7">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1e2024">
 <link rel="icon" href="${BASE}favicon.png">
 <link rel="apple-touch-icon" href="${BASE}apple-touch-icon.png">
 <link rel="stylesheet" href="${BASE}samples/catalogue.css">
@@ -1539,9 +1574,15 @@ ${THEME_SCRIPT}
 </head>
 <body>
 
+<!-- The keyboard's way in. A sample page puts a link on every line of the
+     printed class and the catalogue puts one on every sample, so the bar and
+     the header were a long way to tab past to reach either. Same link, same
+     wording and same first-stop position as the manual's. -->
+<a class="skip" href="#main">Skip to content</a>
+
 ${bar(BASE, "none")}
 
-<main class="sample">
+<main id="main" tabindex="-1" class="sample">
   <div class="sample-body">
   <nav class="crumbs" aria-label="Breadcrumb"><a href="${BASE}samples/">Sample catalogue</a></nav>
   <h1>This page is not here</h1>

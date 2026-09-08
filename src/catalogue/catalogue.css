@@ -985,3 +985,18 @@ html { scroll-padding-top: 62px; }
   .bar-nav .here { padding: 5px 7px; }
 }
 
+/* ---- the keyboard's way past the header ------------------------------
+   Off-screen until it takes focus, then the first thing on the page. Same
+   shape and wording as the manual's, because a reader moving between the two
+   deployments should meet the same control. */
+.skip {
+  position: absolute; left: 8px; top: -60px; z-index: 60;
+  padding: 8px 14px;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); color: var(--fg);
+  font-size: 13px; font-weight: 600; text-decoration: none;
+  transition: top .12s ease;
+}
+.skip:focus { top: 8px; }
+main:focus { outline: none; }
+@media (prefers-reduced-motion: reduce) { .skip { transition: none; } }
