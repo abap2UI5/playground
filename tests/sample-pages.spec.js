@@ -25,6 +25,16 @@ import path from "node:path";
 const CORS = { "access-control-allow-origin": "*" };
 const DIST = path.join(process.cwd(), "dist");
 const index = JSON.parse(fs.readFileSync(path.join(DIST, "samples", "apps.json"), "utf8"));
+
+/* The three shapes tools/sample-pages.mjs writes: the catalogue it copies, the
+ * full list, and a per-sample page. Anything true of all three is asserted
+ * over all three - one of them having it and the others not is how the shell
+ * ended up with a theme colour that none of these had. */
+const PAGE_KINDS = () => [
+  path.join("samples", "index.html"),
+  path.join("samples", "all", "index.html"),
+  path.join("samples", index.entries.find((e) => e.page).page, "index.html"),
+];
 const paged = index.entries.filter((e) => e.page);
 const controlName = (i) => index.controls[i];
 
@@ -565,5 +575,29 @@ test("nothing on a sample page pushes the page sideways on a phone", async ({ pa
   }
   for (const url of ["/samples/", "/samples/all/", "/samples/no-such-page/"]) {
     expect(await sideways(url), `${url} at 320px`).toBe(0);
+  }
+});
+
+/* The keyboard's way past the header, and the colour the phone paints its
+ * chrome with. Both were on the manual and the shell and on none of the three
+ * page kinds this file writes — the catalogue alone puts 833 things in the tab
+ * order, so reaching the list meant tabbing past the bar, the filters and a
+ * link for every sample. */
+test('every page kind opens with a skip link into its own main', async () => {
+  for (const file of PAGE_KINDS()) {
+    const html = fs.readFileSync(path.join(DIST, file), "utf8");
+    expect(html, `${file}: a skip link, first in the body`)
+      .toMatch(/<body>\s*(?:<!--[\s\S]*?-->\s*)?<a class="skip" href="#main">Skip to content<\/a>/);
+    expect(html, `${file}: something for it to skip to`).toContain('<main id="main" tabindex="-1"');
+  }
+});
+
+test('every page kind names the colour for the browser chrome', async () => {
+  for (const file of PAGE_KINDS()) {
+    const html = fs.readFileSync(path.join(DIST, file), "utf8");
+    expect(html, `${file}: a light theme colour`)
+      .toContain('<meta name="theme-color" media="(prefers-color-scheme: light)"');
+    expect(html, `${file}: a dark one`)
+      .toContain('<meta name="theme-color" media="(prefers-color-scheme: dark)"');
   }
 });

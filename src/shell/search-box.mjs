@@ -99,6 +99,13 @@ export function mountSearch(host) {
   input.autocomplete = "off";
   input.spellcheck = false;
   input.placeholder = "Search the documentation and every sample";
+  /* The DIALOG is named ("Search", above); the field inside it was not, so a
+     screen reader announced it as an unnamed edit box. A placeholder is not a
+     name - it is gone after the first keystroke, and not every browser and
+     reader pair falls back to it. This is the one control the bar has, and the
+     bar is on all four deployments, so the name is missing on the manual's 166
+     pages, the catalogue, the full list and all 771 sample pages at once. */
+  input.setAttribute("aria-label", "Search the documentation and every sample");
   const close = el("button", "search-close", "Esc");
   close.type = "button";
   field.append(input, close);
