@@ -439,8 +439,12 @@ const SOCIALS = `<div class="socials">
  * the name, closed by a hairline (catalogue.css); the nav says which part of
  * the site this is: Samples carries
  * aria-current, which is what makes it the bold one (catalogue.css) and what a
- * screen reader announces, and the brand links to the catalogue rather than to
- * the playground, which is one nav item away. The row reads: the mark, a
+ * screen reader announces, and THE BRAND LEADS HOME. It used to lead to the
+ * catalogue - "the front of the section you are in" - which is a rule nobody
+ * outside this file knows: a reader who presses a wordmark expects the front
+ * door of the project, and pressing it in the samples put them on the front of
+ * the samples, which is where the Samples item goes and where most of them
+ * already were. Reported from the published site. The row reads: the mark, a
  * hairline, the four sections - Home, Documentation, Samples, Playground -,
  * the search box in the middle, then a hairline, LinkedIn, GitHub and the
  * button that opens the menu (SOCIALS above, wired by MENU_SCRIPT). The box
@@ -457,7 +461,7 @@ const SEARCH_SCRIPT = (up) => `<script type="module" src="${up}samples/search.mj
  * pages are Samples, and the 404 below is none of them - a page that is not
  * there must not tell a screen reader it is the samples page. */
 const bar = (up, current = "samples") => `<header class="bar">
-  <a class="brand" href="${up}samples/">
+  <a class="brand" href="https://abap2ui5.github.io/docs/" data-back>
     <img src="${up}favicon.png" alt="" width="20" height="20">
     <span>abap2UI5</span>
   </a>
