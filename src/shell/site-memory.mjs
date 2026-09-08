@@ -124,7 +124,14 @@ export function upgradeSiteLinks(root = document) {
 export function keepSiteLinksCurrent(root = document) {
   const lift = () => upgradeSiteLinks(root);
   lift();
-  addEventListener("pageshow", lift);
+  addEventListener("pageshow", (e) => {
+    lift();
+    /* A page handed back alive by the back/forward cache is where the reader
+     * left it, offset and all - so the record a bar link wrote on the way out
+     * (handOff below) is spent. Left there, the next arrival at this page
+     * within its half minute would inherit it. */
+    if (e.persisted) writeStored(HANDOFF_KEY, "");
+  });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") lift();
   });
@@ -143,11 +150,13 @@ export function keepSiteLinksCurrent(root = document) {
       rememberScroll();
       handOff(back.href);
     }
-    /* ...and the Playground item, which goes BACK to a playground that is
-     * still in this tab's history rather than building a new one. After the
-     * lift, so the page it looks for is the one the href now opens. */
-    const playground = e.target.closest?.('a[data-site="playground"]');
-    if (playground) returnToPlayground(e, playground, arrived);
+    /* ...and then the item itself, which goes BACK to its page when that page
+     * is still in this tab's history rather than building it again. After
+     * the lift, so the page it looks for is the one the href now opens, and
+     * after the record, so a step back that turns out to be a reload still
+     * lands the reader where they were on the page. */
+    const item = e.target.closest?.(".bar-nav a[href]");
+    if (item) returnTo(e, item, arrived);
   }, true);
   /* The other moment the offset can be lost: a reader who leaves by any route
    * that is not one of those links. Cheap, and it is the last chance. */
@@ -155,19 +164,27 @@ export function keepSiteLinksCurrent(root = document) {
   restoreScroll();
 }
 
-/* ── THE PLAYGROUND ITEM GOES BACK when the playground is behind you ────────
+/* ── THE BAR GOES BACK to a page that is still behind you ───────────────────
  *
  * Reported as: press Playground in the bar and the app is built and run again,
- * although it was running a moment ago. It was. The item is a link, a link
- * makes a NEW document, and a new playground boots the whole ABAP runtime and
- * runs the app from the top - two to three seconds, and the app's own state,
- * a half-filled form or a table scrolled to row 200, gone with the document
- * that held it. No browser keeps a running page across a forward navigation.
- * Exactly one mechanism keeps one at all: the back/forward cache, and it
- * applies to a page the reader has BEEN on and is going back (or forward) to.
+ * although it was running a moment ago. Then, once that item went back, the
+ * same for the documentation's front door, whose Try it out now example is a
+ * playground in a frame. Both true, and for one reason. An item in the bar is
+ * a link, a link makes a NEW document, and a new playground boots the whole
+ * ABAP runtime and runs the app from the top - two to three seconds, and the
+ * app's own state, a half-filled form or a table scrolled to row 200, gone
+ * with the document that held it. No browser keeps a running page across a
+ * forward navigation. Exactly one mechanism keeps one at all: the back/forward
+ * cache, and it applies to a page the reader has BEEN on and is going back
+ * (or forward) to.
  *
- * So when the page the item opens is still in this tab's history, the item
- * goes to it there instead of loading it again. Two ways of knowing:
+ * So when the page an item opens is still in this tab's history, the item
+ * goes to it there instead of loading it again - Home, Documentation, Samples
+ * and Playground alike, which is why this is one rule and not four. The item
+ * for the page the reader is ON (Samples on the catalogue, Documentation on
+ * every page of the manual) is the browser's to handle, as it always was: a
+ * step back to an older copy of the page you are looking at would be a
+ * surprise. Two ways of knowing which entry:
  *
  *   - The Navigation API. navigation.entries() is the tab's same-origin
  *     history, and the nearest entry that IS the item's page - same path,
@@ -249,9 +266,18 @@ const plain = (e) => e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey &
  * short enough that a press which went nowhere is not a dead press. */
 const FOLLOW_AFTER = 1500;
 
-function returnToPlayground(e, a, arrived) {
+function returnTo(e, a, arrived) {
   if (e.defaultPrevented || !plain(e)) return;
+  /* A link that opens elsewhere has nothing to go back to. */
+  if (a.target && a.target !== "_self") return;
   const href = a.href;
+  let want;
+  try {
+    want = pageOf(new URL(href, location.href));
+  } catch {
+    return;
+  }
+  if (want === pageOf(new URL(location.href))) return;
   const nav = globalThis.navigation;
   let step;
   if (nav?.entries && nav.traverseTo) {

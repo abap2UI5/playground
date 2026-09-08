@@ -252,7 +252,16 @@ const MEMORY_SCRIPT = `<script>
     /* Now, and again whenever it can have gone stale while this page stayed
        open - shown again, looked at again, and on the click itself. */
     lift();
-    addEventListener("pageshow", lift);
+    addEventListener("pageshow", function (e) {
+      lift();
+      /* A page handed back alive by the back/forward cache is where the
+         reader left it, so the record a bar link wrote on the way out is
+         spent - left there, the next arrival within its half minute would
+         inherit it. */
+      if (e.persisted) {
+        try { localStorage.setItem("abap2ui5-playground:returning", ""); } catch (e2) { /* nothing to spend */ }
+      }
+    });
     document.addEventListener("visibilitychange", function () {
       if (document.visibilityState === "visible") lift();
     });
@@ -260,28 +269,32 @@ const MEMORY_SCRIPT = `<script>
       if (e.target.closest && e.target.closest("a[data-site]")) lift();
     }, true);
 
-    /* THE PLAYGROUND ITEM GOES BACK when the playground is behind you - the
-       hand copy of returnToPlayground( ) in src/shell/site-memory.mjs, which
-       says why at length. A link builds a new document, and a new playground
-       boots the whole runtime and runs the app from the top; the one thing
-       that hands a running page back alive is the back/forward cache, and it
-       applies to a page the reader has been on. So when the page the item
-       opens is still in this tab's history, this goes to it there: through
-       the Navigation API where it exists - the nearest entry, either
+    /* THE BAR GOES BACK to a page that is still behind you - the hand copy
+       of returnTo( ) in src/shell/site-memory.mjs, which says why at length.
+       A link builds a new document, and a new playground - the page itself,
+       or the runnable example on the documentation's front door - boots the
+       whole runtime and runs the app from the top; the one thing that hands a
+       running page back alive is the back/forward cache, and it applies to a
+       page the reader has been on. So when the page an item opens is still in
+       this tab's history, this goes to it there, for all four items alike:
+       through the Navigation API where it exists - the nearest entry, either
        direction, that is the same origin, path and query - and without it,
        the one case that can be known: this document was opened from that page
-       and nothing has been pushed onto the history since. A traversal the
-       browser cannot make, or a step back that goes nowhere, follows the link
-       after a moment; the timer is dropped on pagehide, so a page handed back
-       does not fire it on the way in. */
+       and nothing has been pushed onto the history since. The item for the
+       page the reader is on is left to the browser. A traversal the browser
+       cannot make, or a step back that goes nowhere, follows the link after a
+       moment; the timer is dropped on pagehide, so a page handed back does
+       not fire it on the way in. */
     var pageOf = function (u) { return u.origin + u.pathname.replace(/index\\.html$/, "") + u.search; };
     var arrived = history.length;
     document.addEventListener("click", function (e) {
-      var a = e.target.closest && e.target.closest('a[data-site="playground"]');
+      var a = e.target.closest && e.target.closest(".bar-nav a[href]");
       if (!a || e.defaultPrevented) return;
       if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      if (a.target && a.target !== "_self") return;
       var href = a.href, want, step, key = null, nav = window.navigation, entries, at, d;
       try { want = pageOf(new URL(href, location.href)); } catch (e2) { return; }
+      if (want === pageOf(new URL(location.href))) return;
       var is = function (entry) {
         try { return typeof entry.url === "string" && pageOf(new URL(entry.url)) === want; } catch (e3) { return false; }
       };

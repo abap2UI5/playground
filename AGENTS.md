@@ -1273,21 +1273,25 @@ views never write: an **embedded** playground (furniture in somebody else's
 page) and an **app-only** one (`?view=app`, `?view=full` — a running app, not a
 place to come back to).
 
-**And the Playground item goes back to it** rather than building a new one.
-A link makes a new document, and a new playground boots the whole runtime and
-runs the app from the top — two to three seconds, and the app's own state gone
-with the document that held it. The one mechanism that hands a running page
-back alive is the back/forward cache, and it applies to a page the reader has
-been on. So when the page the item opens is still in the tab's history, the
-click traverses to it there (`returnToPlayground( )` in `site-memory.mjs`, the
-hand copy on the sample pages, and the documentation's `site.js`): through the
-Navigation API where it exists — the nearest entry, either direction, that is
-the same origin, path and query — and without it, the one case a page can
-know, that it was opened from the playground and nothing has been pushed onto
-the history since. A traversal the browser cannot make follows the link after
-a moment. Whether the page then comes back **alive** is the browser's call:
-where it was rebuilt instead, the shell prints `notRestoredReasons` to the
-console on arrival (`main.mjs`), which is the one place the browser says why.
+**And the bar goes back to a page that is still behind you** rather than
+building it again — the Playground item first, then all four, because the
+documentation's front door carries a runnable example that is a playground in
+a frame. A link makes a new document, and a new playground boots the whole
+runtime and runs the app from the top — two to three seconds, and the app's
+own state gone with the document that held it. The one mechanism that hands a
+running page back alive is the back/forward cache, and it applies to a page
+the reader has been on. So when the page an item opens is still in the tab's
+history, the click traverses to it there (`returnTo( )` in `site-memory.mjs`,
+the hand copy on the sample pages, and the documentation's `site.js`): through
+the Navigation API where it exists — the nearest entry, either direction, that
+is the same origin, path and query — and without it, the one case a page can
+know, that it was opened from that page and nothing has been pushed onto the
+history since. The item for the page the reader is on is left to the browser.
+A traversal the browser cannot make follows the link after a moment, and a
+page handed back alive spends the scroll record the link wrote on the way
+out. Whether the page comes back **alive** is the browser's call: where it was
+rebuilt instead, the shell prints `notRestoredReasons` to the console on
+arrival (`main.mjs`), which is the one place the browser says why.
 
 `tests/site-memory.spec.js` holds the round trip and the values that must be
 refused, and the step back — what a browser test can see of it is that the

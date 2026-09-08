@@ -159,11 +159,12 @@ test("an app-only view is a running app, not a place to come back to", async ({ 
   expect(await stored(page, PLAYGROUND_KEY)).toBe(null);
 });
 
-// THE PLAYGROUND ITEM GOES BACK. A link builds a new document, and a new
-// playground boots the whole runtime and runs the app from the top - so when
-// the playground is still in this tab's history, the item goes to it THERE
-// (returnToPlayground( ) in site-memory.mjs, and the hand copy on the sample
-// pages). Whether the browser then hands the page back alive is the browser's
+// THE BAR GOES BACK. A link builds a new document, and a new playground - the
+// page, or the runnable example on the documentation's front door - boots the
+// whole runtime and runs the app from the top. So when the page an item opens
+// is still in this tab's history, the item goes to it THERE (returnTo( ) in
+// site-memory.mjs, and the hand copy on the sample pages), all four items
+// alike. Whether the browser then hands the page back alive is the browser's
 // call and cannot be seen from here: this Chromium runs with the back/forward
 // cache off. What can be seen is the traversal itself - a link would have made
 // the history one entry longer, and a step back does not.
@@ -198,6 +199,23 @@ test("so does a sample page's, two steps behind it", async ({ page }) => {
   await playgroundLink(page).click();
   await page.waitForURL((url) => url.pathname === "/");
   await expect(page.locator("#run")).toBeVisible();
+  expect(await historyLength(page)).toBe(before);
+});
+
+test("the playground's Samples item goes back to the catalogue behind it, the same way", async ({ page }) => {
+  // One rule for the four items: the catalogue the reader came from is a page
+  // behind them too, and comes back alive where the browser allows it -
+  // filters, scroll and all, which is what the scroll memory below only
+  // approximates.
+  await page.goto("/samples/?q=table");
+  await expect(page.locator("#count")).toContainText("sample");
+  await openPlayground(page);
+  await expect(samplesLink(page)).toHaveAttribute("href", "/samples/?q=table");
+  const before = await historyLength(page);
+
+  await samplesLink(page).click();
+  await page.waitForURL((url) => url.pathname === "/samples/");
+  await expect(page.locator("#count")).toContainText("sample");
   expect(await historyLength(page)).toBe(before);
 });
 
