@@ -62,7 +62,7 @@ export const PINS = [
      * at, not the deploy that happens to run next. */
     name: "abap2ui5-samples",
     url: "https://github.com/abap2UI5/samples",
-    sha: "9cb15cfd77dd2d8d2ff82cf9ac6b5b97c3106aaa",
+    sha: "00453ece4af85af030d9eed02692243ff25de98b",
     note: "the samples the page opens on and lists as built in",
   },
   {
