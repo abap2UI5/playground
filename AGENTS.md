@@ -26,7 +26,7 @@ them before touching `tools/` or `src/runtime`.
 | `src/embed/` | The embed loader (`abap2ui5-embed.js`) and a worked example page; copied verbatim to `dist/embed/` |
 | `src/catalogue/` | The sample catalogue at `/samples/`: one page, one stylesheet, one module, over the index `tools/build-catalogue.mjs` writes. Its own document and its own bundle - see "The sample catalogue" below. `search-entry.mjs` is the second bundle out of this directory: the bar's search box, as the one file the catalogue and all 772 per-sample pages load |
 | `tools/` | The build (`build.mjs`, which drives `fetch-deps`, `build-framework`, `build-ui5`, `build-catalogue` — which writes the index and, through `sample-pages.mjs`, one static page per sample plus the full list, the sitemap and `404.html`, with the ABAP on those pages fetched by `sample-sources.mjs` and coloured by `abap-highlight.mjs` —, `build-site`), the size budget (`check-size`) and the dev server (`serve`, which mounts `dist/` at the root, under a subpath and under the deployment's own path, and answers a miss with `404.html` the way GitHub Pages does) |
-| `tests/` | Playwright specs — the only test layer; everything is tested through a real browser against the built `dist/` |
+| `tests/` | Playwright specs — the only test layer; everything is tested through a real browser against the built `dist/`. One of them, `bfcache.spec.js`, reads rather than runs: the sources and the three documents the build writes, for an unload listener or a `no-store` that would keep a page out of the back/forward cache and turn the bar's step back into a reload |
 
 `deps/`, `build/` and `dist/` are generated and gitignored. Never commit them.
 
@@ -1069,8 +1069,8 @@ a sample without a test is not possible. CI:
 
 | | |
 |---|---|
-| `check.yml` | every non-main branch and pull request: the composite build action (`.github/actions/build`, with caches for `deps/`, `~/.ui5` and the downport), the size budget, `npm test` |
-| `pages.yml` | pushes to `main`: the same build and tests, then deploy `dist/` to GitHub Pages — a red test never publishes |
+| `check.yml` | every non-main branch and pull request: the composite build action (`.github/actions/build`, with caches for `deps/`, `~/.ui5` and the downport), the size budget, `npm test`. The tests run in **three shards** (`npm test -- --shard=n/3`, one runner each): the build is two minutes with its caches warm and the tests seventeen on one runner, so the wall clock is the build plus a third of the tests |
+| `pages.yml` | pushes to `main`: the same three test shards, a fourth runner that builds the artefact beside them, then deploy `dist/` to GitHub Pages once all four are green — a red test never publishes |
 | `upstream.yml` | weekly: build and test against upstream `HEAD` without moving the pins, and open or extend an issue when that fails, so a bump stays a two-line commit |
 
 ## Three traps the browser sets, and what they cost

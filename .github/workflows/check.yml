@@ -3,6 +3,13 @@ name: check
 # Builds the playground and runs the tests on every branch and pull request.
 # The Pages deployment refuses to publish anything this workflow has not seen
 # green, so this is the gate, not a formality.
+#
+# IN THREE SHARDS. Measured on one runner: the build is two minutes with its
+# caches warm and the browser tests are seventeen - a hundred-odd specs, each
+# of which boots a whole ABAP runtime in a real browser, on four cores. Three
+# runners each take a third of the specs (Playwright's --shard, which splits
+# the list and needs no coordination), so the wall clock is the build plus a
+# third of the tests, at the price of two more builds that are all cache hits.
 
 on:
   push:
@@ -30,14 +37,20 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      # Every shard reports, so one red shard does not hide what the other two
+      # found.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/build
-      - run: npm test
+      - run: npm test -- --shard=${{ matrix.shard }}/3
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.shard }}
           path: playwright-report/
           retention-days: 7
