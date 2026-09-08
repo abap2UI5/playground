@@ -128,6 +128,9 @@ export function keepSiteLinksCurrent(root = document) {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") lift();
   });
+  /* How long the history was when this page arrived - what the step back
+   * below compares against where there is no Navigation API to ask. */
+  const arrived = history.length;
   root.addEventListener("click", (e) => {
     if (e.target.closest?.("a[data-site]")) lift();
     /* ...and, AFTER the lift, the record that says where the reader is being
@@ -140,11 +143,136 @@ export function keepSiteLinksCurrent(root = document) {
       rememberScroll();
       handOff(back.href);
     }
+    /* ...and the Playground item, which goes BACK to a playground that is
+     * still in this tab's history rather than building a new one. After the
+     * lift, so the page it looks for is the one the href now opens. */
+    const playground = e.target.closest?.('a[data-site="playground"]');
+    if (playground) returnToPlayground(e, playground, arrived);
   }, true);
   /* The other moment the offset can be lost: a reader who leaves by any route
    * that is not one of those links. Cheap, and it is the last chance. */
   addEventListener("pagehide", () => rememberScroll());
   restoreScroll();
+}
+
+/* ── THE PLAYGROUND ITEM GOES BACK when the playground is behind you ────────
+ *
+ * Reported as: press Playground in the bar and the app is built and run again,
+ * although it was running a moment ago. It was. The item is a link, a link
+ * makes a NEW document, and a new playground boots the whole ABAP runtime and
+ * runs the app from the top - two to three seconds, and the app's own state,
+ * a half-filled form or a table scrolled to row 200, gone with the document
+ * that held it. No browser keeps a running page across a forward navigation.
+ * Exactly one mechanism keeps one at all: the back/forward cache, and it
+ * applies to a page the reader has BEEN on and is going back (or forward) to.
+ *
+ * So when the page the item opens is still in this tab's history, the item
+ * goes to it there instead of loading it again. Two ways of knowing:
+ *
+ *   - The Navigation API. navigation.entries() is the tab's same-origin
+ *     history, and the nearest entry that IS the item's page - same path,
+ *     same query - is the one. Any distance, either direction: a reader who
+ *     went Samples, then a sample's page, then pressed Playground is two
+ *     steps behind it, and one who left it with the Back button is one step
+ *     in FRONT of it.
+ *   - Without that API, the one case that can be known: this document was
+ *     opened from that page (document.referrer) and nothing has been pushed
+ *     onto the history since. One step back, then.
+ *
+ * Where the browser declines to hand the page back alive, a traversal is a
+ * reload of that entry - what the link would have done anyway - and the
+ * playground says why in the console (main.mjs). And a press has to
+ * navigate: a traversal the browser cannot make rejects, a document still
+ * here after a moment follows the link after all, and the timer behind that
+ * is dropped on pagehide, so a document that WAS handed back does not fire it
+ * on the way in and bounce the reader out of the page they returned to.
+ *
+ * The documentation's bar does the same in scripts/site-js/site.js over in
+ * abap2UI5/docs, with entryOf( ) copied into theme/site-memory.js there and
+ * pinned by test/playground-back.test.mjs. Change one, change the other.
+ */
+
+/** A page, as two history entries are compared: origin, path and query, a
+ *  trailing index.html taken off. The fragment is left out - it carries the
+ *  code, and the playground drops it from its own URL once the code has been
+ *  read (main.mjs), so the entry and the remembered URL can differ in it and
+ *  still be one page. */
+const pageOf = (url) => url.origin + url.pathname.replace(/index\.html$/, "") + url.search;
+
+/**
+ * The key of the history entry nearest to `current` that is the page `href`
+ * opens, or null. `entries` is what navigation.entries() answers and `current`
+ * the index of the entry the reader is on. Nearest first, because the newer of
+ * two playgrounds is the one the href was lifted to; either direction, because
+ * the reader may have LEFT the playground with the Back button.
+ */
+export function entryOf(entries, current, href, base = location.href) {
+  let want;
+  try {
+    want = pageOf(new URL(href, base));
+  } catch {
+    return null;
+  }
+  const is = (entry) => {
+    try {
+      return typeof entry?.url === "string" && pageOf(new URL(entry.url)) === want;
+    } catch {
+      return false;
+    }
+  };
+  for (let d = 1; d < entries.length; d++) {
+    for (const i of [current - d, current + d]) {
+      if (i >= 0 && i < entries.length && is(entries[i])) return entries[i].key ?? null;
+    }
+  }
+  return null;
+}
+
+/** Without the Navigation API: was this document opened FROM the page `href`
+ *  opens, and has nothing been pushed onto the history since it arrived? A
+ *  sample's page lives under the playground's path and is a different page,
+ *  which is why the whole URL is compared and not the section. */
+function cameFrom(href, arrived) {
+  if (history.length < 2 || history.length !== arrived) return false;
+  try {
+    return pageOf(new URL(document.referrer)) === pageOf(new URL(href, location.href));
+  } catch {
+    /* No referrer, or one that is not a URL: nothing is known. */
+    return false;
+  }
+}
+
+/** A press that means "in a new tab" or "in a new window" still means that. */
+const plain = (e) => e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
+
+/* Long enough for a slow connection to commit a traversal that is a reload,
+ * short enough that a press which went nowhere is not a dead press. */
+const FOLLOW_AFTER = 1500;
+
+function returnToPlayground(e, a, arrived) {
+  if (e.defaultPrevented || !plain(e)) return;
+  const href = a.href;
+  const nav = globalThis.navigation;
+  let step;
+  if (nav?.entries && nav.traverseTo) {
+    const key = entryOf(nav.entries(), nav.currentEntry?.index ?? -1, href);
+    if (key === null) return;
+    step = () => nav.traverseTo(key).committed;
+  } else if (cameFrom(href, arrived)) {
+    step = () => history.back();
+  } else {
+    return;
+  }
+  e.preventDefault();
+  const follow = () => location.assign(href);
+  const later = setTimeout(follow, FOLLOW_AFTER);
+  addEventListener("pagehide", () => clearTimeout(later), { once: true });
+  Promise.resolve()
+    .then(step)
+    .catch(() => {
+      clearTimeout(later);
+      follow();
+    });
 }
 
 /* ── WHERE ON THE PAGE, not only which page ─────────────────────────────────
