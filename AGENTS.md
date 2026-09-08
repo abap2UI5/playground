@@ -1273,8 +1273,26 @@ views never write: an **embedded** playground (furniture in somebody else's
 page) and an **app-only** one (`?view=app`, `?view=full` — a running app, not a
 place to come back to).
 
+**And the Playground item goes back to it** rather than building a new one.
+A link makes a new document, and a new playground boots the whole runtime and
+runs the app from the top — two to three seconds, and the app's own state gone
+with the document that held it. The one mechanism that hands a running page
+back alive is the back/forward cache, and it applies to a page the reader has
+been on. So when the page the item opens is still in the tab's history, the
+click traverses to it there (`returnToPlayground( )` in `site-memory.mjs`, the
+hand copy on the sample pages, and the documentation's `site.js`): through the
+Navigation API where it exists — the nearest entry, either direction, that is
+the same origin, path and query — and without it, the one case a page can
+know, that it was opened from the playground and nothing has been pushed onto
+the history since. A traversal the browser cannot make follows the link after
+a moment. Whether the page then comes back **alive** is the browser's call:
+where it was rebuilt instead, the shell prints `notRestoredReasons` to the
+console on arrival (`main.mjs`), which is the one place the browser says why.
+
 `tests/site-memory.spec.js` holds the round trip and the values that must be
-refused. The documentation half cannot be reached from here — it is another
+refused, and the step back — what a browser test can see of it is that the
+history did not grow, because this Chromium runs with the back/forward cache
+off. The documentation half cannot be reached from here — it is another
 host in a test run — and is a unit test over there
 (`test/site-memory.test.mjs`) with a stubbed `location`.
 

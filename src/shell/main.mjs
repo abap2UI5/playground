@@ -247,6 +247,17 @@ async function boot() {
   // (site-memory.mjs) - now, and again whenever that can have moved while this
   // page stayed open. Skipped when embedded, where the bar is not on screen.
   if (!embedded) keepSiteLinksCurrent();
+  // The other three bars step BACK to this page when it is still in the tab's
+  // history (site-memory.mjs), so that the browser can hand it back alive -
+  // app, worker and all - instead of this boot running again. Whether it does
+  // is the browser's call, and when it declined, the one place it says why is
+  // notRestoredReasons on the arrival. The only console line in the shell:
+  // there is nothing a reader can do about it and nothing on the page to say
+  // it in, and the person who needs it is reading the console anyway.
+  const arrival = performance.getEntriesByType?.("navigation")?.[0];
+  if (arrival?.type === "back_forward" && arrival.notRestoredReasons) {
+    console.info("playground: rebuilt rather than restored from the back/forward cache", arrival.notRestoredReasons);
+  }
   // ...and this page written down as well, which it did not used to be. A
   // reader who opens a SAMPLE here has code that is not a draft - a sample
   // that was picked and read is deliberately not stored (see remember( )

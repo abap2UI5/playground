@@ -260,6 +260,53 @@ const MEMORY_SCRIPT = `<script>
       if (e.target.closest && e.target.closest("a[data-site]")) lift();
     }, true);
 
+    /* THE PLAYGROUND ITEM GOES BACK when the playground is behind you - the
+       hand copy of returnToPlayground( ) in src/shell/site-memory.mjs, which
+       says why at length. A link builds a new document, and a new playground
+       boots the whole runtime and runs the app from the top; the one thing
+       that hands a running page back alive is the back/forward cache, and it
+       applies to a page the reader has been on. So when the page the item
+       opens is still in this tab's history, this goes to it there: through
+       the Navigation API where it exists - the nearest entry, either
+       direction, that is the same origin, path and query - and without it,
+       the one case that can be known: this document was opened from that page
+       and nothing has been pushed onto the history since. A traversal the
+       browser cannot make, or a step back that goes nowhere, follows the link
+       after a moment; the timer is dropped on pagehide, so a page handed back
+       does not fire it on the way in. */
+    var pageOf = function (u) { return u.origin + u.pathname.replace(/index\\.html$/, "") + u.search; };
+    var arrived = history.length;
+    document.addEventListener("click", function (e) {
+      var a = e.target.closest && e.target.closest('a[data-site="playground"]');
+      if (!a || e.defaultPrevented) return;
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      var href = a.href, want, step, key = null, nav = window.navigation, entries, at, d;
+      try { want = pageOf(new URL(href, location.href)); } catch (e2) { return; }
+      var is = function (entry) {
+        try { return typeof entry.url === "string" && pageOf(new URL(entry.url)) === want; } catch (e3) { return false; }
+      };
+      if (nav && nav.entries && nav.traverseTo) {
+        entries = nav.entries();
+        at = nav.currentEntry ? nav.currentEntry.index : -1;
+        for (d = 1; d < entries.length && key === null; d++) {
+          if (at - d >= 0 && is(entries[at - d])) key = entries[at - d].key;
+          else if (at + d < entries.length && is(entries[at + d])) key = entries[at + d].key;
+        }
+        if (key === null) return;
+        step = function () { return nav.traverseTo(key).committed; };
+      } else {
+        var from;
+        try { from = pageOf(new URL(document.referrer)); } catch (e4) { return; }
+        if (history.length < 2 || history.length !== arrived || from !== want) return;
+        step = function () { history.back(); };
+      }
+      e.preventDefault();
+      var follow = function () { location.assign(href); };
+      var later = setTimeout(follow, 1500);
+      addEventListener("pagehide", function () { clearTimeout(later); }, { once: true });
+      Promise.resolve().then(step).then(null, function () { clearTimeout(later); follow(); });
+    }, true);
+
     /* Where on the page, not only which page - the hand copy of the same block
        in src/shell/site-memory.mjs. A bar link writes down how far down this
        page the reader is and where they are being sent; the page that arrives

@@ -159,6 +159,59 @@ test("an app-only view is a running app, not a place to come back to", async ({ 
   expect(await stored(page, PLAYGROUND_KEY)).toBe(null);
 });
 
+// THE PLAYGROUND ITEM GOES BACK. A link builds a new document, and a new
+// playground boots the whole runtime and runs the app from the top - so when
+// the playground is still in this tab's history, the item goes to it THERE
+// (returnToPlayground( ) in site-memory.mjs, and the hand copy on the sample
+// pages). Whether the browser then hands the page back alive is the browser's
+// call and cannot be seen from here: this Chromium runs with the back/forward
+// cache off. What can be seen is the traversal itself - a link would have made
+// the history one entry longer, and a step back does not.
+const historyLength = (page) => page.evaluate(() => history.length);
+const playgroundLink = (page) => page.locator('.bar-nav a[data-site="playground"]');
+
+test("the catalogue's Playground item goes back to the playground behind it", async ({ page }) => {
+  await openPlayground(page);
+  await expect.poll(() => stored(page, PLAYGROUND_KEY)).toBe("/");
+  await samplesLink(page).click();
+  await expect(page.locator("#count")).toContainText("sample");
+  const before = await historyLength(page);
+
+  await playgroundLink(page).click();
+  await page.waitForURL((url) => url.pathname === "/");
+  await expect(page.locator("#run")).toBeVisible();
+  expect(await historyLength(page)).toBe(before);
+});
+
+test("so does a sample page's, two steps behind it", async ({ page }) => {
+  // The sample pages carry the memory as an inline copy, so the step back is
+  // checked on its own there - and from two entries away, which is the case
+  // the Navigation API answers and a plain step back could not.
+  await openPlayground(page);
+  await expect.poll(() => stored(page, PLAYGROUND_KEY)).toBe("/");
+  await samplesLink(page).click();
+  await expect(page.locator("#count")).toContainText("sample");
+  await page.goto(`/samples/${firstPage}`);
+  await expect(playgroundLink(page)).toBeVisible();
+  const before = await historyLength(page);
+
+  await playgroundLink(page).click();
+  await page.waitForURL((url) => url.pathname === "/");
+  await expect(page.locator("#run")).toBeVisible();
+  expect(await historyLength(page)).toBe(before);
+});
+
+test("a Playground item with no playground behind it is the link it always was", async ({ page }) => {
+  await page.goto("/samples/");
+  await expect(page.locator("#count")).toContainText("sample");
+  const before = await historyLength(page);
+
+  await playgroundLink(page).click();
+  await page.waitForURL((url) => url.pathname === "/");
+  await expect(page.locator("#run")).toBeVisible();
+  expect(await historyLength(page)).toBe(before + 1);
+});
+
 test("a sample page carries the same two lines the bundles import", async ({ page }) => {
   await page.goto(`/samples/${firstPage}`);
   await page.evaluate(([k, v]) => localStorage.setItem(k, v), [DOCS_KEY, "//example.invalid/x"]);
