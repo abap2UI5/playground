@@ -380,7 +380,7 @@ test("the full playground opens on the sample, and offers the way back", async (
   await page.locator("a.run").click();
 
   const back = page.locator("#source-link");
-  await expect(back).toHaveText("Back to the catalogue", { timeout: 120000 });
+  await expect(back).toHaveText("Back to the catalog", { timeout: 120000 });
   // Narrowed to the class the reader came from, which is the search that has
   // exactly one hit - a static page cannot know the search they had.
   await expect(back).toHaveAttribute("href", `samples/?q=${entry.class}`);
@@ -484,7 +484,7 @@ test("a page renders as the catalogue's own, and its links work", async ({ page 
 
   // Back to the catalogue, and on to a neighbour: the internal links are what
   // make the set a site rather than 770 orphans.
-  await page.locator(".crumbs a", { hasText: "Sample catalogue" }).click();
+  await page.locator(".crumbs a", { hasText: "Sample catalog" }).click();
   await expect(page).toHaveURL(/\/samples\/$/);
 });
 

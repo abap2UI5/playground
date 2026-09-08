@@ -358,7 +358,7 @@ const bar = (up, current = "samples") => `<header class="bar">
 
 const foot = (up) => `<footer class="foot">
   <p>
-    One page per sample, built from the catalogues the three repositories commit —
+    One page per sample, built from the catalogs the three repositories commit —
     <a href="https://github.com/abap2UI5/samples">abap2UI5/samples</a>,
     <a href="https://github.com/abap2UI5/samples-controls">samples-controls</a>,
     <a href="https://github.com/abap2UI5/samples-stack">samples-stack</a> —
@@ -938,7 +938,7 @@ function samplePage(row, ctx) {
      have to guess at. Every step of it is a page that exists - the group is in
      the visible trail and not here, because it has no address of its own. */
   const trail = [
-    { name: "Sample catalogue", item: `${SITE}samples/` },
+    { name: "Sample catalog", item: `${SITE}samples/` },
     ...(source ? [{ name: source.title, item: `${SITE}samples/?src=${encodeURIComponent(row.source)}` }] : []),
     { name: title, item: canonical },
   ];
@@ -951,7 +951,7 @@ function samplePage(row, ctx) {
     codeRepository: github,
     url: canonical,
     keywords: [...(row.keywords || []), ...controls].join(", ") || undefined,
-    isPartOf: { "@type": "WebSite", name: "abap2UI5 sample catalogue", url: `${SITE}samples/` },
+    isPartOf: { "@type": "WebSite", name: "abap2UI5 sample catalog", url: `${SITE}samples/` },
   }, {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
@@ -968,7 +968,7 @@ function samplePage(row, ctx) {
      colour are the class's, in sample.css. The manual's own trail says the
      same thing now. */
   const page = outline(`  <nav class="crumbs" aria-label="Breadcrumb">
-    <a href="../">Sample catalogue</a>${source ? ` › <a href="../?src=${esc(row.source)}">${esc(source.title)}</a>` : ""}${row.group ? ` › ${esc(row.group)}` : ""}
+    <a href="../">Sample catalog</a>${source ? ` › <a href="../?src=${esc(row.source)}">${esc(source.title)}</a>` : ""}${row.group ? ` › ${esc(row.group)}` : ""}
   </nav>
   <h1>${esc(title)}</h1>
   ${lede ? `<p class="lede">${esc(lede)}</p>` : ""}
@@ -1158,7 +1158,7 @@ ${THEME_SCRIPT}
   name: "Every abap2UI5 sample",
   description: `All ${rows.length} abap2UI5 samples on one page, each one linked to its own page.`,
   url: `${SITE}samples/all/`,
-  isPartOf: { "@type": "WebSite", name: "abap2UI5 sample catalogue", url: `${SITE}samples/` },
+  isPartOf: { "@type": "WebSite", name: "abap2UI5 sample catalog", url: `${SITE}samples/` },
   /* The count and nothing else. The 771 rows themselves are the page, in
      markup a crawler already reads; repeating them here as ListItems would
      add 85 kB to a 144 kB page to say a second time what the links say. */
@@ -1171,7 +1171,7 @@ ${THEME_SCRIPT}
   "@context": "https://schema.org",
   "@type": "BreadcrumbList",
   itemListElement: [
-    { "@type": "ListItem", position: 1, name: "Sample catalogue", item: `${SITE}samples/` },
+    { "@type": "ListItem", position: 1, name: "Sample catalog", item: `${SITE}samples/` },
     { "@type": "ListItem", position: 2, name: "The full list", item: `${SITE}samples/all/` },
   ],
 }]).replace(/</g, "\\u003c")}</script>
@@ -1187,12 +1187,12 @@ ${THEME_SCRIPT}
 ${bar("../../")}
 
 <main id="main" tabindex="-1" class="all-groups">
-  <nav class="crumbs" aria-label="Breadcrumb"><a href="../">Sample catalogue</a> › the full list</nav>
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../">Sample catalog</a> › the full list</nav>
   <h1>Every abap2UI5 sample</h1>
   <p class="note">
     All ${rows.length} of them, in the order the three repositories keep them, each with a page of
     its own. To search them — by what a sample does, by the control it builds, by the release your
-    system runs — use the <a href="../">catalogue</a>; this page is the plain list, for reading
+    system runs — use the <a href="../">catalog</a>; this page is the plain list, for reading
     down and for linking to.
   </p>
   ${sections.join("\n  ")}
@@ -1239,7 +1239,7 @@ function notFoundPage(rows) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Not found · abap2UI5</title>
-<meta name="description" content="This address does not name a page of the abap2UI5 sample catalogue.">
+<meta name="description" content="This address does not name a page of the abap2UI5 sample catalog.">
 <!-- Served with a 404 status, which is what a crawler goes by - and said here
      as well, for the case where it is not (a preview, a mirror, a proxy that
      rewrites the status). -->
@@ -1264,12 +1264,12 @@ ${bar(BASE, "none")}
 
 <main id="main" tabindex="-1" class="sample">
   <div class="sample-body">
-  <nav class="crumbs" aria-label="Breadcrumb"><a href="${BASE}samples/">Sample catalogue</a></nav>
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="${BASE}samples/">Sample catalog</a></nav>
   <h1>This page is not here</h1>
   <p class="lede">The address does not name a page of this deployment. A sample may have been
     renamed or dropped by the repository it comes from, or the link that brought you here may
     simply be old.</p>
-  <p>The <a href="${BASE}samples/">catalogue</a> searches every sample by what it does, by the
+  <p>The <a href="${BASE}samples/">catalog</a> searches every sample by what it does, by the
     control it builds and by the release your system runs; <a href="${BASE}samples/all/">the full
     list</a> is all of them on one page; the <a href="${BASE}">playground</a> runs ABAP in this
     browser with no system behind it; and the
@@ -1300,7 +1300,7 @@ ${foot(BASE)}
      guess this repository has itself made. */
   var pages = [
     ["samples/all/", "Every abap2UI5 sample", "the full list, all of them on one page"],
-    ["samples/", "abap2UI5 sample catalogue", "search every sample"],
+    ["samples/", "abap2UI5 sample catalog", "search every sample"],
     ["", "abap2UI5 Playground", "write ABAP and run it in this browser"]
   ];
   var base = ${JSON.stringify(BASE)};
@@ -1540,7 +1540,7 @@ export async function writeSamplePages(index, distDir) {
    * index, the addresses that are stable, and the three repositories behind
    * them. */
   const bySource = (id) => rows.filter((row) => row.source === id).length;
-  fs.writeFileSync(path.join(samplesDir, "llms.txt"), `# abap2UI5 sample catalogue
+  fs.writeFileSync(path.join(samplesDir, "llms.txt"), `# abap2UI5 sample catalog
 
 > Every abap2UI5 sample in one place: ${rows.length} complete ABAP classes from three
 > repositories, each with its own page, the class printed in full, and - where

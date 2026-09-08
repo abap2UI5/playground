@@ -176,7 +176,7 @@ export function mountSearch(host) {
         document.createTextNode(" working samples, in one box \u2014 search by control, by class name, or by what you are trying to do."),
       );
     } else {
-      line.textContent = "Every page of the documentation and every sample in the three catalogues.";
+      line.textContent = "Every page of the documentation and every sample in the three catalogs.";
     }
     const try_ = el("div", "search-try");
     try_.append(el("span", "search-try-head", "Have a look at"));
@@ -277,7 +277,7 @@ export function mountSearch(host) {
     } catch {
       /* An index that did not arrive says so. "Nothing found" would be an
        * answer about the project, and a wrong one. */
-      return note("The search index could not be loaded. The documentation and the sample catalogue are both browsable without it.");
+      return note("The search index could not be loaded. The documentation and the sample catalog are both browsable without it.");
     }
     draw();
   }

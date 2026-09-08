@@ -587,8 +587,8 @@ export function showSourceLink() {
      * end up with. */
     link.href = `samples/${catalogueQuery}`;
     link.removeAttribute("target");
-    link.textContent = "Back to the catalogue";
-    link.title = "Back to the sample catalogue, with the search you came from";
+    link.textContent = "Back to the catalog";
+    link.title = "Back to the sample catalog, with the search you came from";
     return;
   }
   link.href = humanUrl(origin);
