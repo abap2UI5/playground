@@ -87,7 +87,7 @@ test("a sample's page carries what the catalogue knows, in the HTML itself", asy
   expect(html).toContain(`href="../../?src=${encodeURIComponent(entry.raw)}`);
   expect(html).toContain(`back=${encodeURIComponent(`q=${entry.class}`)}`);
   expect(html).toContain(entry.github);
-  expect(html).toContain('<a href="../">Sample catalogue</a>');
+  expect(html).toContain('<a href="../">Sample catalog</a>');
   expect(html).not.toContain('<div class="actions">');
 });
 
