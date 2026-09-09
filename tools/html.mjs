@@ -61,7 +61,12 @@ export function contentSecurityPolicy(inlineScripts) {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:",
     "font-src 'self'",
-    "connect-src 'self'",
+    /* The search index is fetched by its published, absolute address
+       (src/shell/search-box.mjs) - the same origin on the site, another one
+       on a dev server or under the tests, where these pages sit on
+       localhost and the index is answered by a route. Named, so the box
+       works wherever the page is opened. */
+    "connect-src 'self' https://abap2ui5.github.io",
     "frame-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",
