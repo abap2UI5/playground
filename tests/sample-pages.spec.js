@@ -72,6 +72,7 @@ test("a sample's page carries what the catalogue knows, in the HTML itself", asy
     `<link rel="canonical" href="https://abap2ui5.github.io/playground/samples/${entry.page}">`,
   );
   expect(html).toContain('<script type="application/ld+json">');
+  expect(html).toContain('<link rel="sitemap" type="application/xml" href="../../sitemap.xml">');
 
   // The controls the LINTER found in the builder chain - the answer no other
   // listing of these samples has, and the reason a page like this is worth
@@ -603,4 +604,14 @@ test('every page kind names the colour for the browser chrome', async () => {
     expect(html, `${file}: a dark one`)
       .toContain('<meta name="theme-color" media="(prefers-color-scheme: dark)"');
   }
+});
+
+test("the playground describes itself to a machine, at its root", async ({ page }) => {
+  const response = await page.request.get("/llms.txt");
+  expect(response.status()).toBe(200);
+  const text = await response.text();
+  expect(text).toContain("# abap2UI5 Playground");
+  expect(text).toContain("?src=");
+  expect(text).toContain("embed/abap2ui5-embed.js");
+  expect(text).toContain("samples/llms.txt");
 });
