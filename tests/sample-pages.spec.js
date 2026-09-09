@@ -615,3 +615,18 @@ test("the playground describes itself to a machine, at its root", async ({ page 
   expect(text).toContain("embed/abap2ui5-embed.js");
   expect(text).toContain("samples/llms.txt");
 });
+
+test('every page kind, and the catalogue, is published under a policy that names its own inline scripts', async () => {
+  const { inlineScriptsIn, hashOf } = await import("../tools/html.mjs");
+  for (const file of [...PAGE_KINDS(), "samples/index.html"]) {
+    const html = fs.readFileSync(path.join(DIST, file), "utf8");
+    const meta = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)">/);
+    expect(meta, `${file}: a policy in the head`).not.toBeNull();
+    expect(meta[1]).toContain("default-src 'self'");
+    expect(meta[1]).not.toMatch(/script-src[^;]*'unsafe-inline'/);
+    const scripts = inlineScriptsIn(html);
+    expect(scripts.length, `${file}: the theme line at least`).toBeGreaterThan(0);
+    for (const script of scripts) expect(meta[1], `${file}: a hash for every inline script`).toContain(hashOf(script));
+    expect(html, `${file}: no inline handler, which no hash can allow`).not.toMatch(/\son[a-z]+="/);
+  }
+});

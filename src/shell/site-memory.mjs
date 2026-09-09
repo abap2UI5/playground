@@ -99,6 +99,12 @@ export function upgradeSiteLinks(root = document) {
       const target = new URL(last, location.origin);
       if (target.origin !== location.origin) continue;
       if (!target.pathname.startsWith(base.pathname)) continue;
+      /* The catalogue lives UNDER the playground's path, so a stored
+       * playground position that names a sample page passes the test above
+       * - and the Playground item would open a page of the catalogue. The
+       * playground never writes such a value (main.mjs), which is exactly
+       * why a stored one is somebody else's, and refused. */
+      if (a.dataset.site === "playground" && /\/samples(\/|$)/.test(target.pathname.slice(base.pathname.length - 1))) continue;
       a.href = target.pathname + target.search + target.hash;
     } catch {
       /* A stored value that will not parse as a URL at all. The link keeps the

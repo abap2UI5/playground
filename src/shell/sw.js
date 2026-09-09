@@ -109,10 +109,17 @@ async function matchesBuild(rel, response) {
 // the first fast one. A failure here is not worth refusing to install over -
 // the assets that did land still serve, and the rest are fetched on use.
 //
-// Fetched past the browser's HTTP cache (`cache: "reload"`): what is being
-// written down here is this build, and the HTTP cache is where the previous
-// one is still fresh for ten minutes after a deploy. It costs the bytes once
-// more for the core assets, at the moment the page has finished with them.
+// Fetched past the browser's HTTP cache (`cache: "reload"`) ONLY where that
+// buys anything: the core assets, whose names carry no hash and whose bytes
+// are therefore checked against the build (CORE_HASHES), and the frontend's
+// component bundle, which is unhashed and moves with the frontend pin. The
+// HTTP cache is where the previous build is still fresh for ten minutes
+// after a deploy, and for those a stale copy is a copy that fails the check.
+// The chunks are named by their hash and the UI5 resources are pinned by
+// version, so for them the HTTP cache is exactly the right answer - and
+// fetching them past it cost a first visit about five megabytes over the
+// wire a second time, right after it had finished downloading them.
+const RELOAD = (rel) => rel in CORE_HASHES || rel === "app/Component-preload.js";
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
@@ -120,7 +127,7 @@ self.addEventListener("install", (event) => {
       await Promise.allSettled(
         [...CORE, ...APP_FIRST_LOAD, ...DOCUMENTS].map(async (rel) => {
           const url = new URL(rel, BASE);
-          const response = await fetch(url, { credentials: "same-origin", cache: "reload" });
+          const response = await fetch(url, { credentials: "same-origin", cache: RELOAD(rel) ? "reload" : "default" });
           if (response.status !== 200) return;
           if (!(await matchesBuild(rel, response.clone()))) return;
           await cache.put(url, response);
@@ -173,19 +180,9 @@ function isCacheable(url) {
   if (url.search !== "") return false;
   if (CORE.includes(rel)) return true;
 
-  // The sample catalogue at samples/: its bundle, its stylesheet and its
-  // index. Kept as they are used and deliberately NOT precached - apps.json
-  // alone is most of a megabyte, and somebody who came to write ABAP must not
-  // download a list of 770 samples to do it. One visit to the catalogue is
-  // what puts it in the cache, and from then on an installed playground opens
-  // it offline like everything else.
-  //
-  // Caching this index is right where caching the OLD examples data would have
-  // been wrong: that was fetched from another host at run time, so a cached
-  // copy meant yesterday's catalogue. This one is written by the deploy that
-  // wrote the bundle beside it, so it is exactly as current as the build - and
-  // the network-first path below still prefers a fresh answer.
-  if (rel === "samples/apps.json" || rel === "samples/catalogue.mjs" || rel === "samples/catalogue.css") return true;
+  // The sample catalogue's own files go through isLive( ) below - kept, but
+  // never ahead of the network.
+  if (LIVE.has(rel)) return true;
   // Monaco's icon font and the bundle's chunks, under the hashed names esbuild
   // gave them - the chunks are in CORE by name as well, this is for a chunk of
   // a build this worker was not written for, which is still worth keeping.
@@ -212,6 +209,32 @@ function documentOf(url, request) {
   return undefined;
 }
 
+// The sample catalogue at samples/: its index, its bundle and its
+// stylesheet. Kept as they are used and deliberately NOT precached -
+// apps.json alone is most of a megabyte, and somebody who came to write ABAP
+// must not download a list of 770 samples to do it. One visit to the
+// catalogue is what puts it in the cache, and from then on an installed
+// playground opens it offline like everything else.
+//
+// NETWORK FIRST, like the documents, and unlike every other asset. The
+// catalogue is written by the deploy that wrote the bundle beside it, but
+// the deploy that changes it is usually not the deploy that changes the
+// bundle: the site is published every night so that a sample merged today
+// is listed tomorrow, and a night where only the catalogue moved produces a
+// worker identical to the one before it - same build id, same cache - so
+// no new worker installs and nothing ever evicts the copy. Served
+// cache-first, that copy was yesterday's catalogue for every visitor who
+// had ever opened the playground, which is exactly what caching the OLD
+// examples data got wrong. So these three ask the network and fall back to
+// the cache, and the cache is refreshed by every answer. The playground's
+// own samples dialog reads the same apps.json, so it stays current too.
+const LIVE = new Set(["samples/apps.json", "samples/catalogue.mjs", "samples/catalogue.css"]);
+function isLive(url) {
+  if (url.origin !== BASE.origin || url.search !== "") return false;
+  if (!url.pathname.startsWith(BASE.pathname)) return false;
+  return LIVE.has(url.pathname.slice(BASE.pathname.length));
+}
+
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   let url;
@@ -223,6 +246,10 @@ self.addEventListener("fetch", (event) => {
   const doc = documentOf(url, event.request);
   if (doc) {
     event.respondWith(serveDocument(event, doc));
+    return;
+  }
+  if (isLive(url)) {
+    event.respondWith(serveDocument(event, event.request));
     return;
   }
   if (!isCacheable(url)) return;

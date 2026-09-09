@@ -102,7 +102,10 @@ async function fetchJson(repo, name) {
     }
   }
   try {
-    const response = await fetch(url);
+    /* Bounded, like every other fetch in tools/: a raw.githubusercontent.com
+       that answers nothing is a build that sits at this line for the whole
+       of the runner's thirty minutes. */
+    const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
     if (!response.ok) return undefined;
     const text = await response.text();
     const data = JSON.parse(text);

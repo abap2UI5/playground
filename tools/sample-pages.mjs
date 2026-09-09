@@ -69,7 +69,7 @@
 // class name that is not a plain ABAP name gets no directory - a path is not a
 // thing to build out of somebody else's JSON.
 import fs from "fs";
-import { stripHtmlComments } from "./html.mjs";
+import { stripHtmlComments, withPolicy } from "./html.mjs";
 import path from "path";
 import { isSapui5Only } from "../src/shell/ui5-libs.mjs";
 import { highlightAbapLines } from "./abap-highlight.mjs";
@@ -198,10 +198,15 @@ const MENU_SCRIPT = `<script>
     if (!button) return;
     var media = window.matchMedia("(prefers-color-scheme: dark)");
     var system = function () { return media.matches ? "dark" : "light"; };
+    var tell = function () {
+      button.setAttribute("aria-checked", String((document.documentElement.dataset.theme || system()) === "dark"));
+    };
+    tell();
     button.addEventListener("click", function () {
       var now = document.documentElement.dataset.theme || system();
       var next = now === "dark" ? "light" : "dark";
       document.documentElement.dataset.theme = next;
+      tell();
       try {
         if (next === system()) localStorage.removeItem("abap2ui5-playground:theme");
         else localStorage.setItem("abap2ui5-playground:theme", next);
@@ -245,7 +250,7 @@ const SOCIALS = `<div class="socials">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2.2"/><circle cx="12" cy="12" r="2.2"/><circle cx="19" cy="12" r="2.2"/></svg>
       </summary>
       <div class="menu">
-        <button id="theme" class="theme" type="button">
+        <button id="theme" class="theme" type="button" role="switch" aria-checked="false">
           <span class="when-light"><span class="glyph" aria-hidden="true">☾</span>Switch to dark</span>
           <span class="when-dark"><span class="glyph" aria-hidden="true">☀</span>Switch to light</span>
         </button>
@@ -347,10 +352,10 @@ const bar = (up, current = "samples") => `<header class="bar">
     <span>abap2UI5</span>
   </a>
   <nav class="bar-nav" aria-label="Main">
-    <a href="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3.6 10.9 12 4.2l8.4 6.7v8.3a1 1 0 0 1-1 1h-4.3v-6.1H8.9v6.1H4.6a1 1 0 0 1-1-1z"/></svg><span data-text="Home">Home</span></a>
-    <a href="https://abap2ui5.github.io/docs/get_started/about" data-site="docs" data-scope="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 7.2C10.5 5.9 8.5 5.2 6 5.2H3.3v11.9H6c2.5 0 4.5.7 6 1.9 1.5-1.2 3.5-1.9 6-1.9h2.7V5.2H18c-2.5 0-4.5.7-6 1.9z"/><path d="M12 7.2v11.8"/></svg><span data-text="Documentation">Documentation</span></a>
-    <a href="${up}samples/"${current === "samples" ? ` aria-current="page"` : ""} data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.2" y="4.8" width="17.6" height="14.4" rx="2"/><path d="M3.2 9.4h17.6M8.5 9.4v9.8"/></svg><span data-text="Samples">Samples</span></a>
-    <a href="${up}" data-site="playground" title="Write ABAP and run it in the browser"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M10.2 8.4v7.2a.5.5 0 0 0 .76.43l5.8-3.6a.5.5 0 0 0 0-.86l-5.8-3.6a.5.5 0 0 0-.76.43z" fill="currentColor" stroke="none"/></svg><span data-text="Playground">Playground</span></a>
+    <a href="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3.6 10.9 12 4.2l8.4 6.7v8.3a1 1 0 0 1-1 1h-4.3v-6.1H8.9v6.1H4.6a1 1 0 0 1-1-1z"/></svg><span data-text="Home" data-short="Home">Home</span></a>
+    <a href="https://abap2ui5.github.io/docs/get_started/about" data-site="docs" data-scope="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 7.2C10.5 5.9 8.5 5.2 6 5.2H3.3v11.9H6c2.5 0 4.5.7 6 1.9 1.5-1.2 3.5-1.9 6-1.9h2.7V5.2H18c-2.5 0-4.5.7-6 1.9z"/><path d="M12 7.2v11.8"/></svg><span data-text="Documentation" data-short="Docs">Documentation</span></a>
+    <a href="${up}samples/"${current === "samples" ? ` aria-current="page"` : ""} data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.2" y="4.8" width="17.6" height="14.4" rx="2"/><path d="M3.2 9.4h17.6M8.5 9.4v9.8"/></svg><span data-text="Samples" data-short="Samples">Samples</span></a>
+    <a href="${up}" data-site="playground" title="Write ABAP and run it in the browser"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M10.2 8.4v7.2a.5.5 0 0 0 .76.43l5.8-3.6a.5.5 0 0 0 0-.86l-5.8-3.6a.5.5 0 0 0-.76.43z" fill="currentColor" stroke="none"/></svg><span data-text="Playground" data-short="Play">Playground</span></a>
   </nav>
   <span class="search-slot" data-search></span>
   ${SOCIALS}
@@ -1083,6 +1088,7 @@ ${social({ title: pageTitle, description, url: canonical })}
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1e2024">
 <link rel="icon" href="../../favicon.png">
 <link rel="apple-touch-icon" href="../../apple-touch-icon.png">
+<link rel="preload" href="../../fonts/inter-roman-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="../catalogue.css">
 <link rel="stylesheet" href="../sample.css">
 ${THEME_SCRIPT}
@@ -1158,6 +1164,7 @@ ${social({
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1e2024">
 <link rel="icon" href="../../favicon.png">
 <link rel="apple-touch-icon" href="../../apple-touch-icon.png">
+<link rel="preload" href="../../fonts/inter-roman-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="../catalogue.css">
 <link rel="stylesheet" href="../sample.css">
 ${THEME_SCRIPT}
@@ -1257,6 +1264,7 @@ function notFoundPage(rows) {
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1e2024">
 <link rel="icon" href="${BASE}favicon.png">
 <link rel="apple-touch-icon" href="${BASE}apple-touch-icon.png">
+<link rel="preload" href="${BASE}fonts/inter-roman-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="${BASE}samples/catalogue.css">
 <link rel="stylesheet" href="${BASE}samples/sample.css">
 ${THEME_SCRIPT}
@@ -1498,14 +1506,14 @@ export async function writeSamplePages(index, distDir) {
   for (const row of rows) {
     const dir = path.join(samplesDir, row.dir);
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, "index.html"), stripHtmlComments(samplePage(row, ctx)));
+    fs.writeFileSync(path.join(dir, "index.html"), withPolicy(stripHtmlComments(samplePage(row, ctx))));
   }
   fs.mkdirSync(path.join(samplesDir, "all"), { recursive: true });
-  fs.writeFileSync(path.join(samplesDir, "all", "index.html"), stripHtmlComments(allPage(rows, ctx)));
+  fs.writeFileSync(path.join(samplesDir, "all", "index.html"), withPolicy(stripHtmlComments(allPage(rows, ctx))));
 
   /* The page for an address that is not a page - at the root of the artefact,
    * which is where GitHub Pages looks for it. */
-  fs.writeFileSync(path.join(distDir, "404.html"), stripHtmlComments(notFoundPage(rows)));
+  fs.writeFileSync(path.join(distDir, "404.html"), withPolicy(stripHtmlComments(notFoundPage(rows))));
 
   /* The sitemap: the two pages that are always here, the full list, and one
    * line per sample. Absolute URLs, because that is what a sitemap is.

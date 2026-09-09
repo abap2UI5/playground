@@ -20,8 +20,10 @@
  * plain DOM because two of the three documents that use it have no framework
  * and one of them is written 772 times by a build script.
  *
- * Nothing is fetched until somebody types: the index is 700 kB (180 over the
- * wire) and a reader who never searches must not pay for it.
+ * Nothing is fetched until somebody OPENS the box: the index is 700 kB (180
+ * over the wire) and a reader who never searches must not pay for it. Opened,
+ * it is fetched at once rather than on the first keystroke, so the first
+ * character typed already has something to match against.
  */
 import { search, grouped, highlight, loadIndex, rememberQuery, recallQuery } from "./search-engine.mjs";
 

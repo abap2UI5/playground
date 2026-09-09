@@ -16,6 +16,16 @@ name: pages
 # Nightly rather than triggered from the three repositories: a repository_
 # dispatch would need a token held over there, and none of this is urgent
 # enough to be worth one.
+#
+# THE DOCUMENTATION IS TOLD, though, when this site has been published. Its
+# build borrows the bar, the bar's script and two stylesheets from THIS
+# deployment (scripts/build-site.mjs over there), so a change to the bar here
+# reached the manual's 167 pages only with the manual's next push - until
+# then there were two bars. The `notify-docs` job below sends abap2UI5/docs a
+# repository_dispatch after a successful deploy. It needs a fine-grained token
+# held in this repository's secrets as DOCS_DISPATCH_TOKEN (contents: write on
+# abap2UI5/docs, nothing else); without the secret the job does nothing and
+# says so, and the manual's own nightly deploy is what catches up instead.
 
 on:
   push:
@@ -75,3 +85,23 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+
+  # ...and the documentation rebuilds itself against what was just published.
+  notify-docs:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TOKEN: ${{ secrets.DOCS_DISPATCH_TOKEN }}
+    steps:
+      - name: Tell abap2UI5/docs to redeploy
+        if: ${{ env.TOKEN != '' }}
+        run: |
+          curl --fail --silent --show-error \
+            -X POST "https://api.github.com/repos/abap2UI5/docs/dispatches" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"event_type":"playground-published","client_payload":{"sha":"${{ github.sha }}"}}'
+      - name: No token, no dispatch
+        if: ${{ env.TOKEN == '' }}
+        run: echo "DOCS_DISPATCH_TOKEN is not set - abap2UI5/docs will pick up this deploy on its own nightly run."

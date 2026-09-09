@@ -53,7 +53,22 @@ function readUrl() {
 
 /* replaceState, not pushState: typing a query is not five history entries to
  * back out of one character at a time. */
+/* WRITTEN AFTER THE LIST, NOT BEFORE IT, AND NOT ON EVERY KEYSTROKE. The URL
+ * and the position memory used to be written synchronously in front of every
+ * render: replaceState( ) plus a localStorage write per character typed, and
+ * neither call was guarded. Safari refuses replaceState( ) after a hundred
+ * calls in thirty seconds, with an exception - so a reader who typed and
+ * backspaced past that had the handler die before render( ) and a list that
+ * stopped answering. Now the list is drawn first, and the URL and the memory
+ * follow a beat later, once, for however many characters arrived in that
+ * beat; a refusal costs the address bar an update and nothing else. */
+let writing = 0;
+function writeUrlSoon() {
+  clearTimeout(writing);
+  writing = setTimeout(writeUrl, 200);
+}
 function writeUrl() {
+  writing = 0;
   const p = new URLSearchParams();
   if (state.q) p.set(PARAMS.q, state.q);
   if (state.source) p.set(PARAMS.source, state.source);
@@ -62,11 +77,17 @@ function writeUrl() {
   if (state.release) p.set(PARAMS.release, state.release);
   if (state.runs) p.set(PARAMS.runs, "1");
   const query = p.toString();
-  history.replaceState(null, "", query ? `?${query}` : location.pathname);
+  try {
+    history.replaceState(null, "", query ? `?${query}` : location.pathname);
+  } catch {
+    /* Too many updates in too short a time, or a browser that refuses to
+     * rewrite the address: the list is already right, the address is not. */
+  }
   /* The filters are the page here, so the URL they were just written into is
    * what "where you were in the samples" means - a reader who came from the
    * documentation, narrowed to sap.m tables and went back gets the narrowed
-   * list, not the front of the catalogue. */
+   * list, not the front of the catalogue. rememberHere( ) guards its own
+   * write. */
   rememberHere("samples");
 }
 
@@ -81,10 +102,12 @@ const THEME_KEY = "abap2ui5-playground:theme";
 function setUpTheme() {
   const media = window.matchMedia("(prefers-color-scheme: dark)");
   const system = () => (media.matches ? "dark" : "light");
+  el.theme.setAttribute("aria-checked", String((document.documentElement.dataset.theme || system()) === "dark"));
   el.theme.addEventListener("click", () => {
     const now = document.documentElement.dataset.theme || system();
     const next = now === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = next;
+    el.theme.setAttribute("aria-checked", String(next === "dark"));
     try {
       /* A choice that equals the system is forgotten rather than stored, so a
        * page switched back follows the system again from then on. Same rule as
@@ -290,6 +313,7 @@ function render() {
   }
 
   el.results.replaceChildren(frag);
+  el.results.classList.add("is-filled");
   el.count.textContent = hits.length === rows.length
     ? `${rows.length} samples`
     : `${hits.length} of ${rows.length} samples`;
@@ -313,21 +337,24 @@ function bind() {
    * felt as lag rather than read as thrift. */
   el.q.addEventListener("input", () => {
     state.q = el.q.value.trim();
-    writeUrl();
     render();
+    writeUrlSoon();
   });
   for (const [key, node] of [["source", el.source], ["control", el.control], ["library", el.library], ["release", el.release]]) {
     node.addEventListener("change", () => {
       state[key] = node.value;
-      writeUrl();
       render();
+      writeUrl();
     });
   }
   el.runs.addEventListener("change", () => {
     state.runs = el.runs.checked;
-    writeUrl();
     render();
+    writeUrl();
   });
+  /* A page left mid-beat still writes its URL down - the memory is what the
+     bar's Samples item comes back to. */
+  addEventListener("pagehide", () => { if (writing) writeUrl(); });
   el.clear.addEventListener("click", () => {
     state.q = "";
     state.source = "";

@@ -240,12 +240,23 @@ code:
   probe with 200 and then stays silent for a minute is failed with a named
   error, and `boot()` answers that one by discarding every cache the site
   wrote and unregistering the worker before asking for a reload. **The two
-  documents** — `index.html` and `app/index.html` — are the one exception to
-  cache-first: network first, so a deploy reaches the next visit, and the
-  cached copy only when the network has nothing to say, which is what lets
-  the installed playground (`manifest.webmanifest`, the 192 and 512 px icons
-  rendered from the docs' logo) open and run offline; `tests/worker.spec.js`
-  holds both halves, the poisoned-cache visit and the offline run. The
+  documents** — `index.html` and `app/index.html` — and **the catalogue's
+  three files** — `samples/apps.json`, `catalogue.mjs`, `catalogue.css` —
+  are the exceptions to cache-first: network first, so a deploy reaches the
+  next visit, and the cached copy only when the network has nothing to say,
+  which is what lets the installed playground (`manifest.webmanifest`, the
+  192 and 512 px icons rendered from the docs' logo) open and run offline;
+  `tests/worker.spec.js` holds all three halves, the poisoned-cache visit,
+  the poisoned catalogue and the offline run. The catalogue is network-first
+  for a reason of its own: the nightly deploy that lists a sample merged
+  today writes a worker identical to yesterday's when nothing else moved —
+  same build id, same cache — so a cache-first copy of `apps.json` was
+  yesterday's catalogue for every returning visitor, indefinitely. And the
+  install step fetches past the HTTP cache (`cache: "reload"`) only for the
+  entries it can check against the build (`CORE_HASHES`) and the frontend's
+  unhashed component bundle; the hashed chunks and the version-pinned UI5
+  files come out of the HTTP cache, which used to cost a first visit about
+  five megabytes over the wire a second time. The
   frontend's own `navigator.onLine` check is answered "yes" by
   `frontend-bridge.js` for the same reason: the backend is the page around
   the frame.
@@ -762,6 +773,16 @@ the honest thing for it to say, and nothing else on this site depends on it.
 site would not otherwise need: the six files change when a sample is merged in
 another repository, and that is no reason for anything to be pushed here.
 
+**And it tells the documentation.** `scripts/build-site.mjs` over in
+abap2UI5/docs borrows the bar, the bar's script and two stylesheets from this
+deployment at build time, so a bar change here reached the manual only with
+the manual's next push. The `notify-docs` job at the end of `pages.yml` sends
+abap2UI5/docs a `repository_dispatch` (`playground-published`) after a
+successful deploy; it needs a fine-grained token in this repository's secrets
+as `DOCS_DISPATCH_TOKEN` (contents: write on abap2UI5/docs), and without one
+it says so and does nothing — the manual's own nightly deploy, an hour after
+this one, is the net under it.
+
 **A card is one link, and it goes to the sample's own page.** Cards used to end
 in three actions — Run it, Source, Docs — and they were the wrong three: they
 left the site before the reader had seen what the sample *was*, and they made
@@ -1039,12 +1060,36 @@ somebody who came to write ABAP asked for. `tests/sample-pages.spec.js` runs
 against the real index, because a fixture would test a page that was never
 written.
 
-The service worker keeps the page and its index **on use, not in the precache**
-(`src/shell/sw.js`): `apps.json` alone is most of a megabyte, and somebody who
-came to write ABAP must not download 770 samples to do it. Caching it is right
-where caching the old fetched-at-runtime catalogues would have been wrong — it
-is written by the deploy that wrote the bundle beside it, so it is exactly as
-current as the build.
+The service worker keeps the page and its index **on use, not in the precache,
+and never ahead of the network** (`src/shell/sw.js`, `LIVE`): `apps.json`
+alone is most of a megabyte, and somebody who came to write ABAP must not
+download 770 samples to do it. It is written by the deploy that wrote the
+bundle beside it — but the deploy that changes it is usually not the deploy
+that changes the bundle (the nightly run, for a sample merged elsewhere), and
+that deploy writes the same worker with the same cache; served cache-first,
+the copy was yesterday's catalogue for every returning visitor. So the three
+catalogue files ask the network and fall back to the cache, like the two
+documents.
+
+**The catalogue and every sample page are published under a
+Content-Security-Policy** (`withPolicy( )` in `tools/html.mjs`, applied at
+the write in `build-site.mjs` and `sample-pages.mjs`): this origin, the
+inline scripts by hash of the very text written, images from anywhere over
+https, nothing else. `tests/sample-pages.spec.js` reads every page kind back
+for a hash per inline script and for the inline handler no hash can allow.
+The playground's own document has none yet — module workers, WebAssembly,
+Monaco's blob workers and UI5 in a frame are a separate piece of work.
+
+**The catalogue draws first and writes second.** `render( )` runs on every
+keystroke; the URL and the position memory follow 200ms later, once, in a
+try/catch — Safari refuses `replaceState( )` after a hundred calls in thirty
+seconds, and the two synchronous writes in front of every render were where a
+fast typist's handler died. The cards carry `content-visibility: auto` so a
+keystroke lays out the screenful that is visible rather than all 771; the
+four filter lists are drawn at the width their longest option gives them and
+the results box keeps its height until it is filled, which is what took the
+page's layout shift from 0.19 to nothing (`tests/catalogue.spec.js` holds it
+under 0.05).
 
 ## Build, run, test
 
@@ -1182,9 +1227,16 @@ deployment; Samples and Playground are here.
 Each section carries its **mark** in front of its name — a house, a book, a
 window, a play button, the four the documentation's home page draws on its own
 cards — in the link's own colour, so the section you are on is marked twice.
-Below 620px the names are clipped away and the marks are the items: four names
-and their marks are 499px of a 390px screen, and the row ran off the end of it.
-Clipped rather than `display: none`, so a screen reader still reads them.
+Below 620px the names are clipped away and each mark carries its **short
+name** under it instead — Home, Docs, Samples, Play, from `data-short` on the
+same span the full word is on: four full names and their marks are 499px of a
+390px screen, and the row ran off the end of it, but four marks with no word
+were four guesses for a reader who arrived from a link, and a tooltip does not
+exist under a thumb. The full name stays clipped rather than `display: none`,
+so a screen reader still reads it, and the short one is drawn with an empty
+alt (`content: attr(data-short) / ""`) so it is not read twice. The three
+copies of the bar say it, and the manual borrows one of them;
+`tests/catalogue.spec.js` holds the phone.
 
 **The playground's bar used to be the exception, and is not any more.** It was
 one row carrying both the project's bar and this page's workbench — undo,
