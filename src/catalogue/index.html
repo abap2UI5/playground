@@ -50,6 +50,11 @@
   "isPartOf": { "@type": "WebSite", "name": "abap2UI5", "url": "https://abap2ui5.github.io/docs/" }
 }
 </script>
+<!-- The type, preloaded: a @font-face is only discovered once the stylesheet
+     has been parsed, a round trip later than the first line needs it, and
+     `font-display: swap` then draws that line twice. The roman face only -
+     the italic is a few words on this page. -->
+<link rel="preload" href="../fonts/inter-roman-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="catalogue.css">
 <!-- The stored theme, before the first paint. Same key and same rule as the
      playground's own inline script (src/shell/theme.mjs): a choice is applied,
@@ -90,10 +95,10 @@
        the chapter menu on the manual, the trail above a title and the outline
        beside it. The other three say which they are; this one did not. -->
   <nav class="bar-nav" aria-label="Main">
-    <a href="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3.6 10.9 12 4.2l8.4 6.7v8.3a1 1 0 0 1-1 1h-4.3v-6.1H8.9v6.1H4.6a1 1 0 0 1-1-1z"/></svg><span data-text="Home">Home</span></a>
-    <a href="https://abap2ui5.github.io/docs/get_started/about" data-site="docs" data-scope="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 7.2C10.5 5.9 8.5 5.2 6 5.2H3.3v11.9H6c2.5 0 4.5.7 6 1.9 1.5-1.2 3.5-1.9 6-1.9h2.7V5.2H18c-2.5 0-4.5.7-6 1.9z"/><path d="M12 7.2v11.8"/></svg><span data-text="Documentation">Documentation</span></a>
-    <a href="./" aria-current="page"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.2" y="4.8" width="17.6" height="14.4" rx="2"/><path d="M3.2 9.4h17.6M8.5 9.4v9.8"/></svg><span data-text="Samples">Samples</span></a>
-    <a href="../" data-site="playground" title="Write ABAP and run it in the browser"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M10.2 8.4v7.2a.5.5 0 0 0 .76.43l5.8-3.6a.5.5 0 0 0 0-.86l-5.8-3.6a.5.5 0 0 0-.76.43z" fill="currentColor" stroke="none"/></svg><span data-text="Playground">Playground</span></a>
+    <a href="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3.6 10.9 12 4.2l8.4 6.7v8.3a1 1 0 0 1-1 1h-4.3v-6.1H8.9v6.1H4.6a1 1 0 0 1-1-1z"/></svg><span data-text="Home" data-short="Home">Home</span></a>
+    <a href="https://abap2ui5.github.io/docs/get_started/about" data-site="docs" data-scope="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 7.2C10.5 5.9 8.5 5.2 6 5.2H3.3v11.9H6c2.5 0 4.5.7 6 1.9 1.5-1.2 3.5-1.9 6-1.9h2.7V5.2H18c-2.5 0-4.5.7-6 1.9z"/><path d="M12 7.2v11.8"/></svg><span data-text="Documentation" data-short="Docs">Documentation</span></a>
+    <a href="./" aria-current="page"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.2" y="4.8" width="17.6" height="14.4" rx="2"/><path d="M3.2 9.4h17.6M8.5 9.4v9.8"/></svg><span data-text="Samples" data-short="Samples">Samples</span></a>
+    <a href="../" data-site="playground" title="Write ABAP and run it in the browser"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M10.2 8.4v7.2a.5.5 0 0 0 .76.43l5.8-3.6a.5.5 0 0 0 0-.86l-5.8-3.6a.5.5 0 0 0-.76.43z" fill="currentColor" stroke="none"/></svg><span data-text="Playground" data-short="Play">Playground</span></a>
   </nav>
   <!-- The box lands here, built by src/shell/search-box.mjs. Written as an
        empty element rather than as markup, because the same box is on three
@@ -123,7 +128,7 @@
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2.2"/><circle cx="12" cy="12" r="2.2"/><circle cx="19" cy="12" r="2.2"/></svg>
       </summary>
       <div class="menu">
-        <button id="theme" class="theme" type="button">
+        <button id="theme" class="theme" type="button" role="switch" aria-checked="false">
           <span class="when-light"><span class="glyph" aria-hidden="true">☾</span>Switch to dark</span>
           <span class="when-dark"><span class="glyph" aria-hidden="true">☀</span>Switch to light</span>
         </button>
@@ -199,18 +204,15 @@
        get, and it is the paragraph that says what the page is. -->
   <section class="masthead">
     <h1>Every abap2UI5 sample, in one place</h1>
+    <!-- ONE SENTENCE, THEN THE SEARCH. Two paragraphs stood here, and on a
+         phone they were 830px of reading before the field: the first sample
+         was below 1,400px. What the three repositories are is said where a
+         reader chooses between them - the Repository list, and the heading
+         over each group - and the rest is one line. -->
     <p>
-      Three repositories, one catalog. <b>Learn</b> is the path through
-      abap2UI5 itself — bindings, events, popups, navigation, whole apps.
-      <b>Controls</b> is the UI5 demo kit rebuilt in ABAP, one port per sample.
-      <b>Stack</b> is abap2UI5 with OData, RAP, WebSockets or the launchpad.
-    </p>
-    <p>
-      Search by what a sample <em>does</em>, or filter by the control it builds,
-      the library it needs, or the UI5 release your system runs. <b>Open a
-      sample</b> for its own page: what it builds, what it needs, the ABAP
-      itself — and the button that runs it here, in this browser, with nothing
-      installed. The ones that need a real system say so and open for reading.
+      Search by what a sample <em>does</em>, or filter by control, library or
+      the UI5 release your system runs; open one for its ABAP and the button
+      that runs it here, in this browser, with nothing installed.
     </p>
   </section>
 

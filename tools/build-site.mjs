@@ -6,7 +6,7 @@
 // dist/app. This step is the page itself: the shell bundle, its stylesheet, and
 // whatever static assets the shell needs.
 import crypto from "node:crypto";
-import { stripHtmlComments } from "./html.mjs";
+import { stripHtmlComments, withPolicy } from "./html.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -356,10 +356,11 @@ await esbuild.build({
 });
 fs.copyFileSync(path.join(ROOT, "src", "catalogue", "catalogue.css"), path.join(DIST, "samples", "catalogue.css"));
 /* The catalogue's document, without the comments its source is written with -
-   four kilobytes of a twenty-kilobyte page (tools/html.mjs). */
+   four kilobytes of a twenty-kilobyte page - and with its policy in the head
+   (tools/html.mjs, both). */
 fs.writeFileSync(
   path.join(DIST, "samples", "index.html"),
-  stripHtmlComments(fs.readFileSync(path.join(ROOT, "src", "catalogue", "index.html"), "utf8")),
+  withPolicy(stripHtmlComments(fs.readFileSync(path.join(ROOT, "src", "catalogue", "index.html"), "utf8"))),
 );
 
 /* THE HIGHLIGHTER, PUBLISHED - the file that decides which words in a class

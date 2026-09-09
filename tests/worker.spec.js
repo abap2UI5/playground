@@ -371,3 +371,41 @@ test("a startup failure on a page the worker is serving throws the cached site a
   await open(page);
   expect([...served], "the reload went to the network, not to a worker").toEqual([]);
 });
+
+test("the catalogue's index is answered from the network first, and a cached copy never outlives a deploy", async ({ page }) => {
+  await open(page);
+  expect(await workerReady(page)).toBe(true);
+
+  // The catalogue's three files are kept by the worker so the installed
+  // playground opens them offline - but they are the one thing on this site
+  // that changes WITHOUT a new build: the site is published every night so
+  // that a sample merged today is listed tomorrow, and a night where only
+  // the catalogue moved writes a worker identical to the one before it. So a
+  // copy in the cache must never win over the network. Planted by hand, as
+  // the document test above does, and the page has to read past it.
+  await page.evaluate(async () => {
+    const [name] = await caches.keys();
+    const cache = await caches.open(name);
+    await cache.put(
+      new URL("samples/apps.json", document.baseURI),
+      new Response(JSON.stringify({ stale: true, samples: [] }), { headers: { "content-type": "application/json" } }),
+    );
+  });
+  const { served } = watch(page);
+  await page.goto("/samples/");
+  await expect(page.locator("#count")).toContainText("samples");
+  // A real number of samples, not the planted zero...
+  const count = await page.locator("#count").textContent();
+  expect(Number(count.match(/\d+/)[0])).toBeGreaterThan(100);
+  // ...and the answer came through the worker, which is what makes the
+  // fallback exist at all.
+  expect([...served].some((p) => p.endsWith("/samples/apps.json"))).toBe(true);
+  // And the fresh answer replaced the planted one - written behind the
+  // response (waitUntil), so it is polled for rather than read once.
+  await expect.poll(() => page.evaluate(async () => {
+    const [name] = await caches.keys();
+    // Resolved from the catalogue's own page, one level down from the scope.
+    const hit = await (await caches.open(name)).match(new URL("../samples/apps.json", document.baseURI));
+    return hit ? (await hit.json()).stale === true : "missing";
+  })).toBe(false);
+});

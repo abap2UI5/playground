@@ -64,6 +64,9 @@ export function render() {
   const open = currentFile();
 
   strip.hidden = false;
+  /* The role comes with the first tab: a tablist with nothing in it is a role
+     a screen reader cannot make sense of, so the markup carries none. */
+  strip.setAttribute("role", "tablist");
   strip.replaceChildren(...files.map((file, index) => fileTab(file, index, open)), addButton());
 }
 

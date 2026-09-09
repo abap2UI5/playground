@@ -321,3 +321,67 @@ test.describe("on a phone", () => {
     }
   });
 });
+
+test("on a phone the four sections keep a name under their marks", async ({ browser }) => {
+  // Four marks with no word under them were four guesses for a reader who
+  // arrived on a phone: a house, a book, a window and a play button. The
+  // short name is drawn from `data-short` and the full one is kept for the
+  // screen reader - so the accessible name stays the full word.
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const page = await context.newPage();
+  await page.route("**/samples/apps.json", (route) => route.fulfill(json(INDEX)));
+  await page.goto("/samples/");
+  const items = page.locator(".bar-nav > *");
+  await expect(items).toHaveCount(4);
+  const shorts = await items.evaluateAll((els) => els.map((el) => {
+    const span = el.querySelector("span[data-short]");
+    return {
+      short: span?.dataset.short,
+      drawn: span ? getComputedStyle(span, "::after").content : "",
+      name: el.getAttribute("aria-label") || el.textContent.trim(),
+      width: el.getBoundingClientRect().width,
+    };
+  }));
+  expect(shorts.map((s) => s.short)).toEqual(["Home", "Docs", "Samples", "Play"]);
+  for (const s of shorts) {
+    expect(s.drawn).toContain(`"${s.short}"`);
+    expect(s.width).toBeGreaterThanOrEqual(34);
+  }
+  expect(shorts.map((s) => s.name)).toEqual(["Home", "Documentation", "Samples", "Playground"]);
+  // And the row still fits the screen.
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBe(0);
+  await context.close();
+});
+
+test("the theme button is a switch, and says which way it is", async ({ page }) => {
+  await openCatalogue(page);
+  const button = page.locator("#theme");
+  await expect(button).toHaveAttribute("role", "switch");
+  await expect(button).toHaveAttribute("aria-checked", "false");
+  await page.locator("#extra summary").click();
+  await button.click();
+  await expect(button).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+});
+
+test("nothing on the page moves when the index lands", async ({ page }) => {
+  // The four lists are written with one option each and filled once the
+  // index has arrived; a select is as wide as its widest option, so each
+  // grew, the row re-wrapped and the results moved - a layout shift of 0.19.
+  // The lists are drawn at their filled width now and the results box keeps
+  // its height until it is filled.
+  await page.route("**/samples/apps.json", (route) => route.fulfill(json(INDEX)));
+  await page.goto("/samples/");
+  await expect(page.locator("#count")).toContainText("samples");
+  await page.waitForTimeout(600);
+  const shift = await page.evaluate(() => new Promise((resolve) => {
+    let total = 0;
+    const observer = new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) if (!entry.hadRecentInput) total += entry.value;
+    });
+    observer.observe({ type: "layout-shift", buffered: true });
+    setTimeout(() => resolve(total), 100);
+  }));
+  expect(shift).toBeLessThan(0.05);
+});
