@@ -26,7 +26,7 @@ them before touching `tools/` or `src/runtime`.
 | `src/embed/` | The embed loader (`abap2ui5-embed.js`) and a worked example page; copied verbatim to `dist/embed/` |
 | `src/catalogue/` | The sample catalogue at `/samples/`: one page, one stylesheet, one module, over the index `tools/build-catalogue.mjs` writes. Its own document and its own bundle - see "The sample catalogue" below. `search-entry.mjs` is the second bundle out of this directory: the bar's search box, as the one file the catalogue and all 772 per-sample pages load |
 | `tools/` | The build (`build.mjs`, which drives `fetch-deps`, `build-framework`, `build-ui5`, `build-catalogue` — which writes the index and, through `sample-pages.mjs`, one static page per sample plus the full list, the sitemap and `404.html`, with the ABAP on those pages fetched by `sample-sources.mjs` and coloured by `abap-highlight.mjs` —, `build-site`), the size budget (`check-size`) and the dev server (`serve`, which mounts `dist/` at the root, under a subpath and under the deployment's own path, and answers a miss with `404.html` the way GitHub Pages does) |
-| `tests/` | Playwright specs — the only test layer; everything is tested through a real browser against the built `dist/` |
+| `tests/` | Playwright specs — the only test layer; everything is tested through a real browser against the built `dist/`. One of them, `bfcache.spec.js`, reads rather than runs: the sources and the three documents the build writes, for an unload listener or a `no-store` that would keep a page out of the back/forward cache and turn the bar's step back into a reload |
 
 `deps/`, `build/` and `dist/` are generated and gitignored. Never commit them.
 
@@ -1069,8 +1069,8 @@ a sample without a test is not possible. CI:
 
 | | |
 |---|---|
-| `check.yml` | every non-main branch and pull request: the composite build action (`.github/actions/build`, with caches for `deps/`, `~/.ui5` and the downport), the size budget, `npm test` |
-| `pages.yml` | pushes to `main`: the same build and tests, then deploy `dist/` to GitHub Pages — a red test never publishes |
+| `check.yml` | every non-main branch and pull request: the composite build action (`.github/actions/build`, with caches for `deps/`, `~/.ui5` and the downport), the size budget, `npm test`. The tests run in **three shards** (`npm test -- --shard=n/3`, one runner each): the build is two minutes with its caches warm and the tests seventeen on one runner, so the wall clock is the build plus a third of the tests |
+| `pages.yml` | pushes to `main`: the same three test shards, a fourth runner that builds the artefact beside them, then deploy `dist/` to GitHub Pages once all four are green — a red test never publishes |
 | `upstream.yml` | weekly: build and test against upstream `HEAD` without moving the pins, and open or extend an issue when that fails, so a bump stays a two-line commit |
 
 ## Three traps the browser sets, and what they cost
@@ -1255,7 +1255,7 @@ four bars, and leaves the page to answer it.
 | | |
 |---|---|
 | the theme | `abap2ui5-playground:theme`, read before the first paint by the inline script at the top of all three documents here and by a head script over there. The switch in any of the four bars turns all four |
-| where you were | `src/shell/site-memory.mjs`, imported by the shell and the catalogue bundles and carried as an inline copy by the per-sample pages, which have no bundle. Every samples page writes its own path down — the catalogue's *with its filters*, because the filters are the page there — and the Samples item on the other bars is lifted to it: at boot, again when the page is shown or the tab looked at again, and on the click itself (`keepSiteLinksCurrent()`), because a link lifted once and left open carries the position from before. A stored value is **checked, not followed**: resolved against this origin and kept only if it is still inside the href the markup carries, so a poisoned or stale key costs a restored position and nothing else. All three items open in the same tab — the sites are one site, and a bar that opened one of them in a second window was the one asymmetry between the four bars |
+| where you were | `src/shell/site-memory.mjs`, imported by the shell and the catalogue bundles and by the per-sample pages through `samples/page.mjs` (`src/catalogue/page-entry.mjs`, one module for all 772 of them beside `search.mjs` - it used to be an inline copy kept in step by hand). Every samples page writes its own path down — the catalogue's *with its filters*, because the filters are the page there — and the Samples item on the other bars is lifted to it: at boot, again when the page is shown or the tab looked at again, and on the click itself (`keepSiteLinksCurrent()`), because a link lifted once and left open carries the position from before. A stored value is **checked, not followed**: resolved against this origin and kept only if it is still inside the href the markup carries, so a poisoned or stale key costs a restored position and nothing else. All three items open in the same tab — the sites are one site, and a bar that opened one of them in a second window was the one asymmetry between the four bars |
 | where **on** the page you were | The same file, keys `:scroll` (a small map of path → offset, the twelve most recent) and `:returning`. The item above came back to the page and to the TOP of it, which on a list of 770 rows is most of the way to not having remembered anything. Restored **on arrival by the bar and nowhere else**: a `data-back` link writes down how far down this page the reader is and one record saying where they are being sent, and the page that *is* that, arriving within half a minute and with no hash of its own, honours it. Restoring on every load would fight the browser's own back-and-forward restoration and would drop a reader who followed an ordinary link into the middle of a page. Checked the same way a stored path is — `scrollTo` takes whatever it is given |
 | the last thing you searched for | `src/shell/search-engine.mjs`, key `:search`, described above. Checked: a string, short, and less than half an hour old |
 
@@ -1281,8 +1281,8 @@ runtime and runs the app from the top — two to three seconds, and the app's
 own state gone with the document that held it. The one mechanism that hands a
 running page back alive is the back/forward cache, and it applies to a page
 the reader has been on. So when the page an item opens is still in the tab's
-history, the click traverses to it there (`returnTo( )` in `site-memory.mjs`,
-the hand copy on the sample pages, and the documentation's `site.js`): through
+history, the click traverses to it there (`returnTo( )` in `site-memory.mjs`, which
+the sample pages import through `samples/page.mjs`, and the documentation's `site.js`): through
 the Navigation API where it exists — the nearest entry, either direction, that
 is the same origin, path and query — and without it, the one case a page can
 know, that it was opened from that page and nothing has been pushed onto the

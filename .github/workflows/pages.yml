@@ -34,13 +34,31 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The tests, in the same three shards check.yml runs them in - the build
+  # is two minutes with its caches warm and the tests seventeen on one
+  # runner, so three runners each take a third (Playwright's --shard) and the
+  # wall clock is the build plus a third of the tests.
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/build
+      - run: npm test -- --shard=${{ matrix.shard }}/3
+
+  # The artefact that is published: the same build, once more, on a runner
+  # of its own - a cache hit, and it runs beside the shards rather than after
+  # them. Deploy waits for all four.
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/build
-      - run: npm test
 
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
@@ -48,7 +66,7 @@ jobs:
           path: dist
 
   deploy:
-    needs: build
+    needs: [test, build]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:

@@ -6,6 +6,7 @@
 // dist/app. This step is the page itself: the shell bundle, its stylesheet, and
 // whatever static assets the shell needs.
 import crypto from "node:crypto";
+import { stripHtmlComments } from "./html.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -341,6 +342,7 @@ await esbuild.build({
   entryPoints: [
     { in: path.join(ROOT, "src", "catalogue", "catalogue.mjs"), out: "catalogue" },
     { in: path.join(ROOT, "src", "catalogue", "search-entry.mjs"), out: "search" },
+    { in: path.join(ROOT, "src", "catalogue", "page-entry.mjs"), out: "page" },
   ],
   outdir: path.join(DIST, "samples"),
   outExtension: { ".js": ".mjs" },
@@ -352,9 +354,13 @@ await esbuild.build({
   sourcemap: process.env.PG_DEBUG === "1",
   logLevel: "warning",
 });
-for (const name of ["index.html", "catalogue.css"]) {
-  fs.copyFileSync(path.join(ROOT, "src", "catalogue", name), path.join(DIST, "samples", name));
-}
+fs.copyFileSync(path.join(ROOT, "src", "catalogue", "catalogue.css"), path.join(DIST, "samples", "catalogue.css"));
+/* The catalogue's document, without the comments its source is written with -
+   four kilobytes of a twenty-kilobyte page (tools/html.mjs). */
+fs.writeFileSync(
+  path.join(DIST, "samples", "index.html"),
+  stripHtmlComments(fs.readFileSync(path.join(ROOT, "src", "catalogue", "index.html"), "utf8")),
+);
 
 /* THE HIGHLIGHTER, PUBLISHED - the file that decides which words in a class
  * are red and which are green, beside the pages it decides it for.
@@ -389,6 +395,7 @@ for (const name of fs.readdirSync(path.join(ROOT, "src", "fonts"))) {
   log(`fonts/${name} (${kb(path.join(DIST, "fonts", name))})`);
 }
 log(`samples/catalogue.mjs (${kb(path.join(DIST, "samples", "catalogue.mjs"))})`);
+log(`samples/page.mjs (${kb(path.join(DIST, "samples", "page.mjs"))}) - the sample pages' memory, outline and line numbers, one module for all of them`);
 log(`samples/search.mjs (${kb(path.join(DIST, "samples", "search.mjs"))})`);
 
 // A same-origin ABAP file, so ?src= can be exercised without depending on
@@ -518,7 +525,9 @@ function writeIndex() {
     console.error(`build-site: ERROR src/shell/index.html no longer has a ${marker} to substitute`);
     process.exit(1);
   }
-  fs.writeFileSync(path.join(DIST, "index.html"), source.replace(marker, tags.join("\n")));
+  /* After the substitution, without the comments: 9.8 kB of the 37 kB document,
+     a third of its compressed weight (tools/html.mjs). */
+  fs.writeFileSync(path.join(DIST, "index.html"), stripHtmlComments(source.replace(marker, tags.join("\n"))));
   log(`index.html (${tags.length} chunk${tags.length === 1 ? "" : "s"} preloaded)`);
 }
 

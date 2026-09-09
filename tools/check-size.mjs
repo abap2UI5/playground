@@ -56,6 +56,10 @@ const TRANSFERRED = [
    * fetched from the documentation's deployment, and only once somebody
    * types. */
   { file: "samples/search.mjs", limit: 0.012 * MB, note: "the search box in the bar" },
+  /* What the per-sample pages used to carry inline, 15 kB a page: the bar's
+   * memory, the outline walk and the line numbers, as one module for all 772
+   * of them - loaded by every one of them, so the budget is on the file. */
+  { file: "samples/page.mjs", limit: 0.012 * MB, note: "the sample pages' memory, outline and line numbers" },
 ];
 
 // The whole site. Most of it is UI5, which is fetched a bundle at a time and

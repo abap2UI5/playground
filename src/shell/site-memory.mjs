@@ -206,7 +206,8 @@ export function keepSiteLinksCurrent(root = document) {
  *
  * The documentation's bar does the same in scripts/site-js/site.js over in
  * abap2UI5/docs, with entryOf( ) copied into theme/site-memory.js there and
- * pinned by test/playground-back.test.mjs. Change one, change the other.
+ * pinned by test/bar-back.test.mjs. Change one, change the other. The sample
+ * pages import THIS file, through samples/page.mjs.
  */
 
 /** A page, as two history entries are compared: origin, path and query, a

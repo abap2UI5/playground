@@ -235,8 +235,9 @@ test("a sample page carries the same two lines the bundles import", async ({ pag
   await page.evaluate(([k, v]) => localStorage.setItem(k, v), [DOCS_KEY, "//example.invalid/x"]);
   await page.reload();
 
-  // The per-sample pages have no bundle - the memory is an inline copy there
-  // (tools/sample-pages.mjs), so it is checked on its own: it writes, and it
+  // The per-sample pages load the memory through their own module,
+  // samples/page.mjs (src/catalogue/page-entry.mjs) - it used to be an inline
+  // copy kept in step by hand - so it is checked on its own: it writes, and it
   // refuses the same values.
   expect(await stored(page, SAMPLES_KEY)).toBe(`/samples/${firstPage}`);
   await expect(docsLink(page)).toHaveAttribute("href", DOCS_HREF);

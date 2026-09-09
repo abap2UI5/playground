@@ -60,7 +60,7 @@ test("the way on is in the page, and every link on it works from any depth", asy
     expect(href, "a link on the 404 is absolute, or it points at whatever missed").toMatch(/^\//);
   }
   // The catalogue, followed rather than asserted: the point is that it lands.
-  await page.getByRole("link", { name: "catalogue", exact: true }).click();
+  await page.getByRole("link", { name: "catalog", exact: true }).click();
   await expect(page).toHaveURL(`${BASE}samples/`);
   await expect(page.locator("h1")).toBeVisible();
 });
