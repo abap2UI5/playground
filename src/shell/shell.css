@@ -763,6 +763,10 @@ iframe {
   color: var(--fg);
 }
 .examples-head input:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+/* iOS zooms the page in on focusing a field set under 16px, and leaves it
+   zoomed - inside a dialog that is the whole screen there. The size where
+   there is a thumb to focus it with; the dialog's own under a mouse. */
+@media (pointer: coarse) { .examples-head input { font-size: 16px; } }
 .examples-count { flex: none; color: var(--fg-dim); font-family: var(--font-mono); font-size: 12px; }
 
 /* The two halves below the head: what narrows the list, and the list. */
@@ -1053,6 +1057,12 @@ button.insight-row {
      it scrolls, rather than running off the bottom of a small window. */
   width: 372px; max-width: calc(100vw - 24px); padding: 6px;
   max-height: calc(100vh - 62px); overflow-y: auto;
+  /* On a phone `100vh` is the screen with the browser's own bars retracted,
+     and the menu opens with them showing: its last rows sat under the bottom
+     bar, and a list that fit its own box had nothing to scroll. The small
+     viewport is the screen with the bars up, whatever the page has done
+     since; the line above is what a browser without the unit keeps. */
+  max-height: calc(100svh - 62px);
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1452,6 +1462,12 @@ button.insight-row {
    * two-line rows reads as a wall rather than as something to run an eye down. */
   width: min(820px, 100%);
   max-height: 82vh;
+  /* The 8vh above it and the 16px below are the scrim's, so on a phone the
+     three together reached past the screen with the browser's bars showing
+     and the key row at the foot was under them. Bounded by the small
+     viewport - the screen with the bars up - less those two; the line above
+     is what a browser without the unit keeps. */
+  max-height: min(82vh, calc(100svh - 8vh - 16px));
   border: 1px solid var(--line);
   border-radius: var(--radius-surface);
   background: var(--bg);
@@ -1679,5 +1695,19 @@ button.insight-row {
   }
   .bar-nav a,
   .bar-nav .here { padding: 5px 7px; }
+}
+/* UNDER A THUMB A MARK IS A TARGET, and these were drawn for a pointer: 30px
+   of box for the marks at either end, 25px of pill for a section once its
+   word is clipped away, on a screen where 44 is what a finger is asked to be
+   given. The boxes grow to 36 - the bar is 46, so 5 above and 5 below - and
+   the glyphs stay where they were: a pill centres its mark, and the last box
+   gives back the 3px it grew on the outside, so the menu's mark stays flush
+   with the bar's padding. Nothing here moves under a mouse. */
+@media (pointer: coarse) {
+  .bar-nav a,
+  .bar-nav .here { min-width: 34px; min-height: 36px; justify-content: center; }
+  .search-button { height: 36px; }
+  .social, .extra-button { width: 36px; height: 36px; }
+  .extra { margin-right: -3px; }
 }
 

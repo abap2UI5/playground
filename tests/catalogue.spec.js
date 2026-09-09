@@ -291,3 +291,33 @@ test("a broken index says so rather than showing an empty page", async ({ page }
   await page.goto("/samples/");
   await expect(page.locator(".empty")).toContainText("could not be loaded");
 });
+
+/* UNDER A THUMB. The bar's marks were drawn for a pointer - 30px of box for a
+ * mark, 25px of pill for a section once its word is clipped away - and a phone
+ * is where the four sections are their marks and nothing else. The pills and
+ * the boxes are targets there, in a bar that keeps its 46; and the filter
+ * field and its lists take the one size iOS does not zoom the page in on. The
+ * shell's own copy of the bar follows the same rule (tests/shell.spec.js).
+ * `hasTouch` is what makes `(pointer: coarse)` true in the browser under test;
+ * the width is a phone's. */
+test.describe("on a phone", () => {
+  test.use({ hasTouch: true, viewport: { width: 390, height: 760 } });
+
+  test("under a thumb the bar's marks are targets, and the filters do not zoom the page", async ({ page }) => {
+    await openCatalogue(page);
+    expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches), "the browser under test reports a thumb").toBe(true);
+    for (const item of await page.locator(".bar-nav > *").all()) {
+      const box = await item.boundingBox();
+      expect(box.height, "a section's pill is the height of a target").toBeGreaterThanOrEqual(36);
+      expect(box.width, "and near enough the width of one").toBeGreaterThanOrEqual(34);
+    }
+    const more = await page.locator(".bar .extra summary").boundingBox();
+    expect(Math.min(more.width, more.height), "the menu's mark is a target").toBeGreaterThanOrEqual(36);
+    const bar = await page.locator(".bar").boundingBox();
+    expect(bar.height, "in a bar that did not grow to hold them").toBeLessThanOrEqual(47);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), "and nothing pushed the page sideways").toBe(390);
+    for (const id of ["#q", "#f-source", "#f-control", "#f-library", "#f-release"]) {
+      expect(await page.locator(id).evaluate((el) => getComputedStyle(el).fontSize), `${id} is the size iOS stops zooming in at`).toBe("16px");
+    }
+  });
+});

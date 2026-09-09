@@ -652,6 +652,8 @@ h2 { font-size: 15px; margin: 26px 0 8px; }
    from a size, so nothing moves for a reader with a pointer. */
 @media (pointer: coarse) {
   .source-tools a, .source-copy, .run { padding-top: 4px; padding-bottom: 4px; }
+  /* And the crumbs above the title, 12px of text each: a row to land on. */
+  .crumbs a { display: inline-block; padding: 4px 0; }
 }
 .source-copy {
   padding: 0; border: 0; background: none; font: inherit; color: var(--accent);
