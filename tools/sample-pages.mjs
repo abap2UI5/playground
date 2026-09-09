@@ -652,6 +652,8 @@ h2 { font-size: 15px; margin: 26px 0 8px; }
    from a size, so nothing moves for a reader with a pointer. */
 @media (pointer: coarse) {
   .source-tools a, .source-copy, .run { padding-top: 4px; padding-bottom: 4px; }
+  /* And the crumbs above the title, 12px of text each: a row to land on. */
+  .crumbs a { display: inline-block; padding: 4px 0; }
 }
 .source-copy {
   padding: 0; border: 0; background: none; font: inherit; color: var(--accent);
@@ -948,9 +950,14 @@ function samplePage(row, ctx) {
     name: title,
     description: lede || title,
     programmingLanguage: "ABAP",
+    runtimePlatform: "SAP NetWeaver AS ABAP",
+    codeSampleType: "full solution",
     codeRepository: github,
+    /* The three sample repositories are MIT, like the framework. */
+    license: "https://opensource.org/licenses/MIT",
     url: canonical,
     keywords: [...(row.keywords || []), ...controls].join(", ") || undefined,
+    about: { "@type": "SoftwareApplication", name: "abap2UI5", url: "https://abap2ui5.github.io/docs/" },
     isPartOf: { "@type": "WebSite", name: "abap2UI5 sample catalog", url: `${SITE}samples/` },
   }, {
     "@context": "https://schema.org",
@@ -1070,6 +1077,7 @@ function samplePage(row, ctx) {
 <title>${esc(pageTitle)}</title>
 <meta name="description" content="${esc(description)}">
 <link rel="canonical" href="${esc(canonical)}">
+<link rel="sitemap" type="application/xml" href="../../sitemap.xml">
 ${social({ title: pageTitle, description, url: canonical })}
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f5f7">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1e2024">
@@ -1139,6 +1147,7 @@ function allPage(rows, ctx) {
 <title>Every abap2UI5 sample · the full list</title>
 <meta name="description" content="All ${rows.length} abap2UI5 samples on one page: the learning path, the UI5 demo kit rebuilt in ABAP, and the samples that need OData, RAP or a launchpad — each one linked to its own page.">
 <link rel="canonical" href="${SITE}samples/all/">
+<link rel="sitemap" type="application/xml" href="../../sitemap.xml">
 ${social({
   title: "Every abap2UI5 sample · the full list",
   description: `All ${rows.length} abap2UI5 samples on one page: the learning path, the UI5 demo kit rebuilt in ABAP, and the samples that need OData, RAP or a launchpad - each one linked to its own page.`,
@@ -1529,6 +1538,65 @@ export async function writeSamplePages(index, distDir) {
     + "\n</urlset>\n",
   );
 
+  /* THE PLAYGROUND'S OWN MAP, for a machine: samples/llms.txt describes the
+   * samples as data, the documentation's describes the prose, and nothing
+   * described the one thing a model is most likely to be asked to do with
+   * this site - open a class in it by URL, or put a running example on a
+   * page. The contract is the one main.mjs, share.mjs and the embed kit
+   * implement; a change there is a change here. */
+  fs.writeFileSync(path.join(distDir, "llms.txt"), `# abap2UI5 Playground
+
+> Write abap2UI5 apps in the browser: ABAP on the left, the running app on
+> the right, no server involved. The whole framework, compiled to
+> JavaScript, runs inside the page - a class pasted here runs the way it
+> runs on an SAP system, with the UI5 the real system would render it with.
+
+The playground is at ${SITE}. It needs a browser with WebAssembly and
+ES2022 modules; nothing is installed and nothing leaves the browser.
+
+## Opening a class by URL
+
+- \`${SITE}?src=<raw URL of a .clas.abap file>\` fetches the class and runs
+  it. \`src\` may repeat: the first one is the app, the others are classes it
+  needs. A GitHub raw URL is the usual shape, and every sample page below
+  carries one.
+- \`?view=app\` shows the running app and nothing else - no editor, no bar;
+  \`?view=full\` is the same, full screen. \`?embed=1\` is the frame the embed
+  kit opens.
+- A link made with the Share button carries the source itself, in the URL
+  fragment: one version character, \`2\`, then base64url of the files as a
+  JSON array, deflate-raw compressed. Nothing of it reaches a server.
+
+## Putting a running example on a page of your own
+
+\`${SITE}embed/abap2ui5-embed.js\` turns an empty element into a running app:
+
+    <div class="abap2ui5-demo" data-src="https://raw.githubusercontent.com/.../z2ui5_cl_demo.clas.abap"></div>
+    <script src="${SITE}embed/abap2ui5-embed.js"></script>
+
+\`data-src\` takes one URL or several (the first is the app), \`data-code\`
+carries ABAP that lives only in that page, \`data-view="app"\` hides the
+editor, \`data-height\` sets the starting height and \`data-label\` the button
+text. A page that swaps content without reloading calls
+\`window.abap2ui5Embed.setUp()\` after each navigation.
+
+## The samples
+
+- [samples/](${SITE}samples/): every abap2UI5 sample, searchable by control,
+  by library and by the UI5 release a system runs; one page per sample at
+  \`samples/<class>/\` with the class in full, and \`samples/all/\` as one list
+- [samples/llms.txt](${SITE}samples/llms.txt): the samples as data - what
+  \`samples/apps.json\` holds for each of them
+- [sitemap.xml](${SITE}sitemap.xml): every page of this deployment
+
+## Elsewhere
+
+- [the documentation](https://abap2ui5.github.io/docs/llms.txt), and
+  [llms-full.txt](https://abap2ui5.github.io/docs/llms-full.txt) for all of it
+  in one document
+- [the framework's code map](https://github.com/abap2UI5/abap2UI5/blob/main/llms.txt)
+`);
+
   /* AND THE SAME CATALOGUE, ADDRESSED TO A MACHINE. An assistant asked to
    * write abap2UI5 wants two things from this deployment: whether somebody has
    * already built the thing, and the class that proves it. Both are here - 771
@@ -1588,7 +1656,7 @@ ${(index.sources || []).map((s) => `- [${s.title}](https://github.com/${s.repo})
   );
   log(
     `${rows.length} sample pages -> dist/samples/<class>/ (${Math.round(bytes / 1024)} KB), `
-    + `the full list at samples/all/, llms.txt, sitemap.xml with ${urls.length} URLs`
+    + `the full list at samples/all/, llms.txt for the samples and for the playground, sitemap.xml with ${urls.length} URLs`
     + `${skipped > 0 ? ` - ${skipped} entries skipped, no usable class name or source URL` : ""}`,
   );
 }

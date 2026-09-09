@@ -449,6 +449,29 @@ test("the header keeps to a few rows on a phone", async ({ page }) => {
   await expect(page.locator("#theme")).toBeVisible();
 });
 
+/* And under a thumb the bar's marks are targets - the rule the catalogue's bar
+ * follows (tests/catalogue.spec.js), held here for this page's own copy of it
+ * (src/shell/shell.css). `hasTouch` is what makes `(pointer: coarse)` true in
+ * the browser under test. */
+test.describe("under a thumb", () => {
+  test.use({ hasTouch: true, viewport: { width: 390, height: 760 } });
+
+  test("the bar's marks are targets on a phone, and the header keeps its rows", async ({ page }) => {
+    await open(page);
+    for (const item of await page.locator(".bar-nav > *").all()) {
+      const box = await item.boundingBox();
+      expect(box.height, "a section's pill is the height of a target").toBeGreaterThanOrEqual(36);
+      expect(box.width, "and near enough the width of one").toBeGreaterThanOrEqual(34);
+    }
+    const more = await page.locator(".bar .extra summary").boundingBox();
+    expect(Math.min(more.width, more.height), "the menu's mark is a target").toBeGreaterThanOrEqual(36);
+    const bar = await page.locator(".bar").boundingBox();
+    const toolbar = await page.locator(".toolbar").boundingBox();
+    expect(bar.height, "in a bar that did not grow to hold them").toBeLessThanOrEqual(47);
+    expect(bar.height + toolbar.height, "the header is still not a fifth of the phone").toBeLessThan(152);
+  });
+});
+
 test("both panes stay visible when a wide window gets narrow and wide again", async ({ page }) => {
   await open(page);
   await page.setViewportSize({ width: 480, height: 800 });
