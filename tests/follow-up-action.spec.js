@@ -1,18 +1,23 @@
 import { test, expect } from "@playwright/test";
 import { control, MAIN_CLASS, open, setSource } from "./helpers.mjs";
 
-// The shim in tools/patch-transpiler-returning.mjs, proved where it matters:
-// through the transpiler this page runs in the reader's browser, against the
-// real framework, on the two shapes the shim has to tell apart.
+// `follow_up_action( )`, proved where it matters: through the transpiler this
+// page runs in the reader's browser, against the real framework, on the two
+// shapes the predicate behind it has to tell apart.
 //
 // abap2UI5's `follow_up_action( )` is two calls in one and decides between them
 // on `result IS SUPPLIED`: consumed in a view attribute it returns the
 // roundtrip-free handler, called as a statement it queues an action onto the
-// response. Unpatched, the transpiler answered that predicate false for both,
-// so every view-wired handler reached the browser as the empty string and fired
-// as a follow-up on the first response instead - which on the sample pages read
-// as a toast saying `${$source>/text} has been activated` before anything had
-// been clicked.
+// response. The transpiler answered that predicate false for both until
+// abaplint/transpiler#1819 (2.13.81), so every view-wired handler reached the
+// browser as the empty string and fired as a follow-up on the first response
+// instead - which on the sample pages read as a toast saying
+// `${$source>/text} has been activated` before anything had been clicked.
+//
+// This file was `transpiler-patch.spec.js` and covered the local shim that
+// stood in for that fix until the pin reached 2.13.83. The shim is gone; these
+// two assertions are about the framework's behaviour rather than about the
+// shim, so they stay as the guard that the upstream fix keeps doing its job.
 
 const wired = `CLASS ${MAIN_CLASS} DEFINITION PUBLIC CREATE PUBLIC.
   PUBLIC SECTION.
