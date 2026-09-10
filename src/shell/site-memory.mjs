@@ -31,7 +31,7 @@
 // an EMBEDDED playground, which is furniture in somebody else's page, and an
 // app-only view (?view=app, ?view=full), which is a running app rather than a
 // place to come back to.
-import { readStored, writeStored } from "./storage.mjs";
+import { readStored, removeStored, writeStored } from "./storage.mjs";
 
 /* The playground's namespace, for a key the documentation site writes too.
  * It is the wrong word for a value shared by three deployments and it is the
@@ -55,6 +55,12 @@ const written = new WeakMap();
  * section this page belongs to, not the one it links at.
  */
 export function rememberHere(site) {
+  /* A refresh puts the trail down first, and this page then writes itself
+   * down again at once - so a reader who refreshes the catalogue is still
+   * somewhere, and only the OTHER sections' positions are dropped. Here as
+   * well as in keepSiteLinksCurrent( ) because the three documents call the
+   * two in different orders; it happens once per document either way. */
+  forgetOnReload();
   if (KEY[site]) writeStored(KEY[site], here());
 }
 
@@ -128,6 +134,13 @@ export function upgradeSiteLinks(root = document) {
  * propagation is in front of it.
  */
 export function keepSiteLinksCurrent(root = document) {
+  /* ...but a REFRESH starts over, before the first lift reads any of it. This
+   * is where it goes because this is the bar: an embedded playground never
+   * calls this and must never have its host page's storage cleared out from
+   * under it. `also` is what the caller remembers under its own keys - nobody
+   * passes one yet; the search box forgets its own (search-box.mjs). Once per
+   * document, whichever of this and rememberHere( ) runs first. */
+  forgetOnReload();
   const lift = () => upgradeSiteLinks(root);
   lift();
   addEventListener("pageshow", (e) => {
@@ -455,4 +468,82 @@ function settle(y) {
     else stop();
   };
   requestAnimationFrame(put);
+}
+
+/* ── A REFRESH STARTS OVER ──────────────────────────────────────────────────
+ *
+ * Reported on the documentation, and true of all four bars: "it now remembers
+ * everywhere where I was - but when I refresh the page everything should be
+ * initial again, the menus folded, when I move between Documentation, Samples
+ * and Home."
+ *
+ * Which is what pressing reload has always meant, and every memory above is
+ * the other case. They exist because a click makes a NEW DOCUMENT: which page
+ * of the other section you left, how far down it you were - all of it is state
+ * one page hands the next so that a journey ACROSS pages reads as one. None of
+ * it is a preference; all of it is "where I am right now", written down
+ * because the browser drops it at the door.
+ *
+ * A refresh is the reader saying: not this, start again. It is the one press
+ * on the site that has never meant "go somewhere", and it is what everyone
+ * reaches for when a page looks wrong. Handing them back a bar still pointing
+ * at yesterday's sample is the one answer that cannot help.
+ *
+ * WHAT IS DROPPED IS THE TRAIL, AND ONLY THE TRAIL. Everything else this
+ * origin stores is either the reader's WORK - the files in the editor, their
+ * drafts, the sample they are on (main.mjs, drafts.mjs) - or a preference they
+ * set once: the theme, the split, the panel's height, the samples browser's
+ * filters, the checkers, Auto. A refresh that emptied the editor would be a
+ * catastrophe rather than a fresh start, and one that squared up the splitter
+ * would be a bug of exactly the kind this is fixing. So the list below is
+ * written out key by key, and nothing here clears by prefix.
+ *
+ * The playground's own key IS in it, and that costs nothing: this page writes
+ * itself down again at boot (main.mjs), so a refresh of the playground leaves
+ * the Playground item pointing at the playground the reader is looking at,
+ * code and all. What it drops is the OTHER sections' positions - which is what
+ * makes the four items open their front pages again.
+ *
+ * The counterpart is theme/site-memory.js in abap2UI5/docs, where the caller
+ * (scripts/site-js/site.js) passes two more keys of its own - the chapter menu
+ * and the search box. Change one, change the other.
+ */
+
+/** The places this file remembers a reader in, all five of them. */
+const REMEMBERED = [KEY.docs, KEY.samples, KEY.playground, SCROLL_KEY, HANDOFF_KEY];
+
+/* ONE DOCUMENT, ONE RESET. Two of the three entry points call both of the
+ * functions below and in opposite orders, and the reset has to be the first
+ * thing either of them does - but only the first time. Without this, a
+ * catalogue narrowed after a refresh (rememberHere( ) again, on the filter
+ * change) would empty the keys a second time, and what it would drop by then
+ * is what another tab had written since. */
+let forgotten = false;
+
+/** How this document was arrived at: "navigate", "reload", "back_forward",
+ *  "prerender" - or "" where the browser will not say. */
+export function arrivedBy() {
+  try {
+    const entry = performance.getEntriesByType("navigation")[0];
+    if (entry && typeof entry.type === "string") return entry.type;
+    /* What a browser too old for that entry still has. 1 is TYPE_RELOAD. */
+    return performance.navigation?.type === 1 ? "reload" : "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Forget the way back here - and only on a reload, which is the whole of it.
+ *
+ * `also` is for keys the caller remembers under its own name; `how` is there
+ * to be passed in by a test, which has no navigation entry to read. Answers
+ * whether this was the arrival it acts on - a refused storage has nothing to
+ * forget and is not a different answer (storage.mjs).
+ */
+export function forgetOnReload(also = [], how = arrivedBy()) {
+  if (how !== "reload" || forgotten) return false;
+  forgotten = true;
+  for (const key of [...REMEMBERED, ...also]) removeStored(key);
+  return true;
 }

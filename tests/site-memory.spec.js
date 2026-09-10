@@ -473,3 +473,119 @@ test("the key row names a shortcut that works on this keyboard", async ({ page }
   // and the two ways in read as two, not as one key nobody has
   expect(keys).toContain(" or ");
 });
+
+// ---------------------------------------------------------------------------
+// A REFRESH STARTS OVER.
+//
+// Everything above is a memory of a JOURNEY: state one page hands the next
+// because a click here makes a new document. Reload is the one press that has
+// never meant "go somewhere", and it is what a reader presses when a page
+// looks wrong — so it puts the trail down and the four items open their front
+// pages again (site-memory.mjs, forgetOnReload).
+//
+// The other half is what it must NOT touch, and it is the larger one: the
+// reader's work — the files in the editor, their drafts — and the preferences
+// they set once. A refresh that emptied the editor would be a catastrophe
+// rather than a fresh start. The list is written out key by key for that
+// reason, and both halves are held here.
+
+const THEME_KEY = "abap2ui5-playground:theme";
+const FILES_KEY = "abap2ui5-playground:files";
+const SPLIT_KEY = "abap2ui5-playground:split";
+const FILTERS_KEY = "abap2ui5-playground:samples-filters";
+
+/** Everything a reader can have on this origin, as it is before the refresh:
+ *  the trail on the left of the split below, their work and settings on the
+ *  right. */
+const TRAIL = {
+  [DOCS_KEY]: "/docs/cookbook/tables",
+  [PLAYGROUND_KEY]: "/#code",
+  [SCROLL_KEY]: '{"/samples/":2400,"/docs/cookbook/tables":900}',
+  [BACK_KEY]: '{"to":"/nowhere/","at":0}',
+  [QUERY_KEY]: '{"q":"table","at":0}',
+};
+const KEPT = {
+  [THEME_KEY]: "dark",
+  [FILES_KEY]: '[{"name":"zcl_x.clas.abap","code":"CLASS zcl_x DEFINITION."}]',
+  [SPLIT_KEY]: "62",
+  [FILTERS_KEY]: '{"learn":true,"controls":false}',
+};
+const fill = (page, values) => page.evaluate((v) => {
+  for (const [k, x] of Object.entries(v)) localStorage.setItem(k, x);
+}, values);
+
+test("a refresh puts the trail down, and the bar opens its front pages again", async ({ page }) => {
+  await page.goto("/samples/?q=table");
+  await expect(page.locator("#count")).toContainText("sample");
+  await fill(page, { ...TRAIL, ...KEPT });
+
+  await page.reload();
+  await expect(page.locator("#count")).toContainText("sample");
+
+  for (const key of Object.keys(TRAIL)) {
+    /* The handoff is the one that can read back as "" rather than gone: a page
+       spends any record it finds by writing an empty one (restoreScroll), and
+       that runs after this. Spent is spent. */
+    const left = await stored(page, key);
+    expect(key === BACK_KEY ? left || null : left, key).toBe(null);
+  }
+  // ...which is what the reader sees: the item that was pointing into the
+  // middle of the manual points at the manual again.
+  await expect(docsLink(page)).toHaveAttribute("href", DOCS_HREF);
+
+  // This page is written down again at once, by the page itself. A refresh
+  // drops the trail; it does not pretend the reader is nowhere.
+  expect(await stored(page, SAMPLES_KEY)).toBe("/samples/?q=table");
+});
+
+test("...and it keeps the reader's work and everything they chose once", async ({ page }) => {
+  await page.goto("/samples/");
+  await expect(page.locator("#count")).toContainText("sample");
+  await fill(page, { ...TRAIL, ...KEPT });
+
+  await page.reload();
+  await expect(page.locator("#count")).toContainText("sample");
+
+  for (const [key, value] of Object.entries(KEPT)) {
+    expect(await stored(page, key), key).toBe(value);
+  }
+});
+
+test("an ordinary arrival keeps the trail — that is the whole of the memory", async ({ page }) => {
+  await page.goto("/samples/");
+  await expect(page.locator("#count")).toContainText("sample");
+  await fill(page, TRAIL);
+
+  // A link followed, not a refresh: the same document again, arrived at the
+  // way every other test here arrives.
+  await page.goto("/samples/?q=table");
+  await expect(page.locator("#count")).toContainText("sample");
+
+  for (const key of [DOCS_KEY, PLAYGROUND_KEY, QUERY_KEY]) {
+    expect(await stored(page, key), key).toBe(TRAIL[key]);
+  }
+  /* The offsets are the exception, and not to this rule: the map is the one
+     thing the leaving page WRITES on its way out (rememberScroll on pagehide),
+     so what has to still be in it is the entry for the page nobody was on. */
+  expect(JSON.parse(await stored(page, SCROLL_KEY))["/docs/cookbook/tables"]).toBe(900);
+  /* The handoff is consumed by every arrival, whether or not it names the
+     page - that is the mechanism above, not this one. */
+});
+
+test("the playground refreshed is still the playground the reader is looking at", async ({ page }) => {
+  await openPlayground(page);
+  /* The trail only: the editor's own key is the playground's to write, and a
+     file set put there by hand is a boot this test is not about. */
+  await fill(page, TRAIL);
+
+  await page.reload();
+  await expect(page.locator(".bar-nav")).toBeVisible();
+
+  expect(await stored(page, DOCS_KEY)).toBe(null);
+  expect(await stored(page, SAMPLES_KEY)).toBe(null);
+  // The page writes itself down at boot (main.mjs), so the item that opens
+  // this workbench still opens THIS workbench - the code in the editor is in
+  // the URL, and dropping it would be the loss this whole memory exists to
+  // stop.
+  expect(await stored(page, PLAYGROUND_KEY)).toBe("/");
+});

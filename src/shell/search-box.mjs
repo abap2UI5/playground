@@ -25,7 +25,8 @@
  * it is fetched at once rather than on the first keystroke, so the first
  * character typed already has something to match against.
  */
-import { search, grouped, highlight, loadIndex, rememberQuery, recallQuery } from "./search-engine.mjs";
+import { search, grouped, highlight, loadIndex, rememberQuery, recallQuery, forgetQuery } from "./search-engine.mjs";
+import { arrivedBy } from "./site-memory.mjs";
 
 /* The index is published by the documentation, on the origin all four
  * documents share. Absolute, because these pages are served from three
@@ -337,5 +338,10 @@ export function mountSearch(host) {
 /** The three documents here all mount it the same way: into whatever carries
  *  `data-search`, if the page has one. */
 export function setUpSearch(root = document) {
+  /* A REFRESH STARTS THE SITE OVER, and the last thing you searched for is a
+   * memory of the visit before it like every other (site-memory.mjs, which
+   * drops the rest of them). Here rather than there because the key is this
+   * box's: the module that owns a memory is the one that forgets it. */
+  if (arrivedBy() === "reload") forgetQuery();
   mountSearch(root.querySelector("[data-search]"));
 }

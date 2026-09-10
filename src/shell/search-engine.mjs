@@ -212,6 +212,17 @@ export function rememberQuery(query) {
   }
 }
 
+/** Forget it. A refresh starts the site over (site-memory.mjs), and a
+ *  prefilled field is a memory of the visit before it like any other; the box
+ *  is what calls this, because the key is this file's (search-box.mjs). */
+export function forgetQuery() {
+  try {
+    globalThis.localStorage?.removeItem(QUERY_KEY);
+  } catch {
+    /* A refused storage has nothing to forget. */
+  }
+}
+
 /** What to open the box with, or `""` — which is every case that is not a
  *  recent query written by this box. */
 export function recallQuery() {
