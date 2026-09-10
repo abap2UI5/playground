@@ -1311,6 +1311,35 @@ four bars, and leaves the page to answer it.
 | where **on** the page you were | The same file, keys `:scroll` (a small map of path → offset, the twelve most recent) and `:returning`. The item above came back to the page and to the TOP of it, which on a list of 770 rows is most of the way to not having remembered anything. Restored **on arrival by the bar and nowhere else**: a `data-back` link writes down how far down this page the reader is and one record saying where they are being sent, and the page that *is* that, arriving within half a minute and with no hash of its own, honours it. Restoring on every load would fight the browser's own back-and-forward restoration and would drop a reader who followed an ordinary link into the middle of a page. Checked the same way a stored path is — `scrollTo` takes whatever it is given |
 | the last thing you searched for | `src/shell/search-engine.mjs`, key `:search`, described above. Checked: a string, short, and less than half an hour old |
 
+**A refresh starts over.** All four of those, bar the theme, are memories of a
+JOURNEY — state one page hands the next because a click here makes a new
+document, which is why they survive a navigation at all. Reload is the one
+press that has never meant *go somewhere*, and it is what a reader presses when
+a page looks wrong: handing them back a bar still pointing at yesterday's
+sample is the site remembering its way back into whatever they were leaving. So
+`forgetOnReload( )` empties the five position keys on a `reload` navigation and
+on no other, at the top of `keepSiteLinksCurrent( )` — before the first lift
+reads any of them, and never in an embedded playground, which does not call it
+and whose host page's storage is not ours to clear. The search box forgets its
+own key the same way, in `setUpSearch( )`, because the key is
+`search-engine.mjs`'s: the module that owns a memory is the one that forgets
+it.
+
+**What a refresh must NOT drop is everything else this origin stores**, and it
+is the larger half: the reader's WORK — the files in the editor (`:files`),
+their drafts, the sample they are on — and the preferences they set once — the
+theme, the split, the panel height, the samples browser's filters, the
+checkers, Auto. A refresh that emptied the editor would be a catastrophe rather
+than a fresh start, and one that squared up the splitter would be a bug of the
+kind this fixes. The list is written out key by key and nothing clears by
+prefix. The playground's own `:last-playground` is in it and costs nothing:
+`main.mjs` writes this page down again at boot, so the Playground item still
+opens the playground the reader is looking at, code and all. `tests/site-memory.spec.js`
+holds both halves; the documentation's half of the same change is
+`theme/site-memory.js` and `scripts/site-js/site.js` in **abap2UI5/docs**,
+where the caller passes two more keys of its own (the chapter menu, the search
+box).
+
 **The playground is remembered too**, under `:last-playground`, and it did not
 use to be. The argument against was that its URL carries the code in the editor
 rather than a place — samples and docs are places, the playground is a
