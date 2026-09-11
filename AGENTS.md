@@ -1283,7 +1283,13 @@ per-sample page load it as `dist/samples/search.mjs`, one module for all 773
 documents, bundled from `src/catalogue/search-entry.mjs` and budgeted in
 `tools/check-size.mjs`. `src/shell/search-engine.mjs` (the matching) IS a copy
 — of `docs/.vitepress/theme/search-engine.js` over there, kept in step by hand
-like the palette. It also carries the memory of the **last query**: a hit opens
+like the palette: the ranking rules (stop words, the phrase bonus, the field
+matched with its spaces taken out, the plural, what happens when nothing
+matches) are documented and tested THERE, in `test/search.test.mjs`, and a
+change to the matching starts there and is copied here. What this box adds
+of its own is the line above the rows when the answer is not to the query
+as typed — a typo corrected, a word set aside — read off `hits.relaxedTo`.
+It also carries the memory of the **last query**: a hit opens
 another page, often another deployment, and the box that opened there was
 empty, so a reader comparing three samples of one control typed the same word
 three times. The query is written down as a hit is opened and the next box on

@@ -206,10 +206,24 @@ export function mountSearch(host) {
        thirty by default, and a group would then say "eight of twenty-nine" for
        a word with two hundred and thirty-one answers - a number worse than no
        number. Scoring is over ~940 short entries and costs nothing. */
-    const groups = grouped(search(entries, query, { limit: 500 }));
+    const hits = search(entries, query, { limit: 500 });
+    const groups = grouped(hits);
     if (!groups.length) return note(`Nothing matches ${query}.`);
 
     const frag = document.createDocumentFragment();
+    /* What answered, when it was not what was typed: a typo corrected or a
+       word set aside (search-engine.mjs). Said above the results, and the
+       marks in the rows are of the query that answered. */
+    const shown = hits.relaxedTo || query;
+    if (hits.relaxedTo) {
+      const line = el("p", "search-note");
+      line.append(
+        document.createTextNode("Nothing matches "), el("strong", null, query),
+        document.createTextNode(" \u2014 showing "), el("strong", null, hits.relaxedTo),
+        document.createTextNode("."),
+      );
+      frag.append(line);
+    }
     for (const group of groups) {
       const box = el("div", "search-group");
       const head = el("div", "search-group-head", group.label);
@@ -225,10 +239,10 @@ export function mountSearch(host) {
          * deployment from here, a sample is another page - and all of them
          * open in the same tab, which is what the bar's own items promise. */
         row.target = "_self";
-        row.append(marked(hit.entry.title, query, "search-hit-title"));
+        row.append(marked(hit.entry.title, shown, "search-hit-title"));
         if (hit.heading) row.append(el("span", "search-hit-where", `› ${hit.heading.text}`));
-        if (hit.entry.code) row.append(marked(hit.entry.code, query, "search-hit-code"));
-        if (hit.entry.text) row.append(marked(hit.entry.text, query, "search-hit-text"));
+        if (hit.entry.code) row.append(marked(hit.entry.code, shown, "search-hit-code"));
+        if (hit.entry.text) row.append(marked(hit.entry.text, shown, "search-hit-text"));
         const at = rows.length;
         row.addEventListener("mouseenter", () => { active = at; mark(); });
         rows.push(row);
