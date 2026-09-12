@@ -470,7 +470,28 @@ select:disabled { opacity: .5; }
 .editor.is-readonly .monaco-editor textarea { cursor: default; }
 /* Matches the UI5 theme the frame is started with, so the moment before it
    paints is not a flash of the opposite colour. */
-.app-frame { flex: 1; min-height: 0; background: var(--bg); }
+.app-frame { flex: 1; min-height: 0; background: var(--bg); position: relative; }
+
+/* The placeholder lies OVER the frame while the runtime boots: the frame
+   keeps its full size underneath - UI5 measures the frame it starts in, and
+   a frame that was display:none a moment ago measures as nothing - and the
+   placeholder is simply taken away once the first run has rendered. */
+.app-placeholder {
+  position: absolute; inset: 0; z-index: 1;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  gap: .6rem; padding: 1.5rem; text-align: center;
+  background: var(--bg); color: var(--fg-dim);
+}
+.app-placeholder[hidden] { display: none; }
+.app-placeholder p { margin: 0; max-width: 34rem; }
+.app-placeholder-what { color: var(--fg); font-size: 1rem; }
+.app-placeholder-status { font-variant-numeric: tabular-nums; }
+.app-placeholder-help { font-size: .875rem; }
+.app-placeholder kbd { font: inherit; padding: 0 .3em; border: 1px solid var(--line); border-radius: 4px; }
+.link-button {
+  background: none; border: 0; padding: 0; margin: 0;
+  color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline;
+}
 
 iframe {
   width: 100%;

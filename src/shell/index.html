@@ -320,7 +320,7 @@
 
   <span id="versions" class="versions"></span>
   <button id="about" class="ghost about-button" type="button"
-          title="What this is built from" aria-label="About this playground">i</button>
+          title="What this is, how it works and where it stops (?)" aria-label="About this playground: what it is, how it works and where it stops">i</button>
 </div>
 
 <dialog id="about-dialog" class="about">
@@ -418,6 +418,7 @@
       <dt><kbd>F1</kbd></dt><dd>Everything else the editor can do, by name</dd>
       <dt><kbd>F12</kbd> / <kbd>F2</kbd></dt><dd>Go to the definition under the cursor / rename it</dd>
       <dt><kbd>Esc</kbd></dt><dd>Close a dialog, or the name being typed for a new file</dd>
+      <dt><kbd>?</kbd></dt><dd>This dialog - outside the editor and the fields, where a question mark is a character</dd>
     </dl>
 
     <h3>Where it stops</h3>
@@ -581,6 +582,21 @@
 
   <section class="pane pane-right" id="pane-right">
     <div class="app-frame">
+      <!-- What the right half says while the runtime boots. It used to say
+           nothing: for the 3.4 seconds a desk waits and the 14 a throttled
+           phone waits, the half of the screen the visitor came to see was a
+           blank frame, with the only sign of life a 12px status line in the
+           toolbar. The same progress stands here now, in the frame it is
+           about, with one line of what the playground is - and, for a first
+           visit, the way to the dialog that says the rest. Laid OVER the
+           frame (shell.css) rather than in place of it, so the frame keeps
+           its size for the UI5 that is about to lay itself out in it; taken
+           away once the first run has something to show (main.mjs). -->
+      <div class="app-placeholder" id="app-placeholder">
+        <p class="app-placeholder-what">Your app renders here. The ABAP on the left is compiled in this browser — no server, no SAP system.</p>
+        <p class="app-placeholder-status" id="app-placeholder-status">starting…</p>
+        <p class="app-placeholder-help">New here? <button type="button" class="link-button" id="about-from-placeholder">What this is, how it works and where it stops</button> — or press <kbd>?</kbd> any time.</p>
+      </div>
       <iframe id="app" title="the running app" src="about:blank"></iframe>
     </div>
   </section>

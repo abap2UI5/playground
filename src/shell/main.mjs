@@ -457,6 +457,10 @@ async function boot() {
   });
 
   await run();
+  // The frame has something to show, so the placeholder that stood over it
+  // during the boot goes - for good: a later run replaces the app in place,
+  // and a run that fails is said in the status line and the panel.
+  document.getElementById("app-placeholder")?.setAttribute("hidden", "");
   // Said once the playground has something to show, not once it has loaded -
   // an embedding page revealing the frame any earlier would reveal a blank one.
   announceReady();
@@ -518,6 +522,17 @@ async function discardCachedSite() {
 function setUpAbout() {
   const dialog = document.getElementById("about-dialog");
   document.getElementById("about").addEventListener("click", () => dialog.showModal());
+  document.getElementById("about-from-placeholder")?.addEventListener("click", () => dialog.showModal());
+  // `?` opens it too - the key a stranger presses on a page with a keyboard
+  // list. Only where a question mark is not a character: not in the editor,
+  // not in a field, not while a dialog already has the screen.
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "?" || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.target instanceof Element
+        && e.target.closest(".monaco-editor, input, textarea, select, [contenteditable=\"true\"], dialog")) return;
+    e.preventDefault();
+    if (!dialog.open) dialog.showModal();
+  });
   // A click on the backdrop closes it, the way a modal is expected to.
   dialog.addEventListener("click", (e) => {
     if (e.target === dialog) dialog.close();

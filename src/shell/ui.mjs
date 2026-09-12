@@ -8,6 +8,14 @@ export function setStatus(text, isError = false) {
   const el = statusEl();
   el.textContent = text;
   el.classList.toggle("error", isError);
+  // The same line in the app frame's placeholder while that is still on
+  // screen (src/shell/index.html): the toolbar's status is 12px in a corner,
+  // and during the boot the frame is where the visitor is looking.
+  const mirror = document.getElementById("app-placeholder-status");
+  if (mirror) {
+    mirror.textContent = text;
+    mirror.classList.toggle("error", isError);
+  }
   // Under ?view=full there is no bar at all, and the status line is the only
   // channel that mode has left - the panel the log lands in lives in the pane
   // it hides. So trouble brings the bar back rather than being written into
