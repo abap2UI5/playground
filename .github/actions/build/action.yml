@@ -64,5 +64,16 @@ runs:
     # binary is already there, and it is what notices a cache that restored
     # something incomplete.
     - name: Install the browser the tests run in
-      run: npx playwright install chromium
+      # And WebKit beside it when the caller asks for the opt-in project
+      # (PW_WEBKIT=1, playwright.config.js): a browser this repository's two
+      # costliest incidents were specific to, over the few specs that cover
+      # them. --with-deps only there - WebKit needs system libraries Chromium
+      # does not, and installing them for a run that never launches it is a
+      # minute nobody gets back.
+      run: |
+        if [ "${PW_WEBKIT:-}" = "1" ]; then
+          npx playwright install --with-deps chromium webkit
+        else
+          npx playwright install chromium
+        fi
       shell: bash

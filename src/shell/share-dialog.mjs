@@ -99,6 +99,11 @@ function section({ title, blurb, text, rows = 4, copy = "Copy" }) {
 // Opens the dialog over the files given and the link already built for them;
 // `copied` says whether the click before this got the link into the
 // clipboard, which the first section then need not offer again.
+// Where a link stops being pasteable: most chat clients and mail programs keep
+// a URL whole to about 2,000 characters and cut it beyond that, and a cut
+// fragment decodes to nothing (the page then opens on the sample and says so).
+const LONG_LINK = 2000;
+
 export function openShare(files, url, copied = false) {
   if (!dialog) return;
   const frag = document.createDocumentFragment();
@@ -108,7 +113,13 @@ export function openShare(files, url, copied = false) {
       title: "Link",
       blurb:
         "Everything open, in the address - it never leaves the browser." +
-        (copied ? " Already in your clipboard." : ""),
+        (copied ? " Already in your clipboard." : "") +
+        // Six files deflate to more than a chat client keeps in one line:
+        // some cut a URL past ~2,000 characters and the fragment arrives
+        // torn. The zip below is the hand-over that survives that.
+        (url.length > LONG_LINK
+          ? ` This link is ${url.length.toLocaleString()} characters, and some chat clients truncate a URL past 2,000 - for a set this size, Download for abapGit below is the safer hand-over.`
+          : ""),
       text: url,
       rows: 2,
     }),

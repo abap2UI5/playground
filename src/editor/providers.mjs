@@ -41,13 +41,23 @@ export function registerProviders(host) {
   // Two ways in with two ideas of what formatting means is a bug somebody
   // finds by pressing the other one.
   //
-  // What comes back is the whole file set, formatted; Monaco can be handed an
-  // edit for the model it asked about and no other, so the rest is dropped
-  // here and the button is the way to format them all.
+  // What comes back is the whole file set, formatted. Monaco can be handed an
+  // edit for the model it asked about and no other, so that one goes back as
+  // the edit - and the OTHER files are written through the host, the same
+  // door the button's format( ) uses, so the key and the button leave the
+  // same files behind. They used to differ: the key formatted the open file
+  // and dropped the rest, while README, AGENTS.md and the About dialog each
+  // described a different one of the two.
   monaco.languages.registerDocumentFormattingEditProvider("abap", {
     async provideDocumentFormattingEdits(model) {
       const name = model.uri.path.replace(/^\//, "");
       const result = await formatFiles(host?.files?.() ?? []);
+      for (const file of result.files) {
+        if (file.name !== name) host?.write?.(file.name, file.source);
+      }
+      // The status line is the bar's to write (src/shell/main.mjs listens),
+      // and it says the same thing for both ways in.
+      document.dispatchEvent(new CustomEvent("abap2ui5-formatted", { detail: { formatted: result.formatted } }));
       const formatted = result.files.find((f) => f.name === name);
       if (!formatted) return undefined;
       return [{ range: model.getFullModelRange(), text: formatted.source }];

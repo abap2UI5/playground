@@ -21,10 +21,11 @@ import "monaco-editor/editor/contrib/wordHighlighter/browser/wordHighlighter.js"
 import "monaco-editor/editor/contrib/comment/browser/comment.js";
 import "monaco-editor/editor/contrib/contextmenu/browser/contextmenu.js";
 import "monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching.js";
-import { applyLinterFixes, fixableAmong, findingsFor, ruleUrl } from "./abap2ui5-lint.mjs";
+import { applyLinterFixes, fixableAmong, checkFor, ruleUrl } from "./abap2ui5-lint.mjs";
 
 import { uriFor } from "./files.mjs";
 import { registerProviders } from "./providers.mjs";
+import { libraryOf, isCarried } from "../shell/ui5-libs.mjs";
 import { analyse as analyseInWorker, applyAbaplintFixes, formatFiles, knownObjectNames } from "./registry.mjs";
 
 // @abaplint/monaco's snippet provider reaches for a global `monaco`, the way a
@@ -145,7 +146,7 @@ export function connectRegistry() {
   // The formatting provider - Shift+Alt+F, which is Monaco's own binding -
   // formats through the same worker call the bar's button does, and needs the
   // whole file set to do it: an include is not an object on its own.
-  registerProviders({ files: () => getFiles() });
+  registerProviders({ files: () => getFiles(), write: writeSource });
   monaco.languages.registerCompletionItemProvider("abap", abapNameCompletion());
   connected = true;
   refresh();
@@ -381,8 +382,10 @@ async function analyseKey(key) {
     }
 
     // The linter's findings, asked for once and then used three times over:
-    // the underlines, the Problems rows, and how many of them carry a fix.
-    const findings = findingsFor(file.source);
+    // the underlines, the Problems rows, and how many of them carry a fix -
+    // and the views they came from, for the one check the linter cannot make
+    // (below).
+    const { findings, docs } = checkFor(file.source);
     fixable += fixableAmong(findings).length;
     monaco.editor.setModelMarkers(
       model,
@@ -414,11 +417,59 @@ async function analyseKey(key) {
         range: { start: { line: f.line - 1, character: f.column - 1 } },
       });
     }
+    problems.push(...librariesNotCarried(file, docs));
   }
 
   analysis = { key, problems, fixable };
   onAnalysed?.(currentProblems());
   return analysis;
+}
+
+/* The one thing the abap2UI5 linter cannot know: which UI5 libraries THIS
+ * site ships. It checks a view against a UI5 release and a distribution, and
+ * a control from a library that exists on that release passes - sap.ui.mdc,
+ * sap.ui.webc.main, sap.ui.commons are all real OpenUI5 - while
+ * tools/build-ui5.mjs builds ten libraries into dist/app and no other. Such a
+ * control compiles, lints, runs, and renders a gap with nothing in the
+ * console: exactly the silent failure the linter was added to end, left open
+ * on the one axis the playground itself introduces. The samples browser and
+ * the catalogue already judge a SAMPLE's libraries this way (UI5_LIBRARIES,
+ * isCarried); this judges the code in the editor the same way.
+ *
+ * Read off the views the linter reconstructed: every xmlns the view declares
+ * that an element actually uses, mapped to its library. A row per library,
+ * a warning, never an error - the class is correct ABAP and correct UI5, it
+ * is this site that cannot show it. Pointed at the line that names the
+ * library, which is the line to change. */
+function librariesNotCarried(file, docs) {
+  const used = new Set();
+  for (const doc of docs) {
+    const xml = typeof doc === "string" ? doc : String(doc?.xml ?? doc?.text ?? "");
+    const declared = new Map();
+    for (const m of xml.matchAll(/xmlns(?::([\w.-]+))?\s*=\s*"([^"]+)"/g)) declared.set(m[1] ?? "", m[2]);
+    const prefixes = new Set();
+    for (const m of xml.matchAll(/<([\w.-]+):[A-Za-z]/g)) prefixes.add(m[1]);
+    if (/<[A-Z][\w.]*[\s/>]/.test(xml)) prefixes.add("");
+    for (const prefix of prefixes) {
+      const uri = declared.get(prefix);
+      if (uri && uri.startsWith("sap.")) used.add(libraryOf(uri));
+    }
+  }
+  const lines = file.source.split(/\r?\n/);
+  return [...used]
+    .filter((library) => !isCarried(library))
+    .sort()
+    .map((library) => {
+      const at = lines.findIndex((line) => line.includes(library));
+      return {
+        file: file.name,
+        source: "playground",
+        severity: 2,
+        message: `${library} is not one of the UI5 libraries this playground carries - a control from it will not render here (Where it stops, in the About dialog)`,
+        rule: "library",
+        range: { start: { line: at < 0 ? 0 : at, character: 0 } },
+      };
+    });
 }
 
 const currentProblems = () =>

@@ -23,6 +23,7 @@
 // The round trip is still the point: find it here, read it there, run it, come
 // back and keep looking.
 import { cmpVersion } from "../shell/ui5-libs.mjs";
+import { termsOf, matchesTerms } from "../shell/search-terms.mjs";
 import { rememberHere, keepSiteLinksCurrent } from "../shell/site-memory.mjs";
 
 const $ = (id) => document.getElementById(id);
@@ -171,7 +172,10 @@ function matches(row) {
   /* "Runs on 1.84" means "needs 1.84 or less" - the question is what a system
    * can render, not what a sample was filed under. */
   if (state.release && cmpVersion(row.minUi5, state.release) > 0) return false;
-  if (state.q && !row.haystack.includes(state.q.toLowerCase())) return false;
+  /* Every word, in any order - the same matcher the playground's samples
+   * browser uses (src/shell/search-terms.mjs), so "table edit" answers the
+   * same on the page a search is linked from as in the dialog. */
+  if (state.q && !matchesTerms(row.haystack, termsOf(state.q))) return false;
   return true;
 }
 

@@ -149,6 +149,26 @@ test("a search runs over what a sample BUILDS, not only what it is called", asyn
   await expect(page.locator(".empty")).toBeVisible();
 });
 
+test("two words find the row that has both, in any order - the same answer the playground's browser gives", async ({ page }) => {
+  await openCatalogue(page);
+  // "internal" is in one note, "table" in that note, two titles and a
+  // control list. Matched as one substring, "table internal" found nothing
+  // on this page while the samples browser in the playground found the row.
+  await page.fill("#q", "table internal");
+  await expect(page.locator(".card h3")).toHaveText(["Responsive Table I"]);
+  await page.fill("#q", "internal table");
+  await expect(page.locator(".card h3")).toHaveText(["Responsive Table I"]);
+});
+
+test("the reader without JavaScript is told the real count, written at build time", async ({ page }) => {
+  // The one sentence a crawler and a scriptless reader get. It said
+  // "700-odd" while the index held 772; the build writes the number now.
+  const res = await page.request.get("/samples/");
+  const html = await res.text();
+  expect(html).not.toContain("700-odd");
+  expect(html).toMatch(/The catalog is a list of \d{2,} samples/);
+});
+
 test("the filters live in the URL, so a search is a link", async ({ page }) => {
   await openCatalogue(page);
 
@@ -240,6 +260,27 @@ test("a link that did not come from the catalogue still points at GitHub", async
   await expect(link).toHaveAttribute(
     "href", blob("abap2UI5/samples", "src/01/z2ui5_cl_smp_app_493.clas.abap"),
   );
+});
+
+test("a link that came from the catalogue keeps the way back AND the way to the source", async ({ page }) => {
+  await page.route("**/src/01/z2ui5_cl_smp_app_493.clas.abap", (route) =>
+    route.fulfill({
+      status: 200, contentType: "text/plain", headers: CORS,
+      body: "CLASS z2ui5_cl_smp_app_493 DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    INTERFACES z2ui5_if_app.\nENDCLASS.\n"
+        + "CLASS z2ui5_cl_smp_app_493 IMPLEMENTATION.\n  METHOD z2ui5_if_app~main.\n  ENDMETHOD.\nENDCLASS.\n",
+    }),
+  );
+  // The way back used to take the Source link's place, which left this
+  // reader with no route to the class on GitHub.
+  await page.goto(
+    `/?src=${encodeURIComponent(raw("abap2UI5/samples", "src/01/z2ui5_cl_smp_app_493.clas.abap"))}&from=catalogue&back=${encodeURIComponent("q=hello")}`,
+  );
+  const back = page.locator("#back-link");
+  await expect(back).toBeVisible({ timeout: 120000 });
+  await expect(back).toHaveAttribute("href", "samples/?q=hello");
+  const link = page.locator("#source-link");
+  await expect(link).toHaveText("Source");
+  await expect(link).toHaveAttribute("href", blob("abap2UI5/samples", "src/01/z2ui5_cl_smp_app_493.clas.abap"));
 });
 
 test("the bar ends where the playground's own bar ends", async ({ page }) => {

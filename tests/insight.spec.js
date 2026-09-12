@@ -566,3 +566,50 @@ test("the panel colours the XML and the JSON it shows", async ({ page }) => {
   expect(await detail.locator("span.code-key").count()).toBeGreaterThan(0);
   expect(await detail.locator("span.code-string").count()).toBeGreaterThan(0);
 });
+
+const withLibrary = (library, prefix) => `CLASS ${MAIN_CLASS} DEFINITION PUBLIC CREATE PUBLIC.
+  PUBLIC SECTION.
+    INTERFACES z2ui5_if_app.
+ENDCLASS.
+CLASS ${MAIN_CLASS} IMPLEMENTATION.
+  METHOD z2ui5_if_app~main.
+    IF client->check_on_init( ).
+      DATA(view) = z2ui5_cl_ui5_view_builder=>factory(
+          )->ele( n = \`View\` ns = \`mvc\`
+              )->a( n = \`xmlns\`     v = \`sap.m\`
+              )->a( n = \`xmlns:mvc\` v = \`sap.ui.core.mvc\`
+              )->a( n = \`xmlns:${prefix}\` v = \`${library}\` ).
+      view->ele( \`Page\`
+          )->a( n = \`title\` v = \`Libraries\`
+          )->tag( n = \`Table\` ns = \`${prefix}\`
+              )->a( n = \`id\` v = \`tblOther\` ).
+      client->view_display( view->stringify( ) ).
+    ENDIF.
+  ENDMETHOD.
+ENDCLASS.
+`;
+
+test("a control from a library this site does not carry is reported, and the app still runs", async ({ page }) => {
+  await open(page);
+
+  // Real OpenUI5, real control, correct ABAP: abaplint is happy and so is
+  // the abap2UI5 linter, because sap.ui.mdc exists on the release it checks
+  // against. What neither can know is that tools/build-ui5.mjs builds ten
+  // libraries into this site and sap.ui.mdc is not one of them - so the
+  // control used to compile, run and render a gap with nothing in the
+  // console. The one silent failure the playground itself introduces.
+  await setSource(page, withLibrary("sap.ui.mdc", "mdc"));
+
+  const row = page.locator(".insight-row", { hasText: "sap.ui.mdc is not one of the UI5 libraries" }).first();
+  await expect(row).toBeVisible({ timeout: 20000 });
+  await expect(row).toContainText("playground");
+  // A warning, never an error: the class is right, this site is what cannot
+  // show it - so Run is not blocked.
+  await expect(row).toHaveClass(/is-warning/);
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+
+  // A library the site carries says nothing.
+  await setSource(page, withLibrary("sap.ui.layout", "l"));
+  await expect(page.locator(".insight-row", { hasText: "is not one of the UI5 libraries" })).toHaveCount(0, { timeout: 20000 });
+});

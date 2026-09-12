@@ -423,6 +423,17 @@ async function boot() {
   // Format says what it did, the way "Fix them" does: it rewrites somebody's
   // source, across every file that is open, and a button that silently
   // changes three files is a button people stop pressing.
+  const sayFormatted = (formatted) => setStatus(
+    formatted === 0
+      ? "already formatted"
+      : `formatted ${formatted} file${formatted === 1 ? "" : "s"} - Ctrl+Z takes it back`,
+  );
+  // Shift+Alt+F runs the same formatter through Monaco's provider
+  // (src/editor/providers.mjs) and reports through the same line.
+  document.addEventListener("abap2ui5-formatted", (e) => {
+    sayFormatted(e.detail?.formatted ?? 0);
+    reflectHistory();
+  });
   formatButton.addEventListener("click", async () => {
     const { formatted } = await format();
     reflectHistory();
@@ -457,6 +468,10 @@ async function boot() {
   });
 
   await run();
+  // The frame has something to show, so the placeholder that stood over it
+  // during the boot goes - for good: a later run replaces the app in place,
+  // and a run that fails is said in the status line and the panel.
+  document.getElementById("app-placeholder")?.setAttribute("hidden", "");
   // Said once the playground has something to show, not once it has loaded -
   // an embedding page revealing the frame any earlier would reveal a blank one.
   announceReady();
@@ -518,6 +533,17 @@ async function discardCachedSite() {
 function setUpAbout() {
   const dialog = document.getElementById("about-dialog");
   document.getElementById("about").addEventListener("click", () => dialog.showModal());
+  document.getElementById("about-from-placeholder")?.addEventListener("click", () => dialog.showModal());
+  // `?` opens it too - the key a stranger presses on a page with a keyboard
+  // list. Only where a question mark is not a character: not in the editor,
+  // not in a field, not while a dialog already has the screen.
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "?" || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.target instanceof Element
+        && e.target.closest(".monaco-editor, input, textarea, select, [contenteditable=\"true\"], dialog")) return;
+    e.preventDefault();
+    if (!dialog.open) dialog.showModal();
+  });
   // A click on the backdrop closes it, the way a modal is expected to.
   dialog.addEventListener("click", (e) => {
     if (e.target === dialog) dialog.close();
@@ -583,13 +609,13 @@ export function showSourceLink() {
   }
   link.removeAttribute("aria-disabled");
   if (cameFromCatalogue) {
-    /* Same origin and same tab: this is a way back, not a second window to
-     * end up with. */
-    link.href = `samples/${catalogueQuery}`;
-    link.removeAttribute("target");
-    link.textContent = "Back to the catalog";
-    link.title = "Back to the sample catalog, with the search you came from";
-    return;
+    /* The way back sits BESIDE the source link now, not in its place: a reader
+     * who came from the catalogue used to have no route to the class on
+     * GitHub from here. Same origin and same tab - a way back is not a second
+     * window to end up with. */
+    const back = document.getElementById("back-link");
+    back.href = `samples/${catalogueQuery}`;
+    back.hidden = false;
   }
   link.href = humanUrl(origin);
   link.target = "_blank";

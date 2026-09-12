@@ -63,6 +63,12 @@ export async function decodeFiles(fragment, mainFile) {
 // The shared link for what is open: this page, with the code behind #.
 export async function shareUrl(files) {
   const url = new URL(window.location.href);
+  // The query is dropped, like appUrl( ) below drops it: a link opened from
+  // the catalogue carries ?src=…&from=catalogue&back=…, and copying that on
+  // sent the recipient a "Back to the catalog" bar over code that may have
+  // been edited beyond recognition - and the raw URL of the class, in a link
+  // that already carries the class. The fragment is the whole message.
+  url.search = "";
   url.hash = await encodeFiles(files);
   return url.href;
 }

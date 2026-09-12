@@ -34,3 +34,49 @@ test("typing before the corpus has been parsed does not throw, and the page stil
     "typed while the page was still starting",
   );
 });
+
+test("the app frame says what is happening while the runtime boots, and gets out of the way once it runs", async ({ page }) => {
+  // The right half used to be a blank frame for the whole boot - seconds on a
+  // desk, fourteen throttled - with the only sign of life a small status line
+  // in the toolbar. Held back the same way the test above holds the corpus, so
+  // the placeholder is on screen long enough to be read.
+  await page.route("**/editor/corpus.json", async (route) => {
+    await new Promise((r) => setTimeout(r, 4000));
+    await route.continue();
+  });
+  await page.goto("/");
+
+  const placeholder = page.locator("#app-placeholder");
+  await expect(placeholder).toBeVisible();
+  await expect(placeholder).toContainText("Your app renders here");
+  // The same progress the toolbar's status line carries, in the frame the
+  // visitor is looking at.
+  await expect(page.locator("#app-placeholder-status")).not.toHaveText("running");
+  await expect(page.locator("#app-placeholder-status")).toContainText(/sources|runtime|starting/);
+  // And the way to the dialog that says what this is and where it stops.
+  await placeholder.getByRole("button", { name: /where it stops/ }).click();
+  await expect(page.locator("#about-dialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await expect(placeholder).toBeHidden();
+});
+
+test("? opens the About dialog - except where a question mark is a character", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+
+  const dialog = page.locator("#about-dialog");
+  // In the editor it is typed, not obeyed.
+  await page.locator(".monaco-editor").first().click();
+  await page.keyboard.press("Shift+?");
+  await expect(dialog).toBeHidden();
+
+  // On the page itself it opens the dialog.
+  await page.locator("#status").click();
+  await page.keyboard.press("Shift+?");
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("Where it stops");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+});
