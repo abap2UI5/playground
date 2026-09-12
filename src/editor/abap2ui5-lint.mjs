@@ -90,20 +90,31 @@ export function applyLinterSettings(next) {
 // changed what was checked.
 const settingsFor = (s) => ({ minUi5: s.ui5, distribution: s.distribution });
 
-// Everything the linter has to say about one source. Never throws: a rule that
-// falls over on unusual input must not take the editor's diagnostics with it,
-// and the file being typed into is unusual input by definition.
-export function findingsFor(source) {
-  if (lib === undefined) return [];
+// One pass of the linter over one source: its findings AND the views it
+// reconstructed them from. The editor's analysis wants both - the findings
+// for the Problems list, the views to check their libraries against what this
+// site carries - and asking twice was reconstructing the same builder chain
+// twice per keystroke. Never throws: a rule that falls over on unusual input
+// must not take the editor's diagnostics with it, and the file being typed
+// into is unusual input by definition. A class that builds no view has
+// nothing for this linter to say - reporting that as a finding would put a
+// message on every helper class - so it comes back as no findings and no
+// views, `usesBuilder` false.
+export function checkFor(source) {
+  if (lib === undefined) return { findings: [], docs: [], usesBuilder: false, loaded: false };
   try {
     const result = lib.checkAbapSource(source, settingsFor(settings));
-    // A class that builds no view has nothing for this linter to say. Reporting
-    // that as a finding would put a message on every helper class.
-    if (!result.usesBuilder) return [];
-    return result.findings ?? [];
+    if (!result.usesBuilder) return { findings: [], docs: [], usesBuilder: false, loaded: true };
+    return { findings: result.findings ?? [], docs: result.docs ?? [], usesBuilder: true, loaded: true };
   } catch {
-    return [];
+    return { findings: [], docs: [], usesBuilder: false, loaded: true };
   }
+}
+
+// Everything the linter has to say about one source - checkFor( ) without
+// the views, for a caller that only wants the findings.
+export function findingsFor(source) {
+  return checkFor(source).findings;
 }
 
 // The view itself, as the linter reconstructed it - what the View tab shows.
