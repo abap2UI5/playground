@@ -16,7 +16,23 @@ export default defineConfig({
     baseURL: "http://localhost:8080",
     trace: "retain-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    // WebKit over the specs that cover what has gone wrong in Safari before -
+    // the corpus parse blowing the stack on mobile Safari, localStorage
+    // throwing under blocked third-party storage in an embedded frame. The
+    // two costliest incidents in this repository's history were Safari-only,
+    // and every spec ran on Chromium alone. Opt-in (PW_WEBKIT=1), because
+    // WebKit is one more browser to install: CI sets it, `npm test` at a desk
+    // stays what it was.
+    ...(process.env.PW_WEBKIT === "1"
+      ? [{
+          name: "webkit",
+          use: { ...devices["Desktop Safari"] },
+          testMatch: /(boot|embed|shell)\.spec\.js$/,
+        }]
+      : []),
+  ],
   webServer: {
     command: "node tools/serve.mjs",
     url: "http://localhost:8080/index.html",

@@ -37,6 +37,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # The WebKit project of playwright.config.js: boot, embed and shell on
+      # Safari's engine, the browser the two costliest incidents here were
+      # specific to. Opt-in, so a desk's `npm test` stays Chromium-only.
+      PW_WEBKIT: "1"
     strategy:
       # Every shard reports, so one red shard does not hide what the other two
       # found.
