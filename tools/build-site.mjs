@@ -352,9 +352,19 @@ fs.copyFileSync(path.join(ROOT, "src", "catalogue", "catalogue.css"), path.join(
 /* The catalogue's document, without the comments its source is written with -
    four kilobytes of a twenty-kilobyte page - and with its policy in the head
    (tools/html.mjs, both). */
+/* The one figure the document carries as text - the count in the no-JS
+   fallback, the sentence a crawler and a reader without scripts get - is
+   written here from the index the catalogue step has just built, so it cannot
+   say "700-odd" while the index holds 772. A source with no marker, or an
+   index that is not there, fails the build rather than publishing a guess. */
+const catalogueSource = fs.readFileSync(path.join(ROOT, "src", "catalogue", "index.html"), "utf8");
+if (!catalogueSource.includes("__SAMPLE_COUNT__")) throw new Error("src/catalogue/index.html lost its __SAMPLE_COUNT__ marker");
+const catalogueIndex = JSON.parse(fs.readFileSync(path.join(DIST, "samples", "apps.json"), "utf8"));
+const sampleCount = (catalogueIndex.entries ?? catalogueIndex.samples ?? []).length;
+if (!sampleCount) throw new Error("dist/samples/apps.json holds no entries to count - build-catalogue did not run, or its shape changed");
 fs.writeFileSync(
   path.join(DIST, "samples", "index.html"),
-  withPolicy(stripHtmlComments(fs.readFileSync(path.join(ROOT, "src", "catalogue", "index.html"), "utf8"))),
+  withPolicy(stripHtmlComments(catalogueSource.replace("__SAMPLE_COUNT__", String(sampleCount)))),
 );
 
 /* THE HIGHLIGHTER, PUBLISHED - the file that decides which words in a class

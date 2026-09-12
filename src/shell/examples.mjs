@@ -42,6 +42,7 @@
 // what is always here: the samples the page carries and the reader's drafts.
 // No error, no console noise of this module's making.
 import { SAMPLES } from "../editor/samples.mjs";
+import { termsOf, matchesTerms } from "./search-terms.mjs";
 import { deleteDraft, draftNameProblem, listDrafts, saveDraft } from "./drafts.mjs";
 import { readStoredJson, writeStoredJson } from "./storage.mjs";
 
@@ -428,11 +429,11 @@ export function openExamples() {
 
 function render() {
   if (!body) return;
-  /* Every word has to be somewhere in the row, in any order: "table select"
-   * finds the selection-modes sample whichever way round it was typed, which
-   * one string compared whole would not. */
-  const terms = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const hit = (entry) => terms.every((t) => entry.haystack.includes(t));
+  /* Every word has to be somewhere in the row, in any order - the matcher
+   * the sample catalogue page shares (src/shell/search-terms.mjs), so a search
+   * that finds a sample here finds it there. */
+  const terms = termsOf(search.value);
+  const hit = (entry) => matchesTerms(entry.haystack, terms);
   const frag = document.createDocumentFragment();
   let shown = 0;
   let total = 0;
