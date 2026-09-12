@@ -145,7 +145,7 @@ export function connectRegistry() {
   // The formatting provider - Shift+Alt+F, which is Monaco's own binding -
   // formats through the same worker call the bar's button does, and needs the
   // whole file set to do it: an include is not an object on its own.
-  registerProviders({ files: () => getFiles() });
+  registerProviders({ files: () => getFiles(), write: writeSource });
   monaco.languages.registerCompletionItemProvider("abap", abapNameCompletion());
   connected = true;
   refresh();

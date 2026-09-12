@@ -101,12 +101,21 @@ test("Format formats every file that is open, not just the one on screen", async
   expect(other).toContain("    METHODS hello.");
 });
 
-test("Shift+Alt+F is the same formatter, on the file it is pressed in", async ({ page }) => {
+test("Shift+Alt+F is the same formatter, over every open file, and says so", async ({ page }) => {
   // Monaco's own binding, through the document formatting provider - which
-  // used to run the pretty printer alone and now runs what the button runs.
+  // used to run the pretty printer alone, then ran what the button runs but
+  // kept only the edit for the file on screen: the key formatted one file,
+  // the button all of them, and three documents described three behaviours.
   // Two ways in with two ideas of what formatting means is a bug somebody
   // finds by pressing the other one.
   await open(page);
+  await addNamedFile(page, "zcl_other.clas.abap");
+  await setSource(
+    page,
+    "class zcl_other definition public create public.\npublic section.\nmethods hello.\nendclass.\n\n"
+      + "class zcl_other implementation.\nmethod hello.\nendmethod.\nendclass.\n",
+    "zcl_other.clas.abap",
+  );
   await setSource(page, MESSY);
   // Clicked into, not focused: Monaco listens on a hidden textarea, and a
   // key pressed at a document that has not given the editor the caret goes
@@ -120,4 +129,12 @@ test("Shift+Alt+F is the same formatter, on the file it is pressed in", async ({
   const out = await getSource(page);
   expect(out).not.toContain("\t");
   expect(out).toContain("count = count + 1.");
+
+  // The other file too, and the same line the button writes. Polled like the
+  // first: whichever file the key was pressed in gets its edit from Monaco a
+  // moment after the provider has written the rest.
+  await expect(page.locator("#status")).toHaveText(/formatted 2 files/);
+  await expect
+    .poll(async () => await getSource(page, "zcl_other.clas.abap"), { timeout: 30000 })
+    .toContain("CLASS zcl_other DEFINITION PUBLIC CREATE PUBLIC.");
 });

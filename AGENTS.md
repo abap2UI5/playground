@@ -408,7 +408,14 @@ The `{ }` in the bar and Shift+Alt+F are **one** implementation —
 from the button through `format( )` in `src/editor/editor.mjs` and from the key
 through the document-formatting provider in `src/editor/providers.mjs`. Two
 ways in with two ideas of what formatting means is a bug somebody finds by
-pressing the other one.
+pressing the other one - and for a while that bug was here: the worker
+formatted every open file for both, but Monaco takes an edit for the model it
+asked about and no other, so the key dropped the rest and formatted one file
+while the button formatted all, and README, this file and the About dialog
+described three different things. The provider now writes the other files
+through the same `writeSource( )` the button uses (`host.write`) and reports
+through the same status line (an `abap2ui5-formatted` event the bar listens
+to), so the key and the button leave the same files behind.
 
 It is abaplint's pretty printer with abaplint's **layout fixes in front of
 it**. The printer is two things and only two — keyword case and indentation —

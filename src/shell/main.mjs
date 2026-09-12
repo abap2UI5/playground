@@ -423,6 +423,17 @@ async function boot() {
   // Format says what it did, the way "Fix them" does: it rewrites somebody's
   // source, across every file that is open, and a button that silently
   // changes three files is a button people stop pressing.
+  const sayFormatted = (formatted) => setStatus(
+    formatted === 0
+      ? "already formatted"
+      : `formatted ${formatted} file${formatted === 1 ? "" : "s"} - Ctrl+Z takes it back`,
+  );
+  // Shift+Alt+F runs the same formatter through Monaco's provider
+  // (src/editor/providers.mjs) and reports through the same line.
+  document.addEventListener("abap2ui5-formatted", (e) => {
+    sayFormatted(e.detail?.formatted ?? 0);
+    reflectHistory();
+  });
   formatButton.addEventListener("click", async () => {
     const { formatted } = await format();
     reflectHistory();

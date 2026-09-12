@@ -41,7 +41,7 @@ pipeline and moves the last step into the browser.
   the editor can check your classes against them.
 - **Editing.** Monaco — the editor from VS Code — with abaplint behind it:
   diagnostics against the actual framework, hover, go to definition, rename,
-  references and quick fixes. **Format** ({ } in the bar, Shift+Alt+F) is
+  references and quick fixes. **Format** ({ } in the bar, and Shift+Alt+F, which does the same) is
   abaplint's pretty printer with its layout fixes in front of it — indentation
   and keyword case, and also the tab, the trailing space, the double space, the
   space before the full stop and the two statements sharing a line — over every
