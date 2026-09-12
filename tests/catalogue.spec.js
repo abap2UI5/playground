@@ -262,6 +262,27 @@ test("a link that did not come from the catalogue still points at GitHub", async
   );
 });
 
+test("a link that came from the catalogue keeps the way back AND the way to the source", async ({ page }) => {
+  await page.route("**/src/01/z2ui5_cl_smp_app_493.clas.abap", (route) =>
+    route.fulfill({
+      status: 200, contentType: "text/plain", headers: CORS,
+      body: "CLASS z2ui5_cl_smp_app_493 DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    INTERFACES z2ui5_if_app.\nENDCLASS.\n"
+        + "CLASS z2ui5_cl_smp_app_493 IMPLEMENTATION.\n  METHOD z2ui5_if_app~main.\n  ENDMETHOD.\nENDCLASS.\n",
+    }),
+  );
+  // The way back used to take the Source link's place, which left this
+  // reader with no route to the class on GitHub.
+  await page.goto(
+    `/?src=${encodeURIComponent(raw("abap2UI5/samples", "src/01/z2ui5_cl_smp_app_493.clas.abap"))}&from=catalogue&back=${encodeURIComponent("q=hello")}`,
+  );
+  const back = page.locator("#back-link");
+  await expect(back).toBeVisible({ timeout: 120000 });
+  await expect(back).toHaveAttribute("href", "samples/?q=hello");
+  const link = page.locator("#source-link");
+  await expect(link).toHaveText("Source");
+  await expect(link).toHaveAttribute("href", blob("abap2UI5/samples", "src/01/z2ui5_cl_smp_app_493.clas.abap"));
+});
+
 test("the bar ends where the playground's own bar ends", async ({ page }) => {
   await openCatalogue(page);
   // The mark and the name at one end - the nav already says Samples, in bold,

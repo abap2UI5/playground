@@ -37,6 +37,21 @@ test("Share puts the code in the address bar and the link brings it back", async
   await elsewhere.close();
 });
 
+test("a share link is the code and nothing else - the page's own query does not travel", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  // Opened the way the catalogue opens the playground: with a query that
+  // says where the reader came from. That belongs to this visit, not to the
+  // link - a recipient got "Back to the catalog" over code that may have been
+  // edited beyond recognition, and the class's raw URL twice over.
+  await page.goto("/?from=catalogue&back=q%3Dhello");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await page.locator("#share").click();
+  await expect(page.locator("#status")).toContainText("link", { timeout: 15000 });
+  const shared = new URL(page.url());
+  expect(shared.search).toBe("");
+  expect(shared.hash.length).toBeGreaterThan(1);
+});
+
 test("editing after a share retires the link, and the reload keeps the edits", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await open(page);

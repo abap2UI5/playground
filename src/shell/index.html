@@ -314,6 +314,11 @@
   <span class="spacer"></span>
 
   <button id="share" disabled title="Copy a link that carries this code">Share</button>
+  <!-- The way back, only for a reader who came from the sample catalogue: it
+       used to take the Source link's place, which left that reader with no
+       route to the class on GitHub. Same origin and same tab - a way back is
+       not a second window to end up with. -->
+  <a id="back-link" class="source-link" hidden title="Back to the sample catalog, with the search you came from">Back to the catalog</a>
   <a id="source-link" class="source-link" target="_blank" rel="noopener" aria-disabled="true"
      title="Only code that came from GitHub has a page to go to">Source</a>
   <button id="fullscreen" disabled title="Open the app on its own, in a new tab">Full screen</button>

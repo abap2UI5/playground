@@ -609,13 +609,13 @@ export function showSourceLink() {
   }
   link.removeAttribute("aria-disabled");
   if (cameFromCatalogue) {
-    /* Same origin and same tab: this is a way back, not a second window to
-     * end up with. */
-    link.href = `samples/${catalogueQuery}`;
-    link.removeAttribute("target");
-    link.textContent = "Back to the catalog";
-    link.title = "Back to the sample catalog, with the search you came from";
-    return;
+    /* The way back sits BESIDE the source link now, not in its place: a reader
+     * who came from the catalogue used to have no route to the class on
+     * GitHub from here. Same origin and same tab - a way back is not a second
+     * window to end up with. */
+    const back = document.getElementById("back-link");
+    back.href = `samples/${catalogueQuery}`;
+    back.hidden = false;
   }
   link.href = humanUrl(origin);
   link.target = "_blank";
