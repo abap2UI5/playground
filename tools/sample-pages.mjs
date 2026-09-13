@@ -560,17 +560,21 @@ h2 { font-size: 15px; margin: 26px 0 8px; }
  * as the catalogue. Unpressed it is a band and not the frame's full 420
  * pixels: a demo nobody asked for should cost the page one line of its
  * scroll, not a screen of empty box on the way past. */
-/* THE APP IS READ AS A WINDOW, NOT AS A STRIP. The column is 1160px wide and
- * the demo used to be 420px tall in it - 2.8:1, a letterbox, in which a UI5
- * page with a header and a list had room for about four rows before it started
- * scrolling inside a box the reader could not resize. Taller, and no wider
- * than an app is usually designed for, comes to about 5:4: the shape of a
- * window, which is the shape of the thing inside it. The block keeps the
- * column's left edge - it is a part of the page, not an island in it. */
+/* THE APP IS READ AS A WINDOW, NOT AS A STRIP. The demo used to be 420px tall
+ * in this column - 2.8:1, a letterbox, in which a UI5 page with a header and a
+ * list had room for about four rows before it started scrolling inside a box
+ * the reader could not resize. 620 is the height that makes it a window
+ * instead, which is the shape of the thing inside it.
+ *
+ * AND IT IS THE WIDTH OF THE CLASS UNDER IT. The height was once paired with a
+ * cap of 820px, for a 5:4 frame - but the two cards on this page are the same
+ * sample, running and written, and a card that stops 35px short of the one
+ * below it does not read as a narrower frame on purpose. It reads as a box
+ * that failed to finish. Both take the column: same left edge, same right
+ * edge, 620 in the column's width, which is still a window and not a strip. */
 .demo {
   border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
   margin: 0; background: var(--bg);
-  max-width: 820px;
 }
 .demo-head {
   display: flex; flex-wrap: wrap; gap: 2px 16px; justify-content: space-between; align-items: baseline;
