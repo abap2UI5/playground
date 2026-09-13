@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { getSource, MAIN_CLASS, MAIN_FILE, MAIN_MARK, open, runSample, SAMPLES, setSource } from "./helpers.mjs";
+import { allowClipboard, getSource, MAIN_CLASS, MAIN_FILE, MAIN_MARK, open, runSample, SAMPLES, setSource } from "./helpers.mjs";
 
 // A sample other than the one the page opens on - it brings its own class name,
 // which is what makes replacing a draft with it interesting.
@@ -10,8 +10,8 @@ const OTHER = SAMPLES[1];
 
 const MARKER = "written for the share test";
 
-test("Share puts the code in the address bar and the link brings it back", async ({ page, context, browser }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+test("Share puts the code in the address bar and the link brings it back", async ({ page, context, browser, browserName }) => {
+  await allowClipboard(context, browserName);
   await open(page);
 
   const source = (await getSource(page)).replace(MAIN_MARK, MARKER);
@@ -37,8 +37,8 @@ test("Share puts the code in the address bar and the link brings it back", async
   await elsewhere.close();
 });
 
-test("a share link is the code and nothing else - the page's own query does not travel", async ({ page, context }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+test("a share link is the code and nothing else - the page's own query does not travel", async ({ page, context, browserName }) => {
+  await allowClipboard(context, browserName);
   // Opened the way the catalogue opens the playground: with a query that
   // says where the reader came from. That belongs to this visit, not to the
   // link - a recipient got "Back to the catalog" over code that may have been
@@ -52,8 +52,8 @@ test("a share link is the code and nothing else - the page's own query does not 
   expect(shared.hash.length).toBeGreaterThan(1);
 });
 
-test("editing after a share retires the link, and the reload keeps the edits", async ({ page, context }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+test("editing after a share retires the link, and the reload keeps the edits", async ({ page, context, browserName }) => {
+  await allowClipboard(context, browserName);
   await open(page);
 
   await setSource(page, (await getSource(page)).replace(MAIN_MARK, "the shared version"));
@@ -599,8 +599,8 @@ function zipEntries(bytes) {
   return entries;
 }
 
-test("the Share dialog offers an embed block, a markdown fence and an abapGit zip", async ({ page, context }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+test("the Share dialog offers an embed block, a markdown fence and an abapGit zip", async ({ page, context, browserName }) => {
+  await allowClipboard(context, browserName);
   await open(page);
   await page.locator("#share").click();
   const dialog = page.locator("#share-dialog");

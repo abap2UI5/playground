@@ -25,6 +25,15 @@ export default defineConfig({
     // and every spec ran on Chromium alone. Opt-in (PW_WEBKIT=1), because
     // WebKit is one more browser to install: CI sets it, `npm test` at a desk
     // stays what it was.
+    //
+    // Because it is opt-in, a WebKit-only failure is invisible until CI runs,
+    // and the project shipped red for exactly that reason: the four Share
+    // tests granted the clipboard as a pair, and WebKit's grantPermissions
+    // knows `clipboard-read` and not `clipboard-write`, so each died on its
+    // first line with `Unknown permission: clipboard-write`. tests/helpers.mjs
+    // `allowClipboard( )` is the guard, and its header says why nothing is
+    // lost by it. When adding a spec here, the Playwright API a test calls is
+    // the thing to check, not only the code under test.
     ...(process.env.PW_WEBKIT === "1"
       ? [{
           name: "webkit",
