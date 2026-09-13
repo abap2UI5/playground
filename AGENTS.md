@@ -908,17 +908,22 @@ Playground with this code* for a reader who wants the whole window. It is also w
 no longer opens with a row of buttons: Run runs it here now, and the two links
 beside it were links in front of the answer.
 
-What it mounts is `data-view="app"` at `data-height="620"`, in a box capped at
-820px: **the app and nothing else** — no editor, no toolbar, no status line.
+What it mounts is `data-view="app"` at `data-height="620"`, in a box the width
+of the column: **the app and nothing else** — no editor, no toolbar, no status
+line.
 A page that prints the whole class two screens down does not need a second copy
 of it inside a frame, and a strip of the playground's own furniture across the
 top of it is furniture rather than answer. The editor is on the box, in *Switch
 to Playground with this code*, which is where a reader who wants to change a
-line goes anyway. The two numbers are one decision: the column is 1160px wide,
-and 420px in it was 2.8:1 — a letterbox, in which a UI5 page with a header and
+line goes anyway. The height is the decision: the column is 1160px wide, and
+420px in it was 2.8:1 — a letterbox, in which a UI5 page with a header and
 a list had room for four rows before it scrolled inside a box the reader cannot
-resize. 620 in 820 is about 5:4, which is the shape of a window, which is the
-shape of the thing inside it. It is what the demo is read at rather than a
+resize. 620 makes it a window rather than a strip, which is the shape of the
+thing inside it. **The width is not a decision of its own any more.** It was
+capped at 820px for a 5:4 frame, and that put the demo card 35px short of the
+class card under it — the same sample, running and written, in two cards that
+did not line up on the right. Both take the column now; 620 in it is still a
+window. It is what the demo is read at rather than a
 floor it grows from: an abap2UI5 app is a `Shell` around
 a `Page` laid out at 100% of its box, so it never overflows one and the
 loader's grow-on-overflow never fires (`src/embed/abap2ui5-embed.js` says why
