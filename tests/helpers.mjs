@@ -148,3 +148,25 @@ export async function runSample(page, id) {
   // went in over somebody's own work.
   await expect(page.locator("#status")).toHaveText(/^running/, { timeout: 60000 });
 }
+
+// Grants the clipboard permissions where the browser has them.
+//
+// Chromium is the only one Playwright maps both of them on: WebKit's
+// _grantPermissions knows `clipboard-read` and NOT `clipboard-write`, so the
+// pair throws `Unknown permission: clipboard-write` and the test dies on its
+// first line, before it has asserted anything. That is the whole of the
+// WebKit shard's red since the project was added in #93 - four tests in
+// shell.spec.js, none of which ever reached the thing it was testing.
+//
+// Nothing here READS the clipboard. The grant exists so the app's own
+// navigator.clipboard.writeText( ) is not what fails during #share - and it
+// is not needed for that either: copyToClipboard( ) in src/shell/share.mjs
+// answers false on a refusal rather than throwing, share( ) then sets "link
+// is in the address bar" instead of "link copied to the clipboard", and both
+// match the `toContainText("link")` the tests assert. The dialog, the URL
+// and the zip are the same either way. So the grant is a convenience on the
+// browser that has it, and its absence costs no coverage.
+export async function allowClipboard(context, browserName) {
+  if (browserName !== "chromium") return;
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+}
