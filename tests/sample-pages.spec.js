@@ -380,12 +380,21 @@ test("the full playground opens on the sample, and offers the way back", async (
   await page.goto(`/samples/${entry.page}`);
   await page.locator("a.run").click();
 
-  const back = page.locator("#source-link");
-  await expect(back).toHaveText("Back to the catalog", { timeout: 120000 });
+  // The way back sits BESIDE the source link, not in its place (#93): a
+  // reader who came from the catalogue gets both - the route back, and the
+  // class on GitHub. Waiting on the back link is what proves the app booted.
+  const back = page.locator("#back-link");
+  await expect(back).toBeVisible({ timeout: 120000 });
+  await expect(back).toHaveText("Back to the catalog");
   // Narrowed to the class the reader came from, which is the search that has
   // exactly one hit - a static page cannot know the search they had.
   await expect(back).toHaveAttribute("href", `samples/?q=${entry.class}`);
   await expect(back).not.toHaveAttribute("target", "_blank");
+
+  // and the source link is still the source link, in a tab of its own
+  const source = page.locator("#source-link");
+  await expect(source).toHaveText("Source");
+  await expect(source).toHaveAttribute("target", "_blank");
 });
 
 test("a sample that cannot run here says what it needs, and offers no Run", async ({ page }) => {
