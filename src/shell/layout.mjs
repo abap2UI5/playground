@@ -25,6 +25,10 @@ export function setUpSplitter() {
   };
 
   splitter.addEventListener("pointerdown", (e) => {
+    /* The primary button only: a right click opens the context menu, whose
+       pointerup never arrives here, and the page stayed in its dragging state
+       - no selection, the resize cursor - until the splitter was touched again. */
+    if (e.button !== 0 || !e.isPrimary) return;
     splitter.setPointerCapture(e.pointerId);
     splitter.classList.add("is-dragging");
     panes.classList.add("is-dragging");

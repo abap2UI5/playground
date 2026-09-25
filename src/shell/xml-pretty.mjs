@@ -16,7 +16,7 @@ export function prettyXml(xml, indent = "  ") {
     const pad = indent.repeat(depth);
     if (node.nodeType === Node.TEXT_NODE) {
       const text = node.nodeValue.trim();
-      if (text !== "") lines.push(pad + text);
+      if (text !== "") lines.push(pad + escapeText(text));
       return;
     }
     if (node.nodeType === Node.COMMENT_NODE) {

@@ -112,6 +112,18 @@
   async function mount(el) {
     if (el.dataset.mounted) return;
     el.dataset.mounted = "1";
+    try {
+      await mountInto(el);
+    } catch (e) {
+      // Building the URL can fail (a browser without CompressionStream, a
+      // malformed data-origin), and a block marked mounted with its button
+      // still showing would be a button that does nothing from then on.
+      delete el.dataset.mounted;
+      throw e;
+    }
+  }
+
+  async function mountInto(el) {
 
     const appOnly = el.dataset.view === "app";
     /* 520 either way, and app-only used to start at 320 on the theory that a
@@ -145,14 +157,18 @@
     // whatever the page decided the editor deserves, and no message from inside
     // improves on that.
     if (!appOnly) return;
-    window.addEventListener("message", (e) => {
+    const onMessage = (e) => {
+      // A frame the page has since dropped (a navigation in a single-page
+      // documentation site) lets go of its listener at the next message.
+      if (!frame.isConnected) { window.removeEventListener("message", onMessage); return; }
       if (e.source !== frame.contentWindow) return;
       const data = e.data;
       if (!data || data.source !== SOURCE) return;
       if (data.type === "height" && Number.isFinite(data.height)) {
         frame.style.height = `${Math.max(120, Math.min(1200, data.height))}px`;
       }
-    });
+    };
+    window.addEventListener("message", onMessage);
   }
 
   function placeholder(el) {

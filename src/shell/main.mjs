@@ -460,8 +460,12 @@ async function boot() {
   // Ctrl+S as well as Ctrl+Enter: the hand that has typed in an editor for
   // twenty years presses it, and a browser answers with a dialog for saving
   // the page as HTML, which nobody has ever wanted here.
+  // Not from inside a dialog: Ctrl+S in the Share dialog's textarea, or
+  // Ctrl+Enter in the samples browser's search, would start a run behind the
+  // modal the reader is looking at.
   document.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && (e.key === "Enter" || e.key === "s" || e.key === "S")) {
+      if (e.target instanceof Element && e.target.closest("dialog")) return;
       e.preventDefault();
       runAndShow();
     }
@@ -979,7 +983,12 @@ export async function run() {
 
     setStatus("compiling…");
     const { chunks, tests } = await compile(files);
-    state.runtime.defineClasses(chunks.map(({ name, js, lines }) => ({ name, js, lines })));
+    // Waited for: the worker evaluates each chunk with `new Function`, and a
+    // chunk V8 refuses, or one that throws while defining itself, is the
+    // error to show. Left unawaited it was an "Uncaught (in promise)" in the
+    // console, and the run went on to start an app whose class was never
+    // defined - a dump about a missing class, in place of the real cause.
+    await state.runtime.defineClasses(chunks.map(({ name, js, lines }) => ({ name, js, lines })));
 
     // The unit tests in the test includes, before the app: a run is compile,
     // test, start - the order a developer works in - and a failing test is

@@ -1310,7 +1310,7 @@ this origin starts with it, selected, so the first keystroke replaces it.
 What it searches is one generated document, `/docs/search-index.json`: every
 page of the documentation, and every entry of the three sample catalogues. The
 documentation builds it (`scripts/generate-search.mjs` over there) and all four
-bars fetch it from the shared origin, lazily, on the first keystroke. Two
+bars fetch it from the shared origin, lazily, when the box is opened. Two
 copies of that data would be two answers to one query, which is why this one
 thing is fetched rather than copied.
 

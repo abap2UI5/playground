@@ -46,6 +46,12 @@ jobs:
 
       - run: npm run build:ui5 -- --force
 
+      # The index build-site counts and the pages the tests open: build:site
+      # reads dist/samples/apps.json and fails without it, and a run that
+      # failed there said "does not build against upstream" about a step that
+      # never reached upstream's code.
+      - run: npm run build:catalogue
+
       - run: npm run build:site
 
       - run: npx playwright install --with-deps chromium

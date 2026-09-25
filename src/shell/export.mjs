@@ -155,10 +155,13 @@ export function abapGitEntries(files, url) {
     { name: "README.md", data: readme(files, url) },
   ];
   for (const file of files) {
-    const sidecar = sidecarFor(file.name);
-    if (!sidecar) continue;
+    // Every file with a name this understands; a test include has no sidecar
+    // of its own (its class carries the one XML) and travelled with the
+    // README's word for it and nothing else until this said so.
+    if (!parseName(file.name)) continue;
     entries.push({ name: `src/${file.name}`, data: normalisedSource(file.source) });
-    entries.push({ name: `src/${sidecar.name}`, data: sidecar.source + "\n" });
+    const sidecar = sidecarFor(file.name);
+    if (sidecar) entries.push({ name: `src/${sidecar.name}`, data: sidecar.source + "\n" });
   }
   return entries;
 }

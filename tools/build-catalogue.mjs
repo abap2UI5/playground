@@ -106,7 +106,9 @@ async function fetchJson(repo, name) {
        that answers nothing is a build that sits at this line for the whole
        of the runner's thirty minutes. */
     const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
-    if (!response.ok) return undefined;
+    // Thrown rather than returned, so a 5xx or a 429 reaches the stale-cache
+    // fallback below like an answer that never came.
+    if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
     const text = await response.text();
     const data = JSON.parse(text);
     fs.mkdirSync(CACHE, { recursive: true });

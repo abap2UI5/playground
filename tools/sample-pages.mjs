@@ -121,6 +121,14 @@ const esc = (value) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
+/* esc( ) read back - for the one place that starts from written HTML. */
+const unesc = (value) =>
+  String(value ?? "")
+    .replace(/&quot;/g, "\"")
+    .replace(/&gt;/g, ">")
+    .replace(/&lt;/g, "<")
+    .replace(/&amp;/g, "&");
+
 /* A link this page is willing to print. Anything that is not an https URL is
  * not a link here - the alternative is putting whatever a repository committed
  * into an href. */
@@ -772,8 +780,11 @@ function outline(html) {
   const rows = [];
   const seen = new Set();
   const withIds = html.replace(/<h2>([\s\S]*?)<\/h2>/g, (whole, inner) => {
-    /* The text a reader sees, with any markup inside the heading dropped. */
-    const text = inner.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+    /* The text a reader sees, with any markup inside the heading dropped and
+       the entities read back - `inner` is written HTML, so an `&amp;` in a
+       group's name would otherwise be escaped a second time in the outline
+       and spelt out in the id. */
+    const text = unesc(inner.replace(/<[^>]*>/g, "")).replace(/\s+/g, " ").trim();
     let id = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "section";
     while (seen.has(id)) id += "-x";
     seen.add(id);
@@ -1633,9 +1644,10 @@ text. A page that swaps content without reloading calls
 - [apps.json](${SITE}samples/apps.json): the whole index, one object per sample
   under \`entries\`: \`class\`, \`title\`, \`summary\`, \`source\` (which repository),
   \`group\`, \`stage\`, \`keywords\`, the \`controls\` it builds, the \`libraries\` it
-  needs, the oldest UI5 \`release\` it runs on, whether it \`runs\` in the browser,
-  and \`page\` - the directory of its own page here. The top level also lists
-  every \`control\` (${(index.controls || []).length}), \`library\` (${(index.libraries || []).length}) and \`release\` in use.
+  needs, the oldest UI5 release it runs on (\`minUi5\`), whether it \`runs\` in the
+  browser, and \`page\` - the directory of its own page here. The top level also
+  lists every control (\`controls\`, ${(index.controls || []).length}), library (\`libraries\`, ${(index.libraries || []).length}) and
+  release (\`releases\`) in use.
 - [the full list](${SITE}samples/all/): the same ${rows.length} as one HTML page, grouped,
   for reading down or linking into.
 - a sample's own page is \`${SITE}samples/<class>/\` - the class in full, what it

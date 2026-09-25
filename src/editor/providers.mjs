@@ -92,8 +92,15 @@ export function registerProviders(host) {
       for (const change of rename?.documentChanges ?? []) {
         // A TextDocumentEdit carries `edits`; the other kinds (create, rename,
         // delete a file) are nothing an in-page rename produces.
+        // To the document the change names, not the one the cursor is in:
+        // abaplint answers with one TextDocumentEdit per file that refers to
+        // the name (a method renamed from its class has the test include's
+        // ranges in the same answer), and every file here has a model.
+        const uri = change.textDocument?.uri;
+        const resource = uri ? monaco.Uri.parse(uri) : model.uri;
+        if (!monaco.editor.getModel(resource)) continue;
         for (const e of change.edits ?? []) {
-          edits.push({ resource: model.uri, versionId: undefined, textEdit: { range: rangeOf(e.range), text: newName } });
+          edits.push({ resource, versionId: undefined, textEdit: { range: rangeOf(e.range), text: e.newText ?? newName } });
         }
       }
       return { edits };
@@ -154,8 +161,12 @@ export function registerProviders(host) {
     async provideDocumentRangeSemanticTokens(model, range) {
       const result = await languageServer("semanticTokensRange", {
         textDocument: { uri: uriOf(model) },
-        start: { line: range.startLineNumber, character: range.startColumn },
-        end: { line: range.endLineNumber, character: range.endColumn },
+        // Zero-based, like every other range handed over: abaplint adds one
+        // to build its own positions, and passed Monaco's one-based numbers
+        // as they were the window began a line late, so a statement ending
+        // on the first visible line lost its colour.
+        start: positionOf({ lineNumber: range.startLineNumber, column: range.startColumn }),
+        end: positionOf({ lineNumber: range.endLineNumber, column: range.endColumn }),
       });
       return { data: Uint32Array.from(result?.data ?? []) };
     },

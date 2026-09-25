@@ -402,13 +402,27 @@ export function openExamples() {
     loading = true;
     loadIndex()
       .then((data) => {
+        let facets = false;
         try {
           loadedGroups = data === undefined ? [] : groupsFrom(data);
-          if (data !== undefined) fillFacets(data);
+          if (data !== undefined) {
+            fillFacets(data);
+            facets = true;
+          }
         } catch {
           // An index in a shape this module does not know is treated like a
           // missing one - the next deploy of the playground writes both.
           loadedGroups = [];
+        }
+        // A stored pick is checked against the index's options in
+        // fillFacets( ), and only there. Without an index it would stand
+        // unchecked: a facet nothing on the page can answer, hiding the
+        // carried samples and the drafts behind "Nothing here matches that"
+        // under a select that reads "any control".
+        if (!facets && PICKS.some((p) => picks[p] !== "")) {
+          picks = { control: "", library: "", release: "" };
+          reflect();
+          keep();
         }
       })
       .finally(() => {

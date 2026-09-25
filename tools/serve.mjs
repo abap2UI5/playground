@@ -27,6 +27,7 @@ const TYPES = {
   ".woff2": "font/woff2",
   ".ttf": "font/ttf",
   ".abap": "text/plain; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
   ".xml": "application/xml; charset=utf-8",
   ".map": "application/json; charset=utf-8",
   ".properties": "text/plain; charset=utf-8",
@@ -85,7 +86,17 @@ const server = http.createServer((req, res) => {
     return;
   }
   try {
-    if (fs.statSync(file).isDirectory()) file = path.join(file, "index.html");
+    if (fs.statSync(file).isDirectory()) {
+      // The way GitHub Pages answers a directory asked for without its slash:
+      // a redirect to the slash form, not the index in place - served in
+      // place, every relative link on the page resolves one level too high.
+      if (!url.endsWith("/")) {
+        res.writeHead(301, { location: `${req.url.split("?")[0]}/` });
+        res.end();
+        return;
+      }
+      file = path.join(file, "index.html");
+    }
   } catch {
     notFound(res);
     return;

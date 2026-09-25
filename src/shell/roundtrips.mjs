@@ -17,6 +17,11 @@
 const LIMIT = 200;
 
 let entries = [];
+/* The number a roundtrip is listed under. Its own counter rather than the
+   list's length: once the list is full and the oldest entry is dropped for
+   each new one, the length stands still, and two rows called #200 are one
+   row to the panel that keys the expanded one on its number. */
+let seq = 0;
 const listeners = new Set();
 
 export const roundtripList = () => entries;
@@ -28,6 +33,7 @@ function notify() {
 
 export function clearRoundtrips() {
   entries = [];
+  seq = 0;
   notify();
 }
 
@@ -39,7 +45,7 @@ export function recordRoundtrip({ request, response, ms }) {
   const req = parse(request);
   const res = parse(response.body);
   const entry = {
-    n: entries.length + 1,
+    n: ++seq,
     at: new Date(),
     ms: Math.round(ms),
     status: response.status,
