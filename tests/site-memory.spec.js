@@ -141,7 +141,8 @@ test("the playground writes itself down too, URL and all", async ({ page }) => {
 });
 
 test("a sample opened in the playground is what the item comes back to", async ({ page }) => {
-  const src = "https://raw.githubusercontent.com/abap2UI5/samples/main/x.clas.abap";
+  // The site's own linked example, so the test asks nothing of the internet.
+  const src = "examples/zcl_linked_example.clas.abap";
   await page.goto(`/index.html?src=${encodeURIComponent(src)}`);
   await expect(page.locator(".bar-nav")).toBeVisible();
   await expect.poll(() => stored(page, PLAYGROUND_KEY)).toContain("src=");
@@ -149,13 +150,16 @@ test("a sample opened in the playground is what the item comes back to", async (
 
 test("an embedded playground is furniture in somebody else's page, and writes nothing", async ({ page }) => {
   await page.goto("/index.html?embed=1");
-  await page.waitForTimeout(1500);
+  // After the boot has finished, not after a fixed wait: the write this
+  // asserts against happens at the end of boot( ), which a slow runner
+  // reaches later than any number of milliseconds.
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
   expect(await stored(page, PLAYGROUND_KEY)).toBe(null);
 });
 
 test("an app-only view is a running app, not a place to come back to", async ({ page }) => {
   await page.goto("/index.html?view=app");
-  await page.waitForTimeout(1500);
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
   expect(await stored(page, PLAYGROUND_KEY)).toBe(null);
 });
 

@@ -44,11 +44,13 @@ fix is deployed by merging it.
   it a same-origin request interceptor with storage that outlives the tab — so
   it is deliberately as small as that job allows. It answers only `GET`, only
   for its own origin and its own directory, and only for an allow list of the
-  site's own build outputs: the shell bundle, the framework, the corpus,
-  SQLite, the editor font and the UI5 build. Anything carrying a query string
-  is refused outright, and so is everything the playground fetches on somebody
-  else's behalf — linked ABAP, the sample catalogues, the app frame's own
-  document. It never rewrites a response, and it caches only a clean `200`.
+  site's own build outputs: the shell bundle and its chunks, the registry
+  worker, the framework, the corpus, SQLite, the fonts and the UI5 build.
+  Outside `app/` a query string is refused outright; under `app/` the
+  version-pinned queries UI5 puts on its stylesheets and manifest are kept.
+  Linked ABAP and the search index are never cached; the two documents and the
+  catalogue's three files are cached only as a fallback behind a network-first
+  fetch. It never rewrites a response, and it caches only a clean `200`.
   Each cache is named after the build that filled it and the previous one is
   deleted when a new worker takes over, so nothing survives a deploy.
 - **Every dependency is pinned exactly**, including the transpiler, abaplint

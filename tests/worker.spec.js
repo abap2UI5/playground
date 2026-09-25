@@ -37,7 +37,7 @@ test("the heavy assets come out of the worker's cache on a second visit", async 
   const { served, fetched } = watch(page);
   await open(page);
 
-  // The four the size budget is written around - every byte a visitor waits on
+  // The five the size budget is written around - every byte a visitor waits on
   // before the playground can do anything.
   for (const asset of [
     "/assets/shell.mjs",

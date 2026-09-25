@@ -88,9 +88,9 @@
 
   // The fragment format, which the playground defines: one version character,
   // then base64url of the deflate-raw of a JSON array of files. Writing
-  // anything else here would not fail loudly - the playground treats a fragment
-  // it cannot read as somebody else's link and quietly opens its own sample,
-  // so a documentation page would silently show the wrong code.
+  // anything else here would not fail loudly - the playground opens its own
+  // sample in place of a fragment it cannot read, with a note in its status
+  // line, so a documentation page would show the wrong code under a warning.
   async function encodeCode(code) {
     const files = [{ name: fileNameFor(code), source: code }];
     const payload = new TextEncoder().encode(JSON.stringify(files));

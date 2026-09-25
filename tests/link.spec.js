@@ -1,6 +1,16 @@
 import { test, expect } from "@playwright/test";
 import { control, getSource, MAIN_CLASS, openFiles, setSource } from "./helpers.mjs";
 
+// A fragment built in the page, then opened as a REAL load: a goto( ) that only
+// changes the hash of the URL the page already has is a same-document
+// navigation, and the boot that read an empty hash is the boot that answers -
+// so these two tests passed against the unfragmented page until the step
+// through about:blank was added.
+async function openFragment(page, fragment) {
+  await page.goto("about:blank");
+  await page.goto(`/#${fragment}`);
+}
+
 // Two ways of arriving at the playground that are not "somebody opened it":
 // a link that names ABAP living somewhere else, and an embed in another page.
 
@@ -71,11 +81,12 @@ test("a shared set whose first file is an interface opens the sample instead", a
     { name: "zcl_playground.clas.abap", source: "CLASS zcl_playground DEFINITION PUBLIC CREATE PUBLIC.\nENDCLASS." },
   ]);
 
-  await page.goto(`/#${fragment}`);
-  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await openFragment(page, fragment);
+  await expect(page.locator("#status")).toHaveText(/showing the sample instead/, { timeout: 120000 });
   // The first file is the app, so a set that opens with an interface has no
-  // app at all - and is refused before it can wedge the editor.
+  // app at all - and is refused before it can wedge the editor, and said so.
   expect(await getSource(page)).toContain("INTERFACES z2ui5_if_app");
+  await expect(page.locator(".log-body")).toContainText("could not be read");
 });
 
 test("a fragment that decodes to nonsense opens the sample instead of wedging", async ({ page }) => {
@@ -84,9 +95,10 @@ test("a fragment that decodes to nonsense opens the sample instead of wedging", 
   await page.goto("/");
   const fragment = await fragmentFor(page, [{ name: "not a file name", source: "CLASS x." }]);
 
-  await page.goto(`/#${fragment}`);
-  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await openFragment(page, fragment);
+  await expect(page.locator("#status")).toHaveText(/showing the sample instead/, { timeout: 120000 });
   expect(await getSource(page)).toContain(`CLASS ${MAIN_CLASS} DEFINITION`);
+  await expect(page.locator(".log-body")).toContainText("could not be read");
 });
 
 test("a link to somewhere the playground will not fetch from says so", async ({ page }) => {

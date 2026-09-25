@@ -66,10 +66,6 @@ export async function getSource(page, file = MAIN_FILE) {
   );
 }
 
-// The open files, in the order the playground holds them - which is the order
-// the strip shows and, for the first one, what Run starts. Read off the strip
-// rather than out of Monaco: Monaco's own model list is in creation order,
-// which is not the same thing once a file has been reopened.
 // Puts the caret in the ABAP editor.
 //
 // Not a click on `.view-lines`, which is what this used to be: Monaco sizes
@@ -90,6 +86,10 @@ export async function clickEditor(page) {
   await page.locator("#editor").click({ position: { x: 200, y: 10 } });
 }
 
+// The open files, in the order the playground holds them - which is the order
+// the strip shows and, for the first one, what Run starts. Read off the strip
+// rather than out of Monaco: Monaco's own model list is in creation order,
+// which is not the same thing once a file has been reopened.
 export async function openFiles(page) {
   return page.locator(".file-tab [data-file]").evaluateAll((tabs) => tabs.map((t) => t.dataset.file));
 }

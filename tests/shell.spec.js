@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { allowClipboard, getSource, MAIN_CLASS, MAIN_FILE, MAIN_MARK, open, runSample, SAMPLES, setSource } from "./helpers.mjs";
+import { allowClipboard, clickEditor, getSource, MAIN_CLASS, MAIN_FILE, MAIN_MARK, open, runSample, SAMPLES, setSource } from "./helpers.mjs";
 
 // A sample other than the one the page opens on - it brings its own class name,
 // which is what makes replacing a draft with it interesting.
@@ -178,7 +178,7 @@ test("Undo takes the last edit back, Redo brings it again, and both are inactive
 test("Ctrl+S runs, instead of offering to save the page", async ({ page }) => {
   await open(page);
   const before = await page.locator("#app").getAttribute("src");
-  await page.locator("#editor").click();
+  await clickEditor(page);
   await page.keyboard.press("Control+s");
   await expect(page.locator("#app")).not.toHaveAttribute("src", before ?? "", { timeout: 60000 });
   await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });

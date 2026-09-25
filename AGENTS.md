@@ -24,7 +24,7 @@ them before touching `tools/` or `src/runtime`.
 | `src/abap/` | The playground's own ABAP - `zcl_pg_bridge` and nothing else; it travels through the same downport and transpile as the framework. There was a `zcl_pg_hello` beside it, a copy of the hello world in **abap2UI5/samples**; the runtime tests drive the framework's own `z2ui5_cl_ui5_app_hi_world` instead, so this repository holds no app of its own to keep in step with one somebody else maintains |
 | `src/examples/` | ABAP served as static files, so `?src=` has same-origin targets and the link tests depend on no foreign host |
 | `src/embed/` | The embed loader (`abap2ui5-embed.js`) and a worked example page; copied verbatim to `dist/embed/` |
-| `src/catalogue/` | The sample catalogue at `/samples/`: one page, one stylesheet, one module, over the index `tools/build-catalogue.mjs` writes. Its own document and its own bundle - see "The sample catalogue" below. `search-entry.mjs` is the second bundle out of this directory: the bar's search box, as the one file the catalogue and all 772 per-sample pages load |
+| `src/catalogue/` | The sample catalogue at `/samples/`: one page, one stylesheet and three bundles over the index `tools/build-catalogue.mjs` writes - `catalogue.mjs` (the page; see "The sample catalogue" below), `search-entry.mjs` (the bar's search box, as `samples/search.mjs`, the one file the catalogue and all per-sample pages load) and `page-entry.mjs` (the per-sample pages' site memory, outline marker and line links, as `samples/page.mjs`, over `outline.mjs` and `lines.mjs`) |
 | `tools/` | The build (`build.mjs`, which drives `fetch-deps`, `build-framework`, `build-ui5`, `build-catalogue` — which writes the index and, through `sample-pages.mjs`, one static page per sample plus the full list, the sitemap and `404.html`, with the ABAP on those pages fetched by `sample-sources.mjs` and coloured by `abap-highlight.mjs` —, `build-site`), the size budget (`check-size`) and the dev server (`serve`, which mounts `dist/` at the root, under a subpath and under the deployment's own path, and answers a miss with `404.html` the way GitHub Pages does) |
 | `tests/` | Playwright specs — the only test layer; everything is tested through a real browser against the built `dist/`. One of them, `bfcache.spec.js`, reads rather than runs: the sources and the three documents the build writes, for an unload listener or a `no-store` that would keep a page out of the back/forward cache and turn the bar's step back into a reload |
 
@@ -153,7 +153,7 @@ without it neither ships one.
 ## What a visitor waits for
 
 Five assets stand between opening the page and an app on screen, and
-`tools/check-size.mjs` budgets all five: the page bundle with its chunks
+`tools/check-size.mjs` budgets those five among the nine files it holds: the page bundle with its chunks
 (~1.1 MB compressed — Monaco in `shell.mjs`, the abap2UI5 linter as a chunk),
 the registry worker (~0.5 MB — abaplint and the transpiler), the transpiled
 framework (~0.6 MB), the ABAP corpus (~0.4 MB) and SQLite (~0.3 MB). About three megabytes, and then
@@ -627,8 +627,9 @@ deploy — readers get the published playground, never your checkout.
 
 - **Share links**: every open file in the URL fragment, deflate-raw and
   base64url with a version prefix (`src/shell/share.mjs`). The fragment never
-  leaves the browser. A fragment the playground cannot read is treated as
-  somebody else's link and silently replaced by the sample — which is why an
+  leaves the browser. A fragment the playground cannot read is replaced by
+  the sample and reported - the status line says the link could not be
+  followed and the Log carries the decoder's own sentence - which is why an
   external page must build URLs with `window.abap2ui5Embed.url()`, never by
   hand.
 - **`?src=<url>`** (`src/shell/deep-link.mjs`): opens ABAP from same-origin or
@@ -884,14 +885,16 @@ entry at full strength instead of dimmed and a 2px bar in the accent on the
 hairline beside it - by the rule VitePress uses, case for case: NOTHING at the
 top of the page (a reader looking at the title is not in a section yet), the
 last row at the bottom, and otherwise the last heading whose top has passed
-under the bar, or none if no heading has. `OUTLINE_SCRIPT` sets the class; the bar is a
+under the bar, or none if no heading has. `setUpOutline()` in `src/catalogue/outline.mjs` sets the class; the bar is a
 pseudo-element on the row rather than one element sliding between rows, which
 is the only place this deliberately differs from over there.
 Real text in the HTML, and
 nothing a crawler has to run to see any of it: the scripts on a page are the
-two-line theme read the other two documents also carry, the bar's menu and
-its switch and the site memory as inline copies of what the bundles import, and the demo
-loader below, and none of them writes a word of it. `sample.css` is written beside them and
+two-line theme read the other two documents also carry and the bar's menu with
+its switch, inline (`THEME_SCRIPT`, `MENU_SCRIPT` in `tools/sample-pages.mjs`),
+two small modules every page shares (`samples/page.mjs` - the site memory, the
+outline and the line links - and `samples/search.mjs`), and the demo loader
+below, and none of them writes a word of it. `sample.css` is written beside them and
 loaded next to `catalogue.css`, which is the frame: these are the catalogue's
 pages, and a second palette would drift from it on the first change to either.
 
@@ -960,8 +963,8 @@ marked line is not a white column with a coloured line beside it.
 
 **One line needs no script at all**: `:target` is the browser's own answer to
 `#L42`, and it is what a page with its JavaScript blocked still does. The
-script (`LINES_SCRIPT`, at the end of the body, only on a page that prints a
-class) exists for what `:target` cannot answer — the RANGE, which is a fragment
+script (`setUpLines()` in `src/catalogue/lines.mjs`, which does nothing on a
+page that prints no class) exists for what `:target` cannot answer — the RANGE, which is a fragment
 no element has an id for —, for the shift-click that composes one, and for the
 *Copy link* button beside the class. It takes the single-line case over as it
 runs, by marking the block `live` so the stylesheet's rule stops matching: one
@@ -1121,7 +1124,7 @@ chromium`, a browser download rather than a step, which `npm test` then asks for
 by name (CONVENTIONS section 3 asks for that omission to be named here).
 
 The tests are the gate: everything runs through a real browser, and
-`tests/samples.spec.js` imports the sample catalogue and drives every entry —
+`tests/samples.spec.js` imports the list of samples the page carries (`build/samples/index.json`) and drives every entry —
 a sample without a test is not possible. CI:
 
 | | |
@@ -1153,7 +1156,7 @@ they are on somebody else's page, or on a phone.
   parser is recursive.** Statements are matched by a tree of combinators, so a
   long statement is a deep stack — and abap2UI5's `src/01/03` is its UI5
   frontend generated into ABAP string constants, where a whole module becomes
-  *one* statement of up to 1600 tokens joined with `&&`. Those 124 classes took
+  *one* statement of up to 1600 tokens joined with `&&`. Those 62 classes took
   the corpus parse from 130 KB of stack to over 610 KB. Node and Chrome hand out
   a little under a megabyte, so it worked on every desk; mobile Safari hands out
   less, and the parse threw `RangeError: Maximum call stack size exceeded` out

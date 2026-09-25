@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { getSource, MAIN_CLASS, open, setSource } from "./helpers.mjs";
+import { clickEditor, getSource, MAIN_CLASS, open, setSource } from "./helpers.mjs";
 
 // Autofix, and the way back to code that came from a link.
 
@@ -35,7 +35,7 @@ test("abaplint's fixes are offered, applied, and undoable in one step", async ({
 
   // One edit, so one undo takes the whole rewrite back - an automatic change to
   // somebody's source has to be reversible without picking it apart.
-  await page.locator("#editor").click();
+  await clickEditor(page);
   await page.keyboard.press("Control+z");
   expect(await getSource(page), "Ctrl+Z restores what was there").toBe(before);
 });
