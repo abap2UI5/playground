@@ -342,7 +342,14 @@ main {
 @media print {
   .bar, .outline, .demo, .source-copy, .search-scrim, .controls, .side-scrim { display: none !important; }
   html { scroll-padding-top: 0; }
-  body { background: #fff; }
+  /* The palette back to light, whatever the reader chose on screen: the
+     scheme is switched by attribute (data-theme), which a browser's print
+     emulation does not touch - so a dark page printed #e6e7ea on white. */
+  :root, :root[data-theme="dark"] {
+    --bg: #fff; --bg-sunken: #f4f5f7; --fg: #1c1d21; --fg-dim: #6a6d76; --line: #d9dbe0;
+    color-scheme: light;
+  }
+  body { background: #fff; color: var(--fg); }
   main, .sample, .sample-body { display: block; max-width: none; margin: 0; padding: 0; }
   a { color: inherit; }
   pre, table, figure, img, .card { break-inside: avoid; page-break-inside: avoid; }

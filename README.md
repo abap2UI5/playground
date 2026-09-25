@@ -352,9 +352,9 @@ const href = await window.abap2ui5Embed.url({ code, view: "app" });
 ```
 
 That matters more than it looks: a fragment the playground cannot read is
-treated as somebody else's link and quietly replaced by the sample the page opens on, so
-an encoder written by hand fails by showing the wrong code rather than by
-failing.
+replaced by the sample the page opens on, with the status line and the Log
+saying so - so an encoder written by hand fails by showing the wrong code with
+a warning under it rather than by failing outright.
 
 **Nothing loads until the reader clicks.** Each demo is a whole ABAP runtime
 plus an abaplint parse of nine hundred sources — a second or two of processor

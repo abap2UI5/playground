@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 // The build, arranged the way the steps actually depend on one another.
 //
-// There are four: fetch the pinned sources, build the framework, build the UI5
-// frontend, assemble the site. The middle two are the slow ones - a downport of
+// There are five: fetch the pinned sources, build the framework, build the UI5
+// frontend, build the sample catalogue, assemble the site. The second and third
+// are the slow ones - a downport of
 // nine hundred ABAP files that takes about three minutes, and a UI5 build that
 // takes about two - and they have nothing whatever to do with each other. They
 // read different sources, they write to different places (build/downport and
 // dist/runtime for one, build/ui5dist and dist/app for the other), and neither
-// reads a line of what the other produced. Only build-site does, which is why
-// it goes last and on its own.
+// reads a line of what the other produced. Only the catalogue and the site
+// steps read what the two produced, which is why they go after both, the
+// catalogue first (build-site counts its index) and the site last.
 //
 // So the two of them run together and a cold build costs the longer of them
 // rather than the sum of both. With the caches warm this changes nothing -

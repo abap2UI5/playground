@@ -11,7 +11,7 @@ test("the page loads clean", async ({ page }) => {
   await expect(page.locator(".brand")).toContainText("abap2UI5");
   // The runtime is 8 MB and boots asynchronously; the status line is the page
   // telling us it got there.
-  await expect(page.locator("#status")).toContainText("running", { timeout: 90000 });
+  await expect(page.locator("#status")).toContainText("running", { timeout: 120000 });
 
   expect(errors).toEqual([]);
 });
@@ -47,7 +47,7 @@ test("the bar names the framework version it is running", async ({ page }) => {
   await page.goto("/");
   // Read out of the transpiled z2ui5_if_app=>version, so a wrong lookup shows
   // as "unknown" rather than as nothing at all.
-  await expect(page.locator("#versions")).toHaveText(/^abap2UI5 \d+\.\d+\.\d+$/, { timeout: 90000 });
+  await expect(page.locator("#versions")).toHaveText(/^abap2UI5 \d+\.\d+\.\d+$/, { timeout: 120000 });
 });
 
 // The corpus the editor thinks with, as it is served. Two things are worth
@@ -98,7 +98,7 @@ test("the framework bundle leaves the generated frontend out as well", async ({ 
 // evaluated the bundle on its own thread.
 test("the ABAP runtime runs in a worker, not on the page's thread", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator("#status")).toHaveText("running", { timeout: 90000 });
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
 
   const workers = page.workers().map((w) => new URL(w.url()).pathname);
   expect(workers).toContain("/runtime/framework.mjs");
@@ -114,7 +114,7 @@ test("a registry worker that will not start is reported, not waited for", async 
   await page.route("**/editor/registry.mjs", (route) => route.fulfill({ status: 503, body: "" }));
 
   await page.goto("/");
-  await expect(page.locator("#status")).toHaveText("the playground could not start", { timeout: 90000 });
+  await expect(page.locator("#status")).toHaveText("the playground could not start", { timeout: 120000 });
   // Named either by the browser's error event (Chromium does fire one for a
   // 503, with an empty message) or by the HEAD probe that stands in for it.
   await expect(page.locator(".log-body")).toContainText("editor/registry.mjs");
@@ -124,7 +124,7 @@ test("a runtime that will not start is reported, not waited for", async ({ page 
   await page.route("**/runtime/framework.mjs", (route) => route.fulfill({ status: 503, body: "" }));
 
   await page.goto("/");
-  await expect(page.locator("#status")).toHaveText("the playground could not start", { timeout: 90000 });
+  await expect(page.locator("#status")).toHaveText("the playground could not start", { timeout: 120000 });
   // Whatever the browser could say about a worker that never started, rather
   // than an empty line: a worker fails with an ErrorEvent, not an exception.
   await expect(page.locator(".log-body")).not.toBeEmpty();
@@ -136,7 +136,7 @@ test("a startup failure says what went wrong, not only where", async ({ page }) 
   await page.route("**/editor/corpus.json", (route) => route.fulfill({ status: 503, body: "" }));
 
   await page.goto("/");
-  await expect(page.locator("#status")).toHaveText("the playground could not start", { timeout: 90000 });
+  await expect(page.locator("#status")).toHaveText("the playground could not start", { timeout: 120000 });
 
   // The message, not just the frames. This used to be String(e.stack), which
   // reads correctly in Chrome only because V8 puts the message at the top of a

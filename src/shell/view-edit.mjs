@@ -125,7 +125,7 @@ function merge(wanted, was, node) {
   // the reconstruction shows - so text here is something the editor typed and
   // this has to refuse rather than drop.
   for (const child of wanted.childNodes) {
-    if (child.nodeType === 3 && child.nodeValue.trim() !== "") {
+    if ((child.nodeType === 3 || child.nodeType === 4) && child.nodeValue.trim() !== "") {
       return no(`\`${wanted.tagName}\` has text inside it. The builder writes attributes, not text between tags.`);
     }
   }

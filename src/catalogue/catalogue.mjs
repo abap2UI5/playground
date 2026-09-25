@@ -382,11 +382,16 @@ function bind() {
 /** The controls, from the state - after a URL read or a Clear. */
 function reflect() {
   el.q.value = state.q;
-  el.source.value = state.source;
-  el.control.value = state.control;
-  el.library.value = state.library;
-  el.release.value = state.release;
   el.runs.checked = state.runs;
+  /* A value the select has no option for - a library that has since dropped
+     out of the index, a release or a typo in a pasted link - leaves the
+     select on its default, and used to go on filtering from the state behind
+     it: "Nothing matches that" under controls that all read as unset. What
+     the reader cannot see, they cannot undo, so the state follows the select. */
+  for (const key of ["source", "control", "library", "release"]) {
+    el[key].value = state[key];
+    if (el[key].value !== state[key]) state[key] = "";
+  }
 }
 
 async function start() {

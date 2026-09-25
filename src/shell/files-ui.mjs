@@ -84,7 +84,7 @@ function fileTab(file, index, open) {
   name.className = "file-name";
   name.type = "button";
   name.dataset.file = file.name;
-  name.role = "tab";
+  name.setAttribute("role", "tab");
   name.setAttribute("aria-selected", String(file.name === open));
   name.append(file.name);
   tab.append(name);

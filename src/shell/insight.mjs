@@ -14,6 +14,7 @@ import {
   getFiles,
   getSource,
   invalidateAnalysis,
+  onFileShown,
   refresh,
   setEditorReadOnly,
   setSourceOf,
@@ -94,6 +95,15 @@ export function setUpInsight() {
   tabs = [...panel.querySelectorAll("[data-insight]")];
 
   setUpResize();
+
+  // The View tab's edit is about one file's chain, and it makes the ABAP
+  // editor read-only while it is open. Showing another file ends it - here,
+  // on the switch itself, and not only when the View tab next renders:
+  // with Problems in front, the other file arrived read-only with nothing on
+  // screen to say why.
+  onFileShown(() => {
+    if (editing && editing.file !== currentFile()) stopEditing();
+  });
 
   const toggle = document.getElementById("insight-toggle");
   toggle?.addEventListener("click", () => {

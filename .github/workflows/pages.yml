@@ -51,6 +51,11 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # The same tests as check.yml, which means the WebKit project too:
+      # without this a push straight to main was tested on Chromium alone and
+      # deployed past the specs written for Safari's engine.
+      PW_WEBKIT: "1"
     strategy:
       fail-fast: false
       matrix:

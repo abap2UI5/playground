@@ -85,6 +85,10 @@ function inputHash() {
   };
   addTree(APP_SRC);
   h.update(UI5_VERSION).update(UI5_LIBRARIES.join(","));
+  // The tooling that builds it: a bump of @ui5/cli has to rebuild rather than
+  // reuse build/ui5dist (build-framework.mjs hashes the same for its bundle).
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+  h.update(JSON.stringify(pkg.devDependencies));
   h.update(fs.readFileSync(fileURLToPath(import.meta.url)));
   return h.digest("hex");
 }

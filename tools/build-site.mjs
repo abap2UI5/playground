@@ -14,6 +14,7 @@ import * as esbuild from "esbuild";
 import { abap2ui5LinterPlugin, nodeStubPlugin } from "./esbuild-plugins.mjs";
 import { appFirstLoad } from "../src/shell/warm-up.mjs";
 import { SAMPLE_LIST, SAMPLE_REPO } from "../src/editor/sample-list.mjs";
+import { SITE } from "./sample-pages.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "src", "shell");
@@ -359,12 +360,16 @@ fs.copyFileSync(path.join(ROOT, "src", "catalogue", "catalogue.css"), path.join(
    index that is not there, fails the build rather than publishing a guess. */
 const catalogueSource = fs.readFileSync(path.join(ROOT, "src", "catalogue", "index.html"), "utf8");
 if (!catalogueSource.includes("__SAMPLE_COUNT__")) throw new Error("src/catalogue/index.html lost its __SAMPLE_COUNT__ marker");
+/* The site's own address in the canonical, the og:url and the JSON-LD - the
+   same SITE every generated page writes, so a fork (PG_SITE_URL) does not
+   declare the upstream catalogue as the canonical copy of its own. */
+if (!catalogueSource.includes("__SITE__")) throw new Error("src/catalogue/index.html lost its __SITE__ marker");
 const catalogueIndex = JSON.parse(fs.readFileSync(path.join(DIST, "samples", "apps.json"), "utf8"));
 const sampleCount = (catalogueIndex.entries ?? catalogueIndex.samples ?? []).length;
 if (!sampleCount) throw new Error("dist/samples/apps.json holds no entries to count - build-catalogue did not run, or its shape changed");
 fs.writeFileSync(
   path.join(DIST, "samples", "index.html"),
-  withPolicy(stripHtmlComments(catalogueSource.replace("__SAMPLE_COUNT__", String(sampleCount)))),
+  withPolicy(stripHtmlComments(catalogueSource.replaceAll("__SITE__", SITE).replace("__SAMPLE_COUNT__", String(sampleCount)))),
 );
 
 /* THE HIGHLIGHTER, PUBLISHED - the file that decides which words in a class

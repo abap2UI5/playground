@@ -24,6 +24,7 @@ export function listDrafts() {
   return stored.filter(
     (d) =>
       typeof d?.name === "string" &&
+      Number.isFinite(d.at) &&
       Array.isArray(d.files) &&
       d.files.every((f) => typeof f?.name === "string" && typeof f?.source === "string"),
   );

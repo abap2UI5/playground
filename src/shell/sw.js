@@ -1,9 +1,10 @@
 // The second visit, without the download.
 //
 // Before this page can do anything it fetches about seven megabytes over the
-// wire: the shell bundle, which carries Monaco, abaplint, the transpiler and
-// the abap2UI5 linter; the transpiled framework; the ABAP corpus the editor
-// checks against; and SQLite as WebAssembly. None of it changes between
+// wire: the shell bundle, which carries Monaco (the abap2UI5 linter as a
+// chunk); the registry worker, which carries abaplint and the transpiler; the
+// transpiled framework; the ABAP corpus the editor checks against; and SQLite
+// as WebAssembly. None of it changes between
 // deploys, and the browser's own cache is not somewhere you can leave twenty
 // megabytes and expect to find it later - on a phone it is evicted early and
 // often, and even when it survives, every asset still costs a revalidation

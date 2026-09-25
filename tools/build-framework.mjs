@@ -82,7 +82,11 @@ function outputHash() {
   h.update(JSON.stringify(pkg.devDependencies));
   // The runtime the bundle is built from, and the esbuild plugins that build
   // it. A change to either has to rebuild framework.mjs.
-  for (const dir of [path.join(ROOT, "src", "runtime")]) {
+  // And the standard library: the transpile writes open-abap-core's classes
+  // into build/output beside the framework's, so a bump of that pin that the
+  // downport absorbs without changing a byte of build/downport still has to
+  // transpile and bundle again.
+  for (const dir of [path.join(ROOT, "src", "runtime"), path.join(DEPS, "open-abap-core", "src")]) {
     for (const file of walk(dir).sort()) h.update(path.relative(ROOT, file)).update(fs.readFileSync(file));
   }
   h.update(fs.readFileSync(path.join(ROOT, "tools", "esbuild-plugins.mjs")));

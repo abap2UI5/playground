@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { allowClipboard, getSource, MAIN_CLASS, MAIN_FILE, MAIN_MARK, open, runSample, SAMPLES, setSource } from "./helpers.mjs";
+import { allowClipboard, clickEditor, getSource, MAIN_CLASS, MAIN_FILE, MAIN_MARK, open, runSample, SAMPLES, setSource } from "./helpers.mjs";
 
 // A sample other than the one the page opens on - it brings its own class name,
 // which is what makes replacing a draft with it interesting.
@@ -140,10 +140,13 @@ test("the toolbar comes back in the full screen view when something goes wrong",
   await expect(page.locator(".toolbar")).toBeHidden();
 });
 
-test("a link nobody wrote opens on the sample instead of failing", async ({ page }) => {
+test("a link nobody wrote opens on the sample instead of failing, and says so", async ({ page }) => {
   await page.goto("/#thisisnotavalidfragment");
-  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  // The sample runs - and the status says why it is the sample, because the
+  // Share dialog promises the sender that a torn link says so.
+  await expect(page.locator("#status")).toHaveText(/showing the sample instead/, { timeout: 120000 });
   expect(await getSource(page)).toContain(`CLASS ${MAIN_CLASS} DEFINITION`);
+  await expect(page.locator(".log-body")).toContainText("could not be read");
 });
 
 test("Undo takes the last edit back, Redo brings it again, and both are inactive when they cannot", async ({ page }) => {
@@ -175,7 +178,7 @@ test("Undo takes the last edit back, Redo brings it again, and both are inactive
 test("Ctrl+S runs, instead of offering to save the page", async ({ page }) => {
   await open(page);
   const before = await page.locator("#app").getAttribute("src");
-  await page.locator("#editor").click();
+  await clickEditor(page);
   await page.keyboard.press("Control+s");
   await expect(page.locator("#app")).not.toHaveAttribute("src", before ?? "", { timeout: 60000 });
   await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });

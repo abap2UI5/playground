@@ -25,6 +25,10 @@ export function setUpSplitter() {
   };
 
   splitter.addEventListener("pointerdown", (e) => {
+    /* The primary button only: a right click opens the context menu, whose
+       pointerup never arrives here, and the page stayed in its dragging state
+       - no selection, the resize cursor - until the splitter was touched again. */
+    if (e.button !== 0 || !e.isPrimary) return;
     splitter.setPointerCapture(e.pointerId);
     splitter.classList.add("is-dragging");
     panes.classList.add("is-dragging");
@@ -70,7 +74,12 @@ export function setUpTabs(appOnly = false) {
   if (appOnly) return { show: () => {} };
 
   const tabs = [...document.querySelectorAll(".tab")];
-  const wide = window.matchMedia("(min-width: 821px)");
+  // The one query the stylesheet and the panel use (max-width: 820px), negated,
+  // rather than a min-width one pixel up: a fractional viewport - 125% zoom
+  // puts 1026 device pixels at 820.8 - matched neither, and the CSS drew the
+  // desk split while this hid a pane as if the page were narrow.
+  const narrow = window.matchMedia("(max-width: 820px)");
+  const wide = { get matches() { return !narrow.matches; }, addEventListener: (type, fn) => narrow.addEventListener(type, fn) };
 
   // Brings one pane to the front. At desk width both are on screen side by
   // side, so this only records which tab would be active and leaves the panes

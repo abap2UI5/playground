@@ -202,7 +202,7 @@ export function readViewChain(source) {
     const text = mask.slice(statement.start, statement.end);
     // The chain ends where the view is handed over. Everything after that is
     // somebody else's code and is left exactly as it is.
-    if (i > first && /\bstringify\s*\(/.test(text)) break;
+    if (i > first && /\bstringify\s*\(/i.test(text)) break;
 
     const parsed = parseHead(text);
     if (!parsed) {
@@ -246,7 +246,7 @@ export function readViewChain(source) {
   // rewrite is one statement and declares one variable, so a `page` or a
   // `cols` used further down would be a reference to something that no longer
   // exists. The one that survives is the one the assignment names.
-  const kept = /DATA\(\s*(\w+)\s*\)|^\s*(\w+)\s*=/.exec(assignment ?? "");
+  const kept = /DATA\(\s*(\w+)\s*\)|^\s*(\w+)\s*=/i.exec(assignment ?? "");
   const keptName = (kept?.[1] ?? kept?.[2] ?? "").toLowerCase();
   const after = mask.slice(regionEnd);
   for (const name of vars.keys()) {
@@ -350,8 +350,10 @@ function readArgs(mask, source, literalAt, from, to) {
   let depth = 0;
   for (let at = from; at < to; at++) {
     const ch = mask[at];
-    if (ch === "(") depth += 1;
-    else if (ch === ")") depth -= 1;
+    // Brackets count too: `v = lt[ n = 1 ]-x` is one value, not a value and
+    // a second `n =` argument.
+    if (ch === "(" || ch === "[") depth += 1;
+    else if (ch === ")" || ch === "]") depth -= 1;
     else if (depth === 0) {
       const m = /^\b(ns|n|v|b)\s*=(?!=)/.exec(mask.slice(at, to));
       if (m && (at === from || /[\s(]/.test(mask[at - 1]))) {
@@ -364,20 +366,26 @@ function readArgs(mask, source, literalAt, from, to) {
   const args = {};
   if (marks.length === 0) {
     const text = mask.slice(from, to);
-    if (text.trim() !== "") args.positional = { raw: source.slice(from, to).trim(), literal: literalAt(from, to) };
+    const valueEnd = from + text.trimEnd().length;
+    if (text.trim() !== "") args.positional = { raw: source.slice(from, valueEnd).trim(), literal: literalAt(from, valueEnd) };
     return args;
   }
   marks.forEach((mark, i) => {
     const end = i + 1 < marks.length ? marks[i + 1].from : to;
-    const text = source.slice(mark.valueAt, end);
+    // Measured on the mask, where a comment is blank: a `" note` behind the
+    // value is not part of it. Taken from the source it was, and a rewritten
+    // chain whose last attribute carried one ended in `" note ).` - a
+    // statement with its full stop inside a comment.
+    const masked = mask.slice(mark.valueAt, end);
+    const valueEnd = mark.valueAt + masked.trimEnd().length;
     args[mark.key] = {
-      raw: text.trim(),
-      literal: literalAt(mark.valueAt, end),
+      raw: source.slice(mark.valueAt, valueEnd).trim(),
+      literal: literalAt(mark.valueAt, valueEnd),
       // Where the `v = …` / `b = …` starts and where its value ends. It is
       // what lets a changed value be written back over exactly itself instead
       // of the chain being generated again around it - see chain-patch.mjs.
       keyAt: mark.from,
-      valueEnd: end - (text.length - text.trimEnd().length),
+      valueEnd,
     };
   });
   return args;

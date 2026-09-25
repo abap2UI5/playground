@@ -151,6 +151,10 @@ export function mountSearch(host) {
   document.body.append(scrim);
 
   let entries = null;
+  /* Why there are no entries, once a load has failed: draw( ) says this in
+     place of "Loading the index…", which it said forever after a failed load
+     as soon as the reader typed. Cleared by the next open( ), which tries again. */
+  let failed = null;
   let rows = [];
   let active = 0;
 
@@ -200,7 +204,7 @@ export function mountSearch(host) {
   function draw() {
     const query = input.value.trim();
     rows = [];
-    if (!entries) return note("Loading the index…");
+    if (!entries) return note(failed ?? "Loading the index…");
     if (!query) return invite();
     /* A high limit, and the grouping does the capping: search( ) slices to
        thirty by default, and a group would then say "eight of twenty-nine" for
@@ -289,12 +293,14 @@ export function mountSearch(host) {
     if (input.value) input.select();
     draw();
     if (entries) return;
+    failed = null;
     try {
       entries = (await loadIndex(INDEX_URL)).entries;
     } catch {
       /* An index that did not arrive says so. "Nothing found" would be an
        * answer about the project, and a wrong one. */
-      return note("The search index could not be loaded. The documentation and the sample catalog are both browsable without it.");
+      failed = "The search index could not be loaded. The documentation and the sample catalog are both browsable without it.";
+      return note(failed);
     }
     draw();
   }
@@ -324,6 +330,12 @@ export function mountSearch(host) {
   results.addEventListener("click", (e) => {
     if (e.target.closest?.("a.search-hit")) leave();
   });
+  /* The middle button is not a click: browsers fire auxclick for it, and the
+     tab it opens would otherwise start with an empty box. Remembered, not
+     closed - this tab keeps its results. */
+  results.addEventListener("auxclick", (e) => {
+    if (e.button === 1 && e.target.closest?.("a.search-hit")) rememberQuery(input.value);
+  });
 
   button.addEventListener("click", open);
   close.addEventListener("click", hide);
@@ -339,6 +351,10 @@ export function mountSearch(host) {
         || target?.isContentEditable
         || target?.closest?.(".monaco-editor");
       if (typing) return;
+      /* Nor under a modal dialog: the scrim would open in the inert layer
+       * beneath it, refuse the focus, and take the arrow keys and Enter away
+       * from the dialog the reader is looking at. */
+      if (document.querySelector("dialog[open]")) return;
       if (e.key === "/" || ((e.metaKey || e.ctrlKey) && e.key === "k")) { e.preventDefault(); open(); }
       return;
     }
