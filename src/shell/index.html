@@ -328,9 +328,9 @@
           title="What this is, how it works and where it stops (?)" aria-label="About this playground: what it is, how it works and where it stops">i</button>
 </div>
 
-<dialog id="about-dialog" class="about">
+<dialog id="about-dialog" class="about" aria-labelledby="about-title">
   <form method="dialog" class="about-head">
-    <h2>abap2UI5 Playground</h2>
+    <h2 id="about-title">abap2UI5 Playground</h2>
     <button class="ghost" aria-label="Close">✕</button>
   </form>
   <div class="about-body">
@@ -445,9 +445,9 @@
 <!-- Share: the link is in the clipboard before this opens; what it adds is
      the other ways out - an embed block, a markdown fence, a zip for
      abapGit. Filled by src/shell/share-dialog.mjs on every open. -->
-<dialog id="share-dialog" class="about share">
+<dialog id="share-dialog" class="about share" aria-labelledby="share-title">
   <form method="dialog" class="about-head">
-    <h2>Share</h2>
+    <h2 id="share-title">Share</h2>
     <button class="ghost" aria-label="Close">✕</button>
   </form>
   <div class="about-body" id="share-body"></div>
@@ -461,9 +461,9 @@
      covers is out of the way while somebody is looking for something.
      The search sits outside the method="dialog" form on purpose: inside it,
      Enter in the input would close the dialog. -->
-<dialog id="examples-dialog" class="about examples">
+<dialog id="examples-dialog" class="about examples" aria-labelledby="examples-title">
   <header class="about-head examples-head">
-    <h2>Samples</h2>
+    <h2 id="examples-title">Samples</h2>
     <input id="examples-search" type="search" placeholder="Search title, summary, control, class…"
            autocomplete="off" spellcheck="false" aria-label="Search the samples">
     <span id="examples-count" class="examples-count" aria-live="polite"></span>
@@ -526,13 +526,13 @@
 <main class="panes" id="panes" aria-label="Editor and app">
   <h1 class="visually-hidden">abap2UI5 Playground</h1>
   <nav class="tabs" role="tablist" aria-label="Panes">
-    <button class="tab is-active" data-pane="left" role="tab" aria-selected="true"
+    <button class="tab is-active" data-pane="left" id="tab-left" role="tab" aria-selected="true"
             aria-controls="pane-left">ABAP</button>
-    <button class="tab" data-pane="right" role="tab" aria-selected="false"
+    <button class="tab" data-pane="right" id="tab-right" role="tab" aria-selected="false"
             aria-controls="pane-right">App</button>
   </nav>
 
-  <section class="pane pane-left" id="pane-left">
+  <section class="pane pane-left" id="pane-left" role="tabpanel" aria-labelledby="tab-left">
     <!-- The role arrives with the first file (src/shell/files-ui.mjs): a tablist
          with no tab in it is a role a screen reader cannot make sense of. -->
     <div class="files" id="files" aria-label="Open files" hidden></div>
@@ -585,7 +585,7 @@
   <div class="splitter" id="splitter" role="separator" aria-orientation="vertical" tabindex="0"
        aria-label="Resize the editor"></div>
 
-  <section class="pane pane-right" id="pane-right">
+  <section class="pane pane-right" id="pane-right" role="tabpanel" aria-labelledby="tab-right">
     <div class="app-frame">
       <!-- What the right half says while the runtime boots. It used to say
            nothing: for the 3.4 seconds a desk waits and the 14 a throttled

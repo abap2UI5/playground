@@ -20,7 +20,7 @@ function checkAllowed(url) {
   if (url.protocol === "https:" && ALLOWED_HOSTS.includes(url.hostname)) return;
   throw new Error(
     `The playground only opens ABAP from ${ALLOWED_HOSTS.join(" or ")}, or from its own site. ` +
-      `This link points at ${url.hostname}.`,
+      `This link points at ${url.hostname || url.protocol}.`,
   );
 }
 
@@ -42,9 +42,12 @@ export function rawFor(url) {
 // the URL, and it is the name abaplint needs, so it is simply kept.
 function nameFrom(url) {
   const last = url.pathname.split("/").pop() ?? "";
-  if (!/\.(clas|intf)\.abap$/.test(last)) {
+  // A class, an interface, or a class's test include - the third is the file
+  // src/editor/files.mjs is written to take beside its class, and a link that
+  // names both is a link to an app with its tests.
+  if (!/\.(clas|intf)\.abap$|\.clas\.testclasses\.abap$/.test(last)) {
     throw new Error(
-      `${last || url.href} is not an ABAP object file. A link points at a .clas.abap or a .intf.abap.`,
+      `${last || url.href} is not an ABAP object file. A link points at a .clas.abap, a .intf.abap or a .clas.testclasses.abap.`,
     );
   }
   return last.toLowerCase();
@@ -57,6 +60,11 @@ function nameFrom(url) {
 const origins = new Map();
 
 export const originOf = (fileName) => origins.get(fileName);
+
+/** Forgets where linked files came from - for code that replaces them, so a
+ *  draft or a sample opened under a name that was once linked does not offer
+ *  a way back to a file it is not. */
+export const forgetOrigins = () => origins.clear();
 
 // The page a human would want, from the URL a machine was given. GitHub serves
 // raw content from a different host than the one that shows it in context, and
@@ -93,11 +101,14 @@ export function humanUrl(raw) {
 // asking a sample repository for cl_abap_typedescr.clas.abap would be one
 // pointless 404 per name.
 const FRAMEWORK = /^(z2ui5_|cl_|cx_|if_|cf_)/i;
+// What `TYPE REF TO` names that is not a class: the generic and the built-in
+// types. Each would otherwise be one request for data.clas.abap.
+const NOT_A_CLASS = /^(data|object|any|simple|clike|csequence|numeric|xsequence|decfloat|decfloat16|decfloat34|string|xstring|utclong|int8|i|c|n|p|x|f|d|t)$/i;
 
 export function instantiatedClasses(source) {
   const names = new Set();
   const add = (name) => {
-    if (name && !FRAMEWORK.test(name)) names.add(name.toLowerCase());
+    if (name && !FRAMEWORK.test(name) && !NOT_A_CLASS.test(name)) names.add(name.toLowerCase());
   };
   // Comments are stripped first, or the sentence "this app calls zcl_helper"
   // in a header comment would be followed as if it were code.
@@ -135,7 +146,9 @@ export async function followNavigation(files) {
       const from = origins.get(file.name);
       if (from === undefined) continue;
       for (const name of instantiatedClasses(file.source)) {
-        const fileName = `${name}.clas.abap`;
+        // An interface's constants are read with `=>` too, and its file is
+        // an .intf.abap - asked for as a class it could never be found.
+        const fileName = /^[yz]if_/i.test(name) ? `${name}.intf.abap` : `${name}.clas.abap`;
         if (seen.has(fileName) || wanted.has(fileName)) continue;
         wanted.set(fileName, new URL(fileName, from).href);
       }

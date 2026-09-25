@@ -36,6 +36,7 @@ import {
   followNavigation,
   humanUrl,
   linkedSources,
+  forgetOrigins,
   originOf,
 } from "./deep-link.mjs";
 import { DEFAULT_FILES, isSample, sampleById } from "../editor/samples.mjs";
@@ -112,8 +113,9 @@ const catalogueQuery = (() => {
 // to have somewhere to say so.
 const appOnly = params.get("view") === "app" || params.get("view") === "full";
 
-// Set when a ?src= link could not be followed, so boot can say so once the page
-// is far enough along to have somewhere to say it.
+// Set when a ?src= link could not be followed, or the code in a shared link
+// could not be read, so boot can say so once the page is far enough along to
+// have somewhere to say it.
 let linkFailure;
 
 // Where the editor starts, in order of how deliberate the choice was: a link is
@@ -124,9 +126,14 @@ async function startingFiles() {
   try {
     const shared = await filesFromLocation(MAIN_FILE);
     if (shared) return { files: checkFileSet(shared), from: "a shared link" };
-  } catch {
+  } catch (e) {
     // A fragment that will not decode is somebody else's link or a truncated
-    // paste. Opening on the sample beats an error page nobody can act on.
+    // paste. Opening on the sample beats an error page nobody can act on -
+    // and saying so beats opening on the sample as if that were the link:
+    // the Share dialog promises the sender that a torn link "says so".
+    linkFailure = new Error(
+      `The code in this link could not be read - a pasted link may have been cut short. ${e?.message || e}`,
+    );
   }
 
   // ?src=<url> - what a documentation page links when it wants to show one of
@@ -664,6 +671,7 @@ function remember(files) {
 function loadSample(id, tabs) {
   const sample = sampleById(id);
   if (!sample) return;
+  forgetOrigins();
   const keptHow = replaceWith(sample.files);
   // Picking a sample is a request to see it, so it runs without a second click.
   run().then((started) => {
@@ -683,6 +691,7 @@ function loadDraft(files, tabs) {
     showOutput("Drafts", String(e.message || e));
     return;
   }
+  forgetOrigins();
   const keptHow = replaceWith(checked);
   run().then((started) => {
     if (started) tabs.show("right");

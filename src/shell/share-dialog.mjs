@@ -171,5 +171,8 @@ export function openShare(files, url, copied = false) {
   frag.append(git);
 
   body.replaceChildren(frag);
-  dialog.showModal();
+  // Share awaits the link and the clipboard before it gets here, so a second
+  // press can arrive while the dialog is open - and showModal( ) on an open
+  // dialog is an InvalidStateError in older engines.
+  if (!dialog.open) dialog.showModal();
 }
