@@ -455,7 +455,10 @@ back byte for byte included.
   `@abap2ui5/linter`) reconstructs the view the builder chain produces and
   checks it against UI5 **1.71**, the floor abap2UI5 holds its shipped apps to.
   A finding does not block Run: the app runs and is wrong somewhere, and
-  looking at it is the fastest way to understand the finding.
+  looking at it is the fastest way to understand the finding. Its
+  `trailing-whitespace`, `crlf-line-ending` and `missing-final-newline` rules
+  are off here (`settingsFor( )`): the buffer is not a serialised file, and the
+  abapGit zip normalises all three on the way out (`src/shell/export.mjs`).
 
 Both configurations are live in the panel's **abaplint** and **abap2UI5 lint**
 tabs (`src/shell/insight.mjs`); the defaults stay the curated lists. Every

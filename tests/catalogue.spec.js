@@ -49,7 +49,7 @@ const row = (over) => ({
 
 const INDEX = {
   built: "2026-09-03T00:00:00.000Z",
-  ui5: "1.151.0",
+  ui5: "1.152.0",
   minUi5: "1.71",
   carries: ["sap.ui.core", "sap.m", "sap.f"],
   sources: [
@@ -214,7 +214,7 @@ test("what cannot run here is listed, says why, and opens for reading", async ({
   await expect(page.locator(".card", { hasText: "Switch Default Model" })).toHaveCount(0);
   await expect(count(page)).toHaveText("4 of 6 samples");
 
-  // A port above the floor still runs here - this site is on 1.151 - and says
+  // A port above the floor still runs here - this site is on 1.152 - and says
   // which release it needs rather than being hidden.
   await page.uncheck("#f-runs");
   const newer = page.locator(".card", { hasText: "Newer Control" });

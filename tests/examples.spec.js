@@ -48,7 +48,7 @@ const entry = (over) => ({
 
 const APPS_INDEX = {
   built: "2026-09-03T00:00:00.000Z",
-  ui5: "1.151.0",
+  ui5: "1.152.0",
   minUi5: "1.71",
   carries: ["sap.ui.core", "sap.m", "sap.f"],
   sources: [

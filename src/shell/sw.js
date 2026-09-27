@@ -169,7 +169,7 @@ function isCacheable(url) {
   // each time, and it has to stay live for the app to restart at all.
   //
   // Queries are allowed here, and only here. UI5 puts one on every
-  // stylesheet it loads (?sap-ui-dist-version=1.151.0) and on the manifest
+  // stylesheet it loads (?sap-ui-dist-version=1.152.0) and on the manifest
   // (?sap-language=EN), and both name something fixed for a build rather than
   // a moment - so refusing them left the two theme stylesheets, which block
   // the app's first paint, going to the network on every single Run.

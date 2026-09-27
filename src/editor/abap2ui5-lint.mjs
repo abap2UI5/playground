@@ -88,7 +88,26 @@ export function applyLinterSettings(next) {
 // and the number of problems next to it did not move. It was passed as `ui5`
 // until this was noticed, which means the release in that tab had never once
 // changed what was checked.
-const settingsFor = (s) => ({ minUi5: s.ui5, distribution: s.distribution });
+//
+// Three of the linter's file-format rules are switched off, because what they
+// guard is a file abapGit serialises and the buffer here is not one yet: a
+// line ending in blanks is what every Enter leaves behind mid-typing, Monaco
+// adds no final newline, and whether the buffer holds CRs depends on what was
+// pasted into it. The one way out of the
+// playground that IS such a file - the abapGit zip - already does all three
+// on the way out (normalisedSource( ) in src/shell/export.mjs), so a warning
+// here would be about something that can no longer reach a repository.
+// byte-order-mark stays on: the export does not strip one.
+const FILE_FORMAT_RULES_THE_EXPORT_NORMALISES = {
+  "trailing-whitespace": false,
+  "crlf-line-ending": false,
+  "missing-final-newline": false,
+};
+const settingsFor = (s) => ({
+  minUi5: s.ui5,
+  distribution: s.distribution,
+  rules: FILE_FORMAT_RULES_THE_EXPORT_NORMALISES,
+});
 
 // One pass of the linter over one source: its findings AND the views it
 // reconstructed them from. The editor's analysis wants both - the findings

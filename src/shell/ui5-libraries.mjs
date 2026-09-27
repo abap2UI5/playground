@@ -31,7 +31,7 @@ export const UI5_LIBRARIES = [
 //
 // Here rather than in tools/build-ui5.mjs, which used to hold it, because the
 // page needs it too: UI5 puts the version on the query of every stylesheet it
-// loads (?sap-ui-dist-version=1.151.0), and src/shell/warm-up.mjs asks for
+// loads (?sap-ui-dist-version=1.152.0), and src/shell/warm-up.mjs asks for
 // those stylesheets while the corpus is still parsing so the app frame finds
 // them in the cache. A URL with the wrong version would warm nothing.
-export const UI5_VERSION = "1.151.0";
+export const UI5_VERSION = "1.152.0";
