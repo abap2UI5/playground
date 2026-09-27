@@ -15,12 +15,20 @@
 (function () {
   "use strict";
 
-  // `checkLocal` is the frontend's own flag for "the page was served by the
-  // backend", which makes it POST to window.location.href instead of the
-  // manifest's data source. That is what the backend GET page sets, and it is
-  // true here in the sense that matters: the answer comes from this origin.
-  window.z2ui5 = window.z2ui5 || {};
-  window.z2ui5.checkLocal = true;
+  // The frontend sends its roundtrips to this frame's own URL - the one
+  // request the fetch below takes over - because the component is started
+  // with `checkLocal: true`, the frontend's flag for "the page was served by
+  // the backend", which makes it POST to window.location.href instead of the
+  // manifest's data source. This script used to set that flag, as
+  // `window.z2ui5.checkLocal`. abap2UI5#2777 removed the window.z2ui5 global:
+  // the frontend keeps its state per component now (component.ctx.state), and
+  // Component.init( ) reads checkLocal from its component data and from
+  // nowhere else. So the flag is passed the way the backend's own GET page
+  // passes it, as componentData in the data-settings ComponentSupport creates
+  // the component from - written into the frame's index.html at build time by
+  // patchFrontend( ) in tools/build-ui5.mjs. Nothing here reads the
+  // frontend's state either: what the playground records of a roundtrip is
+  // what passes through the fetch below.
 
   var nativeFetch = window.fetch.bind(window);
   var self = new URL(window.location.href);

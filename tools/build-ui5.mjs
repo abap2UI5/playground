@@ -194,10 +194,45 @@ function writeVersionInfo() {
 // the point of it.
 const FRAME_OPTIONS = ['data-sap-ui-frameOptions="trusted"', 'data-sap-ui-frameOptions="allow"'];
 
-// The two changes the playground makes to the frontend it built: a script tag
-// ahead of the UI5 bootstrap, so the roundtrip is already redirected by the
-// time the component starts (see src/shell/frontend-bridge.js), and the
-// frameOptions above.
+// Where the component is told that the page around it is its backend.
+//
+// The frontend POSTs every roundtrip to the manifest's data source
+// (/sap/bc/http/sap/z2ui5) unless its component data says `checkLocal: true`
+// - "this page was served by the backend, answer to its own URL". That is
+// what the backend's GET page passes (z2ui5_cl_ui5_http_handler=>_http_get),
+// and it is true here in the sense that matters: the answer comes from this
+// origin, through the bridge. Without it every roundtrip goes to a path this
+// site does not have, the bridge lets it through (it only takes a POST to the
+// frame's own URL), and nothing renders.
+//
+// It used to be a flag on a `window.z2ui5` global that the bridge set ahead of
+// the bootstrap. abap2UI5#2777 removed the global - the frontend's state is
+// per component now - and Component.init( ) reads the flag from its component
+// data and from nowhere else. The published index.html starts the component
+// through ComponentSupport, whose `data-settings` become the component's
+// settings, so the flag goes there: parsed and extended rather than replaced,
+// so whatever else upstream puts in it stays. Re-running it on a page that
+// already carries the flag writes the same page again.
+const COMPONENT_SETTINGS = /(<div\b[^>]*\bdata-sap-ui-component\b[^>]*\bdata-settings=')([^']*)(')/;
+
+function withCheckLocal(html) {
+  const found = COMPONENT_SETTINGS.exec(html);
+  if (!found) {
+    throw new Error(
+      "build-ui5: the frontend index.html no longer starts the component from data-settings - " +
+        "check how it creates it now, and pass it componentData.checkLocal there",
+    );
+  }
+  const settings = JSON.parse(found[2]);
+  settings.componentData = { ...settings.componentData, checkLocal: true };
+  return html.replace(found[0], found[1] + JSON.stringify(settings) + found[3]);
+}
+
+// The three changes the playground makes to the frontend it built: a script
+// tag ahead of the UI5 bootstrap, so the roundtrip is already redirected by
+// the time the component starts (see src/shell/frontend-bridge.js), the
+// frameOptions above, and the component data that sends the roundtrip to the
+// frame's own URL in the first place.
 function patchFrontend() {
   const indexPath = path.join(UI5_DIST, "index.html");
   let html = fs.readFileSync(indexPath, "utf8");
@@ -216,6 +251,7 @@ function patchFrontend() {
     throw new Error("build-ui5: the frontend index.html no longer sets frameOptions - check what it does now");
   }
   html = html.replace(FRAME_OPTIONS[0], FRAME_OPTIONS[1]);
+  html = withCheckLocal(html);
   fs.writeFileSync(indexPath, html);
   fs.copyFileSync(path.join(ROOT, "src", "shell", "frontend-bridge.js"), path.join(UI5_DIST, "frontend-bridge.js"));
 }
@@ -233,7 +269,7 @@ if (!force && fs.existsSync(stampPath) && fs.readFileSync(stampPath, "utf8").tri
   fs.writeFileSync(stampPath, hash);
 }
 
-// Both are playground changes to somebody else's build output and cost
+// All three are playground changes to somebody else's build output and cost
 // nothing, so they are re-applied on every run rather than being part of the
 // cached tree.
 patchFrontend();
