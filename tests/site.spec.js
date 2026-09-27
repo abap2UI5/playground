@@ -75,16 +75,25 @@ test("the corpus carries the framework and leaves out its generated frontend", a
 });
 
 // And the same directory stays out of the framework bundle, for the bytes this
-// time: 62 classes holding the frontend's source as string constants, read by
+// time: 69 classes holding the frontend's source as string constants, read by
 // nothing the playground ever runs - see generatedFrontendStubPlugin in
-// tools/esbuild-plugins.mjs. The marker is a line of the frontend's own
-// JavaScript (core/Server.js), which only those classes carry as text.
+// tools/esbuild-plugins.mjs. The marker is a method of the frontend's own
+// core/Server.js, which of all the ABAP only those classes carry, as text.
+//
+// It used to be `z2ui5.checkLocal`, which left the frontend with the
+// window.z2ui5 global (abap2UI5#2777) - and from then on this test would have
+// passed on a bundle carrying the whole frontend. So the marker is first
+// found in the frontend the frame loads: a rename upstream fails here, and
+// says to pick another, rather than turning this into a test of nothing.
 //
 // Asserted as booleans on purpose: a toContain( ) over a six-megabyte string
 // prints the whole string when it fails.
 test("the framework bundle leaves the generated frontend out as well", async ({ request }) => {
+  const marker = "_combineSignals";
+  const server = await (await request.get("/app/core/Server.js")).text();
+  expect(server.includes(marker), `${marker} is not in the frontend's core/Server.js any more - pick another marker`).toBe(true);
   const bundle = await (await request.get("/runtime/framework.mjs")).text();
-  expect(bundle.includes("z2ui5.checkLocal"), "the generated frontend is in the bundle").toBe(false);
+  expect(bundle.includes(marker), "the generated frontend is in the bundle").toBe(false);
   // The classes are still there by name, so a reference to one fails with a
   // sentence rather than with "undefined".
   expect(bundle.includes("Z2UI5_CL_UI5F_PRELOAD"), "the stub for the generated frontend is missing").toBe(true);

@@ -66,7 +66,7 @@ of each line. Each step is still its own script and still runnable by name
    injected `Buffer`, the console and crypto shims in
    `tools/esbuild-plugins.mjs`) are all load-bearing — the plan's phase 1
    findings explain each one. One plugin leaves something *out*:
-   `generatedFrontendStubPlugin` puts a stub in the place of each of the 62
+   `generatedFrontendStubPlugin` puts a stub in the place of each of the 69
    `z2ui5_cl_ui5f_*` classes (the UI5 frontend held as ABAP string constants,
    1.7 MB of the 15 MB transpilat, read only by the GET branch of the http
    handler, which nothing here calls) — the transpile still sees the whole
@@ -86,7 +86,12 @@ of each line. Each step is still its own script and still runnable by name
    had just reported the tree up to date. It rewrites
    `frameOptions="trusted"` to `"allow"` so the app renders inside somebody
    else's documentation page, and fails if the attribute is no longer there to
-   rewrite. `UI5_LIBRARIES` (`src/shell/ui5-libraries.mjs` — shared with the
+   rewrite. It also hands the component `componentData: { checkLocal: true }`,
+   added to the `data-settings` ComponentSupport creates it from — what the
+   backend's own GET page passes, and what makes the frontend POST to the
+   frame's own URL rather than to the manifest's `/sap/bc/http/sap/z2ui5` —
+   and fails the same way if the page stops creating the component from
+   there. `UI5_LIBRARIES` (`src/shell/ui5-libraries.mjs` — shared with the
    examples browser, which filters catalogue entries by it) is the closed set
    of libraries the site carries.
 4. **`tools/build-catalogue.mjs`** fetches the six committed catalogues of the
@@ -129,8 +134,18 @@ of each line. Each step is still its own script and still runnable by name
    Node can read, which is what the tests import.
 
 At run time the pieces meet like this: the UI5 frontend runs in an iframe and
-POSTs to its backend with a plain `fetch`; `frontend-bridge.js` replaces
-`window.fetch` for exactly that one request (comparing origin and pathname
+POSTs to its backend with a plain `fetch` — to the frame's own URL, because
+the component starts with `checkLocal: true` in its component data (step 3
+above). That flag used to be `window.z2ui5.checkLocal`, set by the bridge
+ahead of the bootstrap. abap2UI5#2777 removed the `window.z2ui5` global — the
+frontend keeps its state per component now (`component.ctx.state`, on the
+component ComponentSupport names `container-z2ui5`) — and `Component.init()`
+reads the flag from its component data and from nowhere else, so a flag set
+on the window is ignored, every roundtrip goes to the manifest's path, which
+this site does not have, and nothing renders. Nothing in the playground reads
+the frontend's state: the Roundtrips tab is fed by the bridge in `main.mjs`,
+below. `frontend-bridge.js` replaces `window.fetch` for exactly that one
+request (comparing origin and pathname
 only — the run counter lives in the query) and hands the body to the parent
 page, which hands it to the transpiled handler — running in a **dedicated
 worker** the page started (`src/shell/runtime-client.mjs`,
@@ -1438,7 +1453,7 @@ host in a test run — and is a unit test over there
   what somebody control-clicks into to find out how the framework does
   something. Reading the framework is the playground; a tenth of the download
   does not buy it.
-- **The generated frontend is a stub in the framework bundle.** The 62
+- **The generated frontend is a stub in the framework bundle.** The 69
   `z2ui5_cl_ui5f_*` classes are registered by name and throw a sentence from
   `get()`; only the http handler's GET branch reads them, and the playground
   never GETs — the frame's document comes from `dist/app`. Wiring that branch

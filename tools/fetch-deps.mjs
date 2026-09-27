@@ -27,7 +27,7 @@ export const PINS = [
   {
     name: "abap2ui5",
     url: "https://github.com/abap2UI5/abap2UI5",
-    sha: "1b3b64e55841a97e3887325e471012c0c00c7166",
+    sha: "27885d0069393399847c76fd12de2dc18c542c95",
     note: "the framework itself - src/ is downported and transpiled",
   },
   {
@@ -45,7 +45,7 @@ export const PINS = [
      * frontend and backend disagree at runtime. */
     name: "abap2ui5-frontend",
     url: "https://github.com/abap2UI5/frontend",
-    sha: "a8c3dc6f5adc23ea9823b31e581157940783d1b1",
+    sha: "4ae43a2241747744ef7a097d4df9edef150bfb66",
     note: "the published UI5 frontend - result/cloud/app/webapp, mirrored from the framework pin above",
   },
   {
@@ -62,7 +62,7 @@ export const PINS = [
      * at, not the deploy that happens to run next. */
     name: "abap2ui5-samples",
     url: "https://github.com/abap2UI5/samples",
-    sha: "391c9f8ebea7276bc1a6565b411addea0f2ff6d3",
+    sha: "7ea1236878fef5891f106ac139fdb3aedfbb7fdf",
     note: "the samples the page opens on and lists as built in",
   },
   {
@@ -70,7 +70,7 @@ export const PINS = [
     url: "https://github.com/open-abap/open-abap-core",
     // The commit abap2UI5 itself pins, so the playground transpiles the
     // framework against the same standard library its CI tests against.
-    sha: "48335c7351ad72265f7272177e1e3e2fec259a16",
+    sha: "b2d219df61f8c077df7a038bc43d168f9f280fbf",
     note: "ABAP standard library for abaplint and the transpiler",
   },
 ];
