@@ -27,7 +27,7 @@ export const PINS = [
   {
     name: "abap2ui5",
     url: "https://github.com/abap2UI5/abap2UI5",
-    sha: "27885d0069393399847c76fd12de2dc18c542c95",
+    sha: "5a1bd70c97767703cf81d414326d636cda26769c",
     note: "the framework itself - src/ is downported and transpiled",
   },
   {
@@ -45,7 +45,7 @@ export const PINS = [
      * frontend and backend disagree at runtime. */
     name: "abap2ui5-frontend",
     url: "https://github.com/abap2UI5/frontend",
-    sha: "4ae43a2241747744ef7a097d4df9edef150bfb66",
+    sha: "68baa79c91bd86937bb992a8674fe7dbcc2413c5",
     note: "the published UI5 frontend - result/cloud/app/webapp, mirrored from the framework pin above",
   },
   {
@@ -62,7 +62,7 @@ export const PINS = [
      * at, not the deploy that happens to run next. */
     name: "abap2ui5-samples",
     url: "https://github.com/abap2UI5/samples",
-    sha: "7ea1236878fef5891f106ac139fdb3aedfbb7fdf",
+    sha: "cdd5c8b09a4ecdc51943b827ff6711d6c3af13a5",
     note: "the samples the page opens on and lists as built in",
   },
   {
