@@ -76,7 +76,13 @@ of each line. Each step is still its own script and still runnable by name
    the transpile and the bundle (about a minute together) are skipped as well
    when nothing that feeds them moved. Both stamps also check that what they
    would have produced is still on disk, so a deleted `dist/` rebuilds rather
-   than being cached into a missing site.
+   than being cached into a missing site. abaplint and the transpiler are run
+   from `node_modules/.bin` by path, never through `npx`: `npx abaplint` in a
+   checkout without an install asks the registry for a package of that name,
+   fails, and exits non-zero - which `--fix` also does while issues remain, so
+   a tool that never ran was once stamped as a finished downport and the next
+   build died in the transpiler on the first `REF #`. A missing binary now
+   stops the step with its name.
 3. **`tools/build-ui5.mjs`** builds the abap2UI5 UI5 frontend against a pinned
    OpenUI5 (`UI5_VERSION` in `src/shell/ui5-libraries.mjs` — the page reads it
    too, for the warm-up's stylesheet URLs; from npm — no CDN) into `dist/app/`. The copy into

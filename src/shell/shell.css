@@ -863,7 +863,10 @@ iframe {
    starts eliding what it is there to say. */
 .examples-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(23rem, 1fr));
+  /* ...and never wider than the list itself: 23rem is 368px, and on a 390px
+     phone the body's padding leaves 364 - so the one column was four pixels
+     wider than its box and every card's last button was cut at the edge. */
+  grid-template-columns: repeat(auto-fill, minmax(min(23rem, 100%), 1fr));
   gap: .3rem;
 }
 
@@ -878,15 +881,31 @@ iframe {
 .example-item .example-row { flex: 1; min-width: 0; }
 /* The row is a button and a two-line one: what it is called, with what the
    index knows about it, then what it does and the class it is. */
-.example-row {
+/* BOTH CLASSES, BECAUSE `.insight-row` BELOW OUTRANKED THIS. The row carries
+   `insight-row` for the button reset and `example-row` for its own two-line
+   shape, and the two rules are one class each - so the later one won on
+   every property they share: the row was laid out with the panel's `gap`,
+   its `padding` and, the one that showed, `align-items: baseline`. In a
+   column that means no stretch, so each line was as wide as its own words:
+   a summary of 1,100px ran out of its card and under the next one, and the
+   class name after it was never on screen. */
+.insight-row.example-row {
   display: flex; flex-direction: column; align-items: stretch; gap: .1rem;
   padding: .3rem .5rem; border-radius: 6px; border-left: none;
 }
 button.example-row { border-left: none; }
 .example-line { display: flex; align-items: baseline; gap: .4rem; min-width: 0; }
 .example-line.is-second { color: var(--fg-dim); }
-.example-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.example-note { color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* THE TITLE AND THE NOTE ARE WHAT GIVES WAY. Both are set nowrap with an
+   ellipsis, and neither could shrink: a flex item's minimum is its content,
+   so a one-line summary of 1,100px stayed 1,100px wide, ran out of the
+   button, out of the card and under the card beside it - the last column
+   showed the tail of its sentence past its own border, and the class name
+   after the note was never seen at all. `min-width: 0` is what lets the
+   ellipsis happen; the badges and the class name beside them keep their
+   width (`flex: none`), which is the point of the ellipsis being here. */
+.example-title { flex: 0 1 auto; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.example-note { flex: 1 1 auto; min-width: 0; color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .example-row .insight-who { flex: none; font-family: var(--font-mono); }
 
 /* What the index knows, in one or two words each: the group the repository
@@ -1364,8 +1383,18 @@ button.insight-row {
   .examples-intro { display: none; }
   .examples-filters { flex-direction: row; flex-wrap: wrap; align-items: center; gap: .3rem .8rem; }
   .examples-filter-group.is-sources { flex-direction: row; gap: .7rem; margin: 0; padding: .15rem .6rem; border-radius: 999px; }
-  .examples-facets { flex-direction: row; flex-wrap: wrap; gap: .5rem; }
-  .examples-facet { flex-direction: row; align-items: center; gap: .3rem; }
+  /* `max-width: 100%` is what the clamp hangs on: a wrapping row's item is
+     otherwise as wide as its widest child's content, however wide the row. */
+  .examples-facets { flex-direction: row; flex-wrap: wrap; gap: .5rem; max-width: 100%; }
+  /* A select is as wide as its widest option, and the control list's is
+     "sap.ui.layout.form.SimpleForm" and longer - 363px of select on a 390px
+     screen. In the column it was capped by the side's width; in a row that
+     wraps nothing capped it, so the facet ran off the right edge, the row it
+     sat in grew to its width and the two lists after it wrapped past the
+     screen as well. The facet may shrink and grow with the row, and the list
+     inside it gives way rather than the label. */
+  .examples-facet { flex: 1 1 auto; flex-direction: row; align-items: center; gap: .3rem; min-width: 0; max-width: 100%; }
+  .examples-facet select { flex: 1 1 auto; min-width: 0; }
   .examples-all { margin: 0 0 0 auto; padding: 0; border-top: none; }
   /* The head is title, search, count and close, and on a phone the count is
      the one of the four that fits nowhere - the list under it is the count. */

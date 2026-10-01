@@ -96,3 +96,11 @@ test("an address with nothing close to it offers nothing", async ({ page }) => {
   await expect(page.locator("h1")).toHaveText("This page is not here");
   await expect(page.locator("#near")).toBeHidden();
 });
+
+test("a three-letter word is not the start of every title that begins with it", async ({ page }) => {
+  // "not" used to begin "Notification" and answer this address with five
+  // Notification List samples; a word that short is matched whole or not at all.
+  await page.goto(`${BASE}nope-not-here/`);
+  await expect(page.locator("h1")).toHaveText("This page is not here");
+  await expect(page.locator("#near")).toBeHidden();
+});
