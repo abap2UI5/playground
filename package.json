@@ -29,6 +29,7 @@
     "@abaplint/runtime": "2.13.93",
     "@abaplint/transpiler": "2.13.93",
     "@abaplint/transpiler-cli": "2.13.93",
+    "@anthropic-ai/sdk": "0.131.0",
     "@playwright/test": "1.63.0",
     "@ui5/cli": "4.0.70",
     "buffer": "6.0.3",

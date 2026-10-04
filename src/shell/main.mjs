@@ -50,13 +50,14 @@ import { setUpSearch } from "./search-box.mjs";
 import { announceAppHeight, announceReady, announceStatus, startEmbedMessages } from "./embed.mjs";
 import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
 import { openShare, setUpShareDialog } from "./share-dialog.mjs";
-import { clearRoundtrips, recordRoundtrip } from "./roundtrips.mjs";
+import { clearRoundtrips, recordRoundtrip, roundtripList } from "./roundtrips.mjs";
+import { setUpChat } from "./chat.mjs";
 import { state } from "./state.mjs";
 import { STALLED, startRuntime } from "./runtime-client.mjs";
 import { readStored, readStoredJson, removeStored, writeStored, writeStoredJson } from "./storage.mjs";
 import { isDark, onThemeChange, setUpTheme } from "./theme.mjs";
 import { setUpExtra } from "./extra.mjs";
-import { describeError, hideOutput, setStatus, showOutput } from "./ui.mjs";
+import { currentLog, describeError, hideOutput, setStatus, showOutput } from "./ui.mjs";
 import { warmUpAppFrame } from "./warm-up.mjs";
 
 // Built rather than written as a literal, so it resolves under a GitHub Pages
@@ -410,6 +411,25 @@ async function boot() {
   booted = true;
   reflectRunButton();
   showSourceLink();
+
+  // The AI chat (src/shell/chat.mjs, src/shell/ai-agent.mjs): the model works
+  // on the same editor and presses the same Run, through these three. Not in
+  // an embedded playground, whose bar does not carry the switch.
+  if (!embedded) {
+    setUpChat(
+      {
+        files: () => getFiles(),
+        // Through replaceWith( ), like a sample: written into the models that
+        // are open (undoable), the strip redrawn, the draft stored by the
+        // change handler. checkFileSet( ) refuses a set the editor cannot hold.
+        setFiles: (files) => replaceWith(checkFileSet(files)),
+        run: () => runForAgent(),
+      },
+      // On a phone the chat lives in the left pane, so opening it brings
+      // that pane forward.
+      { onToggle: (open) => open && tabs.show("left") },
+    );
+  }
 
   // A click on Run is a request to see the app, so on a narrow screen it brings
   // the app forward - the same move picking a sample makes, and at desk width
@@ -944,6 +964,8 @@ function autorunAfterChange() {
 // each run a different document, so the browser cannot serve a cached one and
 // the load event is unambiguous.
 let running = false;
+// What the last run's unit tests said, for runForAgent( ).
+let lastTestResults = [];
 
 export async function run() {
   // Ctrl+Enter and the sample menu call this too, so the guard cannot be the
@@ -1009,9 +1031,11 @@ export async function run() {
       setStatus("running the tests…");
       const results = await state.runtime.runUnitTests(tests);
       setTestResults(results);
+      lastTestResults = results;
       testsFailed = results.filter((r) => !r.passed).length;
     } else {
       setTestResults([]);
+      lastTestResults = [];
     }
 
     setStatus("starting the app…");
@@ -1078,6 +1102,35 @@ export async function run() {
     running = false;
     reflectRunButton();
   }
+}
+
+// Run, for the AI chat - and everything a person would look at afterwards,
+// as data: the status line, the problems, the tests, the roundtrips the app
+// started with, and the Log. ai-agent.mjs turns it into what the model reads.
+//
+// A run already under way (autorun, set off by the very edit the model just
+// made) is waited out rather than skipped, so the report is about the code
+// as it is now. After the frame has loaded, the first roundtrip is waited for
+// as well: that is the app's start, and the dump the model needs to see, if
+// there is one, arrives with it.
+async function runForAgent() {
+  while (running) await new Promise((resolve) => setTimeout(resolve, 100));
+  const started = await run();
+  if (started) {
+    const until = performance.now() + 10000;
+    while (roundtripList().length === 0 && performance.now() < until) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+  const status = document.getElementById("status");
+  return {
+    started: Boolean(started),
+    status: status.textContent,
+    problems: refresh(),
+    tests: lastTestResults,
+    roundtrips: roundtripList(),
+    log: currentLog(),
+  };
 }
 
 // The net under boot( ).
