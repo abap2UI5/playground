@@ -25,6 +25,10 @@ const KEY_STORAGE = "abap2ui5-playground:anthropic-key";
 // API refuses such a key without the anthropic-workspace-id header. Empty
 // for the ordinary key, which belongs to a workspace already.
 const WORKSPACE_STORAGE = "abap2ui5-playground:anthropic-workspace";
+// Thorough, Balanced or Fast (SPEEDS in ai-agent.mjs). Kept only while it
+// differs from Balanced, the rule the page's other preferences follow.
+const SPEED_STORAGE = "abap2ui5-playground:ai-speed";
+const DEFAULT_SPEED = "balanced";
 
 const SUGGESTIONS = [
   "A table of flights with a search field that filters by carrier",
@@ -61,6 +65,7 @@ export function setUpChat(chatHost, { onToggle } = {}) {
     usage: document.getElementById("chat-usage"),
     download: document.getElementById("chat-download"),
     reset: document.getElementById("chat-new"),
+    speed: document.getElementById("chat-speed"),
   };
 
   el.toggle.addEventListener("click", () => {
@@ -121,6 +126,14 @@ export function setUpChat(chatHost, { onToggle } = {}) {
       setStatus("the zip could not be written", true);
       addLine("notice", String(e?.message ?? e));
     }
+  });
+
+  // Asked before every request, so a change applies from the next turn on.
+  const stored = readStored(SPEED_STORAGE);
+  if (stored && [...el.speed.options].some((o) => o.value === stored)) el.speed.value = stored;
+  el.speed.addEventListener("change", () => {
+    if (el.speed.value === DEFAULT_SPEED) removeStored(SPEED_STORAGE);
+    else writeStored(SPEED_STORAGE, el.speed.value);
   });
 
   showWelcome();
@@ -208,6 +221,10 @@ async function submit() {
 
   let current;
   let raw = "";
+  let note;
+  // The row of each tool call, by its id: written while the call streams in
+  // and runs, and finished in place when it is done.
+  const rows = new Map();
   let mod;
   try {
     mod = await import("./ai-agent.mjs");
@@ -216,9 +233,31 @@ async function submit() {
         apiKey: key,
         workspace: readStored(WORKSPACE_STORAGE) ?? undefined,
         host,
+        speed: () => el.speed.value,
         ui: {
           assistantStart() {
             current = undefined;
+            note = undefined;
+          },
+          thinkingStart() {
+            note = undefined;
+          },
+          thinking(delta) {
+            current = undefined;
+            if (!note) note = addLine("progress", "");
+            note.textContent += delta;
+            scrollDown();
+          },
+          toolPending({ id, text }) {
+            current = undefined;
+            note = undefined;
+            let row = rows.get(id);
+            if (!row) {
+              row = addLine("tool is-pending", "");
+              rows.set(id, row);
+            }
+            row.textContent = text;
+            scrollDown();
           },
           text(delta) {
             if (!current) {
@@ -231,9 +270,14 @@ async function submit() {
             renderMarkdown(current, raw);
             scrollDown();
           },
-          tool({ summary, error }) {
+          tool({ id, summary, error }) {
             current = undefined;
-            addLine(error ? "tool is-error" : "tool", summary);
+            note = undefined;
+            const row = rows.get(id) ?? addLine("tool", "");
+            rows.delete(id);
+            row.className = `chat-msg chat-tool${error ? " is-error" : ""}`;
+            row.textContent = summary;
+            scrollDown();
           },
           usage({ input, output, cached }) {
             const k = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));

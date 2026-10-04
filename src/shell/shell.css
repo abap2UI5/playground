@@ -1956,6 +1956,27 @@ button.chat-suggestion {
   border-left: 2px solid var(--line);
 }
 .chat-tool::before { content: "› "; }
+/* A tool call still under way: its row counts what has arrived, and is
+   finished in place when the call is done. */
+.chat-tool.is-pending { color: var(--fg); border-left-color: var(--accent); }
+.chat-tool.is-pending::before { content: "… "; }
+/* The model's progress notes between tool calls - its own words, quieter
+   than an answer. */
+.chat-progress {
+  align-self: flex-start;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--fg-dim);
+}
+.chat-speed {
+  font: inherit;
+  font-size: 12px;
+  padding: .2rem .35rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  color: var(--fg);
+}
 .chat-tool.is-error,
 .chat-notice.is-error { color: var(--danger); border-left-color: var(--danger); }
 

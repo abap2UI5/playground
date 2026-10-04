@@ -30,7 +30,7 @@ CLASS zcl_ai_app IMPLEMENTATION.
 ENDCLASS.`;
 
 // One streamed answer: some text, then the tool calls, as the API sends them.
-function sse({ text = "", tools = [], stop }) {
+function sse({ text = "", tools = [], stop, note }) {
   const events = [];
   const send = (type, data) => events.push(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
   send("message_start", {
@@ -40,6 +40,15 @@ function sse({ text = "", tools = [], stop }) {
     },
   });
   let index = 0;
+  // A progress note, the way display "updates" streams one: a thinking block
+  // whose text arrives as thinking deltas.
+  if (note) {
+    send("content_block_start", { index, content_block: { type: "thinking", thinking: "", signature: "" } });
+    send("content_block_delta", { index, delta: { type: "thinking_delta", thinking: note } });
+    send("content_block_delta", { index, delta: { type: "signature_delta", signature: "sig" } });
+    send("content_block_stop", { index });
+    index += 1;
+  }
   if (text) {
     send("content_block_start", { index, content_block: { type: "text", text: "" } });
     send("content_block_delta", { index, delta: { type: "text_delta", text } });
@@ -124,6 +133,69 @@ test("the chat builds an app in the editor, runs it and tells the model what hap
     window.monaco.editor.getModels().filter((m) => m.uri.scheme === "file").map((m) => m.uri.path.slice(1)));
   expect(files).toContain(APP_FILE);
   await expect(page.locator("#files")).toContainText(APP_FILE);
+});
+
+test("a change is run by the page itself, its report rides on the change, and the turn shows what it is doing", async ({ page }) => {
+  const requests = [];
+  await page.route("https://api.anthropic.com/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    requests.push({ headers: request.headers(), body: request.postDataJSON() });
+    const answer = requests.length === 1
+      ? sse({ note: "Writing the class now.", tools: [{ name: "write_file", input: { name: APP_FILE, source: APP, as_app: true } }] })
+      : sse({ text: "Done." });
+    await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: answer });
+  });
+
+  await open(page);
+  await saveKey(page);
+  await page.locator("#chat-input").fill("A page");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toHaveText("Done.", { timeout: 90000 });
+
+  // No run_app was asked for, and the app ran all the same - two requests,
+  // not three, and the report on the write's own result.
+  expect(requests).toHaveLength(2);
+  const result = requests[1].body.messages.at(-1).content;
+  expect(result).toHaveLength(1);
+  expect(result[0].content).toContain("The page ran the app after these changes");
+  expect(result[0].content).toContain("status: running");
+  await expect(page.frameLocator("#app").getByText(MARK)).toBeVisible();
+
+  // The turn said what it was doing: the progress note, then the rows of the
+  // write and of the run - finished, none left pending.
+  await expect(page.locator(".chat-progress")).toHaveText("Writing the class now.");
+  await expect(page.locator(".chat-tool").first()).toHaveText(`created ${APP_FILE}`);
+  await expect(page.locator(".chat-tool").nth(1)).toContainText("ran: running");
+  await expect(page.locator(".chat-tool.is-pending")).toHaveCount(0);
+
+  // Balanced by default: Opus 5.5 at medium, the progress notes asked for.
+  expect(requests[0].body.model).toBe("claude-opus-5-5");
+  expect(requests[0].body.output_config.effort).toBe("medium");
+  expect(requests[0].body.thinking).toEqual({ type: "adaptive", display: "updates" });
+  expect(requests[0].headers["anthropic-beta"]).toContain("thinking-display-updates-2026-08-18");
+});
+
+test("Fast in the header sends the next message to Sonnet 5.5, and is remembered", async ({ page }) => {
+  const models = [];
+  await page.route("https://api.anthropic.com/**", (route) => {
+    if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    models.push(route.request().postDataJSON().model);
+    return route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: sse({ text: "Hi." }) });
+  });
+
+  await open(page);
+  await saveKey(page);
+  await page.locator("#chat-speed").selectOption("fast");
+  await page.locator("#chat-input").fill("hello");
+  await page.locator("#chat-send").click();
+  await expect(page.locator(".chat-assistant").last()).toHaveText("Hi.");
+  expect(models).toEqual(["claude-sonnet-5-5"]);
+
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await page.locator("#ai").click();
+  await expect(page.locator("#chat-speed")).toHaveValue("fast");
 });
 
 test("a key the API refuses brings the key form back and says why", async ({ page }) => {

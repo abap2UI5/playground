@@ -196,8 +196,14 @@ with abapGit.
   UI5 libraries built in (see *What it can and cannot do*) — the model is told
   so, and fills internal tables where a real app would `SELECT`.
 
-It runs on `claude-opus-5-5`; a request a safety classifier declines is
-answered by the fallback model the API picks rather than dropped. The SDK and
+The select in the chat's header picks the model and how long it thinks:
+**Balanced** (Opus 5.5, the default), **Thorough** (Opus 5.5, thinking longer)
+or **Fast** (Sonnet 5.5, which answers soonest) — it applies from the next
+message. After every change the page runs the app by itself and hands the
+model the report, so no turn is spent asking for a run, and while a turn is
+under way the chat shows the model's short notes and counts the lines of the
+class it is writing. A request a safety classifier declines is answered by the
+fallback model the API picks rather than dropped. The SDK and
 the guide are a chunk of their own (~70 KB compressed), downloaded only by
 somebody who sends a message.
 
