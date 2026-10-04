@@ -30,7 +30,20 @@ import Anthropic from "@anthropic-ai/sdk";
 import GUIDE from "../../deps/abap2ui5/docs/agents/building-apps.md";
 import { parseName } from "../editor/files.mjs";
 
-export const MODEL = "claude-opus-5-5";
+// How much the reader trades speed for care - the chat header's select. The
+// model is the reader's choice, not this page's: Balanced is the default and
+// stays on Opus 5.5 at the effort that model defaults to; Thorough lets it
+// think longer; Fast is Sonnet 5.5, which answers sooner.
+export const SPEEDS = {
+  thorough: { model: "claude-opus-5-5", effort: "high", label: "Thorough · Opus 5.5" },
+  balanced: { model: "claude-opus-5-5", effort: "medium", label: "Balanced · Opus 5.5" },
+  fast: { model: "claude-sonnet-5-5", effort: "medium", label: "Fast · Sonnet 5.5" },
+};
+export const DEFAULT_SPEED = "balanced";
+
+// The tools that change the editor, after which the page runs the app by
+// itself (see loop( )).
+const FILE_TOOLS = new Set(["write_file", "edit_file", "delete_file"]);
 
 // What applies here and not in a real system - the guide is written for a
 // project with abapGit, the linter on the command line and an SAP system
@@ -54,12 +67,17 @@ How the playground works, and what that means for you:
   write_file with as_app: true for the app class.
 - Use the tools to change the editor. Never paste code into the chat
   instead - the person sees the editor and the running app, and the files
-  are what they take home. Use edit_file for small changes and write_file
-  for new files or rewrites.
-- After every change, call run_app and read what it reports: abaplint
-  errors block the run and must be fixed; abap2UI5 lint findings mean the
-  view uses something UI5 1.71 does not have - fix those too; a dump names
-  the line. Iterate until it runs clean, then stop calling tools.
+  are what they take home. Write a new app as one complete write_file;
+  use edit_file for later changes of a few lines.
+- The person is watching and every turn costs them time, so make all the
+  changes a step needs in ONE message - several tool calls side by side -
+  rather than one change per turn.
+- After the file changes of a message, the page runs the app by itself and
+  attaches the report to the result of your last change: abaplint errors
+  block the run and must be fixed; abap2UI5 lint findings mean the view uses
+  something UI5 1.71 does not have - fix those too; a dump names the line.
+  Iterate until it runs clean, then stop calling tools. run_app is only for
+  running again without changing anything.
 - There is no database of the person's own here: no custom tables, no
   SELECT from business tables, no RFC, no files, no HTTP. When the app
   needs data, fill internal tables in the code (VALUE #( ... )) and say in
@@ -70,9 +88,9 @@ How the playground works, and what that means for you:
   sap.suite, sap.viz. Hold the view to UI5 1.71.
 - Build views with z2ui5_cl_ui5_view_builder as the guide below shows,
   never with the frozen z2ui5_cl_xml_view.
-- When unsure how abap2UI5 does something, search_samples finds a sample
-  that does it and read_sample gives you its source. Prefer a pattern from
-  a sample over inventing one.
+- The guide below covers the common patterns - write from it directly.
+  Only when it does not cover what you need, search_samples finds a sample
+  that does it and read_sample gives you its source.
 - The editor may already hold code (a sample, or the person's own work).
   If the person asks for something new, write a new app class, make it the
   app and delete the files it does not need. If they ask for a change,
@@ -87,7 +105,7 @@ Talking to the person:
 
 The abap2UI5 guide to building apps follows. Its sections on validation
 tooling (npm scripts, the MCP server, screenshots) do not apply here: in
-this page, run_app is your validation.`;
+this page, the run after your changes is your validation.`;
 
 const SYSTEM = [
   {
@@ -155,7 +173,9 @@ const TOOLS = [
   {
     name: "run_app",
     description:
-      "Press Run: check the ABAP, compile it, run the unit tests and start the app. Answers with the status, " +
+      "Press Run again without changing a file - after write_file, edit_file or delete_file the page runs the " +
+      "app by itself and attaches this same report to your last change. Checks the ABAP, compiles it, runs the " +
+      "unit tests and starts the app. Answers with the status, " +
       "every problem from abaplint and the abap2UI5 linter, the test results, the first roundtrip " +
       "(the view the app rendered) and a dump with its line if the app dumped.",
     eager_input_streaming: true,
@@ -203,10 +223,16 @@ const filesAsText = (files) =>
  *   host.run()             -> the report of one Run, see describeRun( )
  *   host.show(name)        -> puts that file on screen in the editor
  *
- *   ui.assistantStart()  ui.text(delta)  ui.tool({ name, summary, error })
- *   ui.usage({ input, output, cached })  ui.notice(text)
+ *   ui.assistantStart()  ui.text(delta)  ui.notice(text)
+ *   ui.thinkingStart()  ui.thinking(delta)     the model's progress notes between tool calls
+ *   ui.toolPending({ id, text })               a tool call while its input streams in, then while it runs
+ *   ui.tool({ id, summary, error })            the same row, done
+ *   ui.usage({ input, output, cached })
+ *
+ * `speed` answers which of SPEEDS to use, asked before every request, so a
+ * change in the header applies from the next turn on.
  */
-export function createAgent({ apiKey, workspace, host, ui }) {
+export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT_SPEED }) {
   const client = new Anthropic({
     apiKey,
     dangerouslyAllowBrowser: true,
@@ -250,22 +276,45 @@ export function createAgent({ apiKey, workspace, host, ui }) {
     let jsonRetries = 0;
     while (!stopped) {
       ui.assistantStart();
+      const settings = SPEEDS[speed()] ?? SPEEDS[DEFAULT_SPEED];
       stream = client.beta.messages.stream({
-        model: MODEL,
+        model: settings.model,
         max_tokens: 32000,
         system: SYSTEM,
         tools: TOOLS,
         messages,
-        output_config: { effort: "high" },
+        output_config: { effort: settings.effort },
+        // The reasoning stays hidden; the short notes the model writes between
+        // tool calls ("the table is there, now the search") come back as text,
+        // so a long turn is not minutes of silence.
+        thinking: { type: "adaptive", display: "updates" },
+        betas: ["server-side-fallback-2026-07-01", "thinking-display-updates-2026-08-18"],
         // A request a safety classifier declines is answered by the model
         // the API picks for that category instead of stopping the turn.
-        betas: ["server-side-fallback-2026-07-01"],
         fallbacks: "default",
         // The conversation so far, cached up to its last block: every turn of
         // a tool loop resends all of it.
         cache_control: { type: "ephemeral" },
       });
       stream.on("text", (delta) => ui.text(delta));
+      // What arrives before the turn is complete, shown as it arrives: a
+      // progress note, and a tool call whose input is still streaming - a
+      // class being written is the longest wait of all, and it counts its
+      // lines on screen rather than sitting still.
+      let streaming;
+      stream.on("streamEvent", (event) => {
+        if (event.type === "content_block_start") {
+          const block = event.content_block;
+          streaming = block.type === "tool_use" ? { id: block.id, name: block.name } : undefined;
+          if (block.type === "thinking") ui.thinkingStart();
+          if (streaming) ui.toolPending({ id: block.id, text: pendingText(block.name, {}) });
+        } else if (event.type === "content_block_delta" && event.delta.type === "thinking_delta" && event.delta.thinking) {
+          ui.thinking(event.delta.thinking);
+        }
+      });
+      stream.on("inputJson", (_partial, input) => {
+        if (streaming) ui.toolPending({ id: streaming.id, text: pendingText(streaming.name, input ?? {}) });
+      });
 
       let message;
       try {
@@ -322,24 +371,52 @@ export function createAgent({ apiKey, workspace, host, ui }) {
 
       messages.push({ role: "assistant", content: message.content });
       const results = [];
+      // The last successful change, and whether a run_app came after it.
+      let lastChange;
+      let ranSince = false;
       for (const use of uses) {
         if (stopped) {
           results.push({ type: "tool_result", tool_use_id: use.id, is_error: true, content: "Stopped by the user." });
           continue;
         }
+        if (use.name === "run_app") ui.toolPending({ id: use.id, text: pendingText("run_app", {}) });
         let result;
         try {
           result = await execute(use.name, use.input ?? {});
         } catch (e) {
           result = { error: String(e?.message ?? e) };
         }
-        ui.tool({ name: use.name, summary: result.summary ?? result.error ?? "", error: Boolean(result.error) });
-        results.push({
+        ui.tool({ id: use.id, summary: result.summary ?? result.error ?? "", error: Boolean(result.error) });
+        const entry = {
           type: "tool_result",
           tool_use_id: use.id,
           ...(result.error ? { is_error: true } : {}),
           content: clip(result.error ?? result.text),
-        });
+        };
+        results.push(entry);
+        if (FILE_TOOLS.has(use.name) && !result.error) {
+          lastChange = entry;
+          ranSince = false;
+        } else if (use.name === "run_app") {
+          ranSince = true;
+        }
+      }
+      // The run every change is followed by, done here rather than asked
+      // for: a model that has to call run_app after writing spends a whole
+      // turn - the request, the thinking, the answer - on pressing a button.
+      // The report rides on the result of the last change, in the same
+      // message, so the next turn already knows how the code ran.
+      if (lastChange && !ranSince && !stopped) {
+        const id = `auto-run-${results.length}-${messages.length}`;
+        ui.toolPending({ id, text: pendingText("run_app", {}) });
+        let report;
+        try {
+          report = describeRun(await host.run());
+        } catch (e) {
+          report = { text: `The automatic run failed: ${String(e?.message ?? e)}`, summary: "run failed" };
+        }
+        ui.tool({ id, summary: report.summary, error: false });
+        lastChange.content = clip(`${lastChange.content}\n\nThe page ran the app after these changes:\n${report.text}`);
       }
       // Whatever the tools changed, the model has just been told.
       seen = snapshot();
@@ -442,7 +519,7 @@ export function explainError(err) {
     return { text: "The API key was not accepted. Enter a valid Anthropic API key.", key: true };
   }
   if (err instanceof Anthropic.PermissionDeniedError) {
-    return { text: `This key may not use ${MODEL}: ${err.message}`, key: true };
+    return { text: `This key may not use the model - try another speed in the header, or another key: ${err.message}`, key: true };
   }
   if (err instanceof Anthropic.RateLimitError) return { text: "Rate limited - wait a moment and send again." };
   if (err instanceof Anthropic.BadRequestError && /anthropic-workspace-id/.test(err.message)) {
@@ -460,6 +537,25 @@ export function explainError(err) {
   }
   if (err instanceof Anthropic.APIError) return { text: `The API answered ${err.status ?? "with an error"}: ${err.message}` };
   return { text: String(err?.message ?? err) };
+}
+
+// What a tool call is doing while it is still under way - written while its
+// input streams in, so it reads whatever of the input has arrived.
+export function pendingText(name, input) {
+  const file = str(input.name) ?? "a file";
+  switch (name) {
+    case "write_file": {
+      const lines = str(input.source)?.split("\n").length ?? 0;
+      return `writing ${file}${lines ? ` · ${lines} line${lines === 1 ? "" : "s"}` : ""}…`;
+    }
+    case "edit_file": return `editing ${file}…`;
+    case "delete_file": return `deleting ${file}…`;
+    case "read_files": return "reading the editor…";
+    case "run_app": return "running the app…";
+    case "search_samples": return `searching samples${str(input.query) ? ` for "${input.query}"` : ""}…`;
+    case "read_sample": return `reading sample ${str(input.class) ?? ""}…`;
+    default: return `${name}…`;
+  }
 }
 
 // One Run, as the model reads it. Everything a person would look at after
@@ -497,7 +593,7 @@ export function describeRun(report) {
       lines.push(`answer:\n${clip(String(first.response ?? ""), 4000)}`);
     }
     for (const view of first.views ?? []) {
-      lines.push(`view rendered into slot ${view.slot}:\n${clip(view.xml, 8000)}`);
+      lines.push(`view rendered into slot ${view.slot}:\n${clip(view.xml, 4000)}`);
     }
   } else if (report.started) {
     lines.push("first roundtrip: none arrived within ten seconds");
@@ -578,5 +674,7 @@ async function readSample(input) {
   }
   const response = await fetch(url);
   if (!response.ok) return { error: `The source of ${name} could not be fetched (${response.status}).` };
-  return { text: clip(await response.text(), 30000), summary: `read sample ${name}` };
+  // Long enough for any app the learning path has; the tail of a control
+  // port is table data the model does not need to read to learn the pattern.
+  return { text: clip(await response.text(), 12000), summary: `read sample ${name}` };
 }

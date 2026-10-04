@@ -696,10 +696,27 @@ talks to a model or needs a key.
   anything earlier. Tool inputs stream (`eager_input_streaming`), so each is
   validated before it touches the editor, a turn cut off at `max_tokens` never
   runs its tools, and all results of a turn go back in one message.
-- **Model and request shape.** `claude-opus-5-5`, effort `high`, the system
-  prompt cached (`cache_control`), and `fallbacks: "default"` behind the
-  `server-side-fallback-2026-07-01` beta so a request a safety classifier
-  declines is answered by the fallback model rather than stopping. Errors are
+- **Model and request shape.** `SPEEDS` in `ai-agent.mjs`, picked in the chat
+  header and asked before every request (`abap2ui5-playground:ai-speed`, kept
+  only while it is not the default): Balanced is `claude-opus-5-5` at effort
+  `medium` (that model's own default), Thorough the same at `high`, Fast
+  `claude-sonnet-5-5` at `medium`. The model is the reader's choice; the page
+  does not pick a cheaper one for them. The system prompt is cached
+  (`cache_control`), and `fallbacks: "default"` behind the
+  `server-side-fallback-2026-07-01` beta answers a request a safety classifier
+  declines with the fallback model rather than stopping.
+- **Where a turn's time goes, and what was done about it.** A model turn - the
+  request, the thinking, the answer - is the unit of waiting, so the loop
+  spends as few as it can: after a turn's file changes the page runs the app
+  itself and appends the report to the result of the last change (`loop( )`,
+  `FILE_TOOLS`), where the model used to spend a whole turn calling
+  `run_app`; the rules ask for every change of a step in one message, and for
+  the guide before the sample catalogue. Perceived time is the other half:
+  `thinking.display: "updates"` (beta `thinking-display-updates-2026-08-18`)
+  returns the model's notes between tool calls as text, shown as progress
+  lines, and a tool call's row is written while its input streams
+  (`pendingText( )` - a class counts its lines as it arrives) and finished in
+  place when it has run. Errors are
   said in the chat by `explainError( )` from the SDK's typed errors; a refused
   key brings the key form back.
 
