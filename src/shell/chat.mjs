@@ -21,6 +21,10 @@ import { readStored, removeStored, writeStored } from "./storage.mjs";
 import { setStatus } from "./ui.mjs";
 
 const KEY_STORAGE = "abap2ui5-playground:anthropic-key";
+// The workspace a key that is not tied to one sends its requests to - the
+// API refuses such a key without the anthropic-workspace-id header. Empty
+// for the ordinary key, which belongs to a workspace already.
+const WORKSPACE_STORAGE = "abap2ui5-playground:anthropic-workspace";
 
 const SUGGESTIONS = [
   "A table of flights with a search field that filters by carrier",
@@ -51,6 +55,7 @@ export function setUpChat(chatHost, { onToggle } = {}) {
     send: document.getElementById("chat-send"),
     keyForm: document.getElementById("chat-key"),
     keyInput: document.getElementById("chat-key-input"),
+    workspaceInput: document.getElementById("chat-workspace-input"),
     keyButton: document.getElementById("chat-key-button"),
     keyRemove: document.getElementById("chat-key-remove"),
     usage: document.getElementById("chat-usage"),
@@ -66,8 +71,12 @@ export function setUpChat(chatHost, { onToggle } = {}) {
   el.keyForm.addEventListener("submit", (e) => {
     e.preventDefault();
     const key = el.keyInput.value.trim();
-    if (key === "") return;
-    writeStored(KEY_STORAGE, key);
+    // The workspace can be added later on its own, to a key already stored.
+    if (key === "" && readStored(KEY_STORAGE) === null) return;
+    if (key !== "") writeStored(KEY_STORAGE, key);
+    const workspace = el.workspaceInput.value.trim();
+    if (workspace === "") removeStored(WORKSPACE_STORAGE);
+    else writeStored(WORKSPACE_STORAGE, workspace);
     el.keyInput.value = "";
     // A new key is a new client; the conversation so far went with the old one.
     agent = undefined;
@@ -76,6 +85,8 @@ export function setUpChat(chatHost, { onToggle } = {}) {
   });
   el.keyRemove.addEventListener("click", () => {
     removeStored(KEY_STORAGE);
+    removeStored(WORKSPACE_STORAGE);
+    el.workspaceInput.value = "";
     agent = undefined;
     showKeyForm(true);
   });
@@ -133,6 +144,7 @@ function setOpen(value) {
 function showKeyForm(show) {
   el.keyForm.hidden = !show;
   el.keyRemove.hidden = readStored(KEY_STORAGE) === null;
+  if (show) el.workspaceInput.value = readStored(WORKSPACE_STORAGE) ?? "";
 }
 
 function showWelcome() {
@@ -201,6 +213,7 @@ async function submit() {
     if (!agent) {
       agent = mod.createAgent({
         apiKey: key,
+        workspace: readStored(WORKSPACE_STORAGE) ?? undefined,
         host,
         ui: {
           assistantStart() {
@@ -235,7 +248,12 @@ async function submit() {
     const said = mod ? mod.explainError(e) : { text: `The AI part of the page could not be loaded: ${String(e?.message ?? e)}` };
     addLine(said.stopped ? "notice" : "notice is-error", said.text);
     setStatus(said.stopped ? "stopped" : "the AI request failed", !said.stopped);
-    if (said.key) showKeyForm(true);
+    if (said.key) {
+      showKeyForm(true);
+      // A key without a workspace is a valid key - what is missing is the
+      // workspace, so that is where the caret goes.
+      (said.workspace ? el.workspaceInput : el.keyInput).focus();
+    }
   } finally {
     setBusy(false);
   }

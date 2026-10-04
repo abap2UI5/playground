@@ -606,6 +606,10 @@
           <button type="submit" class="primary">Save</button>
           <button type="button" id="chat-key-remove" class="ghost" hidden>Remove</button>
         </div>
+        <label for="chat-workspace-input">Workspace ID <span class="chat-key-optional">- only for a key that is not tied to a workspace</span></label>
+        <div class="chat-key-row">
+          <input id="chat-workspace-input" type="text" autocomplete="off" spellcheck="false" placeholder="wrkspc_… (optional)">
+        </div>
         <p class="chat-key-note">Kept in this browser only and sent to api.anthropic.com and nowhere else - there is
           no server behind this page. Usage is billed to your key. Get one at
           <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.</p>

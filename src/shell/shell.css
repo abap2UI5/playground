@@ -1845,6 +1845,7 @@ button.insight-row {
 }
 .chat-key[hidden] { display: none; }
 .chat-key label { font-weight: 600; }
+.chat-key-optional { font-weight: 400; color: var(--fg-dim); }
 .chat-key-row { display: flex; gap: .5rem; }
 .chat-key-row input {
   flex: 1;

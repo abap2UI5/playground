@@ -205,8 +205,15 @@ const filesAsText = (files) =>
  *   ui.assistantStart()  ui.text(delta)  ui.tool({ name, summary, error })
  *   ui.usage({ input, output, cached })  ui.notice(text)
  */
-export function createAgent({ apiKey, host, ui }) {
-  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+export function createAgent({ apiKey, workspace, host, ui }) {
+  const client = new Anthropic({
+    apiKey,
+    dangerouslyAllowBrowser: true,
+    // A key that is not tied to a workspace is refused without this header
+    // ("This API key is not scoped to a workspace..."); the ordinary key
+    // belongs to one already and sends nothing extra.
+    ...(workspace ? { defaultHeaders: { "anthropic-workspace-id": workspace } } : {}),
+  });
   // The conversation exactly as it was sent and answered - only ever
   // appended to: the model's thinking blocks are bound to the history they
   // were written in, and an edited history invalidates them.
@@ -433,6 +440,15 @@ export function explainError(err) {
     return { text: `This key may not use ${MODEL}: ${err.message}`, key: true };
   }
   if (err instanceof Anthropic.RateLimitError) return { text: "Rate limited - wait a moment and send again." };
+  if (err instanceof Anthropic.BadRequestError && /anthropic-workspace-id/.test(err.message)) {
+    return {
+      text:
+        "This key is not tied to a workspace, so the API needs to be told which one to use. Enter the workspace ID " +
+        "(wrkspc_…, in the Console under Settings → Workspaces) in the key form - or create a key inside a workspace.",
+      key: true,
+      workspace: true,
+    };
+  }
   if (err instanceof Anthropic.BadRequestError) return { text: `The request was refused: ${err.message}` };
   if (err instanceof Anthropic.APIConnectionError) {
     return { text: "api.anthropic.com could not be reached - check the connection, or whether a proxy or extension blocks it." };

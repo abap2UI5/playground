@@ -140,6 +140,47 @@ test("a key the API refuses brings the key form back and says why", async ({ pag
   await expect(page.locator("#chat-send")).toHaveText("Send");
 });
 
+test("a key without a workspace is told which one to use, and the workspace goes with every request", async ({ page }) => {
+  const seen = [];
+  await page.route("https://api.anthropic.com/**", (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    const workspace = request.headers()["anthropic-workspace-id"];
+    seen.push(workspace);
+    return workspace
+      ? route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: sse({ text: "Hello." }) })
+      : route.fulfill({
+          status: 400,
+          headers: { ...cors(), "content-type": "application/json" },
+          body: JSON.stringify({
+            type: "error",
+            error: {
+              type: "invalid_request_error",
+              message: "This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header with the ID of the workspace to use.",
+            },
+          }),
+        });
+  });
+
+  await open(page);
+  await saveKey(page);
+  await page.locator("#chat-input").fill("hi");
+  await page.locator("#chat-send").click();
+
+  // Said in words a reader can act on, with the caret where the answer goes.
+  await expect(page.locator(".chat-notice.is-error")).toContainText("not tied to a workspace");
+  await expect(page.locator("#chat-key")).toBeVisible();
+  await expect(page.locator("#chat-workspace-input")).toBeFocused();
+
+  // The key is already stored; the workspace is added on its own.
+  await page.locator("#chat-workspace-input").fill("wrkspc_test");
+  await page.locator("#chat-key button[type=submit]").click();
+  await page.locator("#chat-input").fill("hi again");
+  await page.locator("#chat-send").click();
+  await expect(page.locator(".chat-assistant").last()).toHaveText("Hello.");
+  expect(seen).toEqual([undefined, "wrkspc_test"]);
+});
+
 test("the chat is not offered in an embedded playground", async ({ page }) => {
   await page.goto("/?embed=1");
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });

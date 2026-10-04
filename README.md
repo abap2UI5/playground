@@ -175,7 +175,10 @@ with abapGit.
   [Anthropic API key](https://console.anthropic.com/settings/keys). It is kept
   in this browser's local storage and sent to `api.anthropic.com` and nowhere
   else — there is still nothing behind this page. Usage is billed to that key;
-  the chat's header counts the tokens.
+  the chat's header counts the tokens. A key that is not tied to a workspace
+  (the API answers *"This API key is not scoped to a workspace"*) also needs
+  the workspace ID (`wrkspc_…`, in the Console under Settings → Workspaces),
+  which the key form takes as an optional second field.
 - **The model uses the playground the way you do.** It has no compiler of its
   own: it writes files into the editor (Ctrl+Z takes them back), presses the
   same Run, and is told what you would see — the abaplint errors, the abap2UI5

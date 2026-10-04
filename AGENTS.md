@@ -665,7 +665,11 @@ talks to a model or needs a key.
 - **The key is the reader's, the request is the browser's.** Stored under
   `abap2ui5-playground:anthropic-key` through `storage.mjs`, sent by the
   Anthropic SDK straight from the page (`dangerouslyAllowBrowser`, which sends
-  the `anthropic-dangerous-direct-browser-access` header CORS needs). No proxy,
+  the `anthropic-dangerous-direct-browser-access` header CORS needs). A key
+  that is not tied to a workspace needs `anthropic-workspace-id` on every
+  request: the optional second field of the key form, stored under
+  `abap2ui5-playground:anthropic-workspace` and sent as `defaultHeaders`;
+  `explainError( )` recognises the API's refusal and points at that field. No proxy,
   no server: the page stays a static file. Never in an embedded playground —
   the switch is hidden there (`shell.css`) and `setUpChat( )` is not called.
 - **Its instructions come from the pin.** `ai-agent.mjs` imports
