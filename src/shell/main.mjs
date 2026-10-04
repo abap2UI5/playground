@@ -18,6 +18,7 @@ import {
   format,
   getFiles,
   invalidateAnalysis,
+  openFile,
   redo,
   refresh,
   refreshNow,
@@ -424,6 +425,7 @@ async function boot() {
         // change handler. checkFileSet( ) refuses a set the editor cannot hold.
         setFiles: (files) => replaceWith(checkFileSet(files)),
         run: () => runForAgent(),
+        show: (name) => openFile(name),
       },
       // On a phone the chat lives in the left pane, so opening it brings
       // that pane forward.

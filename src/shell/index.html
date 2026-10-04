@@ -588,8 +588,9 @@
       </div>
       <div class="insight-body" id="insight-body" role="tabpanel"></div>
     </div>
-    <!-- The chat, in place of the editor and the panel while the AI switch is
-         on (src/shell/chat.mjs). The key form shows until a key is stored. -->
+    <!-- The chat, beside the code while the AI switch is on (src/shell/chat.mjs;
+         the layout per width is in shell.css). The key form shows until a key
+         is stored. -->
     <div class="chat" id="chat" hidden>
       <div class="chat-head">
         <h2 class="chat-title">Build with AI</h2>
@@ -605,6 +606,10 @@
           <input id="chat-key-input" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
           <button type="submit" class="primary">Save</button>
           <button type="button" id="chat-key-remove" class="ghost" hidden>Remove</button>
+        </div>
+        <label for="chat-workspace-input">Workspace ID <span class="chat-key-optional">- only for a key that is not tied to a workspace</span></label>
+        <div class="chat-key-row">
+          <input id="chat-workspace-input" type="text" autocomplete="off" spellcheck="false" placeholder="wrkspc_… (optional)">
         </div>
         <p class="chat-key-note">Kept in this browser only and sent to api.anthropic.com and nowhere else - there is
           no server behind this page. Usage is billed to your key. Get one at

@@ -163,11 +163,13 @@ it back to the curated list of the day.
 
 ## Build an app by describing it
 
-**AI**, the switch beside Samples, turns the left half into a chat. Describe
+**AI**, the switch beside Samples, opens a chat beside the code — a column of
+its own on a wide screen, under the editor on a smaller one. Describe
 the app you want — *"a table of flights with a search field"* — and Claude
 writes it as an abap2UI5 class into the editor, presses Run, reads what the two
-checkers and the app said, fixes it, and runs it again until it is clean. The
-app appears on the right while you talk; ask for changes until it fits, then
+checkers and the app said, fixes it, and runs it again until it is clean. You
+watch the code arrive in the editor and the app appear on the right while you
+talk; ask for changes until it fits, then
 **Download for abapGit** takes the class home as a repository you import
 with abapGit.
 
@@ -175,7 +177,10 @@ with abapGit.
   [Anthropic API key](https://console.anthropic.com/settings/keys). It is kept
   in this browser's local storage and sent to `api.anthropic.com` and nowhere
   else — there is still nothing behind this page. Usage is billed to that key;
-  the chat's header counts the tokens.
+  the chat's header counts the tokens. A key that is not tied to a workspace
+  (the API answers *"This API key is not scoped to a workspace"*) also needs
+  the workspace ID (`wrkspc_…`, in the Console under Settings → Workspaces),
+  which the key form takes as an optional second field.
 - **The model uses the playground the way you do.** It has no compiler of its
   own: it writes files into the editor (Ctrl+Z takes them back), presses the
   same Run, and is told what you would see — the abaplint errors, the abap2UI5

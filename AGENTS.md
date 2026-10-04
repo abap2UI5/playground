@@ -644,11 +644,16 @@ changing anything near it.
 
 ## The AI chat — `src/shell/chat.mjs`, `src/shell/ai-agent.mjs`
 
-**AI** in the toolbar puts a chat in the left pane in place of the file strip,
-the editor and the panel (`.is-chatting` hides them — hidden, not removed, so
-the models and their undo stacks survive and Monaco's `automaticLayout` takes
-the size back when they return). The model builds the app in the editor; the
-app runs on the right. `tests/ai.spec.js` holds it with `api.anthropic.com`
+**AI** in the toolbar puts a chat into the left pane beside the code, so what
+the model writes is on screen while it writes it (`.is-chatting` in
+`shell.css`): from 1400px a column beside the file strip, the editor and the
+panel; between 820 and 1400 the code above and the chat below, the panel
+folded away; on a phone the chat takes the pane. Whatever is not shown is
+hidden, never removed, so the models and their undo stacks survive and
+Monaco's `automaticLayout` takes the size it is given. The editor follows the
+file the model just wrote or edited (`host.show`). The model's answers are
+markdown, rendered by `renderMarkdown( )` in `chat.mjs` into nodes and never
+through `innerHTML`. The app runs on the right. `tests/ai.spec.js` holds it with `api.anthropic.com`
 answered by the test (the streamed events of the Messages API), so no test
 talks to a model or needs a key.
 
@@ -665,7 +670,11 @@ talks to a model or needs a key.
 - **The key is the reader's, the request is the browser's.** Stored under
   `abap2ui5-playground:anthropic-key` through `storage.mjs`, sent by the
   Anthropic SDK straight from the page (`dangerouslyAllowBrowser`, which sends
-  the `anthropic-dangerous-direct-browser-access` header CORS needs). No proxy,
+  the `anthropic-dangerous-direct-browser-access` header CORS needs). A key
+  that is not tied to a workspace needs `anthropic-workspace-id` on every
+  request: the optional second field of the key form, stored under
+  `abap2ui5-playground:anthropic-workspace` and sent as `defaultHeaders`;
+  `explainError( )` recognises the API's refusal and points at that field. No proxy,
   no server: the page stays a static file. Never in an embedded playground —
   the switch is hidden there (`shell.css`) and `setUpChat( )` is not called.
 - **Its instructions come from the pin.** `ai-agent.mjs` imports

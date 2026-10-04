@@ -80,21 +80,27 @@ test("the chat builds an app in the editor, runs it and tells the model what hap
             { name: "run_app", input: {} },
           ],
         })
-      : sse({ text: "Done - the page is running." });
+      : sse({ text: "**Done** - the page is running.\n\n- one `class`\n- one run" });
     await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: answer });
   });
 
   await open(page);
   await saveKey(page);
-  // The editor makes way for the chat; the app stays on the right.
-  await expect(page.locator("#editor")).toBeHidden();
+  // The chat shares the pane with the code, so what the model writes stays
+  // on screen; the app stays on the right.
   await expect(page.locator("#chat")).toBeVisible();
+  await expect(page.locator("#editor")).toBeVisible();
 
   await page.locator("#chat-input").fill("A page that says it was built by the model");
   await page.locator("#chat-input").press("Enter");
 
   await expect(page.locator(".chat-user")).toHaveText("A page that says it was built by the model");
-  await expect(page.locator(".chat-assistant").last()).toHaveText("Done - the page is running.", { timeout: 90000 });
+  await expect(page.locator(".chat-assistant").last()).toContainText("Done - the page is running.", { timeout: 90000 });
+  // The answer's markdown is rendered as nodes, not shown as typed.
+  await expect(page.locator(".chat-assistant").last().locator("strong")).toHaveText("Done");
+  await expect(page.locator(".chat-assistant").last().locator("li code")).toHaveText("class");
+  // The file the model wrote is the one on screen in the editor.
+  expect(await page.evaluate(() => window.monaco.editor.getEditors()[0].getModel().uri.path)).toBe(`/${APP_FILE}`);
   await expect(page.locator(".chat-tool").first()).toHaveText(`created ${APP_FILE}`);
   await expect(page.locator(".chat-tool").nth(1)).toContainText("ran: running");
   await expect(page.frameLocator("#app").getByText(MARK)).toBeVisible();
@@ -138,6 +144,67 @@ test("a key the API refuses brings the key form back and says why", async ({ pag
   await expect(page.locator(".chat-notice.is-error")).toContainText("API key was not accepted");
   await expect(page.locator("#chat-key")).toBeVisible();
   await expect(page.locator("#chat-send")).toHaveText("Send");
+});
+
+test("a key without a workspace is told which one to use, and the workspace goes with every request", async ({ page }) => {
+  const seen = [];
+  await page.route("https://api.anthropic.com/**", (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    const workspace = request.headers()["anthropic-workspace-id"];
+    seen.push(workspace);
+    return workspace
+      ? route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: sse({ text: "Hello." }) })
+      : route.fulfill({
+          status: 400,
+          headers: { ...cors(), "content-type": "application/json" },
+          body: JSON.stringify({
+            type: "error",
+            error: {
+              type: "invalid_request_error",
+              message: "This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header with the ID of the workspace to use.",
+            },
+          }),
+        });
+  });
+
+  await open(page);
+  await saveKey(page);
+  await page.locator("#chat-input").fill("hi");
+  await page.locator("#chat-send").click();
+
+  // Said in words a reader can act on, with the caret where the answer goes.
+  await expect(page.locator(".chat-notice.is-error")).toContainText("not tied to a workspace");
+  await expect(page.locator("#chat-key")).toBeVisible();
+  await expect(page.locator("#chat-workspace-input")).toBeFocused();
+
+  // The key is already stored; the workspace is added on its own.
+  await page.locator("#chat-workspace-input").fill("wrkspc_test");
+  await page.locator("#chat-key button[type=submit]").click();
+  await page.locator("#chat-input").fill("hi again");
+  await page.locator("#chat-send").click();
+  await expect(page.locator(".chat-assistant").last()).toHaveText("Hello.");
+  expect(seen).toEqual([undefined, "wrkspc_test"]);
+});
+
+test("on a phone the chat takes the pane, and the editor comes back with the switch", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page);
+  await page.locator("#ai").click();
+  await expect(page.locator("#chat")).toBeVisible();
+  await expect(page.locator("#editor")).toBeHidden();
+  await page.locator("#ai").click();
+  await expect(page.locator("#editor")).toBeVisible();
+});
+
+test("at desk width the chat is a column beside the code", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await open(page);
+  await page.locator("#ai").click();
+  const chat = await page.locator("#chat").boundingBox();
+  const editor = await page.locator("#editor").boundingBox();
+  expect(chat.x + chat.width).toBeLessThanOrEqual(editor.x + 1);
+  expect(editor.height).toBeGreaterThan(300);
 });
 
 test("the chat is not offered in an embedded playground", async ({ page }) => {

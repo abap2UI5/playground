@@ -1802,13 +1802,38 @@ button.insight-row {
 /* ------------------------------------------------------------------- chat */
 
 /* The AI chat (src/shell/chat.mjs): while the switch in the bar is on, the
-   left pane shows the conversation in place of the file strip, the editor and
-   the panel - they are hidden rather than removed, so the models, their undo
-   stacks and Monaco itself stay as they are and come back as they were
-   (Monaco's automaticLayout takes the new size when it is shown again). */
-.pane-left.is-chatting > .files,
-.pane-left.is-chatting > .editor,
-.pane-left.is-chatting > .insight { display: none; }
+   chat shares the left pane with the code, so what the model writes is on
+   screen while it writes it - laid out by the room there is:
+
+   - wide (1400px and up): the chat is a column beside the file strip, the
+     editor and the panel;
+   - in between: the code above, the chat below, the panel folded away;
+   - on a phone: the chat takes the pane, and the ABAP tab's editor comes
+     back when the switch is turned off.
+
+   Hidden, never removed: the models, their undo stacks and Monaco itself stay
+   as they are, and Monaco's automaticLayout takes whatever size it is given. */
+@media (max-width: 820px) {
+  .pane-left.is-chatting > .files,
+  .pane-left.is-chatting > .editor,
+  .pane-left.is-chatting > .insight { display: none; }
+}
+@media (width > 820px) and (width < 1400px) {
+  .pane-left.is-chatting > .insight { display: none; }
+  .pane-left.is-chatting > .editor { flex: 1 1 0; }
+  .pane-left.is-chatting > .chat { flex: 1 1 0; border-top: 1px solid var(--line); }
+}
+@media (width >= 1400px) {
+  .pane-left.is-chatting {
+    display: grid;
+    grid-template-columns: minmax(18rem, 42%) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+  .pane-left.is-chatting > .chat { grid-column: 1; grid-row: 1 / -1; border-right: 1px solid var(--line); }
+  .pane-left.is-chatting > .files { grid-column: 2; grid-row: 1; }
+  .pane-left.is-chatting > .editor { grid-column: 2; grid-row: 2; min-height: 0; }
+  .pane-left.is-chatting > .insight { grid-column: 2; grid-row: 3; }
+}
 .is-embedded #ai { display: none; }
 
 .chat {
@@ -1823,6 +1848,7 @@ button.insight-row {
 .chat-head {
   flex: none;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: .5rem;
   padding: .45rem .75rem;
@@ -1845,6 +1871,7 @@ button.insight-row {
 }
 .chat-key[hidden] { display: none; }
 .chat-key label { font-weight: 600; }
+.chat-key-optional { font-weight: 400; color: var(--fg-dim); }
 .chat-key-row { display: flex; gap: .5rem; }
 .chat-key-row input {
   flex: 1;
@@ -1892,7 +1919,33 @@ button.chat-suggestion {
   padding: .45rem .7rem;
   border-radius: var(--radius-surface);
 }
-.chat-assistant { align-self: flex-start; }
+/* The model's answer is rendered from its markdown (renderMarkdown( ) in
+   chat.mjs - built as nodes, never as HTML), so it is laid out as blocks
+   rather than kept as typed. */
+.chat-assistant { align-self: flex-start; white-space: normal; }
+.chat-assistant > :first-child { margin-top: 0; }
+.chat-assistant > :last-child { margin-bottom: 0; }
+.chat-assistant p,
+.chat-assistant ul,
+.chat-assistant ol { margin: .45rem 0; }
+.chat-assistant ul,
+.chat-assistant ol { padding-left: 1.3rem; }
+.chat-assistant li { margin: .15rem 0; }
+.chat-assistant code {
+  font: 12.5px var(--font-mono);
+  background: var(--bg-sunken);
+  border-radius: 4px;
+  padding: .05rem .3rem;
+}
+.chat-assistant pre {
+  margin: .45rem 0;
+  padding: .5rem .6rem;
+  background: var(--bg-sunken);
+  border-radius: 6px;
+  overflow-x: auto;
+  white-space: pre;
+}
+.chat-assistant pre code { background: none; padding: 0; }
 .chat-tool,
 .chat-notice {
   align-self: flex-start;
