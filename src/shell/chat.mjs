@@ -1,11 +1,11 @@
 // The chat on screen: describe an app, watch it being built.
 //
 // The switch in the toolbar (AI, beside Samples) puts the chat in the left
-// pane in place of the editor and the panel; the app stays on the right. The
-// editor is one click away and holds whatever the model wrote - every change
-// it makes goes through the editor, the same undo stack and the same Run, so
-// switching back shows the code exactly as it is (src/shell/ai-agent.mjs says
-// why nothing there bypasses them).
+// pane beside the code - a column at desk width, under the editor in between,
+// the whole pane on a phone (shell.css) - and the app stays on the right.
+// Every change the model makes goes through the editor, the same undo stack
+// and the same Run, so the code on screen is the code that runs
+// (src/shell/ai-agent.mjs says why nothing there bypasses them).
 //
 // The conversation and the SDK live in the agent's chunk, imported the first
 // time somebody sends a message: a reader who never opens the chat downloads
@@ -207,6 +207,7 @@ async function submit() {
   setBusy(true);
 
   let current;
+  let raw = "";
   let mod;
   try {
     mod = await import("./ai-agent.mjs");
@@ -220,8 +221,14 @@ async function submit() {
             current = undefined;
           },
           text(delta) {
-            if (!current) current = addLine("assistant", "");
-            current.textContent += delta;
+            if (!current) {
+              current = addLine("assistant", "");
+              raw = "";
+            }
+            // Rendered again on every delta: an answer is a few paragraphs,
+            // and a half-written **bold** has to become bold once it closes.
+            raw += delta;
+            renderMarkdown(current, raw);
             scrollDown();
           },
           tool({ summary, error }) {
@@ -257,4 +264,88 @@ async function submit() {
   } finally {
     setBusy(false);
   }
+}
+
+// The model answers in markdown. Rendered here into nodes - paragraphs,
+// lists, headings, fenced code, `code` and **bold** - and never through
+// innerHTML: every character of the answer reaches the page as text, so
+// nothing the model writes can be markup.
+export function renderMarkdown(target, text) {
+  const blocks = [];
+  let paragraph = [];
+  let list;
+  const endParagraph = () => {
+    if (paragraph.length === 0) return;
+    blocks.push(element("p", inline(paragraph.join(" "))));
+    paragraph = [];
+  };
+  const endList = () => {
+    if (list) blocks.push(list);
+    list = undefined;
+  };
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^\s*```/.test(line)) {
+      endParagraph();
+      endList();
+      const code = [];
+      for (i += 1; i < lines.length && !/^\s*```/.test(lines[i]); i++) code.push(lines[i]);
+      const pre = document.createElement("pre");
+      const c = document.createElement("code");
+      c.textContent = code.join("\n");
+      pre.append(c);
+      blocks.push(pre);
+      continue;
+    }
+    const item = /^\s*(?:([-*])|(\d+)\.)\s+(.*)$/.exec(line);
+    if (item) {
+      endParagraph();
+      const kind = item[1] ? "ul" : "ol";
+      if (!list || list.tagName.toLowerCase() !== kind) {
+        endList();
+        list = document.createElement(kind);
+      }
+      list.append(element("li", inline(item[3])));
+      continue;
+    }
+    const heading = /^#{1,6}\s+(.*)$/.exec(line);
+    if (heading) {
+      endParagraph();
+      endList();
+      blocks.push(element("p", [element("strong", inline(heading[1]))]));
+      continue;
+    }
+    if (line.trim() === "") {
+      endParagraph();
+      endList();
+      continue;
+    }
+    endList();
+    paragraph.push(line.trim());
+  }
+  endParagraph();
+  endList();
+  target.replaceChildren(...blocks);
+}
+
+function element(tag, children) {
+  const el = document.createElement(tag);
+  el.append(...children);
+  return el;
+}
+
+function inline(text) {
+  const nodes = [];
+  for (const part of text.split(/(`[^`]+`|\*\*[^*]+\*\*)/)) {
+    if (part === "") continue;
+    if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
+      nodes.push(element("code", [part.slice(1, -1)]));
+    } else if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      nodes.push(element("strong", [part.slice(2, -2)]));
+    } else {
+      nodes.push(document.createTextNode(part));
+    }
+  }
+  return nodes;
 }

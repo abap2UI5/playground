@@ -201,6 +201,7 @@ const filesAsText = (files) =>
  *   host.files()           -> [{ name, source }], the app first
  *   host.setFiles(files)   -> puts a whole file set into the editor (throws on a bad name)
  *   host.run()             -> the report of one Run, see describeRun( )
+ *   host.show(name)        -> puts that file on screen in the editor
  *
  *   ui.assistantStart()  ui.text(delta)  ui.tool({ name, summary, error })
  *   ui.usage({ input, output, cached })  ui.notice(text)
@@ -376,6 +377,9 @@ export function createAgent({ apiKey, workspace, host, ui }) {
     let next = at === -1 ? [...files, { name, source }] : files.map((f) => (f.name === name ? { name, source } : f));
     if (input.as_app === true) next = [next.find((f) => f.name === name), ...next.filter((f) => f.name !== name)];
     host.setFiles(next);
+    // The file it just wrote is the one on screen, so the reader watches
+    // the code arrive rather than the app file it may not have touched.
+    host.show?.(name);
     const lines = source.split("\n").length;
     return {
       text: `${at === -1 ? "Created" : "Replaced"} ${name} (${lines} lines)${next[0].name === name ? ", it is the app" : ""}.`,
@@ -401,6 +405,7 @@ export function createAgent({ apiKey, workspace, host, ui }) {
     }
     const source = file.source.slice(0, first) + newText + file.source.slice(first + oldText.length);
     host.setFiles(files.map((f) => (f.name === name ? { name, source } : f)));
+    host.show?.(name);
     return { text: `Edited ${name}.`, summary: `edited ${name}` };
   }
 
