@@ -289,7 +289,12 @@ const result = await esbuild.build({
   // files, copied out of the pinned abap2UI5/samples by writeSamples( ) above
   // into build/samples/, and reached through the import module it writes there
   // - see src/editor/samples.mjs, which is the only importer.
-  loader: { ".ttf": "file", ".abap": "text" },
+  //
+  // `.md` is text for one importer: src/shell/ai-agent.mjs, the chat's chunk,
+  // which carries abap2UI5's own guide to building an app
+  // (deps/abap2ui5/docs/agents/building-apps.md, at the pinned commit) as the
+  // model's instructions.
+  loader: { ".ttf": "file", ".abap": "text", ".md": "text" },
   // ...and Inter is NOT one of the things this bundle carries. The two urls in
   // shell.css point at `../fonts/`, which from the stylesheet's place in the
   // build (`assets/shell.css`) is `dist/fonts/` - the one copy the catalogue's
@@ -507,7 +512,7 @@ function writeServiceWorker() {
     path.join(DIST, "sw.js"),
     source
       .replaceAll("__BUILD_ID__", build)
-      .replace("__CHUNKS__", JSON.stringify(chunks()))
+      .replace("__CHUNKS__", JSON.stringify(chunks().filter((c) => !onUseOnly(c))))
       .replace("__APP_FIRST_LOAD__", JSON.stringify(firstLoad))
       .replace("__CORE__", JSON.stringify(hashes)),
   );
@@ -539,6 +544,16 @@ function writeIndex() {
      a third of its compressed weight (tools/html.mjs). */
   fs.writeFileSync(path.join(DIST, "index.html"), stripHtmlComments(source.replace(marker, tags.join("\n"))));
   log(`index.html (${tags.length} chunk${tags.length === 1 ? "" : "s"} preloaded)`);
+}
+
+// The chunk the AI chat loads (src/shell/ai-agent.mjs: the Anthropic SDK and
+// the app-building guide) is left out of the worker's precache. Precached, it
+// would be downloaded by every visitor the worker installs for, and the point
+// of the chunk is that only somebody who opens the chat pays for it; the
+// worker still keeps it once it has been used (`assets/*.mjs` is on its allow
+// list), and the chat needs the network to do anything anyway.
+function onUseOnly(chunk) {
+  return /^assets\/ai-agent-[\w-]+\.mjs$/.test(chunk);
 }
 
 // The bundle's chunks, as paths relative to dist/: every module under assets/
