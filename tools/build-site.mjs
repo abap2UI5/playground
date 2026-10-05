@@ -269,10 +269,11 @@ const result = await esbuild.build({
   platform: "browser",
   target: "es2022",
   minify: true,
-  // abaplint identifies some of its own node types by class name, so a bundler
-  // that renames classes changes what it resolves - the same trap the framework
-  // bundle hits through open-abap's RTTI.
-  keepNames: true,
+  // No keepNames here any more: it was for abaplint, which identifies some of
+  // its own node types by class name - and abaplint has left this bundle for
+  // the registry worker (which keeps it). Nothing left here (Monaco, the
+  // abap2UI5 linter, the SDK, the shell) goes by a class's name, and the
+  // renaming wrappers were 145 KB of the page's JavaScript, 36 KB brotli.
   // 20 MB of source map, a sixth of the published site, that only a browser
   // with devtools open ever fetches - and anyone debugging the playground has
   // the sources anyway. PG_DEBUG=1 builds it, the same switch the framework
@@ -306,9 +307,10 @@ const result = await esbuild.build({
   // The linter plugin goes first: it claims `fs` and `path` for the abap2UI5
   // linter alone, and leaves every other importer to the ordinary stubs.
   plugins: [abap2ui5LinterPlugin(ROOT), nodeStubPlugin(ROOT)],
-  // abaplint reaches for Buffer when it builds its DDIC built-ins, the same way
-  // the transpiled standard library does.
-  inject: [path.join(ROOT, "src", "runtime", "buffer-shim.mjs")],
+  // No Buffer shim either: it was injected for abaplint, which now runs in the
+  // registry worker (the shim is injected there). What is left on the page
+  // reaches for Buffer only behind a typeof check, so the shim was a 31 KB
+  // chunk, modulepreloaded and evaluated at every start, that nothing used.
 });
 
 writeIndex();

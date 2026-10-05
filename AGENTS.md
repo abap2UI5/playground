@@ -165,8 +165,10 @@ compiled to WebAssembly. Run means: a fresh database, then reload the iframe
 with `?app_start=<CLASS>&run=<n>`. "Fresh" is SQLite reopened on an image of
 the empty database taken once after the transpiled init seeded it
 (`db-setup.mjs`) — under a millisecond, where rebuilding it from the DDL (27
-tables, 724 seed rows) was 85 ms per Run on a desk and several times that on
-a phone.
+tables, then 724 seed rows) was 85 ms per Run on a desk and several times that
+on a phone. TADIR is not seeded at all (`populateTables` in
+`build-framework.mjs`): nothing reads it, and its 760 INSERTs were about a
+quarter of a second of every boot.
 
 `PG_DEBUG=1` builds the page and framework bundles unminified with source maps;
 without it neither ships one.
