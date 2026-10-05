@@ -345,8 +345,15 @@ test("a link into a class that was cut off says so rather than highlighting noth
   const { entry, html } = printed(12);
   const count = (html.match(/<span class="ln" id="L/g) || []).length;
   await page.goto(`/samples/${entry.page}#L${count + 500}`);
-  await expect(page.locator(".source-hint")).toContainText("is not on this page");
+  // Which of the two answers depends on the class: one printed only in part
+  // says what was printed, one printed whole says the line is past its end
+  // (it used to claim "the first N lines" of a class that has no more).
+  await expect(page.locator(".source-hint")).toContainText(
+    html.includes("source-note") ? "is not on this page" : `is past the end — the class has ${count} lines`,
+  );
   await expect(page.locator(".ln.is-marked")).toHaveCount(0);
+  // And a range that marks nothing offers no link to copy.
+  await expect(page.locator(".source-copy")).toBeHidden();
 });
 
 test.describe("with the script blocked", () => {
