@@ -8,7 +8,6 @@ import { nameProblem, skeletonFor } from "../editor/files.mjs";
 import { setStatus } from "./ui.mjs";
 
 let strip;
-let onChanged;
 // Opening a different file changes nothing about the file set, so it is not a
 // change - but it does change what several things on the page are about: the
 // outline below the editor, and the link to where this file came from.
@@ -20,16 +19,16 @@ let naming = false;
 
 export function setUpFiles(options = {}) {
   strip = document.getElementById("files");
-  onChanged = options.onChanged;
   onOpened = options.onOpened;
 
   strip.addEventListener("click", (e) => {
     const close = e.target.closest("[data-close]");
     if (close) {
       e.stopPropagation();
+      // closeFile( ) reports the change through the editor's own change
+      // handler, which redraws this strip - a second report here stored the
+      // draft and redrew the panel twice for one click.
       closeFile(close.dataset.close);
-      render();
-      onChanged?.();
       return;
     }
     const add = e.target.closest("[data-add]");
@@ -152,7 +151,11 @@ function askForNewFile() {
       done();
       return;
     }
-    const problem = nameProblem(trimmed, existing, existing);
+    // The files as they are NOW, not as they were when the input opened: a
+    // sample or the AI chat may have replaced the set meanwhile, and a name
+    // that set already holds reached addFile( ) and a model Monaco already had.
+    const current = getFiles().map((f) => f.name);
+    const problem = nameProblem(trimmed, current, current);
     if (problem) {
       // Kept open with the offending name still in it: the answer to "that is
       // not a file name" is almost always a small correction, not starting
@@ -162,9 +165,8 @@ function askForNewFile() {
       return;
     }
     naming = false;
+    // Reported through the editor's change handler, like closeFile( ) above.
     addFile({ name: trimmed, source: skeletonFor(trimmed) });
-    render();
-    onChanged?.();
   };
 
   input.addEventListener("keydown", (e) => {

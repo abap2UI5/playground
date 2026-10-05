@@ -169,6 +169,32 @@ test("the reader without JavaScript is told the real count, written at build tim
   expect(html).toMatch(/The catalog is a list of \d{2,} samples/);
 });
 
+test("Enter in the search field keeps the search rather than reloading the page empty", async ({ page }) => {
+  await openCatalogue(page, "?src=controls");
+  await page.fill("#q", "table");
+  // The field's form had no submit handler, so Enter submitted it - a GET to
+  // this page with no named fields, every filter gone.
+  await page.locator("#q").press("Enter");
+  await page.waitForTimeout(500);
+  await expect(page.locator("#q")).toHaveValue("table");
+  await expect(page.locator("#f-source")).toHaveValue("controls");
+  await expect(page.locator(".card h3")).toHaveText(["Breadcrumbs", "Smart Table"]);
+});
+
+test("a release between two listed ones filters as the one below it, and a blank search is no search", async ({ page }) => {
+  // 1.96 is not a release any sample names - but "1.96 or older" is a fair
+  // question, and it used to be answered with the unfiltered list.
+  await openCatalogue(page, "?rel=1.96");
+  // The fixture lists 1.71, 1.84 and 1.120: the answer is 1.84, and the
+  // sample that needs 1.120 is not on the list.
+  await expect(page.locator("#f-release")).toHaveValue("1.84");
+  await expect(page.locator(".card")).toHaveCount(5);
+
+  await openCatalogue(page, "?q=%20");
+  await expect(page.locator("#q")).toHaveValue("");
+  await expect(page.locator(".stage h2")).toHaveText(["Start here", "Show many rows", "Controls", "Stack"]);
+});
+
 test("the filters live in the URL, so a search is a link", async ({ page }) => {
   await openCatalogue(page);
 

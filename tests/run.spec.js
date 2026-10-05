@@ -317,3 +317,17 @@ test("a dump is pointed at: the ABAP line it was raised at, underlined, listed a
   await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
   await expect(page.locator(".insight-row.is-error")).toHaveCount(0);
 });
+
+// A class_constructor is emitted as a top-level `await` at the end of the
+// class's chunk, which a plain `new Function` refused as a SyntaxError - so a
+// class with one could never run at all.
+test("a class with a class_constructor runs, and the constructor has run first", async ({ page }) => {
+  await open(page);
+  const withConstructor = app("Static Title", "out = greeting.")
+    .replace("    DATA out TYPE string.", "    DATA out TYPE string.\n    CLASS-DATA greeting TYPE string.\n    CLASS-METHODS class_constructor.")
+    .replace("  METHOD view_display.", "  METHOD class_constructor.\n    greeting = `set by the class_constructor`.\n  ENDMETHOD.\n  METHOD view_display.");
+  await setSource(page, withConstructor);
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+  await expect(control(page, "txtOut")).toContainText("set by the class_constructor");
+});

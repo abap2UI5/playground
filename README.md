@@ -161,6 +161,58 @@ many problems there are now, so a rule can be tried rather than argued about,
 and what you change is still there the next time you open the page — Reset puts
 it back to the curated list of the day.
 
+## Build an app by describing it
+
+**Still being built, and not linked from the playground:** the **AI Studio**
+has a page of its own, [`/playground/ai/`](https://abap2ui5.github.io/playground/ai/),
+reached by its address and kept out of search engines. It starts on an empty
+class. The chat runs down the left, and the stage beside it shows the running
+app in a window of its own, the code, or both side by side (**Preview**,
+**Code**, **Split** in the studio's bar; a phone takes them in turns, the chat
+first). Every run that starts the app is a card in the conversation that
+brings the app forward; ⛶ makes it the browser's full screen. Describe
+the app you want — *"a table of flights with a search field"* — and Claude
+writes it as an abap2UI5 class into the editor, presses Run, reads what the two
+checkers and the app said, fixes it, and runs it again until it is clean. You
+watch the code arrive in the editor and the app appear on the right while you
+talk; ask for changes until it fits, then
+**Download for abapGit** takes the class home as a repository you import
+with abapGit.
+
+- **Your own key, and no server.** The first message asks for an
+  [Anthropic API key](https://console.anthropic.com/settings/keys). It is kept
+  in this browser's local storage and sent to `api.anthropic.com` and nowhere
+  else — there is still nothing behind this page. Usage is billed to that key;
+  the chat's header counts the tokens. A key that is not tied to a workspace
+  (the API answers *"This API key is not scoped to a workspace"*) also needs
+  the workspace ID (`wrkspc_…`, in the Console under Settings → Workspaces),
+  which the key form takes as an optional second field.
+- **The model uses the playground the way you do.** It has no compiler of its
+  own: it writes files into the editor (Ctrl+Z takes them back), presses the
+  same Run, and is told what you would see — the abaplint errors, the abap2UI5
+  linter's findings against UI5 1.71, the unit tests, the view the app rendered
+  and the line a dump was raised at. Switch the chat off and the code it wrote
+  is in the editor, ready to edit by hand; switch it on again and the model is
+  told what changed.
+- **It knows abap2UI5 from the source.** Its instructions are abap2UI5's own
+  [guide to building apps](https://github.com/abap2UI5/abap2UI5/blob/main/docs/agents/building-apps.md),
+  at the same commit as the framework this page runs, and it can search the
+  sample catalogue and read a sample's code before it writes its own.
+- **The limits are the playground's.** No tables of your own, no RFC, only the
+  UI5 libraries built in (see *What it can and cannot do*) — the model is told
+  so, and fills internal tables where a real app would `SELECT`.
+
+The select in the chat's header picks the model and how long it thinks:
+**Balanced** (Opus 5.5, the default), **Thorough** (Opus 5.5, thinking longer)
+or **Fast** (Sonnet 5.5, which answers soonest) — it applies from the next
+message. After every change the page runs the app by itself and hands the
+model the report, so no turn is spent asking for a run, and while a turn is
+under way the chat shows the model's short notes and counts the lines of the
+class it is writing. A request a safety classifier declines is answered by the
+fallback model the API picks rather than dropped. The SDK and
+the guide are a chunk of their own (~70 KB compressed), downloaded only by
+somebody who sends a message.
+
 ## The sample catalogue
 
 **<https://abap2ui5.github.io/playground/samples/>** — every abap2UI5 sample in

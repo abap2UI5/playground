@@ -101,18 +101,32 @@ export function startRuntime() {
   // not speak in a minute any more than it has so far. The failure is named
   // so boot( ) can tell it from a runtime that failed, because the remedy is
   // different: this one is cured by throwing the cached site away.
+  //
+  // A probe that gets NO answer - offline, or a phone between two cells - says
+  // nothing either way: the installed playground opened offline has its
+  // runtime in the service worker's cache, and a HEAD (which goes past the
+  // worker) cannot reach the network to confirm it. That used to fail the
+  // boot on the spot whenever the framework was slower than the parse. Now it
+  // waits like a 200 does, and if the runtime then stays silent the failure
+  // is a plain one rather than STALLED - discarding the cached site of a
+  // reader who is offline would take away the only copy they can reach.
   const whenReady = async () => {
+    let unanswered = false;
     if (!settled) {
       try {
         const response = await fetch(new URL(SCRIPT, document.baseURI), { method: "HEAD" });
         if (!settled && !response.ok) fail(new Error(`${SCRIPT}: ${response.status}`));
-      } catch (e) {
-        if (!settled) fail(new Error(`${SCRIPT}: ${String(e?.message ?? e)}`));
+      } catch {
+        unanswered = true;
       }
     }
     if (!settled) {
       const timer = setTimeout(() => {
         if (settled) return;
+        if (unanswered) {
+          fail(new Error(`${SCRIPT} did not start, and the network did not answer to say why`));
+          return;
+        }
         const error = new Error(`${SCRIPT} loaded but never reported ready`);
         error.name = STALLED;
         fail(error);

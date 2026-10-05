@@ -16,6 +16,7 @@ import {
   invalidateAnalysis,
   onFileShown,
   refresh,
+  refreshNow,
   setEditorReadOnly,
   setSourceOf,
 } from "../editor/editor.mjs";
@@ -34,7 +35,7 @@ import { highlighted } from "./highlight.mjs";
 import { sourceWithView, viewEditable } from "./view-edit.mjs";
 import { keepAbaplintSettings, keepLinterSettings } from "./checker-settings.mjs";
 import { readStored, writeStored } from "./storage.mjs";
-import { currentLog, hideOutput, onLogChange, setStatus } from "./ui.mjs";
+import { currentLog, hideOutput, onLogChange, setStatus, showOutput } from "./ui.mjs";
 
 let panel;
 let body;
@@ -139,13 +140,20 @@ export function setUpInsight() {
   // failed or the page could not start, and a message nobody is shown is the
   // same as no message. That includes an embedded playground, where the panel
   // is otherwise out of the way - an error is not tooling.
+  //
+  // A CLEARED log (every run starts by clearing it) redraws only the Log tab
+  // itself. It used to redraw whatever tab was open, and the Config tabs are
+  // a textarea rebuilt from the stored settings - so Ctrl+Enter, or autorun,
+  // in the middle of editing that JSON threw the edit away.
   onLogChange((entry) => {
     paintLogDot(entry);
     if (entry.body !== "") {
       expand();
       view = "log";
+      render();
+    } else if (view === "log") {
+      render();
     }
-    render();
   });
 
   // A click in either list goes to the line it names.
@@ -158,6 +166,9 @@ export function setUpInsight() {
   // A roundtrip landing while its tab is open is listed as it lands; the
   // badge counts them whichever tab is open.
   onRoundtrip(() => {
+    // A cleared list is a new Run, whose numbering starts over at #1 - so the
+    // row that was open would otherwise reopen as the new run's #1.
+    if (roundtripList().length === 0) openedRoundtrip = undefined;
     paintRoundtripCount();
     if (view === "roundtrips") render();
   });
@@ -184,6 +195,10 @@ function setUpResize() {
   };
 
   grip.addEventListener("pointerdown", (e) => {
+    // The primary button only, as on the splitter (src/shell/layout.mjs): a
+    // right click's pointerup goes to the context menu and left the grip
+    // dragging until it was touched again.
+    if (e.button !== 0 || !e.isPrimary) return;
     grip.setPointerCapture(e.pointerId);
     expand();
     grip.classList.add("is-dragging");
@@ -199,7 +214,12 @@ function setUpResize() {
     if (!grip.hasPointerCapture?.(e.pointerId)) return;
     grip.releasePointerCapture(e.pointerId);
     grip.classList.remove("is-dragging");
-    writeStored(HEIGHT_KEY, String(apply(panel.getBoundingClientRect().bottom - e.clientY)));
+    // A cancelled pointer's position is not one (often 0, 0, which is the
+    // tallest panel there is): what the last move applied is what is kept.
+    const height = e.type === "pointercancel"
+      ? Math.round(panel.getBoundingClientRect().height)
+      : apply(panel.getBoundingClientRect().bottom - e.clientY);
+    writeStored(HEIGHT_KEY, String(height));
   };
   grip.addEventListener("pointerup", stop);
   grip.addEventListener("pointercancel", stop);
@@ -378,7 +398,17 @@ function fixBar(count) {
     // Both checkers rewrite the source, so this is somebody's code being
     // changed under them. It goes in as one edit per file, which is what makes
     // Ctrl+Z take the whole thing back rather than unpicking it fix by fix.
-    const fixed = await applyFixes();
+    let fixed;
+    try {
+      fixed = await applyFixes();
+    } catch (e) {
+      // A fixer that threw in the worker: said, and the button handed back,
+      // rather than an unhandled rejection under a button left disabled.
+      button.disabled = false;
+      setStatus("the fixes could not be applied", true);
+      showOutput("Fix them", String(e?.message ?? e));
+      return;
+    }
     updateInsight(refresh());
     // The outcome goes to the status line, not into this bar: the line above
     // was written by a render that the updateInsight( ) on the line before just
@@ -738,7 +768,10 @@ function configEditor({ title, blurb, value, onApply, onKeep, onReset, extra }) 
       // The panel says what changed rather than only that something did: the
       // whole point of the tab is understanding why a message is or is not
       // there, so the count is the answer.
-      const problems = refresh();
+      // Waited for: right after invalidateAnalysis( ) the kept answer is
+      // empty, and refresh( ) handed that back - "applied - 0 problems now"
+      // whatever the rules said, with the panel flashing empty under it.
+      const problems = await refreshNow();
       updateInsight(problems);
       said.textContent = `applied - ${problems.length} problem${problems.length === 1 ? "" : "s"} now`;
     } catch (e) {
@@ -931,7 +964,7 @@ function paintRoundtripCount() {
 }
 
 // Which roundtrip is opened up in the list, by its number; a new Run starts
-// the numbering over, so a stale selection simply matches nothing.
+// the numbering over and clears this (the onRoundtrip listener above).
 let openedRoundtrip;
 
 // The conversation between the frontend and the app, one row per roundtrip:

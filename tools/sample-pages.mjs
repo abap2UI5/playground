@@ -727,7 +727,12 @@ function forPrinting(code) {
   const kept = [];
   let chars = 0;
   for (const line of lines) {
-    if (kept.length >= MAX_LINES || chars + line.length > MAX_CHARS) break;
+    if (kept.length >= MAX_LINES || chars + line.length > MAX_CHARS) {
+      // A first line longer than the whole budget is cut rather than left
+      // out, or the page printed "the first 0 lines" and an empty block.
+      if (kept.length === 0) kept.push(line.slice(0, MAX_CHARS));
+      break;
+    }
     kept.push(line);
     chars += line.length + 1;
   }
@@ -1284,7 +1289,7 @@ function notFoundPage(rows) {
 <link rel="stylesheet" href="${BASE}samples/sample.css">
 ${THEME_SCRIPT}
 </head>
-<body>
+<body data-not-found>
 
 <!-- The keyboard's way in. A sample page puts a link on every line of the
      printed class and the catalogue puts one on every sample, so the bar and
@@ -1336,7 +1341,10 @@ ${foot(BASE)}
     ["", "abap2UI5 Playground", "write ABAP and run it in this browser"]
   ];
   var base = ${JSON.stringify(BASE)};
-  var here = decodeURIComponent(location.pathname);
+  /* A stray % in the address (50%off, a cut escape) is a URIError out of the
+     decoder, and the page that is about wrong addresses offered nothing. */
+  var here;
+  try { here = decodeURIComponent(location.pathname); } catch (e) { here = location.pathname; }
   var parts = here.slice(here.indexOf(base) === 0 ? base.length : 0)
     .toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length > 2; });
   if (!parts.length) return;

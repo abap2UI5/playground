@@ -46,4 +46,13 @@ export function prettyXml(xml, indent = "  ") {
 }
 
 const escapeText = (text) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;");
-const escapeAttribute = (text) => escapeText(text).replaceAll('"', "&quot;");
+// A line break or a tab inside a value is written as a character reference,
+// the way the reconstruction writes it: printed raw, the parser's attribute
+// normalisation turns it into a space, and Save with nothing changed replaced
+// the original ABAP of that value with a literal of the spaced-out text.
+const escapeAttribute = (text) =>
+  escapeText(text)
+    .replaceAll('"', "&quot;")
+    .replaceAll("\n", "&#xA;")
+    .replaceAll("\r", "&#xD;")
+    .replaceAll("\t", "&#x9;");

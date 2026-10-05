@@ -32,6 +32,8 @@ export function setUpLines() {
       if (!m) return null;
       var a = Number(m[1]);
       var b = m[2] === undefined ? a : Number(m[2]);
+      /* Lines count from 1: #L0 is no line, not "line 0 is not printed". */
+      if (a < 1 || b < 1) return null;
       return { from: Math.min(a, b), to: Math.max(a, b) };
     };
 
@@ -43,7 +45,11 @@ export function setUpLines() {
       if (copy) copy.hidden = range === null;
       if (range === null) { say(HINT); return; }
       var first = null;
-      for (var n = range.from; n <= range.to; n++) {
+      /* Walked only as far as the lines that are printed: #L1-L99999999 is a
+         link anybody can send, and it used to be a hundred million lookups
+         on the reader's main thread. */
+      var last = Math.min(range.to, lines.length);
+      for (var n = range.from; n <= last; n++) {
         var el = document.getElementById("L" + n);
         if (!el) continue;
         el.classList.add("is-marked");

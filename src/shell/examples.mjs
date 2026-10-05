@@ -152,11 +152,13 @@ function groupsFrom(data) {
       who: str(entry.class),
       url: str(entry.raw),
       github: str(entry.github),
-      docs: (entry.docs || []).filter((d) => typeof d === "string"),
+      // https only, here as well as where the index is written: the index of
+      // a deploy from before that check, served from a cache, is still read.
+      docs: (entry.docs || []).filter((d) => typeof d === "string" && /^https:\/\//.test(d)),
       source: str(entry.source),
       group: str(entry.group),
       minUi5: str(entry.minUi5) || floor,
-      sapui5: entry.needs === "needs SAPUI5",
+      sapui5: entry.sapui5 === true || entry.needs === "needs SAPUI5",
       runs: entry.runs === true,
       needs: entry.runs === true ? undefined : str(entry.needs) || undefined,
       /* The long half of "needs": what a stack sample's system must have,

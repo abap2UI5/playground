@@ -11,6 +11,13 @@ export function setStatus(text, isError = false) {
   // The same line in the app frame's placeholder while that is still on
   // screen (src/shell/index.html): the toolbar's status is 12px in a corner,
   // and during the boot the frame is where the visitor is looking.
+  // ...and in the AI Studio's bar, which takes the toolbar's place while
+  // the studio is open (src/shell/chat.mjs).
+  const studio = document.getElementById("studio-status");
+  if (studio) {
+    studio.textContent = text;
+    studio.classList.toggle("error", isError);
+  }
   const mirror = document.getElementById("app-placeholder-status");
   if (mirror) {
     mirror.textContent = text;

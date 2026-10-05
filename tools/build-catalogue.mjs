@@ -72,6 +72,15 @@ const SOURCES = [
 
 const str = (v) => (typeof v === "string" ? v : "");
 const list = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === "string") : str(v) ? str(v).split(/\s+/) : []);
+/* The derived file is somebody else's JSON too: a field that is not an array
+ * (`"needs": "1.120"`, `"controls": {}`) is treated as absent rather than
+ * thrown on - one repository's typo must not take the build with it. */
+const arr = (v) => (Array.isArray(v) ? v : []);
+/* A link that leaves this site goes out only over https - the rule the
+ * per-sample pages already applied, now applied where the index is written,
+ * so the samples dialog in the playground (a page without a policy) never
+ * gets a `javascript:` href from a catalogue. */
+const httpsLinks = (v) => list(v).filter((u) => /^https:\/\/[^\s"'<>]+$/.test(u));
 
 /* A path out of a catalogue becomes a URL under its own repository, and only a
  * plain relative one does. The playground's own loader checks the host and the
@@ -79,7 +88,8 @@ const list = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === "string") :
  * catalogue point anywhere its repository is not. */
 function urls(repo, file, branch = "main") {
   if (!/^[\w./-]+\.clas\.abap$/.test(file) || file.startsWith("/") || file.includes("..")) return undefined;
-  if (!/^[\w.-]+$/.test(branch)) return undefined;
+  // `..` is made of allowed characters and climbs out of the repository.
+  if (!/^[\w.-]+$/.test(branch) || /^\.+$/.test(branch)) return undefined;
   return {
     raw: `https://raw.githubusercontent.com/${repo}/${branch}/${file}`,
     github: `https://github.com/${repo}/blob/${branch}/${file}`,
@@ -148,7 +158,7 @@ function readLearn(source, data) {
       group: str(sample.category),
       stage: str(sample.stage),
       keywords: list(sample.keywords),
-      docs: list(sample.docs),
+      docs: httpsLinks(sample.docs),
       ...link,
     });
   }
@@ -259,9 +269,9 @@ for (const source of SOURCES) {
    * the join, and samples-stack spells it in upper case in both files, so it
    * is lowercased on both sides rather than in one of them. */
   const facts = new Map();
-  const dictionary = (derived?.controls || []).map(String);
-  for (const row of derived?.ports || derived?.samples || []) {
-    facts.set(str(row.class).toLowerCase(), row);
+  const dictionary = arr(derived?.controls).map(String);
+  for (const row of arr(derived?.ports ?? derived?.samples)) {
+    if (row && typeof row === "object") facts.set(str(row.class).toLowerCase(), row);
   }
   if (derived === undefined) {
     log(`${source.repo}: no catalogue-derived.json yet - listed without controls or release`);
@@ -271,7 +281,7 @@ for (const source of SOURCES) {
     const fact = facts.get(entry.class.toLowerCase());
     /* The dictionary index is per repository; this index is over all three,
      * so every name is re-registered here. */
-    const controls = (fact?.controls || [])
+    const controls = arr(fact?.controls)
       .map((i) => dictionary[i])
       .filter(Boolean);
     const libraries = [...new Set(controls.map(libraryOf))].sort();
@@ -317,7 +327,13 @@ for (const source of SOURCES) {
       runs: needs === undefined,
       /* What made it that release - so a filtered list can be argued with
        * rather than only believed. */
-      since: (fact?.needs || []).map((n) => ({ name: str(n.name), since: str(n.since) })),
+      since: arr(fact?.needs)
+        .filter((n) => n && typeof n === "object")
+        .map((n) => ({ name: str(n.name), since: str(n.since) })),
+      /* Which rows need SAPUI5, said as a fact rather than read off the
+       * badge: a stack sample's badge is "needs a system" whatever its
+       * libraries are, and the dialog's "OpenUI5 only" let those through. */
+      sapui5: sapui5 || undefined,
       /* Not view code at all: the backend half of a stack story, or a class
        * the linter found no chain in. Different from "builds no controls". */
       noChain: fact?.noChain === true || undefined,
