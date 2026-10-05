@@ -95,10 +95,14 @@ test("the chat builds an app in the editor, runs it and tells the model what hap
 
   await open(page);
   await saveKey(page);
-  // The chat shares the pane with the code, so what the model writes stays
-  // on screen; the app stays on the right.
+  // AI turns the page into the studio: the site's bar and the toolbar step
+  // aside, the chat beside the app on the stage (Preview at this width).
+  await expect(page.locator("body")).toHaveClass(/is-studio/);
+  await expect(page.locator("header.bar")).toBeHidden();
+  await expect(page.locator("#run")).toBeHidden();
   await expect(page.locator("#chat")).toBeVisible();
-  await expect(page.locator("#editor")).toBeVisible();
+  await expect(page.locator("#app")).toBeVisible();
+  await expect(page.locator(".studio-stage[aria-selected=true]")).toHaveText("Preview");
 
   await page.locator("#chat-input").fill("A page that says it was built by the model");
   await page.locator("#chat-input").press("Enter");
@@ -113,6 +117,17 @@ test("the chat builds an app in the editor, runs it and tells the model what hap
   await expect(page.locator(".chat-tool").first()).toHaveText(`created ${APP_FILE}`);
   await expect(page.locator(".chat-tool").nth(1)).toContainText("ran: running");
   await expect(page.frameLocator("#app").getByText(MARK)).toBeVisible();
+  // The run is a card in the conversation, and the stage's window names the app.
+  await expect(page.locator(".chat-card")).toContainText("App updated");
+  await expect(page.locator("#studio-url")).toContainText("ZCL_AI_APP");
+
+  // Code on the stage shows the editor, on the file the model wrote.
+  await page.locator('.studio-stage[data-stage="code"]').click();
+  await expect(page.locator("#editor")).toBeVisible();
+  await expect(page.locator("#app")).toBeHidden();
+  // ...and the card brings the app back.
+  await page.locator(".chat-card").click();
+  await expect(page.locator("#app")).toBeVisible();
 
   // The key went to the API as the key, and the editor's files went with the
   // first message so the model knows what is open.
@@ -126,8 +141,11 @@ test("the chat builds an app in the editor, runs it and tells the model what hap
   expect(results[1].content).toContain("status: running");
   expect(results[1].content).toContain(MARK);
 
-  // Back to the editor: the model's class is there, and it is the app.
-  await page.locator("#ai").click();
+  // Leaving the studio comes back to the playground and its editor: the
+  // model's class is there, and it is the app.
+  await page.locator("#studio-exit").click();
+  await expect(page.locator("body")).not.toHaveClass(/is-studio/);
+  await expect(page.locator("header.bar")).toBeVisible();
   await expect(page.locator("#editor")).toBeVisible();
   const files = await page.evaluate(() =>
     window.monaco.editor.getModels().filter((m) => m.uri.scheme === "file").map((m) => m.uri.path.slice(1)));
@@ -259,24 +277,41 @@ test("a key without a workspace is told which one to use, and the workspace goes
   expect(seen).toEqual([undefined, "wrkspc_test"]);
 });
 
-test("on a phone the chat takes the pane, and the editor comes back with the switch", async ({ page }) => {
+test("on a phone the studio opens on the chat, the stages take turns, and the way out stays on screen", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await open(page);
   await page.locator("#ai").click();
   await expect(page.locator("#chat")).toBeVisible();
-  await expect(page.locator("#editor")).toBeHidden();
-  await page.locator("#ai").click();
+  await expect(page.locator("#app")).toBeHidden();
+  await expect(page.locator(".studio-stage[aria-selected=true]")).toHaveText("Chat");
+
+  await page.locator('.studio-stage[data-stage="preview"]').click();
+  await expect(page.locator("#chat")).toBeHidden();
+  const stage = await page.locator("#pane-right").boundingBox();
+  // The stage fits the screen, from under the bar to the bottom edge.
+  expect(stage.y + stage.height).toBeLessThanOrEqual(844 + 1);
+
+  // Every control of the bar is inside the screen - the way out above all.
+  for (const id of ["#studio-exit", '.studio-stage[data-stage="code"]']) {
+    const box = await page.locator(id).boundingBox();
+    expect(box.x + box.width, id).toBeLessThanOrEqual(390);
+  }
+  await page.locator("#studio-exit").click();
   await expect(page.locator("#editor")).toBeVisible();
 });
 
-test("at desk width the chat is a column beside the code", async ({ page }) => {
+test("on a wide screen the studio opens on Split: chat, code and app side by side", async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await open(page);
   await page.locator("#ai").click();
+  await expect(page.locator(".studio-stage[aria-selected=true]")).toHaveText("Split");
   const chat = await page.locator("#chat").boundingBox();
   const editor = await page.locator("#editor").boundingBox();
+  const app = await page.locator("#pane-right").boundingBox();
   expect(chat.x + chat.width).toBeLessThanOrEqual(editor.x + 1);
+  expect(editor.x + editor.width).toBeLessThanOrEqual(app.x + 1);
   expect(editor.height).toBeGreaterThan(300);
+  expect(app.height).toBeGreaterThan(500);
 });
 
 test("the chat is not offered in an embedded playground", async ({ page }) => {

@@ -1,8 +1,10 @@
-// The chat on screen: describe an app, watch it being built.
+// The chat on screen - the AI Studio: describe an app, watch it being built.
 //
-// The switch in the toolbar (AI, beside Samples) puts the chat in the left
-// pane beside the code - a column at desk width, under the editor in between,
-// the whole pane on a phone (shell.css) - and the app stays on the right.
+// The switch in the toolbar (AI, beside Samples) turns the whole page into
+// the AI Studio: the site's bar and the toolbar step aside, the chat runs
+// down the left, and a stage beside it shows the app, the code, or both
+// (`body.is-studio[data-stage]`, "AI Studio" in shell.css). Nothing is moved
+// in the DOM - the app frame least of all, since a moved iframe reloads.
 // Every change the model makes goes through the editor, the same undo stack
 // and the same Run, so the code on screen is the code that runs
 // (src/shell/ai-agent.mjs says why nothing there bypasses them).
@@ -29,6 +31,11 @@ const WORKSPACE_STORAGE = "abap2ui5-playground:anthropic-workspace";
 // differs from Balanced, the rule the page's other preferences follow.
 const SPEED_STORAGE = "abap2ui5-playground:ai-speed";
 const DEFAULT_SPEED = "balanced";
+// The stage the studio last showed - kept, the way a split is.
+const STAGE_STORAGE = "abap2ui5-playground:ai-stage";
+const STAGES = ["chat", "preview", "code", "split"];
+// The one width the stylesheet and layout.mjs share for "a phone".
+const narrow = () => window.matchMedia("(max-width: 820px)").matches;
 
 const SUGGESTIONS = [
   "A table of flights with a search field that filters by carrier",
@@ -66,11 +73,33 @@ export function setUpChat(chatHost, { onToggle } = {}) {
     download: document.getElementById("chat-download"),
     reset: document.getElementById("chat-new"),
     speed: document.getElementById("chat-speed"),
+    bar: document.getElementById("studio-bar"),
+    stages: [...document.querySelectorAll(".studio-stage")],
+    fullscreen: document.getElementById("studio-fullscreen"),
+    exit: document.getElementById("studio-exit"),
+    url: document.getElementById("studio-url"),
+    stage: document.getElementById("pane-right"),
   };
 
   el.toggle.addEventListener("click", () => {
     setOpen(!open);
     onToggle?.(open);
+  });
+  el.exit.addEventListener("click", () => {
+    setOpen(false);
+    onToggle?.(false);
+  });
+  for (const button of el.stages) button.addEventListener("click", () => setStage(button.dataset.stage, true));
+  // The browser's own full screen, on top of the studio's: hidden where the
+  // page may not have it (an iframe without allowfullscreen, an old Safari).
+  el.fullscreen.hidden = !document.fullscreenEnabled;
+  el.fullscreen.addEventListener("click", () => {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    else document.documentElement.requestFullscreen?.().catch(() => {});
+  });
+  // Crossing the phone width changes which stages there are.
+  window.matchMedia("(max-width: 820px)").addEventListener("change", () => {
+    if (open) setStage(document.body.dataset.stage);
   });
 
   el.keyForm.addEventListener("submit", (e) => {
@@ -146,12 +175,73 @@ function setOpen(value) {
   open = value;
   el.toggle.setAttribute("aria-checked", String(open));
   el.toggle.title = open ? "Back to the ABAP editor" : "Build an app by describing it - an AI chat";
-  el.pane.classList.toggle("is-chatting", open);
   el.chat.hidden = !open;
-  if (!open) return;
+  el.bar.hidden = !open;
+  document.body.classList.toggle("is-studio", open);
+  if (!open) {
+    delete document.body.dataset.stage;
+    document.body.classList.remove("is-ai-working");
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    return;
+  }
+  // The narrow layout hides one of the two panes by attribute; the studio
+  // decides what is on screen by its stage alone.
+  el.pane.hidden = false;
+  el.stage.hidden = false;
+  const stored = readStored(STAGE_STORAGE);
+  // A phone starts on the conversation - the one thing on it nobody has
+  // seen yet; a wide screen on the chat beside code and app.
+  setStage(narrow() ? "chat" : stored ?? (window.innerWidth >= 1500 ? "split" : "preview"));
+  showAppName();
   showKeyForm(readStored(KEY_STORAGE) === null);
   if (el.keyForm.hidden) el.input.focus();
   else el.keyInput.focus();
+}
+
+// What the stage shows. A stage the width does not offer is mapped onto one
+// it does: Split is Preview on a phone, and Chat is the whole studio on a
+// phone and simply the chat column everywhere else.
+function setStage(stage, chosen = false) {
+  let next = STAGES.includes(stage) ? stage : "preview";
+  if (narrow() && next === "split") next = "preview";
+  if (!narrow() && next === "chat") next = "preview";
+  document.body.dataset.stage = next;
+  for (const button of el.stages) button.setAttribute("aria-selected", String(button.dataset.stage === next));
+  if (chosen) writeStored(STAGE_STORAGE, next);
+}
+
+// The app's name in the window bar of the stage: the class Run starts.
+function showAppName() {
+  const app = host.files()[0]?.name.replace(/\.clas\.abap$/, "").toUpperCase();
+  if (app) el.url.textContent = `${app} · running in your browser`;
+}
+
+// A run that started the app, said in the conversation as a card: it brings
+// the app forward where the stage was showing something else, and the stage
+// flashes so the eye finds it.
+function appUpdated() {
+  showAppName();
+  const card = document.createElement("button");
+  card.type = "button";
+  card.className = "chat-card";
+  card.append("✦ App updated");
+  const hint = document.createElement("span");
+  hint.textContent = "show it";
+  card.append(hint);
+  card.addEventListener("click", () => {
+    const stage = document.body.dataset.stage;
+    if (stage === "code" || stage === "chat") setStage("preview", true);
+    flashStage();
+  });
+  el.log.append(card);
+  scrollDown();
+  flashStage();
+}
+
+function flashStage() {
+  el.stage.classList.remove("is-flash");
+  void el.stage.offsetWidth;
+  el.stage.classList.add("is-flash");
 }
 
 function showKeyForm(show) {
@@ -164,6 +254,8 @@ function showWelcome() {
   el.log.replaceChildren();
   const intro = document.createElement("div");
   intro.className = "chat-welcome";
+  const title = document.createElement("h2");
+  title.textContent = "What do you want to build?";
   const lead = document.createElement("p");
   lead.textContent =
     "Describe the app you want. Claude writes it as an abap2UI5 class into the editor, runs it here and fixes " +
@@ -181,7 +273,7 @@ function showWelcome() {
     });
     list.append(b);
   }
-  intro.append(lead, list);
+  intro.append(title, lead, list);
   el.log.append(intro);
 }
 
@@ -203,6 +295,7 @@ function setBusy(value) {
   el.send.textContent = busy ? "Stop" : "Send";
   el.send.classList.toggle("primary", !busy);
   el.chat.classList.toggle("is-busy", busy);
+  document.body.classList.toggle("is-ai-working", busy && open);
 }
 
 async function submit() {
@@ -278,6 +371,7 @@ async function submit() {
             row.className = `chat-msg chat-tool${error ? " is-error" : ""}`;
             row.textContent = summary;
             scrollDown();
+            if (!error && /^ran: running/.test(summary)) appUpdated();
           },
           usage({ input, output, cached }) {
             const k = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));

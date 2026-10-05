@@ -163,8 +163,13 @@ it back to the curated list of the day.
 
 ## Build an app by describing it
 
-**AI**, the switch beside Samples, opens a chat beside the code — a column of
-its own on a wide screen, under the editor on a smaller one. Describe
+**AI**, the switch beside Samples, turns the page into the **AI Studio**: the
+site's bar and the toolbar step aside, the chat runs down the left, and the
+stage beside it shows the running app in a window of its own, the code, or
+both side by side (**Preview**, **Code**, **Split** in the studio's bar; a
+phone takes them in turns, the chat first). Every run that starts the app is a
+card in the conversation that brings the app forward; ⛶ makes it the
+browser's full screen, ✕ goes back to the playground. Describe
 the app you want — *"a table of flights with a search field"* — and Claude
 writes it as an abap2UI5 class into the editor, presses Run, reads what the two
 checkers and the app said, fixes it, and runs it again until it is clean. You

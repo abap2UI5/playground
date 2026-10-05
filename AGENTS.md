@@ -644,13 +644,28 @@ changing anything near it.
 
 ## The AI chat — `src/shell/chat.mjs`, `src/shell/ai-agent.mjs`
 
-**AI** in the toolbar puts a chat into the left pane beside the code, so what
-the model writes is on screen while it writes it (`.is-chatting` in
-`shell.css`): from 1400px a column beside the file strip, the editor and the
-panel; between 820 and 1400 the code above and the chat below, the panel
-folded away; on a phone the chat takes the pane. Whatever is not shown is
-hidden, never removed, so the models and their undo stacks survive and
-Monaco's `automaticLayout` takes the size it is given. The editor follows the
+**AI** in the toolbar turns the page into the **AI Studio** (`body.is-studio`,
+"AI Studio" at the end of `shell.css`): the site's bar, the toolbar, the ABAP/App
+tabs and the splitter step aside, the studio's own bar (`#studio-bar`: the
+stages, the status line mirrored by `setStatus( )`, browser full screen, the way
+out) runs across the top, the chat down the left, and a stage beside it shows
+what `body[data-stage]` says - `preview` (the app frame, in a window of its
+own), `code` (file strip, editor, panel), `split` (both), or on a phone `chat`,
+where the stages take turns and the chat comes first. **Nothing is moved in
+the DOM**: `.pane-left` dissolves into the grid with `display: contents` and
+every pane keeps its element, because an iframe that is moved reloads - which
+for the app frame would be a lost run and a lost model. Whatever is not on the
+stage is hidden, never removed, so the models and their undo stacks survive
+and Monaco's `automaticLayout` takes the size it is given. Two traps, both
+held by `tests/ai.spec.js` on a phone: the page's visually hidden `<h1>` is a
+box and took a grid cell until it was taken out of the flow, and the phone
+layout's `inset` on `.pane` (room for the tabs) pushed the stage down and off
+the screen until the studio took it back. The studio has its own palette in
+both themes on purpose - it is the one room of the site that is not the
+documentation - and answers `prefers-reduced-motion` for its own animations
+(the stage's edge glow while the model works, the shimmer of a pending tool
+row). A run that started the app is a card in the conversation
+(`appUpdated( )`) that brings the app onto the stage. The editor follows the
 file the model just wrote or edited (`host.show`). The model's answers are
 markdown, rendered by `renderMarkdown( )` in `chat.mjs` into nodes and never
 through `innerHTML`. The app runs on the right. `tests/ai.spec.js` holds it with `api.anthropic.com`
