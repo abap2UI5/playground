@@ -1019,8 +1019,13 @@ function setUpAutorun({ restore }) {
     // until the next keystroke looks like a switch that does nothing. Off, the
     // change already waiting is dropped rather than run behind the reader's
     // back.
-    if (autorun) run();
-    else clearTimeout(autorunTimer);
+    // During a Run, run( ) only returns - and the change waiting was dropped
+    // with Run left disabled ("autorun has the job"). autorunAfterChange( )
+    // waits for the Run to end and runs it then.
+    if (autorun) {
+      if (running) autorunAfterChange();
+      else run();
+    } else clearTimeout(autorunTimer);
   });
   reflectAutorun();
 }
@@ -1133,6 +1138,14 @@ export async function run() {
     // error to show. Left unawaited it was an "Uncaught (in promise)" in the
     // console, and the run went on to start an app whose class was never
     // defined - a dump about a missing class, in place of the real cause.
+    //
+    // The Run is counted here, the moment the classes change: the
+    // window.__z2ui5Playground roundtrip refuses a frame of an earlier Run by
+    // this number, and counted only before the database reset it let the old
+    // app's timer run the NEW classes through the whole test phase - a dump
+    // that was not the new app's, left on screen after it started. Counted
+    // after compile, so code that does not compile leaves the old app working.
+    state.runCounter += 1;
     await state.runtime.defineClasses(chunks.map(({ name, js, lines }) => ({ name, js, lines })));
 
     // The unit tests in the test includes, before the app: a run is compile,
@@ -1178,10 +1191,8 @@ export async function run() {
     }
 
     setStatus("starting the app…");
-    // Counted before the reset, not after it: the window.__z2ui5Playground
-    // roundtrip refuses a frame of an earlier Run by this number, and the old
-    // app must not reach the database while it is being reset either.
-    state.runCounter += 1;
+    // (The Run was counted before the classes were defined - see above - so
+    // the old app cannot reach the database while it is being reset either.)
     await state.runtime.resetDatabase();
     // A run is a fresh app; what the last one said to its frontend is over.
     clearRoundtrips();

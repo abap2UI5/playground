@@ -60,8 +60,8 @@ export async function runUnitTests(tests) {
       testclass_name: new abap.types.Character(30),
       method_name: new abap.types.Character(30),
     });
-  const input = new abap.types.Table(row(), { withHeader: false, type: "STANDARD", isUnique: false, keyFields: [] });
-  for (const test of tests) {
+  const inputOf = (test) => {
+    const input = new abap.types.Table(row(), { withHeader: false, type: "STANDARD", isUnique: false, keyFields: [] });
     for (const method of test.methods) {
       const line = row();
       line.get().class_name.set(test.class);
@@ -69,28 +69,57 @@ export async function runUnitTests(tests) {
       line.get().method_name.set(method);
       abap.statements.append({ source: line, target: input });
     }
-  }
+    return input;
+  };
   // The runner keeps the SECOND GET RUN TIME of each test, which counts from
   // the first one ever taken in this runtime - so every duration in the Tests
   // tab included all the runs before it, and grew with the session. Started
   // afresh for this run, the values count from its start, and each test's
   // own time is the step from the row before.
   abap.context.runTime = undefined;
-  let result;
+  const text = (field) => String(field?.get?.() ?? "").trimEnd();
+  // One test class at a time. The runner calls class_setup and setup outside
+  // its own TRY, so an assertion in one class's setup threw out of the whole
+  // run: every test of every class came back failed, with an empty message.
+  // Now that class's tests are its rows, marked with what its setup said, and
+  // the other classes run as usual.
+  const entries = [];
   try {
-    result = await runner.run({ it_input: input });
+    for (const test of tests) {
+      try {
+        const result = await runner.run({ it_input: inputOf(test) });
+        entries.push(...result.get().list.array().map((entry) => ({ entry })));
+      } catch (e) {
+        const said = text(e?.msg) || String(e?.message ?? "") || e?.constructor?.INTERNAL_NAME || "the setup failed";
+        for (const method of test.methods) {
+          entries.push({
+            failed: {
+              class: test.class,
+              testclass: test.testclass,
+              method,
+              passed: false,
+              status: "ERROR",
+              expected: text(e?.expected),
+              actual: text(e?.actual),
+              message: `setup failed: ${said}`,
+              microseconds: 0,
+              frame: "",
+              location: locate(e?.stack),
+            },
+          });
+        }
+      }
+    }
   } finally {
     // The tests ran against the same class objects the app is about to use,
     // and a static attribute one of them set was what the app started with.
     // Defined again, the app starts from the classes as written (a few ms).
     if (lastChunks) await defineClasses(lastChunks);
   }
-  const text = (field) => String(field?.get?.() ?? "").trimEnd();
   let before = 0;
-  return result
-    .get()
-    .list.array()
-    .map((entry) => {
+  return entries
+    .map(({ entry, failed }) => {
+      if (failed) return failed;
       const fields = entry.get();
       const status = text(fields.status);
       const at = Number(fields.runtime?.get?.() ?? 0);
@@ -146,8 +175,24 @@ const AsyncFunction = (async () => {}).constructor;
 // The last set defined, for runUnitTests( ) to define again after the tests.
 let lastChunks;
 
+// What the previous set of chunks put into abap.Classes over the bundle's own
+// entries: name -> the bundle's class there (undefined for a name the bundle
+// does not have). Put back before the next set is defined. Defining only ever
+// added: a file named after a framework class replaced that class for the
+// rest of the session, and a broken copy (from ?src= or the AI chat) broke
+// every later Run until a reload, as a class taken out of the editor stayed
+// reachable by dynamic name.
+const shadowed = new Map();
+
 export async function defineClasses(chunks) {
   lastChunks = chunks;
+  const classes = globalThis.abap.Classes;
+  for (const [name, original] of shadowed) {
+    if (original === undefined) delete classes[name];
+    else classes[name] = original;
+  }
+  shadowed.clear();
+  const before = { ...classes };
   // Only the chunks of THIS set keep a line table: every class name ever
   // defined used to keep one for the session, and locate( ) builds its
   // pattern over all of them on every dump - a catalogue session or an AI
@@ -162,6 +207,9 @@ export async function defineClasses(chunks) {
       await define(globalThis.abap);
     }
   } finally {
+    for (const name of Object.keys(classes)) {
+      if (classes[name] !== before[name]) shadowed.set(name, before[name]);
+    }
     // Even when a chunk threw: the ones before it are already redefined, and
     // the app still in the frame must not go on reading type caches built
     // from their previous versions.
@@ -244,7 +292,11 @@ keepDumpsLocatable();
 function forgetCachedTypeInformation() {
   for (const cls of Object.values(globalThis.abap.Classes)) {
     for (const [name, value] of Object.entries(cls)) {
-      if (/cache/i.test(name)) value?.clear?.();
+      // ...and the two class-level lookups abap2UI5 keeps by class name without
+      // calling them caches (z2ui5_cl_ui5_util_context): a class refused once
+      // as "does not implement z2ui5_if_app" stayed refused after the reader
+      // added the interface, until a reload.
+      if (/cache|^gt_class_(exists|impl_intf)$/i.test(name)) value?.clear?.();
     }
   }
 }

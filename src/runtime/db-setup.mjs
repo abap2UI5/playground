@@ -79,6 +79,11 @@ export async function resetDatabase() {
   if (image === undefined) {
     throw new Error("resetDatabase called before setup");
   }
+  // WRITE goes to abap.context.console, which nothing reads and nothing ever
+  // emptied: the same app, run again and again, grew it by its output each
+  // time until a WRITE hit the string length limit and dumped - from the
+  // sixth Run on for an app that writes a lot. A Run starts with it empty.
+  globalThis.abap.context.console?.clear?.();
   const previous = globalThis.abap.context.databaseConnections["DEFAULT"];
   await open(image);
   try {
