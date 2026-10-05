@@ -34,6 +34,34 @@ function watch(page) {
 // waits on install, is also when its precache is filled.
 const workerReady = (page) => page.evaluate(() => navigator.serviceWorker.ready.then(() => true));
 
+// The network gone quiet: no request open and none started for a second and a
+// half - what waitForLoadState("networkidle") means, counted here by hand.
+// Playwright's own idle signal, with the service worker allowed, never came
+// for a page whose requests had all finished once several of these tests ran
+// side by side (three local workers: every run timed out on it, with nothing
+// in flight). The same pages, the same requests; only who counts them differs.
+async function networkSettled(page, quietMs = 1500, timeout = 60000) {
+  const context = page.context();
+  const open = new Set();
+  let last = Date.now();
+  const started = (r) => { open.add(r); last = Date.now(); };
+  const ended = (r) => { open.delete(r); last = Date.now(); };
+  context.on("request", started);
+  context.on("requestfinished", ended);
+  context.on("requestfailed", ended);
+  try {
+    const until = Date.now() + timeout;
+    while (open.size > 0 || Date.now() - last < quietMs) {
+      if (Date.now() > until) throw new Error(`the network did not settle: ${open.size} request(s) open`);
+      await page.waitForTimeout(100);
+    }
+  } finally {
+    context.off("request", started);
+    context.off("requestfinished", ended);
+    context.off("requestfailed", ended);
+  }
+}
+
 test("the heavy assets come out of the worker's cache on a second visit", async ({ page }) => {
   await open(page);
   expect(await workerReady(page)).toBe(true);
@@ -139,7 +167,7 @@ test("the app frame's stylesheets and component come out of the cache as well", 
   // The first visit's app is still fetching its fonts when the status line
   // says running, and this page is not the worker's yet - so the watch would
   // count those against the second visit. Let it finish first.
-  await page.waitForLoadState("networkidle");
+  await networkSettled(page);
 
   const { served, fetched } = watch(page);
   await open(page);
@@ -185,7 +213,7 @@ test("the playground opens and runs with no network, on what the last visit left
   // documents included, and the ABAP runs where it always did, in this tab.
   await open(page);
   expect(await workerReady(page)).toBe(true);
-  await page.waitForLoadState("networkidle");
+  await networkSettled(page);
   // A controlled visit, so the app's own assets have all passed through the
   // worker once and been kept - including what the app only reaches for on
   // the first press of its button, UI5's message toast, which is the honest
@@ -201,7 +229,7 @@ test("the playground opens and runs with no network, on what the last visit left
   await page.locator("#run").click();
   await expect(page.locator("#status")).toHaveText(/^running/, { timeout: 60000 });
   await press(page, "online");
-  await page.waitForLoadState("networkidle");
+  await networkSettled(page);
 
   await context.setOffline(true);
   try {
