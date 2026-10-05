@@ -29,8 +29,10 @@ import Anthropic from "@anthropic-ai/sdk";
 import { AgentError, createAppClient } from "../vendor/agent/appclient.mjs";
 import { analyzeScreen, applyResponse, emptyState, FRONTEND_EVENTS, getAt, modelKeyOf } from "../vendor/agent/snapshot.mjs";
 import { catalogueEntries, DEFAULT_SPEED, SPEEDS } from "./ai-common.mjs";
+import { attachmentBlocks } from "./attachments.mjs";
 
 export { explainError } from "./ai-common.mjs";
+export { kindOf, MAX_FILES } from "./attachments.mjs";
 
 const SLOTS = ["MAIN", "NEST", "NEST2", "POPUP", "POPOVER"];
 const MAX_ROWS = 20;
@@ -213,6 +215,11 @@ Working with the person:
   person wants to work with two apps at once (read in one, enter in the
   other). The apps share one database, and restart_app restarts all of them.
   Only open apps the person asks for or clearly needs.
+- The person may attach files to a message - a PDF, a spreadsheet (each
+  sheet comes as CSV), a Word document, an image, a text file. Treat them as
+  the material to work from: the orders to enter, the values to check, the
+  form to fill. Work through a list row by row, say how far you got, and
+  never invent a value a file does not have.
 - Answer in the language the person writes in. Keep it short: what you did,
   and what the app answered.`;
 
@@ -529,7 +536,9 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
   // A snapshot as the model reads it, with the tab it belongs to.
   const snapshotText = (app, snapshot) => clip(JSON.stringify({ tab: app.id, ...snapshot }));
 
-  async function send(text) {
+  // `files` are the File objects the reader added to this message; they go in
+  // front of its text, as the content blocks attachments.mjs makes of them.
+  async function send(text, files = []) {
     stopped = false;
     const content = [];
     const first = told.size === 0;
@@ -553,6 +562,11 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
           `${screens.join("\n")}\n</screen>`,
       });
       tellAll();
+    }
+    if (files.length > 0) {
+      const { blocks, errors } = await attachmentBlocks(files);
+      for (const error of errors) ui.notice(error);
+      content.push(...blocks);
     }
     content.push({ type: "text", text });
     messages.push({ role: "user", content });

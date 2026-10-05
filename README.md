@@ -248,6 +248,12 @@ carries on from there.
   (*"look the colour up in the value help app and greet it in the first"*).
   They run in one runtime on one database, so opening an app keeps the others
   as they are; *Restart* starts all of them again on a fresh database.
+- **Files in the chat.** 📎, a drop on the chat or a paste adds files to the
+  next message — up to five, 10 MB each: a **PDF** and **images** go to the
+  model as they are, an **Excel** sheet (`.xlsx`) as CSV, a **Word** document
+  (`.docx`) as its text, and text files (CSV, JSON, XML, …) as text — *"enter
+  every order in this sheet"*. The Office files are read in your browser; the
+  old binary formats (`.xls`, `.doc`) are refused with what to save them as.
 - **Your own key, and no server** — exactly as in the AI Studio: held in
   memory for the visit, sent to `api.anthropic.com` and nowhere else.
 

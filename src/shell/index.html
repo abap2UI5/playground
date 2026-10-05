@@ -740,6 +740,12 @@
     </form>
     <div class="pilot-log" id="pilot-log" role="log" aria-live="polite" aria-label="Conversation"></div>
     <form class="pilot-compose" id="pilot-compose">
+      <!-- The files going with the next message (src/shell/attachments.mjs). -->
+      <div class="pilot-files" id="pilot-files" aria-label="Files for the next message" hidden></div>
+      <button type="button" id="pilot-attach" class="pilot-attach" title="Add files - PDF, Excel, Word, images, text"
+              aria-label="Add files">📎</button>
+      <input type="file" id="pilot-file-input" multiple hidden
+             accept=".pdf,.xlsx,.xlsm,.docx,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv,.tsv,.json,.md,.xml,.html,.yaml,.yml,.abap,text/*">
       <textarea id="pilot-input" rows="2" aria-label="Your message"
                 placeholder="Tell Claude what to do in the app… (Enter sends, Shift+Enter is a new line)"></textarea>
       <button type="submit" id="pilot-send" class="primary">Send</button>

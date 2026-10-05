@@ -2995,6 +2995,46 @@ button.pilot-card span { color: var(--pl-dim); font-weight: 400; }
 .pilot-key-row input:focus { outline: 2px solid var(--pl-signal); outline-offset: -1px; }
 body.is-pilot #pilot-send { border-radius: 10px; padding: .55rem 1rem; }
 
+/* Files for the next message: chips above the line, the paperclip in it,
+   and the whole chat lit while a file is dragged over it. */
+.pilot-compose { flex-wrap: wrap; }
+.pilot-files[hidden] { display: none; }
+.pilot-files { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 6px; }
+.pilot-file {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  max-width: 100%;
+  padding: .2rem .25rem .2rem .6rem;
+  border: 1px solid var(--pl-line);
+  border-radius: 999px;
+  background: var(--pl-panel);
+  font: 11.5px var(--font-mono);
+  color: var(--pl-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pilot-file::before { content: "📎" / ""; }
+body.is-pilot button.pilot-file-remove {
+  border: 0;
+  background: transparent;
+  color: var(--pl-dim);
+  padding: 0 .3rem;
+  font-size: 14px;
+}
+body.is-pilot button.pilot-attach {
+  align-self: stretch;
+  border: 1px solid var(--pl-line);
+  border-radius: 10px;
+  background: var(--pl-panel);
+  padding: 0 .6rem;
+  font-size: 16px;
+}
+body.is-pilot button.pilot-attach:hover { border-color: var(--pl-signal); }
+.pilot.is-dropping { outline: 2px dashed var(--pl-signal); outline-offset: -6px; }
+.pilot-user-files { display: block; margin-top: .3rem; font: 11.5px var(--font-mono); opacity: .8; }
+
 @keyframes pilot-pulse { 50% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); } }
 @keyframes pilot-sweep { to { --pilot-angle: 360deg; } }
 @keyframes pilot-flash {

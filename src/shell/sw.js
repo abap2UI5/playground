@@ -91,10 +91,11 @@ const CORE = [...Object.keys(CORE_HASHES), ...CHUNKS];
 // reaches for - precached as well, so one online visit is enough for the
 // installed playground to open offline, rather than the second one it would
 // take for a controlled page to pass through serveDocument( ).
-// The AI Studio's page too (ai/index.html): it runs on the same bundle, and
-// left out it went to the network after a deploy and paired the new document
-// with this build's cached assets - the mix DOC_HASHES exists to prevent.
-const DOCUMENTS = ["index.html", "app/index.html", "ai/index.html"];
+// The AI Studio's page too (ai/index.html), and the AI Pilot's
+// (pilot/index.html): they run on the same bundle, and left out each went to
+// the network after a deploy and paired the new document with this build's
+// cached assets - the mix DOC_HASHES exists to prevent.
+const DOCUMENTS = ["index.html", "app/index.html", "ai/index.html", "pilot/index.html"];
 
 // And what this build's two documents hash to, written in by the build like
 // CORE_HASHES. A document is network-first, the assets beside it cache-first,
@@ -237,6 +238,7 @@ function documentOf(url, request) {
   if (rel === "" || rel === "index.html") return new URL("index.html", BASE);
   if (rel === "app/index.html") return new URL("app/index.html", BASE);
   if (rel === "ai/" || rel === "ai/index.html") return new URL("ai/index.html", BASE);
+  if (rel === "pilot/" || rel === "pilot/index.html") return new URL("pilot/index.html", BASE);
   // The catalogue, asked for as the directory or as the file. It registers no
   // worker of its own - a reader who only wanted to look a sample up must not
   // be handed the playground's three megabytes of precache - so this only ever

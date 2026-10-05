@@ -136,6 +136,8 @@ test("the documents are answered from the network first, and the cache is only t
         // The AI Studio's document, precached like the playground's so a
         // deploy cannot pair it with another build's assets.
         entry === "/ai/index.html" ||
+        // ...and the AI Pilot's, for the same reason.
+        entry === "/pilot/index.html" ||
         // The type, precached like the rest of the core: an installed
         // playground opened offline is the page that was installed, not the
         // one the reader's own font stack draws.
