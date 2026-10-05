@@ -53,15 +53,26 @@ const SUGGESTIONS = [
 let host;
 let el;
 let sessionKey = null;
-// The chunk: the vendored client, the mirror, the conversation and the SDK.
-// Asked for when the page starts, not on the first message - the mirror has
-// to see the app's first roundtrip, and this page is the chat.
+// The chunk: the vendored client, the mirrors, the conversation and the SDK.
+// Asked for when the page starts, not on the first message - the mirrors
+// have to see each app's first roundtrip, and this page is the chat.
 let chunk;
-let mirror;
-// Roundtrips that arrived before the chunk did (the app's start, usually).
-const early = [];
-// The act waiting for the frame to send its roundtrip - see drive( ).
-let request = null;
+let mod;
+
+// The apps on the stage, one tab each. Tab "1" is Run's own frame (#app) and
+// the app the first file declares; the others are frames of their own, added
+// by openApp( ) with `beside`, which load their class from the same build of
+// classes in the same runtime - one database, so what one app writes the
+// others can read. Each tab keeps the screen of its app (`mirror`), the act
+// parked for its frame (`request`) and whatever the frame was answered before
+// the chunk arrived (`early`).
+const MAX_APPS = 4;
+const tabs = [];
+let visible = "1";
+let nextTab = 2;
+// Whether the next pick in the samples browser opens beside the others (the
+// tab strip's +) or in place of the app on screen (Change app).
+let pickBeside = false;
 
 let agent;
 let active;
@@ -73,66 +84,250 @@ let raw = "";
 let note;
 const rows = new Map();
 let hudTimer;
-let knownApp = "";
+
+const tabById = (id) => tabs.find((t) => t.id === id);
+const visibleTab = () => tabById(visible) ?? tabs[0];
+const frameApi = (tab) => tab.frame.contentWindow?.__z2ui5PlaygroundPilot;
+const classOf = (files) => files[0].name.replace(/\.clas\.abap$/, "");
+
+// Which tab a roundtrip came from: the frame's own address names it
+// (?pilot=<tab>), and Run's frame names none.
+function tabFrom(from) {
+  let id = null;
+  try {
+    id = from ? new URL(from, document.baseURI).searchParams.get("pilot") : null;
+  } catch {
+    id = null;
+  }
+  return tabById(id ?? "1");
+}
 
 // ------------------------------------------------------------- the bridge
 
-/** main.mjs, in the bridge's roundtrip( ): the Pilot's request, if one is
- *  waiting for the frame - taken, so it goes out once. */
-export function takePilotRequest() {
-  const taken = request;
-  request = null;
-  taken?.settled();
+/** main.mjs, in the bridge's roundtrip( ): the Pilot's request parked for
+ *  the frame that is asking, if there is one - taken, so it goes out once. */
+export function takePilotRequest(from) {
+  const tab = host && tabFrom(from);
+  const taken = tab?.request;
+  if (!taken) return null;
+  tab.request = null;
+  taken.settled();
   return taken;
 }
 
-/** main.mjs, after every answer the framework gave the frame. */
-export function sawRoundtrip(body, response) {
+/** main.mjs, after every answer the framework gave a frame. */
+export function sawRoundtrip(body, response, from) {
+  const tab = host && tabFrom(from);
+  if (!tab) return;
+  if (tab.mirror) tab.mirror.observe(body, response);
+  else tab.early.push([body, response]);
+}
+
+/** main.mjs, after a Run: one fresh database for all of them, so every other
+ *  app starts again too - or closes, when its class left the files. */
+export function pilotRan() {
   if (!host) return;
-  if (mirror) mirror.observe(body, response);
-  else early.push([body, response]);
+  const names = new Set(host.files().map((f) => f.name));
+  for (const tab of tabs.slice(1)) {
+    if (names.has(`${tab.cls}.clas.abap`)) loadFrame(tab);
+    else closeTab(tab.id);
+  }
+}
+
+/** main.mjs: a pick in the samples browser - files, or a promise of them. */
+export async function pilotPicked(files) {
+  const beside = pickBeside;
+  pickBeside = false;
+  try {
+    const picked = await files;
+    if (!picked) return;
+    const report = await openApp(picked, beside ? { beside: true } : { tab: visible });
+    if (!report.started) setStatus(`the app could not be opened - ${report.status}`, true);
+  } catch (e) {
+    setStatus(`the app could not be opened - ${String(e?.message ?? e)}`, true);
+  }
 }
 
 /*
- * One request of the Pilot, sent by the app frame so that the frame renders
+ * One request of the Pilot, sent by a tab's frame so that the frame renders
  * the answer. Answers what the framework answered ({ status, body }), or
- * rejects when the frame cannot send - no app on screen, or a frontend that
- * no longer has what frontend-bridge.js reaches for.
+ * rejects when the frame cannot send - no app in it, or a frontend that no
+ * longer has what frontend-bridge.js reaches for.
  */
-function drive(body) {
+function drive(tab, body) {
   return new Promise((resolve, reject) => {
-    const api = host.frame();
     const gaveUp = setTimeout(() => {
-      if (request?.body !== body) return;
-      request = null;
-      reject(new Error("the app on screen did not send the roundtrip - restart_app starts it again"));
+      if (tab.request?.body !== body) return;
+      tab.request = null;
+      reject(new Error("the app did not send the roundtrip - restart_app starts it again"));
     }, 15000);
-    request = { body, resolve, reject, settled: () => clearTimeout(gaveUp) };
+    tab.request = { body, resolve, reject, settled: () => clearTimeout(gaveUp) };
     let sent = false;
     try {
-      sent = api?.roundtrip() === true;
+      sent = frameApi(tab)?.roundtrip() === true;
     } catch {
       sent = false;
     }
     if (!sent) {
       clearTimeout(gaveUp);
-      request = null;
-      reject(new Error("the app on screen could not be updated - it is not running (restart_app starts it)"));
+      tab.request = null;
+      reject(new Error("the app could not be updated - it is not running (restart_app starts it)"));
     }
   });
+}
+
+// --------------------------------------------------------------- the tabs
+
+function addTab(id, frame, cls) {
+  const tab = { id, frame, cls, mirror: null, early: [], request: null, known: "" };
+  tabs.push(tab);
+  if (mod) attachMirror(tab);
+  return tab;
+}
+
+function attachMirror(tab) {
+  tab.mirror = mod.createMirror({ onChange: () => screenChanged(tab) });
+  for (const [body, response] of tab.early.splice(0)) tab.mirror.observe(body, response);
+}
+
+// (Re)loads a tab's frame on its class, at the current Run - Run's own frame
+// as well as the others, with the address run( ) builds.
+function loadFrame(tab) {
+  const src = host.frameSrc(tab.cls, tab.id === "1" ? {} : { pilot: tab.id });
+  tab.frame.dataset.src = src;
+  const win = tab.frame.contentWindow;
+  try {
+    if (win && win.location.href !== "about:blank") {
+      win.location.replace(src);
+      return;
+    }
+  } catch {
+    // another origin - set src instead
+  }
+  tab.frame.src = src;
+}
+
+// Until the tab's app has started: its first answer folded, and rendered.
+async function started(tab, versionBefore) {
+  const until = performance.now() + 30000;
+  while (performance.now() < until) {
+    let rendering = true;
+    try {
+      rendering = frameApi(tab)?.busy() !== false;
+    } catch {
+      rendering = true;
+    }
+    if (tab.mirror.version !== versionBefore && tab.mirror.state.id && !rendering) return true;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return false;
+}
+
+/*
+ * An app onto the stage: in tab `tab` in place of the app there, or - with
+ * `beside` - in a tab of its own beside the others. Its files go into the
+ * editor and are compiled with the rest (host.addFiles: no fresh database,
+ * so the other apps keep their state); a Run app replaced becomes the first
+ * file, so Restart starts it from then on.
+ */
+async function openApp(files, { beside = false, tab: target } = {}) {
+  await chunk;
+  let tab = beside ? null : tabById(target ?? visible);
+  if (!beside && !tab) return { started: false, status: `there is no app ${target}` };
+  if (beside && tabs.length >= MAX_APPS) {
+    return { started: false, status: `${MAX_APPS} apps are open - close one first` };
+  }
+  const cls = classOf(files);
+  const report = await host.addFiles(files, tab?.id === "1" ? { first: files[0].name } : {});
+  if (!report.started) return report;
+  if (!tab) {
+    const frame = document.createElement("iframe");
+    const id = String(nextTab++);
+    frame.title = `app ${id}`;
+    frame.className = "pilot-frame";
+    el.stage.querySelector(".app-frame").append(frame);
+    tab = addTab(id, frame, cls);
+  }
+  tab.cls = cls;
+  const before = tab.mirror.version;
+  loadFrame(tab);
+  showTab(tab.id);
+  if (!(await started(tab, before))) return { started: false, status: `${cls.toUpperCase()} did not start within 30 seconds` };
+  return { started: true, status: "running", tab: tab.id };
+}
+
+function closeTab(id) {
+  if (id === "1") return false;
+  const tab = tabById(id);
+  if (!tab) return false;
+  tabs.splice(tabs.indexOf(tab), 1);
+  tab.request?.reject(new Error("the app was closed"));
+  tab.frame.remove();
+  if (visible === id) visible = "1";
+  showTab(visible);
+  return true;
+}
+
+function showTab(id) {
+  if (!tabById(id)) return;
+  visible = id;
+  for (const tab of tabs) tab.frame.classList.toggle("is-behind", tab.id !== id);
+  renderTabs();
+  screenChanged(visibleTab());
+}
+
+// The strip over the stage: a tab per app, and + to open another beside.
+function renderTabs() {
+  const buttons = [];
+  for (const tab of tabs) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.setAttribute("role", "tab");
+    button.className = "pilot-tab";
+    button.dataset.tab = tab.id;
+    button.setAttribute("aria-selected", String(tab.id === visible));
+    const app = tab.mirror?.state.app || tab.cls?.toUpperCase() || "starting…";
+    button.textContent = `${tab.id} · ${app}`;
+    button.addEventListener("click", () => showTab(tab.id));
+    buttons.push(button);
+    if (tab.id !== "1") {
+      const close = document.createElement("button");
+      close.type = "button";
+      close.className = "pilot-tab-close";
+      close.title = `Close app ${tab.id}`;
+      close.setAttribute("aria-label", `Close app ${tab.id}`);
+      close.textContent = "×";
+      close.addEventListener("click", () => closeTab(tab.id));
+      buttons.push(close);
+    }
+  }
+  const add = document.createElement("button");
+  add.type = "button";
+  add.className = "pilot-tab-add";
+  add.title = "Open another app beside this one";
+  add.textContent = "+ App";
+  add.disabled = tabs.length >= MAX_APPS;
+  add.addEventListener("click", () => {
+    pickBeside = true;
+    host.openSamples();
+  });
+  buttons.push(add);
+  el.tabs.replaceChildren(...buttons);
 }
 
 // ---------------------------------------------------------------- the page
 
 /**
  * `pilotHost` is the page (main.mjs):
- *   files()             the open files, the app first
- *   run()               Run, and its report (runForAgent)
- *   openFiles(files)    those files in place of what is open, then Run
- *   fetchLinked(url)    a catalogued class and the classes it needs
- *   openSamples()       the samples browser
- *   frame()             the frame's __z2ui5PlaygroundPilot, or undefined
- *   appClass()          the class Run starts
+ *   files()                   the open files, the app first
+ *   run()                     Run, and its report (runForAgent)
+ *   addFiles(files, {first})  files beside the open ones, compiled, no Run
+ *   frameSrc(cls, params)     the address a frame loads an app from
+ *   mainFrame                 Run's own frame
+ *   carried(cls)              a sample the page carries, by class
+ *   fetchLinked(url)          a catalogued class and the classes it needs
+ *   openSamples()             the samples browser
+ *   appClass()                the class Run starts
  */
 export function setUpPilot(pilotHost) {
   host = pilotHost;
@@ -161,6 +356,7 @@ export function setUpPilot(pilotHost) {
     fullscreen: document.getElementById("pilot-fullscreen"),
     hud: document.getElementById("pilot-hud"),
     stage: document.getElementById("pane-right"),
+    tabs: document.getElementById("pilot-tabs"),
   };
 
   document.body.classList.add("is-pilot");
@@ -170,16 +366,23 @@ export function setUpPilot(pilotHost) {
   document.getElementById("pane-right").hidden = false;
   setView("app");
 
-  chunk = import("./pilot-agent.mjs").then((mod) => {
-    mirror = mod.createMirror({ onChange: screenChanged });
-    for (const [body, response] of early.splice(0)) mirror.observe(body, response);
-    return mod;
+  addTab("1", host.mainFrame, host.appClass());
+  el.tabs.hidden = false;
+  renderTabs();
+
+  chunk = import("./pilot-agent.mjs").then((loaded) => {
+    mod = loaded;
+    for (const tab of tabs) attachMirror(tab);
+    return loaded;
   });
   // A chunk that did not arrive is said when a message needs it; until then
   // nothing is waiting on it.
   chunk.catch(() => {});
 
-  el.change.addEventListener("click", () => host.openSamples());
+  el.change.addEventListener("click", () => {
+    pickBeside = false;
+    host.openSamples();
+  });
   el.restart.addEventListener("click", async () => {
     el.restart.disabled = true;
     try {
@@ -267,26 +470,28 @@ function setSees(open, chosen = false) {
   if (open) renderSees();
 }
 
-// The screen changed - an answer the frame got, from the Pilot's act or the
-// reader's click. The bar names the app; a NEW app is said in the chat.
-function screenChanged() {
-  const app = mirror.state.app;
+// A tab's screen changed - an answer its frame got, from the Pilot's act or
+// the reader's click. The strip names its app; the bar and "What Claude
+// sees" follow the tab on screen; a NEW app in a tab is said in the chat.
+function screenChanged(tab) {
+  if (!tab) return;
+  const app = tab.mirror?.state.app ?? "";
+  if (app && tab.known && app !== tab.known) addCard(`Tab ${tab.id} is now on ${app}`, tab.id);
+  else if (app && !tab.known && tab.id !== "1") addCard(`Opened ${app} beside - tab ${tab.id}`, tab.id);
+  if (app) tab.known = app;
+  renderTabs();
+  if (tab.id !== visible) return;
   el.appName.textContent = app ? `${app} · running in your browser` : "no app running";
-  if (app && app !== knownApp) {
-    if (knownApp !== "") addCard(`Now on ${app}`);
-    knownApp = app;
-  }
   if (!el.seesPanel.hidden) renderSees();
 }
 
 function renderSees() {
-  if (!mirror) {
+  const tab = visibleTab();
+  if (!mod || !tab?.mirror) {
     el.seesBody.textContent = "loading…";
     return;
   }
-  chunk.then((mod) => {
-    el.seesBody.replaceChildren(highlightJson(JSON.stringify(mod.describeMirror(mirror), null, 2)));
-  });
+  el.seesBody.replaceChildren(highlightJson(JSON.stringify(mod.describeMirror(tab.mirror), null, 2)));
 }
 
 // What the Pilot is doing, written over the app for a moment: the reader
@@ -374,7 +579,7 @@ function addLine(kind, text) {
   return div;
 }
 
-function addCard(text) {
+function addCard(text, tabId) {
   const card = document.createElement("button");
   card.type = "button";
   card.className = "pilot-card";
@@ -384,6 +589,7 @@ function addCard(text) {
   card.append(hint);
   card.addEventListener("click", () => {
     setView("app");
+    if (tabId) showTab(tabId);
     flashStage();
   });
   el.log.append(card);
@@ -422,10 +628,9 @@ async function submit() {
 
   const gen = generation;
   const live = () => gen === generation;
-  let mod;
   let turn;
   try {
-    mod = await chunk;
+    await chunk;
     if (stopAsked || !live()) {
       if (live()) addLine("notice", "Stopped.");
       setStatus("stopped");
@@ -498,8 +703,25 @@ async function submit() {
       agent = mod.createPilot({
         apiKey: sessionKey,
         workspace: readStored(WORKSPACE_STORAGE) ?? undefined,
-        host: { ...host, drive },
-        mirror,
+        host: {
+          files: host.files,
+          run: host.run,
+          carried: host.carried,
+          fetchLinked: host.fetchLinked,
+          // The apps on the stage, as the conversation takes them.
+          apps: () =>
+            tabs.map((tab) => ({
+              id: tab.id,
+              visible: tab.id === visible,
+              mirror: tab.mirror,
+              cls: tab.cls,
+              frame: () => frameApi(tab),
+              drive: (body) => drive(tab, body),
+            })),
+          show: (id) => showTab(id),
+          openApp: (files, options) => openApp(files, options),
+          closeApp: (id) => closeTab(id),
+        },
         speed: () => el.speed.value,
         ui: guarded,
       });

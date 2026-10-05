@@ -181,7 +181,7 @@ test("the Pilot opens another app, works through its popup and picks a row", asy
   await expect(page.locator(".pilot-assistant").last()).toContainText("BLACK it is.", { timeout: 90000 });
 
   // The new app is the one on screen, said in the chat and in the bar.
-  await expect(page.locator(".pilot-card")).toContainText("Now on Z2UI5_CL_SMP_APP_009");
+  await expect(page.locator(".pilot-card")).toContainText("is now on Z2UI5_CL_SMP_APP_009");
   await expect(page.locator("#pilot-app-name")).toContainText("Z2UI5_CL_SMP_APP_009");
   // The popup was the model's screen while it was open...
   const popup = JSON.parse(textOf(requests[2].body.messages.at(-1)));
@@ -214,6 +214,56 @@ test("a value typed without an event shows in the field and stays pending", asyn
   // typing would have.
   await app.getByRole("button", { name: "Greet" }).click();
   await expect(app.getByText("Hello Eve!")).toBeVisible();
+});
+
+test("several apps side by side: the Pilot opens one beside, works in both, and each keeps its state", async ({ page }) => {
+  const requests = await answerWith(page, [
+    { tools: [{ name: "open_app", input: { class: "z2ui5_cl_smp_app_009", beside: true } }] },
+    { tools: [{ name: "act", input: { app: "2", event: "POPUP_TABLE_VALUE" } }] },
+    { tools: [{ name: "act", input: { app: "2", values: { "/T_SUGGESTION_SEL/1/SELKZ": true }, event: "POPUP_TABLE_VALUE_CONTINUE" } }] },
+    { tools: [{ name: "act", input: { app: "1", values: { "/NAME": "Blue" }, event: "GREET" } }] },
+    { text: "Both done." },
+  ]);
+  await openPilot(page);
+  await useKey(page);
+  await say(page, "Pick a colour in the value help app and greet it in the first one");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("Both done.", { timeout: 90000 });
+
+  // Two apps on the stage, a tab each, and the chat said the second one came.
+  await expect(page.locator(".pilot-tab")).toHaveCount(2);
+  await expect(page.locator(".pilot-card")).toContainText("Opened Z2UI5_CL_SMP_APP_009 beside - tab 2");
+  // The second app has the pick in its own frame...
+  const second = page.frameLocator("iframe.pilot-frame");
+  await expect(second.getByRole("textbox", { name: "Input with value" })).toHaveValue("BLUE");
+  // ...and the first, brought back on screen by the act on it, its greeting.
+  await expect(page.locator('.pilot-tab[data-tab="1"]')).toHaveAttribute("aria-selected", "true");
+  await expect(page.frameLocator("#app").getByText("Hello Blue!")).toBeVisible();
+  // Every answer said which app it was about.
+  expect(JSON.parse(textOf(requests[3].body.messages.at(-1))).tab).toBe("2");
+  expect(JSON.parse(textOf(requests[4].body.messages.at(-1))).tab).toBe("1");
+
+  // The reader closes the second tab; the first app is untouched.
+  await page.locator(".pilot-tab-close").click();
+  await expect(page.locator(".pilot-tab")).toHaveCount(1);
+  await expect(page.locator("iframe.pilot-frame")).toHaveCount(0);
+  await expect(page.frameLocator("#app").getByText("Hello Blue!")).toBeVisible();
+});
+
+test("Restart starts every app on the stage again", async ({ page }) => {
+  await answerWith(page, [
+    { tools: [{ name: "open_app", input: { class: "z2ui5_cl_smp_app_009", beside: true } }] },
+    { tools: [{ name: "act", input: { app: "2", values: { "/S_SCREEN/QUANTITY": 7 }, event: "BUTTON_SEND" } }] },
+    { text: "Sent." },
+  ]);
+  await openPilot(page);
+  await useKey(page);
+  await say(page, "Open the value help beside and send a quantity of 7");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("Sent.", { timeout: 90000 });
+  const second = page.frameLocator("iframe.pilot-frame");
+  await expect(second.locator('input[placeholder="quantity"]')).toHaveValue("7");
+  await page.locator("#pilot-restart").click();
+  await expect(page.locator(".pilot-tab")).toHaveCount(2);
+  await expect(second.locator('input[placeholder="quantity"]')).not.toHaveValue("7", { timeout: 30000 });
 });
 
 test("What Claude sees shows the agent snapshot of the screen", async ({ page }) => {

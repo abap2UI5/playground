@@ -243,6 +243,11 @@ carries on from there.
   browser, and Claude can look an app up in the catalogue and open it itself.
   A shared link or `?src=` opens your own class:
   `/playground/pilot/?src=<raw url>`.
+- **Several apps at once.** Up to four, one tab each over the stage — *+ App*
+  opens one beside the others, and so does Claude when a task spans two apps
+  (*"look the colour up in the value help app and greet it in the first"*).
+  They run in one runtime on one database, so opening an app keeps the others
+  as they are; *Restart* starts all of them again on a fresh database.
 - **Your own key, and no server** — exactly as in the AI Studio: held in
   memory for the visit, sent to `api.anthropic.com` and nowhere else.
 

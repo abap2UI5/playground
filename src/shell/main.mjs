@@ -53,7 +53,7 @@ import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mj
 import { openShare, setUpShareDialog } from "./share-dialog.mjs";
 import { clearRoundtrips, recordRoundtrip, roundtripList } from "./roundtrips.mjs";
 import { setUpChat } from "./chat.mjs";
-import { sawRoundtrip, setUpPilot, takePilotRequest } from "./pilot.mjs";
+import { pilotPicked, pilotRan, sawRoundtrip, setUpPilot, takePilotRequest } from "./pilot.mjs";
 import { AI_FILE, AI_STARTER, isUntouchedStarter } from "./ai-starter.mjs";
 import { state } from "./state.mjs";
 import { RUNAWAY, STALLED, startRuntime } from "./runtime-client.mjs";
@@ -308,7 +308,9 @@ async function boot() {
   // Not when embedded - an embedded playground is furniture in somebody
   // else's page, and a dialog that covers it belongs to nobody.
   if (!embedded) setUpSearch();
-  setUpAutorun({ restore: !embedded });
+  // Never on the Pilot's page: a change to the files there is an app opened
+  // beside the others, and a run would restart every one of them.
+  setUpAutorun({ restore: !embedded && !pilotPage });
   setUpSplitter();
   setUpAbout();
   setUpShareDialog();
@@ -363,8 +365,10 @@ async function boot() {
   // link goes through. It is the one way to a sample - there is no sample
   // menu beside it, and the built-ins are its first group.
   setUpExamples({
-    openSample: (id) => loadSample(id, tabs),
-    openLinked: (url) => loadLinked(url, tabs),
+    // On the Pilot's page a pick goes to the Pilot, which opens it in place
+    // of the app on screen or beside it (src/shell/pilot.mjs).
+    openSample: (id) => (pilotPage ? pilotPicked(sampleById(id)?.files) : loadSample(id, tabs)),
+    openLinked: (url) => (pilotPage ? pilotPicked(carriedFiles(url) ?? linkedFiles(url)) : loadLinked(url, tabs)),
     // The reader's own drafts (src/shell/drafts.mjs): what is open, to save,
     // and a saved one to open - which runs, the way a sample does.
     currentFiles: () => getFiles(),
@@ -399,13 +403,13 @@ async function boot() {
         // a roundtrip so that it renders the answer, and what goes to the
         // framework is the Pilot's request in place of the frame's. Every
         // answer, the reader's clicks included, is shown to the Pilot after.
-        const pilot = takePilotRequest();
+        const pilot = takePilotRequest(from);
         if (pilot) body = pilot.body;
         const started = performance.now();
         try {
           const response = await state.runtime.roundtrip(body);
           recordRoundtrip({ request: body, response, ms: performance.now() - started });
-          sawRoundtrip(body, response);
+          sawRoundtrip(body, response, from);
           pilot?.resolve(response);
           if (response.location) pointAtDump(response.location, firstLine(response.body));
           return response;
@@ -498,22 +502,27 @@ async function boot() {
     setUpPilot({
       files: () => getFiles(),
       run: () => runForAgent(),
-      // A set of files in place of what is open, then a run: the sample a
-      // picked row in the samples browser would be, without the browser.
-      openFiles: (files) => {
-        latestPick++;
-        forgetOrigins();
-        replaceWith(checkFileSet(files));
-        return runForAgent();
-      },
       // A catalogued class by its raw URL, and the classes it needs beside it -
       // the ?src= path, as loadLinked( ) takes it.
-      fetchLinked: async (url) => {
-        const linked = checkFileSet(await fetchLinkedFiles(new URLSearchParams([["src", url]])));
-        return checkFileSet([...linked, ...(await followNavigation(linked))]);
+      fetchLinked: (url) => linkedFiles(url),
+      // Further apps, beside the one Run starts: their files go into the
+      // editor beside the others and everything is compiled and defined
+      // again - WITHOUT a fresh database and without counting a Run, so the
+      // apps already open keep their state and their frames stay current.
+      addFiles: (files, options) => addAppFiles(files, options),
+      // The address a Pilot frame loads an app from - Run's own, plus the
+      // frame's name, which tells the bridge whose roundtrip it is.
+      frameSrc: (cls, params = {}) => {
+        const src = new URL("app/index.html", document.baseURI);
+        src.searchParams.set("app_start", cls);
+        src.searchParams.set("run", String(state.runCounter));
+        for (const [key, value] of Object.entries(params)) src.searchParams.set(key, value);
+        src.searchParams.set("sap-ui-theme", uiTheme());
+        return src.href;
       },
+      mainFrame: frame,
       // One of the samples the page carries, by its class - no network.
-      carried: (cls) => SAMPLES.find((s) => s.files[0].name === `${cls.toLowerCase()}.clas.abap`)?.files,
+      carried: (cls) => carriedClass(cls),
       openSamples: () => openExamples(),
       frame: () => frame.contentWindow?.__z2ui5PlaygroundPilot,
       appClass: () => entryClass(getFiles()),
@@ -922,6 +931,60 @@ async function loadLinked(url, tabs) {
   }
 }
 
+// One of the samples the page carries, by its class - no network.
+const carriedClass = (cls) => SAMPLES.find((s) => s.files[0].name === `${cls.toLowerCase()}.clas.abap`)?.files;
+// ...and by the raw URL the samples browser hands over for its catalogue row:
+// the AI Pilot opens the copy the page carries rather than fetching it.
+const carriedFiles = (url) => carriedClass(String(url).split("/").pop().replace(/\.clas\.abap$/, ""));
+
+// A catalogued class by its raw URL and the classes it needs beside it, as
+// files - the ?src= path without the run.
+async function linkedFiles(url) {
+  const linked = checkFileSet(await fetchLinkedFiles(new URLSearchParams([["src", url]])));
+  return checkFileSet([...linked, ...(await followNavigation(linked))]);
+}
+
+// The AI Pilot's further apps (src/shell/pilot.mjs): `files` go into the
+// editor beside what is there (a file of the same name is replaced), `first`
+// names the file Run is to start from now on, and the whole set is checked,
+// compiled and defined - the same steps as run( ) up to the classes, and not
+// one step further: no fresh database, no Run counted, no frame reloaded. The
+// runtime defines a set of classes as a whole (defineClasses( ) puts back what
+// the last set shadowed), which is why the apps already open are compiled
+// again with the new one rather than the new one alone.
+async function addAppFiles(files, { first } = {}) {
+  while (running) await new Promise((resolve) => setTimeout(resolve, 100));
+  running = true;
+  reflectRunButton();
+  try {
+    let next = getFiles().map((f) => ({ ...f }));
+    for (const file of files) {
+      const at = next.findIndex((f) => f.name === file.name);
+      if (at === -1) next.push({ ...file });
+      else next[at] = { ...file };
+    }
+    if (first) {
+      const lead = next.find((f) => f.name === first);
+      if (lead) next = [lead, ...next.filter((f) => f !== lead)];
+    }
+    replaceWith(checkFileSet(next), { asOpened: false });
+    const problems = await refreshNow();
+    updateInsight(problems);
+    const errors = problems.filter((i) => i.severity === 1 && i.source === "abaplint");
+    if (errors.length > 0) {
+      return { started: false, status: `${errors.length} error${errors.length > 1 ? "s" : ""} in the ABAP`, problems };
+    }
+    const { chunks } = await compile(getFiles());
+    await state.runtime.defineClasses(chunks.map(({ name, js, lines }) => ({ name, js, lines })));
+    return { started: true, status: "running", problems };
+  } catch (e) {
+    return { started: false, status: String(e?.message ?? e), problems: [] };
+  } finally {
+    running = false;
+    reflectRunButton();
+  }
+}
+
 // The app on its own, in a tab of its own - the whole window, none of the
 // editor around it.
 //
@@ -1301,6 +1364,9 @@ export async function run() {
     }
     // After the load event, so the app has rendered and has a height to report.
     if (appOnly) announceAppHeight(frame);
+    // The AI Pilot's further apps start again with this Run - same fresh
+    // database, new Run number (src/shell/pilot.mjs).
+    if (pilotPage) pilotRan();
     // Answered rather than returned blank, because on a narrow screen the
     // caller brings the app forward - and every path out of here above this
     // line is one where there is no app to bring: nothing compiled, or the

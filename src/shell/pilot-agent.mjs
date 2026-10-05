@@ -173,9 +173,14 @@ Working with the person:
   not name.
 - If the app cannot do what was asked, say so plainly; read_source shows its
   ABAP when you need to understand what an event does.
-- Other apps: find_apps searches the sample catalogue, open_app opens one in
-  place of the app on screen. Only open another app when the person asks for
-  it or clearly wants something this app does not do.
+- Several apps: the stage holds up to four, one tab each, numbered 1 to 4;
+  every snapshot says its "tab". look and act take app (a tab number or a
+  class) and default to the app on screen; acting on another brings it on
+  screen. find_apps searches the sample catalogue; open_app opens an app in
+  place of one, or with beside: true next to the others - use that when the
+  person wants to work with two apps at once (read in one, enter in the
+  other). The apps share one database, and restart_app restarts all of them.
+  Only open apps the person asks for or clearly needs.
 - Answer in the language the person writes in. Keep it short: what you did,
   and what the app answered.`;
 
@@ -185,7 +190,13 @@ const TOOLS = [
   {
     name: "look",
     description: "The screen of the app as it is now - the agent snapshot. Pass max_rows for more table rows (default 20, max 200).",
-    input_schema: { type: "object", properties: { max_rows: { type: "number" } } },
+    input_schema: {
+      type: "object",
+      properties: {
+        app: { type: "string", description: "which app: its tab number (\"2\") or its class; default the app on screen" },
+        max_rows: { type: "number" },
+      },
+    },
   },
   {
     name: "act",
@@ -198,6 +209,7 @@ const TOOLS = [
     input_schema: {
       type: "object",
       properties: {
+        app: { type: "string", description: "which app: its tab number (\"2\") or its class; default the app on screen" },
         values: { type: "object", description: "{ \"<field id, path or name>\": value, \"<table path>/<row>/<COLUMN>\": value }" },
         event: { type: "string", description: "the action to fire: its event name (e.g. \"SAVE\") or its id (\"a3\")" },
         row: { type: "number", description: "for a row action: the row index (0-based) in its table" },
@@ -209,8 +221,8 @@ const TOOLS = [
   {
     name: "restart_app",
     description:
-      "Start the app on screen again: a fresh database and its first screen - what Run does. Answers the new " +
-      "snapshot, or why the app did not start.",
+      "Start the apps again: a fresh database - shared by all open apps - and each app's first screen, what Run " +
+      "does. Answers the snapshot of the app on screen, or why the apps did not start.",
     input_schema: { type: "object", properties: {} },
   },
   {
@@ -226,11 +238,36 @@ const TOOLS = [
   },
   {
     name: "open_app",
-    description: "Open a sample class from find_apps in place of the app on screen, start it and answer its first snapshot.",
+    description:
+      "Open a sample class from find_apps and answer its first snapshot - in place of an app (default: the one on " +
+      "screen), or with beside: true in a tab of its own next to the open apps (at most 4). The apps share one " +
+      "database; opening one keeps the others as they are.",
     input_schema: {
       type: "object",
-      properties: { class: { type: "string", description: "The class name, e.g. z2ui5_cl_smp_app_009" } },
+      properties: {
+        class: { type: "string", description: "The class name, e.g. z2ui5_cl_smp_app_009" },
+        beside: { type: "boolean", description: "open it in a new tab beside the open apps" },
+        app: { type: "string", description: "without beside: the app to replace (tab number or class)" },
+      },
       required: ["class"],
+    },
+  },
+  {
+    name: "show_app",
+    description: "Bring an open app onto the screen (its tab), e.g. before you explain something in it.",
+    input_schema: {
+      type: "object",
+      properties: { app: { type: "string", description: "tab number or class" } },
+      required: ["app"],
+    },
+  },
+  {
+    name: "close_app",
+    description: "Close an app's tab. The first app cannot be closed.",
+    input_schema: {
+      type: "object",
+      properties: { app: { type: "string", description: "tab number or class" } },
+      required: ["app"],
     },
   },
   {
@@ -244,17 +281,14 @@ const TOOLS = [
 
 /*
  * The model's hands on the app: the vendored client, with the frame as its
- * transport. `host` is the page (pilot.mjs adds drive( ) to main.mjs's):
- *   host.drive(body)        one request, sent by the app frame -> { status, body }
- *   host.frame()            the frame's __z2ui5PlaygroundPilot
- *   host.run()              Run, and its report
- *   host.openFiles(files)   another app, then Run
- *   host.carried(cls)       a sample the page carries, by class
- *   host.fetchLinked(url)   a catalogued class and what it needs
- *   host.files()            the open files
- *   host.appClass()         the class Run starts
+ * transport. One operator per app on the stage; `app` is that app's tab
+ * (pilot.mjs, the apps( ) of its host):
+ *   app.drive(body)   one request, sent by the app's frame -> { status, body }
+ *   app.frame()       the frame's __z2ui5PlaygroundPilot
+ *   app.cls           the class the tab was opened on
  */
-export function createOperator({ host, mirror, ui = {} }) {
+export function createOperator({ app, mirror, ui = {} }) {
+  const host = { drive: (body) => app.drive(body), frame: () => app.frame(), appClass: () => app.cls };
   // The answer the next start is given instead of being sent - see replayOf( ).
   let replay = null;
   const client = createAppClient({
@@ -399,13 +433,7 @@ export function createOperator({ host, mirror, ui = {} }) {
     return look(maxRows);
   }
 
-  async function restart() {
-    const report = await host.run();
-    if (!report.started) return { started: false, report };
-    return { started: true, report, snapshot: mirror.state.id ? await look() : null };
-  }
-
-  return { look, act, restart };
+  return { look, act };
 }
 
 // ------------------------------------------------------- the conversation
@@ -414,43 +442,85 @@ export function createOperator({ host, mirror, ui = {} }) {
  * One conversation. `ui` is what the chat draws (pilot.mjs): the same calls
  * the AI Studio's chat answers, plus acting(text) for the bar over the app.
  */
-export function createPilot({ apiKey, workspace, host, mirror, ui, speed = () => DEFAULT_SPEED }) {
+/*
+ * `host` is the page (pilot.mjs):
+ *   host.apps()                       the apps on the stage: { id, visible, mirror, cls, frame( ), drive( ) }
+ *   host.show(id)                     brings an app's tab forward
+ *   host.openApp(files, { beside, tab })  an app in a tab, or in a new one beside
+ *   host.closeApp(id)                 closes a tab (not the first)
+ *   host.run()                        Run: every app again, on a fresh database
+ *   host.carried(cls), host.fetchLinked(url), host.files()
+ */
+export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT_SPEED }) {
   const client = new Anthropic({
     apiKey,
     dangerouslyAllowBrowser: true,
     ...(workspace ? { defaultHeaders: { "anthropic-workspace-id": workspace } } : {}),
   });
-  const operator = createOperator({ host, mirror, ui });
+  // One operator per app, made the first time the model reaches for it and
+  // made again for a tab that was closed and whose number came back.
+  const operators = new Map();
+  function operatorOf(app) {
+    const known = operators.get(app.id);
+    if (known && known.mirror === app.mirror) return known.operator;
+    const operator = createOperator({ app, mirror: app.mirror, ui });
+    operators.set(app.id, { mirror: app.mirror, operator });
+    return operator;
+  }
+  // The app a tool means: a tab number, or the class an open tab runs;
+  // without one, the app on screen. Acting on another brings it forward, so
+  // the reader sees what is being done.
+  function appOf(ref) {
+    const apps = host.apps();
+    if (ref === undefined || ref === null || ref === "") return apps.find((a) => a.visible) ?? apps[0];
+    const key = String(ref).trim();
+    const app = apps.find((a) => a.id === key)
+      ?? apps.find((a) => (a.mirror?.state.app || a.cls || "").toUpperCase() === key.toUpperCase());
+    if (!app) throw new AgentError(`there is no app ${key} - open apps: ${appList()}`);
+    return app;
+  }
+  const appList = () =>
+    host.apps().map((a) => `${a.id} ${a.mirror?.state.app || a.cls?.toUpperCase()}${a.visible ? " (on screen)" : ""}`).join(", ");
   // Append-only, as in the studio: thinking blocks are bound to the history
   // they were written in.
   const messages = [];
-  // The mirror's version the model was last told about - by a tool's answer
-  // or by the screen sent with a message.
-  let told = -1;
+  // Each app's mirror version the model was last told about - by a tool's
+  // answer or by the screen sent with a message.
+  const told = new Map();
+  const tellAll = () => {
+    for (const a of host.apps()) told.set(a.id, a.mirror?.version);
+  };
   let stream;
   let stopped = false;
   const total = { input: 0, output: 0, cached: 0 };
 
-  const snapshotText = (snapshot) => clip(JSON.stringify(snapshot));
+  // A snapshot as the model reads it, with the tab it belongs to.
+  const snapshotText = (app, snapshot) => clip(JSON.stringify({ tab: app.id, ...snapshot }));
 
   async function send(text) {
     stopped = false;
     const content = [];
-    if (mirror.version !== told) {
-      const first = told === -1;
-      let screen;
-      try {
-        screen = snapshotText(await operator.look());
-      } catch (e) {
-        screen = String(e?.message ?? e);
+    const first = told.size === 0;
+    const changed = host.apps().filter((a) => told.get(a.id) !== a.mirror?.version);
+    if (changed.length > 0) {
+      const screens = [];
+      for (const app of changed) {
+        try {
+          screens.push(snapshotText(app, await operatorOf(app).look()));
+        } catch (e) {
+          screens.push(`tab ${app.id}: ${String(e?.message ?? e)}`);
+        }
       }
       content.push({
         type: "text",
-        text: first
-          ? `<screen>\nThe app on the person's screen right now:\n${screen}\n</screen>`
-          : `<screen>\nThe screen changed since your last step - the person used the app themselves, or it was restarted. Now:\n${screen}\n</screen>`,
+        text:
+          `<screen>\nOpen apps: ${appList()}.\n` +
+          (first
+            ? "The screen right now:\n"
+            : "Changed since your last step - the person used the app themselves, or it was restarted or opened:\n") +
+          `${screens.join("\n")}\n</screen>`,
       });
-      told = mirror.version;
+      tellAll();
     }
     content.push({ type: "text", text });
     messages.push({ role: "user", content });
@@ -570,8 +640,8 @@ export function createPilot({ apiKey, workspace, host, mirror, ui, speed = () =>
           content: clip(result.error ?? result.text),
         });
       }
-      // Whatever the tools did to the screen, the model has just read.
-      told = mirror.version;
+      // Whatever the tools did to the screens, the model has just read.
+      tellAll();
       messages.push({ role: "user", content: results });
     }
   }
@@ -579,23 +649,36 @@ export function createPilot({ apiKey, workspace, host, mirror, ui, speed = () =>
   async function execute(name, input) {
     switch (name) {
       case "look": {
-        const snapshot = await operator.look(num(input.max_rows));
-        return { text: snapshotText(snapshot), summary: `looked at ${snapshot.title || snapshot.app}` };
+        const app = appOf(input.app);
+        const snapshot = await operatorOf(app).look(num(input.max_rows));
+        return { text: snapshotText(app, snapshot), summary: `looked at ${snapshot.title || snapshot.app}` };
       }
       case "act": return act(input);
       case "restart_app": {
-        ui.acting?.("restarting the app");
-        const { started, report, snapshot } = await operator.restart();
-        if (!started) {
+        ui.acting?.("restarting the apps");
+        const report = await host.run();
+        if (!report.started) {
           const errors = (report.problems ?? []).filter((p) => p.severity === 1).slice(0, 10);
           return {
             error: `The app did not start: ${report.status}${errors.length ? `\n${errors.map((p) => `- ${p.file}:${(p.range?.start?.line ?? 0) + 1} ${p.message}`).join("\n")}` : ""}`,
           };
         }
-        return { text: snapshot ? snapshotText(snapshot) : `started: ${report.status}`, summary: "restarted the app" };
+        const app = appOf(input.app);
+        return { text: `Open apps: ${appList()}.\n${snapshotText(app, await operatorOf(app).look())}`, summary: "restarted the apps" };
       }
       case "find_apps": return findApps(input);
       case "open_app": return openApp(input);
+      case "show_app": {
+        const app = appOf(input.app);
+        host.show(app.id);
+        return { text: `App ${app.id} is on screen.`, summary: `showed app ${app.id}` };
+      }
+      case "close_app": {
+        const app = appOf(input.app);
+        if (app.id === "1") return { error: "The first app cannot be closed - open_app replaces it." };
+        host.closeApp(app.id);
+        return { text: `Closed app ${app.id}. Open apps: ${appList()}.`, summary: `closed app ${app.id}` };
+      }
       case "read_source": {
         const files = host.files();
         return {
@@ -611,6 +694,14 @@ export function createPilot({ apiKey, workspace, host, mirror, ui, speed = () =>
     const values = input.values && typeof input.values === "object" && !Array.isArray(input.values) ? input.values : undefined;
     const event = str(input.event);
     if (!values && !event) return { error: "act needs values, an event, or both." };
+    let app;
+    try {
+      app = appOf(input.app);
+    } catch (e) {
+      return { error: String(e?.message ?? e) };
+    }
+    if (!app.visible) host.show(app.id);
+    const operator = operatorOf(app);
     try {
       const snapshot = await operator.act({
         values,
@@ -626,13 +717,13 @@ export function createPilot({ apiKey, workspace, host, mirror, ui, speed = () =>
       // What the app SAID in answer - a toast, a message box, a field's
       // error - not the strips that stand on the screen anyway.
       const said = (snapshot.messages ?? []).filter((m) => m.source !== "strip" && m.text).map((m) => m.text)[0];
-      return { text: snapshotText(snapshot), summary: `${what}${said ? ` → "${String(said).slice(0, 60)}"` : ""}` };
+      return { text: snapshotText(app, snapshot), summary: `${what}${said ? ` → "${String(said).slice(0, 60)}"` : ""}` };
     } catch (e) {
       // A refusal of the client names what is possible; the screen goes
       // with it, so the next act needs no look first.
       let screen = "";
       try {
-        screen = `\n\nThe screen now:\n${snapshotText(await operator.look())}`;
+        screen = `\n\nThe screen now:\n${snapshotText(app, await operator.look())}`;
       } catch {
         screen = "";
       }
@@ -667,11 +758,22 @@ export function createPilot({ apiKey, workspace, host, mirror, ui, speed = () =>
       if (!entry.runs) return { error: `${cls} does not run in the playground (it needs a system or a library this page has not got).` };
       files = await host.fetchLinked(entry.raw);
     }
-    ui.acting?.(`opening ${cls.toUpperCase()}`);
-    const report = await host.openFiles(files);
+    const beside = input.beside === true;
+    let target;
+    try {
+      target = beside ? undefined : appOf(input.app).id;
+    } catch (e) {
+      return { error: String(e?.message ?? e) };
+    }
+    ui.acting?.(`opening ${cls.toUpperCase()}${beside ? " beside" : ""}`);
+    const report = await host.openApp(files, { beside, tab: target });
     if (!report.started) return { error: `${cls} did not start: ${report.status}` };
-    const snapshot = await operator.look();
-    return { text: snapshotText(snapshot), summary: `opened ${cls.toUpperCase()}` };
+    const app = appOf(report.tab);
+    const snapshot = await operatorOf(app).look();
+    return {
+      text: `Open apps: ${appList()}.\n${snapshotText(app, snapshot)}`,
+      summary: `opened ${cls.toUpperCase()}${beside ? ` beside - app ${app.id}` : ""}`,
+    };
   }
 
   return {
@@ -698,7 +800,9 @@ export function pendingText(name, input) {
     }
     case "restart_app": return "restarting the app…";
     case "find_apps": return `looking for apps${str(input.query) ? ` about "${input.query}"` : ""}…`;
-    case "open_app": return `opening ${str(input.class) ?? "an app"}…`;
+    case "open_app": return `opening ${str(input.class) ?? "an app"}${input.beside === true ? " beside" : ""}…`;
+    case "show_app": return `showing app ${str(input.app) ?? ""}…`;
+    case "close_app": return `closing app ${str(input.app) ?? ""}…`;
     case "read_source": return "reading the ABAP…";
     default: return `${name}…`;
   }

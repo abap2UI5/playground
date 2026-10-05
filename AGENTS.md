@@ -851,15 +851,40 @@ controls at any moment - the next message carries the new screen in a
   reader's own would carry them on. The request that goes out is the one a
   single act would send.
 
-The tools are `look`, `act`, `restart_app`, `find_apps`, `open_app` and
-`read_source` - the app, Run and the catalogue, and nothing else. The
+**Several apps, a tab each** (at most four, `.pilot-tabs` over the stage). Tab
+1 is Run's own frame and the class of the first file; the others are frames
+`pilot.mjs` creates, loading their class at the current Run with
+`?pilot=<tab>` in their address - which is how the bridge knows whose
+roundtrip it is (`takePilotRequest(from)`, `sawRoundtrip(…, from)`) and each
+tab keeps a mirror of its own. The runtime defines a set of classes as a
+whole (`defineClasses( )` puts back whatever the last set shadowed), so an
+app opened beside the others is not compiled alone: `addAppFiles( )` in
+`main.mjs` puts its files into the editor beside the rest and compiles and
+defines the WHOLE set - and stops there, with no fresh database and no Run
+counted, so the apps already open keep their drafts and their frames stay
+current. Replacing tab 1's app makes its file the first, so Restart starts it
+from then on. A Run (Restart, `restart_app`) is one fresh database for all of
+them, so `pilotRan( )` reloads every other tab on the new Run number, or
+closes one whose class left the files. A pick in the samples browser goes to
+the Pilot on this page (`pilotPicked( )`): in place of the app on screen, or
+beside after the strip's **+ App**, and a catalogue row of a sample the page
+carries opens that copy instead of fetching it. Autorun is never restored on
+this page: a change to the files is an app opened beside, and a run would
+restart them all.
+
+The tools are `look`, `act`, `restart_app`, `find_apps`, `open_app` (with
+`beside`), `show_app`, `close_app` and `read_source` - the apps, Run and the
+catalogue, and nothing else. `look` and `act` take `app` (a tab number or a
+class) and default to the app on screen; an act on another tab brings it on
+screen first, and every snapshot the model reads carries its `tab`. The
 conversation is append-only and asks the same model at the same speeds as
 the studio (`ai-common.mjs`); the key follows the studio's rule word for word
 (memory only, never stored). `tests/pilot.spec.js` answers `api.anthropic.com`
 itself and holds the act in the real app (the ABAP ran, the frontend rendered
 the answer), a refused act sending nothing, the reader's own click reaching the
 model, a popup worked through in another app, a value typed without an event,
-the snapshot panel, the phone, and the vendored copies against `source.json`.
+two apps worked side by side and one closed, Restart restarting every tab, the
+snapshot panel, the phone, and the vendored copies against `source.json`.
 
 ## The public surfaces — the docs site consumes these
 
