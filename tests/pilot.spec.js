@@ -293,6 +293,45 @@ test("what the reader typed stays on the model's screen when the answer carries 
   expect(snapshot.fields.find((f) => f.path === "/S_SCREEN/QUANTITY").value).toBe("5");
 });
 
+test("files go with a message: a PDF as it is, a spreadsheet as CSV, a Word document as text", async ({ page }) => {
+  const requests = await answerWith(page, [{ text: "Three files read." }]);
+  await openPilot(page);
+  await useKey(page);
+  const input = page.locator("#pilot-file-input");
+  await input.setInputFiles([
+    "tests/fixtures/orders.xlsx",
+    "tests/fixtures/brief.docx",
+    "tests/fixtures/note.pdf",
+  ]);
+  // The old binary format is refused at once, with what to save it as.
+  await input.setInputFiles([{ name: "old.xls", mimeType: "application/vnd.ms-excel", buffer: Buffer.from("x") }]);
+  await expect(page.locator(".pilot-notice.is-error")).toContainText("old.xls is the old binary Office format");
+  await expect(page.locator(".pilot-file")).toHaveCount(3);
+  // One removed and added again: still three, no duplicate.
+  await page.locator(".pilot-file-remove").first().click();
+  await expect(page.locator(".pilot-file")).toHaveCount(2);
+  await input.setInputFiles(["tests/fixtures/orders.xlsx"]);
+  await expect(page.locator(".pilot-file")).toHaveCount(3);
+
+  await say(page, "Enter these orders");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("Three files read.", { timeout: 60000 });
+  // The chips went with the message, and the message lists them.
+  await expect(page.locator(".pilot-file")).toHaveCount(0);
+  await expect(page.locator(".pilot-user .pilot-user-files")).toContainText("📎 orders.xlsx");
+
+  const content = requests[0].body.messages[0].content;
+  const documents = content.filter((b) => b.type === "document");
+  const pdf = documents.find((b) => b.source.media_type === "application/pdf");
+  expect(pdf.title).toBe("note.pdf");
+  expect(Buffer.from(pdf.source.data, "base64").toString("latin1")).toContain("%PDF-1.4");
+  const sheet = documents.find((b) => b.title === "orders.xlsx - sheet Orders").source.data;
+  expect(sheet).toContain("Name,Quantity\nCarol,7\n\"Dora, Jr.\",12.5\nEve,,late");
+  const word = documents.find((b) => b.title === "brief.docx").source.data;
+  expect(word).toBe("Greet Frida\nthen\tstop");
+  // ...and the text comes last.
+  expect(content.at(-1)).toEqual({ type: "text", text: "Enter these orders" });
+});
+
 test("What Claude sees shows the agent snapshot of the screen", async ({ page }) => {
   await openPilot(page);
   await page.locator("#pilot-sees").click();

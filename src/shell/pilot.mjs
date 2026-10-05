@@ -358,6 +358,9 @@ export function setUpPilot(pilotHost) {
     hud: document.getElementById("pilot-hud"),
     stage: document.getElementById("pane-right"),
     tabs: document.getElementById("pilot-tabs"),
+    files: document.getElementById("pilot-files"),
+    attach: document.getElementById("pilot-attach"),
+    fileInput: document.getElementById("pilot-file-input"),
   };
 
   document.body.classList.add("is-pilot");
@@ -427,6 +430,34 @@ export function setUpPilot(pilotHost) {
     if (busy) stopTurn();
     else submit();
   });
+  // Files for the next message: the paperclip, a drop anywhere on the chat,
+  // or a paste into the message.
+  el.attach.addEventListener("click", () => el.fileInput.click());
+  el.fileInput.addEventListener("change", () => {
+    addFiles([...el.fileInput.files]);
+    el.fileInput.value = "";
+  });
+  el.chat.addEventListener("dragover", (e) => {
+    if (![...(e.dataTransfer?.types ?? [])].includes("Files")) return;
+    e.preventDefault();
+    el.chat.classList.add("is-dropping");
+  });
+  el.chat.addEventListener("dragleave", (e) => {
+    if (!el.chat.contains(e.relatedTarget)) el.chat.classList.remove("is-dropping");
+  });
+  el.chat.addEventListener("drop", (e) => {
+    el.chat.classList.remove("is-dropping");
+    if (!e.dataTransfer?.files?.length) return;
+    e.preventDefault();
+    addFiles([...e.dataTransfer.files]);
+  });
+  el.input.addEventListener("paste", (e) => {
+    const files = [...(e.clipboardData?.files ?? [])];
+    if (files.length === 0) return;
+    e.preventDefault();
+    addFiles(files);
+  });
+
   el.input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
@@ -553,7 +584,8 @@ function showWelcome() {
   lead.textContent =
     "Say what you want done in the app on screen. Claude reads the screen, fills the fields and presses the " +
     "buttons - in this app, in your browser, while you watch. Take the controls yourself any time; Claude " +
-    "carries on from wherever you left it.";
+    "carries on from wherever you left it. Add a PDF, an Excel sheet or a Word file with 📎 and Claude " +
+    "works from it - the orders to enter, the values to check.";
   const list = document.createElement("div");
   list.className = "pilot-suggestions";
   for (const text of SUGGESTIONS) {
@@ -570,6 +602,56 @@ function showWelcome() {
   intro.append(title, lead, list);
   el.log.append(intro);
 }
+
+// ---------------------------------------------------------------- files
+
+// The files waiting for the next message. Checked as they are added - a
+// format the chat cannot read is said at once, not after Send - and read only
+// when the message goes (attachments.mjs, in the chunk).
+let attached = [];
+
+async function addFiles(files) {
+  const loaded = await chunk;
+  for (const file of files) {
+    const kind = loaded.kindOf(file);
+    if (kind.error) {
+      addLine("notice is-error", kind.error);
+      continue;
+    }
+    if (attached.length >= loaded.MAX_FILES) {
+      addLine("notice is-error", `${file.name} was left out - ${loaded.MAX_FILES} files go with one message`);
+      continue;
+    }
+    if (!attached.some((f) => f.name === file.name && f.size === file.size)) attached.push(file);
+  }
+  renderFiles();
+  el.input.focus();
+}
+
+function renderFiles() {
+  el.files.hidden = attached.length === 0;
+  el.files.replaceChildren(
+    ...attached.map((file) => {
+      const chip = document.createElement("span");
+      chip.className = "pilot-file";
+      chip.append(`${file.name} · ${sizeOf(file.size)}`);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "pilot-file-remove";
+      remove.textContent = "×";
+      remove.title = `Remove ${file.name}`;
+      remove.setAttribute("aria-label", `Remove ${file.name}`);
+      remove.addEventListener("click", () => {
+        attached = attached.filter((f) => f !== file);
+        renderFiles();
+      });
+      chip.append(remove);
+      return chip;
+    }),
+  );
+}
+
+const sizeOf = (bytes) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
 
 function addLine(kind, text) {
   const div = document.createElement("div");
@@ -611,8 +693,10 @@ function setBusy(value) {
 }
 
 async function submit() {
-  const text = el.input.value.trim();
-  if (text === "") return;
+  const typed = el.input.value.trim();
+  if (typed === "" && attached.length === 0) return;
+  // Files alone are a message too: the model is told they are what it is about.
+  const text = typed || "Here are the files.";
   if (sessionKey === null) {
     showKeyForm(true);
     el.keyInput.focus();
@@ -620,7 +704,16 @@ async function submit() {
   }
   el.log.querySelector(".pilot-welcome")?.remove();
   el.input.value = "";
-  addLine("user", text);
+  const files = attached;
+  attached = [];
+  renderFiles();
+  const said = addLine("user", typed);
+  if (files.length > 0) {
+    const list = document.createElement("span");
+    list.className = "pilot-user-files";
+    list.textContent = files.map((f) => `📎 ${f.name}`).join("\n");
+    said.append(list);
+  }
   setBusy(true);
   stopAsked = false;
   current = undefined;
@@ -730,7 +823,7 @@ async function submit() {
     turn = agent;
     active = turn;
     setStatus("the Pilot is flying…");
-    const { stopped } = await turn.send(text);
+    const { stopped } = await turn.send(text, files);
     if (!live()) return;
     if (stopped) addLine("notice", "Stopped.");
     setStatus(stopped ? "stopped" : "the Pilot is done");
