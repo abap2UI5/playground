@@ -544,6 +544,26 @@
     <button type="button" id="studio-exit" class="studio-icon" title="Leave the AI Studio - back to the playground"
             aria-label="Leave the AI Studio">✕</button>
   </header>
+  <!-- The AI Pilot's own bar (src/shell/pilot.mjs, "AI Pilot" in shell.css):
+       the page pilot/index.html, written by the build from this one, where
+       Claude operates the running app and the reader steers in the chat.
+       Hidden everywhere else. -->
+  <header class="pilot-bar" id="pilot-bar" hidden>
+    <span class="pilot-brand"><span class="pilot-mark" aria-hidden="true">✈</span><span class="pilot-brand-name">abap2UI5</span> <b>AI Pilot</b></span>
+    <span class="pilot-app" title="The app on screen - Claude operates this one">
+      <i class="pilot-live" aria-hidden="true"></i><span id="pilot-app-name">starting…</span>
+    </span>
+    <button type="button" id="pilot-change" class="pilot-button" title="Open another app from the samples">Change app</button>
+    <button type="button" id="pilot-restart" class="pilot-button" title="Start the app again on a fresh database">Restart</button>
+    <span class="pilot-status" id="pilot-status" role="status" aria-live="polite"></span>
+    <div class="pilot-views" role="tablist" aria-label="What is on screen">
+      <button type="button" role="tab" data-view="chat" class="pilot-view" aria-selected="false">Chat</button>
+      <button type="button" role="tab" data-view="app" class="pilot-view" aria-selected="true">App</button>
+    </div>
+    <button type="button" id="pilot-sees" class="pilot-button" aria-pressed="false"
+            title="The screen as Claude reads it - the agent snapshot of the app">What Claude sees</button>
+    <button type="button" id="pilot-fullscreen" class="pilot-icon" title="Full screen" aria-label="Full screen">⛶</button>
+  </header>
   <nav class="tabs" role="tablist" aria-label="Panes">
     <button class="tab is-active" data-pane="left" id="tab-left" role="tab" aria-selected="true"
             aria-controls="pane-left">ABAP</button>
@@ -668,9 +688,60 @@
         <p class="app-placeholder-status" id="app-placeholder-status">starting…</p>
         <p class="app-placeholder-help">New here? <button type="button" class="link-button" id="about-from-placeholder">What this is, how it works and where it stops</button> — or press <kbd>?</kbd> any time.</p>
       </div>
+      <!-- What the AI Pilot is doing in the app right now, over the app
+           (src/shell/pilot.mjs) - typing a value, pressing a button. -->
+      <div class="pilot-hud" id="pilot-hud" aria-hidden="true" hidden></div>
       <iframe id="app" title="the running app" src="about:blank"></iframe>
     </div>
   </section>
+
+  <!-- The AI Pilot's screen panel: the agent snapshot of the app on screen,
+       which is all Claude knows of it (src/shell/pilot.mjs). -->
+  <section class="pilot-sees" id="pilot-sees-panel" aria-label="What Claude sees" hidden>
+    <div class="pilot-sees-head">
+      <h2>What Claude sees</h2>
+      <span class="pilot-sees-note">the agent snapshot of the screen - fields, actions, tables, messages</span>
+    </div>
+    <pre class="pilot-sees-body" id="pilot-sees-body" tabindex="0"></pre>
+  </section>
+
+  <!-- The AI Pilot's chat (src/shell/pilot.mjs). -->
+  <aside class="pilot" id="pilot" aria-label="AI Pilot chat" hidden>
+    <div class="pilot-head">
+      <h2 class="pilot-title">Co-pilot</h2>
+      <span class="pilot-usage" id="pilot-usage"></span>
+      <span class="spacer"></span>
+      <select id="pilot-speed" class="pilot-speed" aria-label="Model and how long it thinks"
+              title="Which model answers, and how long it thinks first">
+        <option value="balanced">Balanced · Opus 5.5</option>
+        <option value="thorough">Thorough · Opus 5.5</option>
+        <option value="fast">Fast · Sonnet 5.5</option>
+      </select>
+      <button type="button" id="pilot-new" class="ghost" title="Start a new conversation - the app stays as it is">New chat</button>
+      <button type="button" id="pilot-key-button" class="ghost" title="Your Anthropic API key">Key</button>
+    </div>
+    <form class="pilot-key" id="pilot-key" hidden>
+      <label for="pilot-key-input">Your Anthropic API key</label>
+      <div class="pilot-key-row">
+        <input id="pilot-key-input" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
+        <button type="submit" class="primary">Use key</button>
+        <button type="button" id="pilot-key-remove" class="ghost" hidden>Remove</button>
+      </div>
+      <label for="pilot-workspace-input">Workspace ID <span class="pilot-key-optional">- only for a key that is not tied to a workspace</span></label>
+      <div class="pilot-key-row">
+        <input id="pilot-workspace-input" type="text" autocomplete="off" spellcheck="false" placeholder="wrkspc_… (optional)">
+      </div>
+      <p class="pilot-key-note">Held for this visit only, never stored, and sent to api.anthropic.com and nowhere
+        else - there is no server behind this page. Usage is billed to your key.
+        <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Get a key</a></p>
+    </form>
+    <div class="pilot-log" id="pilot-log" role="log" aria-live="polite" aria-label="Conversation"></div>
+    <form class="pilot-compose" id="pilot-compose">
+      <textarea id="pilot-input" rows="2" aria-label="Your message"
+                placeholder="Tell Claude what to do in the app… (Enter sends, Shift+Enter is a new line)"></textarea>
+      <button type="submit" id="pilot-send" class="primary">Send</button>
+    </form>
+  </aside>
 </main>
 
 <script type="module" src="assets/shell.mjs"></script>

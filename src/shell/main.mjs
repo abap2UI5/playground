@@ -40,7 +40,7 @@ import {
   forgetOrigins,
   originOf,
 } from "./deep-link.mjs";
-import { DEFAULT_FILES, isSample, sampleById } from "../editor/samples.mjs";
+import { DEFAULT_FILES, isSample, SAMPLES, sampleById } from "../editor/samples.mjs";
 import { openExamples, setUpExamples } from "./examples.mjs";
 import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
 import { setTestResults, setUpInsight, showInsight, updateInsight } from "./insight.mjs";
@@ -53,6 +53,7 @@ import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mj
 import { openShare, setUpShareDialog } from "./share-dialog.mjs";
 import { clearRoundtrips, recordRoundtrip, roundtripList } from "./roundtrips.mjs";
 import { setUpChat } from "./chat.mjs";
+import { sawRoundtrip, setUpPilot, takePilotRequest } from "./pilot.mjs";
 import { AI_FILE, AI_STARTER, isUntouchedStarter } from "./ai-starter.mjs";
 import { state } from "./state.mjs";
 import { RUNAWAY, STALLED, startRuntime } from "./runtime-client.mjs";
@@ -90,6 +91,13 @@ const embedded = params.get("embed") === "1";
 // over the playground's own draft. The playground itself has no way into the studio while it is being
 // built - its address is the door.
 const aiPage = document.documentElement.dataset.page === "ai";
+
+// The AI Pilot's page (pilot/index.html, written the same way): a chat in
+// which Claude operates the running app while the reader watches - see
+// src/shell/pilot.mjs. It opens on what a link carries, else on the default
+// sample, and like the studio it neither restores nor stores the
+// playground's draft.
+const pilotPage = document.documentElement.dataset.page === "pilot";
 
 /* Opened from the sample catalogue - see showSourceLink( ). `back` is that
  * page's own query string, passed through so the reader lands on the search
@@ -162,7 +170,7 @@ async function startingFiles() {
       linkFailure = e;
     }
   }
-  if (!embedded) {
+  if (!embedded && !pilotPage) {
     try {
       // A draft that will not parse, or a storage that will not answer, is a
       // draft that is gone - readStoredJson says so with undefined. What is
@@ -287,7 +295,7 @@ async function boot() {
   //
   // Not when embedded (furniture in somebody else's page) and not in an
   // app-only view (a running app, not a place to come back to).
-  if (!embedded && !appOnly && !aiPage) {
+  if (!embedded && !appOnly && !aiPage && !pilotPage) {
     const writeHere = () => rememberHere("playground");
     writeHere();
     addEventListener("pagehide", writeHere);
@@ -387,16 +395,25 @@ async function boot() {
         // that says nothing (an older bridge script) is served as before.
         const run = from ? new URL(from, document.baseURI).searchParams.get("run") : null;
         if (run !== null && run !== String(state.runCounter)) throw new Error("this app was replaced by a newer Run");
+        // The AI Pilot's act (src/shell/pilot.mjs): the frame was made to send
+        // a roundtrip so that it renders the answer, and what goes to the
+        // framework is the Pilot's request in place of the frame's. Every
+        // answer, the reader's clicks included, is shown to the Pilot after.
+        const pilot = takePilotRequest();
+        if (pilot) body = pilot.body;
         const started = performance.now();
         try {
           const response = await state.runtime.roundtrip(body);
           recordRoundtrip({ request: body, response, ms: performance.now() - started });
+          sawRoundtrip(body, response);
+          pilot?.resolve(response);
           if (response.location) pointAtDump(response.location, firstLine(response.body));
           return response;
         } catch (e) {
           // A JavaScript error out of the transpiled code, rather than an
           // ABAP exception the framework turned into a dump: the frame's
           // fetch rejects, and the line is still worth pointing at.
+          pilot?.reject(e);
           if (e?.location) pointAtDump(e.location, String(e.message ?? e));
           // ABAP that did not finish, stopped by the runtime's watchdog: the
           // frame only sees a failed request, so the page says what happened.
@@ -472,6 +489,35 @@ async function boot() {
       // under it to leave to.
       { startOpen: true },
     );
+  }
+
+  // The AI Pilot (src/shell/pilot.mjs): the model operates the app in the
+  // frame. It opens the samples the way the samples browser does and
+  // restarts the app the way Run does - these, and nothing else.
+  if (pilotPage && !embedded) {
+    setUpPilot({
+      files: () => getFiles(),
+      run: () => runForAgent(),
+      // A set of files in place of what is open, then a run: the sample a
+      // picked row in the samples browser would be, without the browser.
+      openFiles: (files) => {
+        latestPick++;
+        forgetOrigins();
+        replaceWith(checkFileSet(files));
+        return runForAgent();
+      },
+      // A catalogued class by its raw URL, and the classes it needs beside it -
+      // the ?src= path, as loadLinked( ) takes it.
+      fetchLinked: async (url) => {
+        const linked = checkFileSet(await fetchLinkedFiles(new URLSearchParams([["src", url]])));
+        return checkFileSet([...linked, ...(await followNavigation(linked))]);
+      },
+      // One of the samples the page carries, by its class - no network.
+      carried: (cls) => SAMPLES.find((s) => s.files[0].name === `${cls.toLowerCase()}.clas.abap`)?.files,
+      openSamples: () => openExamples(),
+      frame: () => frame.contentWindow?.__z2ui5PlaygroundPilot,
+      appClass: () => entryClass(getFiles()),
+    });
   }
 
   // A click on Run is a request to see the app, so on a narrow screen it brings
@@ -715,8 +761,9 @@ function remember(files) {
   updateInsight(refresh());
   // Neither an embedding nor the AI Studio keeps a draft: the one shows what
   // its page asked for, the other starts on the same minimal class every time and
-  // must not write over the playground's own work.
-  if (embedded || aiPage) return;
+  // must not write over the playground's own work. The AI Pilot neither: it
+  // operates an app rather than editing one.
+  if (embedded || aiPage || pilotPage) return;
   // A sample that was picked and read is not a draft, and is forgotten rather
   // than stored - the rule the checker settings already follow. Kept, it pinned
   // the reader to a frozen copy: the sample was improved in a later deploy and

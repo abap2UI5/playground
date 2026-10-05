@@ -214,6 +214,38 @@ fallback model the API picks rather than dropped. The SDK and
 the guide are a chunk of their own (~70 KB compressed), downloaded only by
 somebody who sends a message.
 
+## Let Claude operate an app
+
+**Still being built, and not linked from the playground either:** the **AI
+Pilot** has a page of its own, [`/playground/pilot/`](https://abap2ui5.github.io/playground/pilot/).
+Where the AI Studio builds an app, the Pilot *uses* one: the app runs on the
+stage, the chat stands beside it, and you say what you want done — *"greet
+Carol"*, *"open the value help sample and pick the third colour"*. Claude reads
+the screen, types into the fields and presses the buttons, **in the app on your
+screen**: you watch the values arrive, the popup open, the message box come up.
+Take the controls yourself whenever you like — Claude is told what you did and
+carries on from there.
+
+- **What Claude sees** (the button in the bar) shows the screen the way the
+  model reads it: the [agent snapshot](https://github.com/abap2UI5/mcp-server/blob/main/docs/agent-snapshot.md)
+  — fields with their values, the actions it can fire, the tables, what the
+  app said. Nothing else: no screenshot, no CSS selector.
+- **The same protocol as everywhere else.** The client that turns *"fill
+  these fields, fire that event"* into the request the browser would send is
+  [abap2UI5/mcp-server](https://github.com/abap2UI5/mcp-server)'s own,
+  vendored unchanged — the one the VS Code extension runs against an SAP
+  system and cap2UI5 runs inside CAP. Its requests are sent *by the app
+  frame*, so the frontend renders every answer with its own code.
+- **Strict.** An event that is not on the screen, a field that is not
+  editable, a value outside a dropdown's choices are refused with what *is*
+  possible, and nothing is sent.
+- **Any sample.** It opens on Basics II; *Change app* opens the samples
+  browser, and Claude can look an app up in the catalogue and open it itself.
+  A shared link or `?src=` opens your own class:
+  `/playground/pilot/?src=<raw url>`.
+- **Your own key, and no server** — exactly as in the AI Studio: held in
+  memory for the visit, sent to `api.anthropic.com` and nowhere else.
+
 ## The sample catalogue
 
 **<https://abap2ui5.github.io/playground/samples/>** — every abap2UI5 sample in

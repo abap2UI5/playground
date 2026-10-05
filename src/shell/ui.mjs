@@ -13,10 +13,12 @@ export function setStatus(text, isError = false) {
   // and during the boot the frame is where the visitor is looking.
   // ...and in the AI Studio's bar, which takes the toolbar's place while
   // the studio is open (src/shell/chat.mjs).
-  const studio = document.getElementById("studio-status");
-  if (studio) {
-    studio.textContent = text;
-    studio.classList.toggle("error", isError);
+  // ...and in the AI Pilot's bar, for the same reason (src/shell/pilot.mjs).
+  for (const id of ["studio-status", "pilot-status"]) {
+    const bar = document.getElementById(id);
+    if (!bar) continue;
+    bar.textContent = text;
+    bar.classList.toggle("error", isError);
   }
   const mirror = document.getElementById("app-placeholder-status");
   if (mirror) {
