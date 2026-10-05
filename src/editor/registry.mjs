@@ -238,7 +238,7 @@ export const formatFiles = (files) => call("format", files);
 export const documentSymbols = (fileName) => call("symbols", fileName);
 
 // One language server call, by name, with plain LSP objects both ways.
-export const languageServer = (method, params) => call("ls", method, params);
+export const languageServer = (method, params, files) => call("ls", method, params, files);
 
 // Compiles the editor's files in the worker; rejects with an Error that
 // carries `problems` when the transpiler refused something at a line.

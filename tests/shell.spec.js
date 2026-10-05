@@ -490,6 +490,19 @@ test.describe("under a thumb", () => {
   });
 });
 
+/* The narrowest phones most people have: 360px (most Android phones). The
+ * About button used to wrap onto a third toolbar row of its own there. */
+test.describe("on a 360px phone", () => {
+  test.use({ hasTouch: true, viewport: { width: 360, height: 740 } });
+
+  test("the header keeps to two toolbar rows", async ({ page }) => {
+    await open(page);
+    const bar = await page.locator(".bar").boundingBox();
+    const toolbar = await page.locator(".toolbar").boundingBox();
+    expect(bar.height + toolbar.height, "the header is still not a fifth of the phone").toBeLessThan(152);
+  });
+});
+
 test("both panes stay visible when a wide window gets narrow and wide again", async ({ page }) => {
   await open(page);
   await page.setViewportSize({ width: 480, height: 800 });

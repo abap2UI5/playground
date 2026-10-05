@@ -8,7 +8,7 @@
 // snippet provider needs no registry at all and is taken from the package.
 import * as monaco from "monaco-editor/editor/editor.api.js";
 import { ABAPSnippetProvider } from "@abaplint/monaco/build/abap_snippet_provider.js";
-import { formatFiles, languageServer, semanticTokensLegend } from "./registry.mjs";
+import { formatFiles, languageServer as askServer, semanticTokensLegend } from "./registry.mjs";
 
 const uriOf = (model) => model.uri.toString();
 const positionOf = (position) => ({ line: position.lineNumber - 1, character: position.column - 1 });
@@ -21,6 +21,14 @@ const locations = (found) => (found ?? []).map((f) => ({ uri: monaco.Uri.parse(f
 // because a file is formatted in the company of the others: an include is not
 // an object on its own, and abaplint has nothing to print for one.
 export function registerProviders(host) {
+  // Every question goes with the text as the editor has it NOW. The worker's
+  // copy is brought up to date by the analysis, 150ms after the typing stops
+  // plus a round trip - and Monaco asks for semantic tokens 100ms after an
+  // edit, so the last request was answered for the previous text and the
+  // colours stayed shifted; a hover, a rename or a code action straight after
+  // typing hit positions in text that was no longer there. Unchanged files
+  // cost the worker a string comparison.
+  const languageServer = (method, params) => askServer(method, params, host.files());
   monaco.languages.registerCompletionItemProvider("abap", new ABAPSnippetProvider());
 
   monaco.languages.registerHoverProvider("abap", {

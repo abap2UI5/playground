@@ -121,6 +121,19 @@ function setUpTheme() {
       // A browser that refuses storage still gets the switch, just not the memory.
     }
   });
+  /* The switch is shared by every page on this origin, and the bar hands
+     pages back alive from the back/forward cache (returnTo( ) in
+     site-memory.mjs) - so a page that comes back, or sees another tab flip
+     it, reads the stored choice again. src/shell/theme.mjs does the same. */
+  const resync = () => {
+    let stored = null;
+    try { stored = localStorage.getItem(THEME_KEY); } catch { /* blocked storage: the system decides */ }
+    if (stored === "dark" || stored === "light") document.documentElement.dataset.theme = stored;
+    else delete document.documentElement.dataset.theme;
+    el.theme.setAttribute("aria-checked", String((document.documentElement.dataset.theme || system()) === "dark"));
+  };
+  addEventListener("pageshow", (e) => { if (e.persisted) resync(); });
+  addEventListener("storage", (e) => { if (e.key === THEME_KEY || e.key === null) resync(); });
 }
 
 /* The menu behind the bar's last button is a <details>, so it opens and closes

@@ -78,6 +78,7 @@ function validated(next) {
 // validated( ) throws, which is the sentence the Config tab shows.
 export function applyLinterSettings(next) {
   settings = validated(next);
+  memo.clear();
 }
 
 // The settings in the shape the linter takes them.
@@ -103,6 +104,31 @@ const FILE_FORMAT_RULES_THE_EXPORT_NORMALISES = {
   "crlf-line-ending": false,
   "missing-final-newline": false,
 };
+// The last few answers, by source. The linter runs on the page's thread over
+// every open file on every analysis, and again for the View tab - 10 to 100ms
+// a file on a desk, several times that on a phone - for files that, but for
+// the one being typed in, did not change. Kept per source text and dropped
+// whenever the settings change; a handful is all the open files need.
+const memo = new Map();
+const MEMO_SIZE = 8;
+function check(source) {
+  if (memo.has(source)) {
+    const hit = memo.get(source);
+    memo.delete(source);
+    memo.set(source, hit);
+    return hit;
+  }
+  let result;
+  try {
+    result = lib.checkAbapSource(source, settingsFor(settings));
+  } catch {
+    result = null;
+  }
+  memo.set(source, result);
+  if (memo.size > MEMO_SIZE) memo.delete(memo.keys().next().value);
+  return result;
+}
+
 const settingsFor = (s) => ({
   minUi5: s.ui5,
   distribution: s.distribution,
@@ -121,13 +147,9 @@ const settingsFor = (s) => ({
 // views, `usesBuilder` false.
 export function checkFor(source) {
   if (lib === undefined) return { findings: [], docs: [], usesBuilder: false, loaded: false };
-  try {
-    const result = lib.checkAbapSource(source, settingsFor(settings));
-    if (!result.usesBuilder) return { findings: [], docs: [], usesBuilder: false, loaded: true };
-    return { findings: result.findings ?? [], docs: result.docs ?? [], usesBuilder: true, loaded: true };
-  } catch {
-    return { findings: [], docs: [], usesBuilder: false, loaded: true };
-  }
+  const result = check(source);
+  if (!result?.usesBuilder) return { findings: [], docs: [], usesBuilder: false, loaded: true };
+  return { findings: result.findings ?? [], docs: result.docs ?? [], usesBuilder: true, loaded: true };
 }
 
 // Everything the linter has to say about one source - checkFor( ) without
@@ -144,13 +166,9 @@ export function findingsFor(source) {
 // view - the tab says so in both cases.
 export function viewsFor(source) {
   if (lib === undefined) return { docs: [], notes: [], loaded: false };
-  try {
-    const result = lib.checkAbapSource(source, settingsFor(settings));
-    if (!result.usesBuilder) return { docs: [], notes: [], loaded: true };
-    return { docs: result.docs ?? [], notes: result.notes ?? [], loaded: true };
-  } catch {
-    return { docs: [], notes: [], loaded: true };
-  }
+  const result = check(source);
+  if (!result?.usesBuilder) return { docs: [], notes: [], loaded: true };
+  return { docs: result.docs ?? [], notes: result.notes ?? [], loaded: true };
 }
 
 // Which of a set of findings this linter can repair itself. Not all of them:

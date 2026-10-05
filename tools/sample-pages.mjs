@@ -220,6 +220,18 @@ const MENU_SCRIPT = `<script>
         else localStorage.setItem("abap2ui5-playground:theme", next);
       } catch (e) { /* a browser that refuses storage still gets the switch, just not the memory */ }
     });
+    /* Read again when the page comes back from the back/forward cache or
+       another tab flips it - setUpTheme( ) in src/catalogue/catalogue.mjs
+       does the same. */
+    var resync = function () {
+      var stored = null;
+      try { stored = localStorage.getItem("abap2ui5-playground:theme"); } catch (e) { /* blocked storage */ }
+      if (stored === "dark" || stored === "light") document.documentElement.dataset.theme = stored;
+      else delete document.documentElement.dataset.theme;
+      tell();
+    };
+    addEventListener("pageshow", function (e) { if (e.persisted) resync(); });
+    addEventListener("storage", function (e) { if (e.key === "abap2ui5-playground:theme" || e.key === null) resync(); });
   })();
 </script>`;
 

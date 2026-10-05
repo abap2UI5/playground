@@ -70,14 +70,32 @@ export async function runUnitTests(tests) {
       abap.statements.append({ source: line, target: input });
     }
   }
-  const result = await runner.run({ it_input: input });
+  // The runner keeps the SECOND GET RUN TIME of each test, which counts from
+  // the first one ever taken in this runtime - so every duration in the Tests
+  // tab included all the runs before it, and grew with the session. Started
+  // afresh for this run, the values count from its start, and each test's
+  // own time is the step from the row before.
+  abap.context.runTime = undefined;
+  let result;
+  try {
+    result = await runner.run({ it_input: input });
+  } finally {
+    // The tests ran against the same class objects the app is about to use,
+    // and a static attribute one of them set was what the app started with.
+    // Defined again, the app starts from the classes as written (a few ms).
+    if (lastChunks) await defineClasses(lastChunks);
+  }
   const text = (field) => String(field?.get?.() ?? "").trimEnd();
+  let before = 0;
   return result
     .get()
     .list.array()
     .map((entry) => {
       const fields = entry.get();
       const status = text(fields.status);
+      const at = Number(fields.runtime?.get?.() ?? 0);
+      const microseconds = Math.max(0, at - before);
+      before = at;
       return {
         class: text(fields.class_name),
         testclass: text(fields.testclass_name),
@@ -88,7 +106,7 @@ export async function runUnitTests(tests) {
         actual: text(fields.actual),
         message: text(fields.message),
         // Microseconds on a system; the runtime's GET RUN TIME counts them too.
-        microseconds: Number(fields.runtime?.get?.() ?? 0),
+        microseconds,
         // The frame as the runner found it, and the ABAP line behind it.
         frame: text(fields.js_location),
         location: locate(text(fields.js_location)),
@@ -125,14 +143,24 @@ const lineTables = new Map();
 // arithmetic in locate( ) still holds.
 const AsyncFunction = (async () => {}).constructor;
 
+// The last set defined, for runUnitTests( ) to define again after the tests.
+let lastChunks;
+
 export async function defineClasses(chunks) {
-  for (const chunk of chunks) {
-    const { js, name, lines } = typeof chunk === "string" ? { js: chunk } : chunk;
-    if (name) lineTables.set(name, lines ?? []);
-    const define = new AsyncFunction("abap", `${js}\nreturn true;${name ? `\n//# sourceURL=${name}` : ""}`);
-    await define(globalThis.abap);
+  lastChunks = chunks;
+  try {
+    for (const chunk of chunks) {
+      const { js, name, lines } = typeof chunk === "string" ? { js: chunk } : chunk;
+      if (name) lineTables.set(name, lines ?? []);
+      const define = new AsyncFunction("abap", `${js}\nreturn true;${name ? `\n//# sourceURL=${name}` : ""}`);
+      await define(globalThis.abap);
+    }
+  } finally {
+    // Even when a chunk threw: the ones before it are already redefined, and
+    // the app still in the frame must not go on reading type caches built
+    // from their previous versions.
+    forgetCachedTypeInformation();
   }
-  forgetCachedTypeInformation();
 }
 
 // The ABAP line behind a JavaScript stack: the first frame that is in one of

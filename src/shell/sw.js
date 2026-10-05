@@ -124,7 +124,8 @@ async function matchesBuild(rel, response) {
 // is still fresh in the HTTP cache stored the previous build's document under
 // the new build's cache, and an installed playground opened offline paired it
 // with the new bundle - the mix CORE_HASHES exists to prevent.
-const RELOAD = (rel) => rel in CORE_HASHES || rel === "app/Component-preload.js" || DOCUMENTS.includes(rel);
+const RELOAD = (rel) =>
+  rel in CORE_HASHES || rel === "app/Component-preload.js" || rel === "app/frontend-bridge.js" || DOCUMENTS.includes(rel);
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
@@ -269,7 +270,11 @@ self.addEventListener("fetch", (event) => {
 async function serveDocument(event, doc) {
   const cache = await caches.open(CACHE);
   try {
-    const response = await fetch(event.request);
+    // Past the HTTP cache (revalidated - a 304 when nothing moved): Pages
+    // keeps a document fresh for ten minutes, and in the minutes after a
+    // deploy the old index.html answered beside the new build's cached
+    // bundle, and was then written over the clean precached copy.
+    const response = await fetch(event.request, { cache: "no-cache" });
     if (response.status === 200) {
       event.waitUntil(cache.put(doc, response.clone()).catch(() => {}));
     }

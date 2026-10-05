@@ -62,7 +62,8 @@ export function setUpLines() {
         say("Line " + range.from + " is not on this page — the first " + lines.length + " lines are printed.");
         return;
       }
-      say(range.from === range.to ? "Line " + range.from : "Lines " + range.from + "–" + range.to);
+      // The range as far as it is printed, not as far as the address claims.
+      say(range.from === Math.min(range.to, last) ? "Line " + range.from : "Lines " + range.from + "–" + Math.min(range.to, last));
       if (scroll) first.scrollIntoView({ block: "center" });
     };
 

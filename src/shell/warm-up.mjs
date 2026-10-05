@@ -32,6 +32,10 @@ export const appFirstLoad = (theme) => [
   "app/resources/sap/ui/core/library-preload.js",
   `app/resources/sap/ui/core/themes/${theme}/library.css?sap-ui-dist-version=${UI5_VERSION}`,
   "app/Component-preload.js",
+  // The playground's own script, which app/index.html loads before anything
+  // else: not precached, an installed playground opened offline after one
+  // visit had a frame whose every roundtrip failed.
+  "app/frontend-bridge.js",
   "app/resources/sap/m/library-preload.js",
   `app/resources/sap/m/themes/${theme}/library.css?sap-ui-dist-version=${UI5_VERSION}`,
   "app/resources/sap/ui/layout/library-preload-lazy.js",

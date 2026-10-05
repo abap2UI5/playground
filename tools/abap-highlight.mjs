@@ -84,44 +84,59 @@ const TOKENS = new RegExp(
   "g",
 );
 
-// Where a string template that opens at `from` ends: the `|` that closes it
-// at brace depth zero, with the literals and nested templates inside its
-// `{ }` stepped over - a regex ending at the first `|` split
-// `|a { 'x|y' } b|` in two and coloured the rest of the line as a string.
-// Unterminated on this line: the line's end.
-function templateEnd(text, from) {
-  let depth = 0;
-  for (let i = from + 1; i < text.length; i++) {
+// Where a string template ends: the `|` that closes it at brace depth zero,
+// with the literals and nested templates inside its `{ }` stepped over - a
+// regex ending at the first `|` split `|a { 'x|y' } b|` in two and coloured
+// the rest of the line as a string. Scanning starts at `i` (just after the
+// opening `|`, or at the start of a line the template continues on) with the
+// brace depth the template had there; a template still open at the end of
+// the line says so, with its depth, so the next line goes on from there.
+function scanTemplate(text, i, depth) {
+  for (; i < text.length; i++) {
     const ch = text[i];
     if (depth === 0) {
       if (ch === "\\") i += 1;
       else if (ch === "{") depth += 1;
-      else if (ch === "|") return i + 1;
+      else if (ch === "|") return { end: i + 1, open: false, depth: 0 };
     } else if (ch === "}") depth -= 1;
     else if (ch === "{") depth += 1;
     else if (ch === "'" || ch === "`") {
       const close = text.indexOf(ch, i + 1);
-      if (close === -1) return text.length;
+      if (close === -1) return { end: text.length, open: true, depth };
       i = close;
     } else if (ch === "|") {
-      i = templateEnd(text, i) - 1;
+      i = scanTemplate(text, i + 1, 0).end - 1;
     }
   }
-  return text.length;
+  return { end: text.length, open: true, depth };
 }
 
-function line(text) {
-  // A `*` in the first column comments out the whole line, whatever is on it.
-  if (text.startsWith("*")) return span("code-comment", text);
-
+// One line, and the template it leaves open for the next (undefined if none).
+// A template whose { } runs over several lines - common in builder code - was
+// read line by line from scratch: its tail on the next line, `) }"| ).`, came
+// out a comment, or `| INTO TABLE lt_item.` a string.
+function line(text, carry) {
   let out = "";
   let at = 0;
-  TOKENS.lastIndex = 0;
+  let next;
+  if (carry) {
+    const r = scanTemplate(text, 0, carry.depth);
+    out += span("code-string", text.slice(0, r.end));
+    if (r.open) return { html: out, carry: { depth: r.depth } };
+    at = r.end;
+  } else if (text.startsWith("*")) {
+    // A `*` in the first column comments out the whole line, whatever is on it.
+    return { html: span("code-comment", text), carry: undefined };
+  }
+
+  TOKENS.lastIndex = at;
   for (let match = TOKENS.exec(text); match; match = TOKENS.exec(text)) {
     let token = match[0];
     if (token[0] === "|") {
-      token = text.slice(match.index, templateEnd(text, match.index));
-      TOKENS.lastIndex = match.index + token.length;
+      const r = scanTemplate(text, match.index + 1, 0);
+      token = text.slice(match.index, r.end);
+      TOKENS.lastIndex = r.end;
+      if (r.open) next = { depth: r.depth };
     }
     if (match.index > at) out += esc(text.slice(at, match.index));
     at = match.index + token.length;
@@ -137,7 +152,7 @@ function line(text) {
       out += span("code-key", token);
     } else out += esc(token);
   }
-  return out + esc(text.slice(at));
+  return { html: out + esc(text.slice(at)), carry: next };
 }
 
 /* The class as HTML: escaped, coloured, and otherwise exactly as committed -
@@ -145,5 +160,10 @@ function line(text) {
  * its own (an id and a numbered link, so a passage of a sample has an
  * address). Joining them back with "\n" is the whole of the old shape. */
 export function highlightAbapLines(code) {
-  return String(code).split("\n").map(line);
+  let carry;
+  return String(code).split("\n").map((text) => {
+    const result = line(text, carry);
+    carry = result.carry;
+    return result.html;
+  });
 }

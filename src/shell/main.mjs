@@ -54,7 +54,7 @@ import { openShare, setUpShareDialog } from "./share-dialog.mjs";
 import { clearRoundtrips, recordRoundtrip, roundtripList } from "./roundtrips.mjs";
 import { setUpChat } from "./chat.mjs";
 import { state } from "./state.mjs";
-import { STALLED, startRuntime } from "./runtime-client.mjs";
+import { RUNAWAY, STALLED, startRuntime } from "./runtime-client.mjs";
 import { readStored, readStoredJson, removeStored, writeStored, writeStoredJson } from "./storage.mjs";
 import { isDark, onThemeChange, setUpTheme } from "./theme.mjs";
 import { setUpExtra } from "./extra.mjs";
@@ -317,8 +317,12 @@ async function boot() {
     })(),
   );
 
-  const { files } = await startingReady;
+  const { files, from } = await startingReady;
+  startedFrom = from;
   createEditor(document.getElementById("editor"), files, { onChange: remember, dark: isDark() });
+  // What a link or the default sample put in is not the reader's work until
+  // they change it (see `opened`); a restored draft is.
+  if (from !== "your last session") opened = JSON.stringify(getFiles());
   // A theme change - the switch in the bar, or the sun going down on a page
   // that follows the system - must not restart the app: somebody has a
   // half-filled form open. UI5 can swap its theme at runtime, so the running
@@ -378,6 +382,12 @@ async function boot() {
           // ABAP exception the framework turned into a dump: the frame's
           // fetch rejects, and the line is still worth pointing at.
           if (e?.location) pointAtDump(e.location, String(e.message ?? e));
+          // ABAP that did not finish, stopped by the runtime's watchdog: the
+          // frame only sees a failed request, so the page says what happened.
+          if (e?.name === RUNAWAY) {
+            setStatus("the app was stopped - its ABAP did not finish", true);
+            showOutput("Run", String(e.message));
+          }
           throw e;
         }
       },
@@ -436,7 +446,9 @@ async function boot() {
         // Through replaceWith( ), like a sample: written into the models that
         // are open (undoable), the strip redrawn, the draft stored by the
         // change handler. checkFileSet( ) refuses a set the editor cannot hold.
-        setFiles: (files) => replaceWith(checkFileSet(files)),
+        // Not "as opened": what the model wrote is work, and is stored like
+        // typed code.
+        setFiles: (files) => replaceWith(checkFileSet(files), { asOpened: false }),
         run: () => runForAgent(),
         show: (name) => openFile(name),
       },
@@ -518,7 +530,12 @@ async function boot() {
   // After the first run, not before: run() opens with a clear of the output
   // panel, so a message shown earlier would be wiped by the very next line.
   if (linkFailure) {
-    setStatus("the link could not be followed - showing the sample instead", true);
+    // What is on screen instead is the stored draft when there is one, not
+    // always the sample - the sentence used to say "the sample" regardless.
+    setStatus(
+      `the link could not be followed - showing ${startedFrom === "your last session" ? "your last session" : "the sample"} instead`,
+      true,
+    );
     showOutput("Link", String(linkFailure.message || linkFailure));
   }
 
@@ -685,7 +702,12 @@ function remember(files) {
   // Undo cannot reach it any more. The stored copy is then the only way back,
   // and deleting it here threw away the very thing the status line promises.
   // One keystroke in the sample makes it a draft and takes its place.
-  if (!isSample(current)) writeStoredJson(STORAGE_KEY, current);
+  // Nor are files exactly as a link or the samples browser put them in: a
+  // catalogued sample is not one isSample( ) knows, and opening one from the
+  // browser used to write it straight over the stored draft - while the
+  // status line promised that draft "comes back if you reload".
+  const pristine = opened !== undefined && JSON.stringify(current) === opened;
+  if (!isSample(current) && !pristine) writeStoredJson(STORAGE_KEY, current);
   // A fragment in the address bar is a claim about what the editor holds, and
   // it just stopped being true. Left there, it would also win over this draft
   // on the next reload (a link outranks stored code in startingFiles), quietly
@@ -711,7 +733,7 @@ function loadSample(id, tabs) {
   forgetOrigins();
   const keptHow = replaceWith(sample.files);
   // Picking a sample is a request to see it, so it runs without a second click.
-  run().then((started) => {
+  runWhenFree().then((started) => {
     if (!started) return;
     tabs.show("right");
     if (keptHow) sayDraftIsKept(keptHow);
@@ -731,7 +753,7 @@ function loadDraft(files, tabs) {
   }
   forgetOrigins();
   const keptHow = replaceWith(checked);
-  run().then((started) => {
+  runWhenFree().then((started) => {
     if (!started) return;
     tabs.show("right");
     if (keptHow) sayDraftIsKept(keptHow);
@@ -750,13 +772,32 @@ function loadDraft(files, tabs) {
 // now and bring their own class names, so it is the ordinary one - which is
 // why the sentence below is chosen rather than fixed, and why remember( )
 // leaves a stored draft alone when a sample goes in over it.
-function replaceWith(files) {
+function replaceWith(files, { asOpened = true } = {}) {
   const before = getFiles();
-  const hadDraft = !isSample(before);
+  // Somebody's own work - not a sample, and not files left exactly as they
+  // were opened.
+  const hadDraft = !isSample(before) && JSON.stringify(before) !== opened;
   const undoable = before.every((f) => files.some((n) => n.name === f.name));
   setFiles(files.map((f) => ({ ...f })));
+  opened = asOpened ? JSON.stringify(getFiles()) : undefined;
   renderFiles();
   return hadDraft && (undoable ? "undo" : "reload");
+}
+
+// The files as the last load put them in, as text - a sample, a catalogued
+// class, a named draft, a link. Until they are changed they are not a draft
+// of the reader's, and remember( ) does not store them over the one there is.
+let opened;
+// Where the editor's starting files came from (startingFiles( )).
+let startedFrom;
+
+// Run, once the run under way (if any) has finished. A sample opened while
+// another one was still starting went into the editor, and its run returned
+// at once because one was under way: the editor held one sample and the
+// frame ran the other, with "running" in the status line.
+async function runWhenFree() {
+  while (running) await new Promise((resolve) => setTimeout(resolve, 100));
+  return run();
 }
 
 // Said after the run, because run( ) ends by writing "running" over the
@@ -782,7 +823,7 @@ async function loadLinked(url, tabs) {
     const linked = checkFileSet(await fetchLinkedFiles(new URLSearchParams([["src", url]])));
     const alongside = await followNavigation(linked);
     const keptHow = replaceWith(checkFileSet([...linked, ...alongside]));
-    if (await run()) {
+    if (await runWhenFree()) {
       tabs.show("right");
       if (keptHow) sayDraftIsKept(keptHow);
     }
@@ -1063,7 +1104,32 @@ export async function run() {
     let testsFailed = 0;
     if (tests.length > 0) {
       setStatus("running the tests…");
-      const results = await state.runtime.runUnitTests(tests);
+      let results;
+      try {
+        results = await state.runtime.runUnitTests(tests);
+      } catch (e) {
+        // A JavaScript error out of a test - a read through an initial
+        // reference - stopped the runner itself, and took the whole run with
+        // it: no Tests row, no app. The tests are reported as not run, the
+        // Log says why, and the app starts, as it does for a failed test.
+        if (e?.name === RUNAWAY) throw e;
+        results = tests.flatMap((t) =>
+          t.methods.map((method) => ({
+            class: t.class.toUpperCase(),
+            testclass: t.testclass,
+            method,
+            passed: false,
+            status: "ERROR",
+            expected: "",
+            actual: "",
+            message: String(e?.message ?? e),
+            microseconds: 0,
+            frame: "",
+            location: e?.location,
+          })),
+        );
+        showOutput("Tests", `The tests could not be run to the end: ${String(e?.message ?? e)}`);
+      }
       setTestResults(results);
       lastTestResults = results;
       testsFailed = results.filter((r) => !r.passed).length;

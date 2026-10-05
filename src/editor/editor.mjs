@@ -91,6 +91,13 @@ export function createEditor(container, files, options = {}) {
     renderWhitespace: "selection",
     theme: options.dark ? THEME_DARK : THEME_LIGHT,
   });
+  // Shift+Alt+F, as the Format button's tooltip says, on every platform.
+  // Monaco binds document formatting to Ctrl+Shift+I on Linux, so there the
+  // advertised key did nothing at all (the tests run with a Windows user
+  // agent, which is why they never saw it).
+  editor.addCommand(monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF, () => {
+    editor.getAction("editor.action.formatDocument")?.run();
+  });
 
   return editor;
 }
@@ -233,10 +240,16 @@ export function closeFile(name) {
   // The first file is the app. Removing it would change what Run starts
   // without saying so, which is worse than refusing.
   if (files[0]?.name === name) return;
-  const remaining = files.filter((f) => f.name !== name);
+  // A class's test include goes with it: left open alone it was a file set
+  // nothing could hold - the reload, the share link and the named draft all
+  // refused it, and the stored draft was lost behind the refusal.
+  const tests = name.endsWith(".clas.abap") ? name.replace(/\.clas\.abap$/, ".clas.testclasses.abap") : undefined;
+  const gone = (n) => n === name || n === tests;
+  const remaining = files.filter((f) => !gone(f.name));
   if (remaining.length === 0) return;
-  if (currentFile() === name) openFile(remaining[0].name);
-  fileOrder = fileOrder.filter((n) => n !== name);
+  if (gone(currentFile())) openFile(remaining[0].name);
+  fileOrder = fileOrder.filter((n) => !gone(n));
+  if (tests) modelFor(tests)?.dispose();
   model.dispose();
   modelGeneration += 1;
   if (connected) refresh();

@@ -331,3 +331,20 @@ test("a class with a class_constructor runs, and the constructor has run first",
   await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
   await expect(control(page, "txtOut")).toContainText("set by the class_constructor");
 });
+
+// ABAP that never returns used to wedge the runtime worker for good: the
+// next Run waited on it for ever with Run disabled. Past the limit the worker
+// is stopped and started again, and the next Run is an ordinary one.
+test("a loop that never ends is stopped, and the next Run works again", async ({ page }) => {
+  await page.addInitScript(() => { window.__abap2ui5RunLimit = 4000; });
+  await open(page);
+  await setSource(page, app("Never Ends", "DATA(n) = 0.\n      WHILE n = 0.\n      ENDWHILE."));
+  await page.locator("#run").click();
+  // The app frame's first roundtrip is where the loop runs; it is stopped.
+  await expect.poll(() => outputText(page), { timeout: 30000 }).toContain("without finishing");
+
+  await setSource(page, app("Second Version", "out = `after the loop`."));
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+  await expect(control(page, "txtOut")).toContainText("after the loop");
+});

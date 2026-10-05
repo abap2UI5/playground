@@ -75,7 +75,8 @@ const OPS = {
   symbols(name) {
     return core.documentSymbols(name);
   },
-  ls(method, params) {
+  ls(method, params, files) {
+    if (files) core.updateFiles(files);
     return core.languageServer(method, params);
   },
   compile(files) {
@@ -89,12 +90,25 @@ const OPS = {
   },
 };
 
+// What has to wait while the whole corpus is being parsed - the build, or an
+// applied abaplint configuration, which yields between objects so progress
+// can be reported. An analysis arriving in one of those yields called
+// registry.parse( ) itself and parsed every object still dirty in one
+// blocking go: seconds with the progress frozen. Behind `busy` it waits for
+// the parse that is already under way instead. `files` is not on the list -
+// the build waits for it.
+const WAITS = new Set(["analyse", "applyFixes", "format", "symbols", "ls", "compile"]);
+let busy = Promise.resolve();
+
 self.addEventListener("message", async (event) => {
   const { id, op, args } = event.data ?? {};
   try {
+    if (WAITS.has(op)) await busy.catch(() => {});
     const fn = OPS[op];
     if (fn === undefined) throw new Error(`The registry worker has no operation called ${op}.`);
-    const value = await fn(...(args ?? []));
+    const running = fn(...(args ?? []));
+    if (op === "build" || op === "applySettings") busy = Promise.resolve(running);
+    const value = await running;
     post({ id, ok: true, value });
   } catch (e) {
     post({ id, ok: false, error: describe(e) });
