@@ -115,6 +115,9 @@ export const validateSettings = (next) => validated(next);
 // are validated before anything is changed, so a rejected edit leaves the
 // registry exactly as it was.
 export async function applyAbaplintSettings(next, onProgress) {
+  // Checked before anything changes, so a call that comes too early leaves
+  // the settings and the config in step.
+  if (!registry) throw new Error("The sources are still being read - apply again once the editor is ready.");
   useAbaplintSettings(next);
   registry.setConfig(config());
   await parseWithYields(registry, onProgress);
@@ -637,5 +640,5 @@ function merge(left, right) {
 // name does not match its file produces "Class definition name must match
 // filename", which is a true statement about a file the writer never saw.
 export function declaredObjectName(source) {
-  return /^\s*(?:CLASS|INTERFACE)\s+([a-zA-Z_]\w*)\s+(?:DEFINITION|PUBLIC)/im.exec(source)?.[1]?.toUpperCase();
+  return /^[ \t]*(?:CLASS|INTERFACE)\s+([a-zA-Z_]\w*)\s+(?:DEFINITION|PUBLIC)/im.exec(source)?.[1]?.toUpperCase();
 }

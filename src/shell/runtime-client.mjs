@@ -167,6 +167,13 @@ export function startRuntime() {
         else waiting.reject(revive(message.error));
       });
       fresh.addEventListener("error", (event) => reject(new Error(event.message || `${SCRIPT} could not be restarted`)));
+      // Bounded like the first start (whenReady): a module worker whose
+      // script cannot be fetched - offline, no cached copy - is silent, and
+      // every Run after the watchdog waited on this for ever with Run off.
+      const timer = setTimeout(() => reject(new Error(`${SCRIPT} did not start again`)), patience());
+      fresh.addEventListener("message", (event) => {
+        if (event.data?.type === "ready") clearTimeout(timer);
+      });
     });
     restarted.catch(() => {});
   };
@@ -176,7 +183,15 @@ export function startRuntime() {
   // is reported by the call that needed the runtime, not lost.
   const call = async (op, ...args) => {
     await whenReady();
-    if (restarted) await restarted;
+    if (restarted) {
+      try {
+        await restarted;
+      } catch (e) {
+        // Said by this call; the next one tries a fresh worker again.
+        restart();
+        throw e;
+      }
+    }
     return new Promise((resolve, reject) => {
       const id = next++;
       let watchdog;

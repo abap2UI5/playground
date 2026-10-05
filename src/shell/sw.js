@@ -93,8 +93,21 @@ const CORE = [...Object.keys(CORE_HASHES), ...CHUNKS];
 // take for a controlled page to pass through serveDocument( ).
 const DOCUMENTS = ["index.html", "app/index.html"];
 
+// And what this build's two documents hash to, written in by the build like
+// CORE_HASHES. A document is network-first, the assets beside it cache-first,
+// and a worker published by a later deploy only takes over once no tab of the
+// playground is open - a RELOAD does not let it, because the page being
+// reloaded is still this worker's client while the new navigation is fetched.
+// So after a deploy a reload got the NEW index.html over this worker's OLD
+// shell bundle, and the new frame document over the old frontend: markup
+// reaching for elements the bundle did not know, until the boot failed and
+// the whole cache was thrown away. A document that is not this build's is
+// now answered with the copy this build kept, so the pair stays whole until
+// the new worker takes over with its own.
+const DOC_HASHES = __DOCS__;
+
 async function matchesBuild(rel, response) {
-  const expected = CORE_HASHES[rel];
+  const expected = CORE_HASHES[rel] ?? DOC_HASHES[rel];
   // A chunk, or the frame's assets: named by a hash or pinned by version,
   // nothing to check them against here.
   if (expected === undefined) return true;
@@ -141,7 +154,10 @@ self.addEventListener("install", (event) => {
           const url = new URL(rel, BASE);
           const get = (mode) => fetch(url, { credentials: "same-origin", cache: mode });
           let response = await get(RELOAD(rel) ? "reload" : "default");
-          if (response.status === 200 && !(await matchesBuild(rel, response.clone())) && rel in CORE_HASHES) {
+          if (response.status === 200 && !(await matchesBuild(rel, response.clone()))) {
+            // A document is fetched past the HTTP cache already; one that is
+            // still not this build's is a CDN a deploy behind, and not kept.
+            if (!(rel in CORE_HASHES)) return;
             response = await get("reload");
             if (response.status === 200 && !(await matchesBuild(rel, response.clone()))) return;
           }
@@ -286,6 +302,13 @@ async function serveDocument(event, doc) {
     // bundle, and was then written over the clean precached copy.
     const response = await fetch(event.request, { cache: "no-cache" });
     if (response.status === 200) {
+      const rel = new URL(doc.url ?? doc).pathname.slice(BASE.pathname.length);
+      if (rel in DOC_HASHES && !(await matchesBuild(rel, response.clone()))) {
+        // Another build's document - see DOC_HASHES. The kept copy if there
+        // is one; without one, the network's is all there is, and it is not
+        // kept.
+        return (await cache.match(doc)) ?? response;
+      }
       event.waitUntil(cache.put(doc, response.clone()).catch(() => {}));
     }
     return response;

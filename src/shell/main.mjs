@@ -370,7 +370,14 @@ async function boot() {
       // Every roundtrip is kept for the Roundtrips tab on its way through -
       // see src/shell/roundtrips.mjs. Timed around the worker's answer, so
       // the number is the ABAP plus the message hops and not the render.
-      roundtrip: async (body) => {
+      roundtrip: async (body, from) => {
+        // An app from a Run that has been replaced: a timer or a click in the
+        // old frame in the moment before the new document arrives ran against
+        // the new Run's fresh database, and was listed as the new Run's first
+        // roundtrip. Refused instead - that frame is on its way out. A frame
+        // that says nothing (an older bridge script) is served as before.
+        const run = from ? new URL(from, document.baseURI).searchParams.get("run") : null;
+        if (run !== null && run !== String(state.runCounter)) throw new Error("this app was replaced by a newer Run");
         const started = performance.now();
         try {
           const response = await state.runtime.roundtrip(body);
@@ -1149,11 +1156,14 @@ export async function run() {
     }
 
     setStatus("starting the app…");
+    // Counted before the reset, not after it: the window.__z2ui5Playground
+    // roundtrip refuses a frame of an earlier Run by this number, and the old
+    // app must not reach the database while it is being reset either.
+    state.runCounter += 1;
     await state.runtime.resetDatabase();
     // A run is a fresh app; what the last one said to its frontend is over.
     clearRoundtrips();
 
-    state.runCounter += 1;
     const src = new URL("app/index.html", document.baseURI);
     src.searchParams.set("app_start", entryClass(files));
     src.searchParams.set("run", String(state.runCounter));

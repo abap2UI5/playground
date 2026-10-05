@@ -517,8 +517,20 @@ function writeServiceWorker() {
     if (!rel.startsWith("resources/")) id.update(fs.readFileSync(path.join(DIST, "app", rel)));
   }
 
+  /* The two documents, by their bytes as well: the worker keeps a document
+     only beside the assets of its own build (DOC_HASHES in sw.js), so a
+     change to index.html alone has to be a new build - or the worker would
+     go on serving the document it holds for good. app/index.html is in the
+     id already, with the rest of app/ outside resources/. */
+  const docs = {};
+  for (const rel of ["index.html", "app/index.html"]) {
+    const bytes = fs.readFileSync(path.join(DIST, rel));
+    if (rel === "index.html") id.update(bytes);
+    docs[rel] = crypto.createHash("sha256").update(bytes).digest("hex");
+  }
+
   const source = fs.readFileSync(path.join(SHELL, "sw.js"), "utf8");
-  for (const marker of ["__BUILD_ID__", "__CHUNKS__", "__APP_FIRST_LOAD__", "__CORE__"]) {
+  for (const marker of ["__BUILD_ID__", "__CHUNKS__", "__APP_FIRST_LOAD__", "__CORE__", "__DOCS__"]) {
     if (!source.includes(marker)) {
       console.error(`build-site: ERROR src/shell/sw.js no longer has a ${marker} to substitute`);
       process.exit(1);
@@ -534,7 +546,8 @@ function writeServiceWorker() {
       .replaceAll("__BUILD_ID__", build)
       .replace("__CHUNKS__", JSON.stringify(chunks().filter((c) => !onUseOnly(c))))
       .replace("__APP_FIRST_LOAD__", JSON.stringify(firstLoad))
-      .replace("__CORE__", JSON.stringify(hashes)),
+      .replace("__CORE__", JSON.stringify(hashes))
+      .replace("__DOCS__", JSON.stringify(docs)),
   );
   log(`sw.js (build ${build})`);
 }

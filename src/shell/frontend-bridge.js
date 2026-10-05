@@ -108,7 +108,10 @@
       body = await new Response(body).text();
     }
 
-    var result = await playground().roundtrip(body);
+    // Its own address goes along, which names the Run it belongs to (?run=):
+    // the old app is still alive for the moment between a new Run resetting
+    // the database and the new frame document arriving.
+    var result = await playground().roundtrip(body, window.location.href);
     return new Response(result.body, {
       status: result.status,
       statusText: result.reason,

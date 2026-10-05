@@ -283,7 +283,11 @@ code:
   first and go past it only when that copy fails the check, and the hashed
   chunks and the version-pinned UI5 files come out of the HTTP cache - which
   used to cost a first visit about five megabytes over the wire a second
-  time. The
+  time. The two documents are hashed into the worker too (`DOC_HASHES`, and
+  `index.html`'s bytes into the build id): a reload does not let a waiting
+  worker take over, so after a deploy a reload got the new document over the
+  old worker's cached bundle - now a document that is not the worker's build
+  is answered with the copy that build kept. The
   frontend's own `navigator.onLine` check is answered "yes" by
   `frontend-bridge.js` for the same reason: the backend is the page around
   the frame.

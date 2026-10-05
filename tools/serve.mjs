@@ -91,7 +91,9 @@ const server = http.createServer((req, res) => {
       // a redirect to the slash form, not the index in place - served in
       // place, every relative link on the page resolves one level too high.
       if (!url.endsWith("/")) {
-        res.writeHead(301, { location: `${req.url.split("?")[0]}/` });
+        // One leading slash: `//samples` answered `//samples/`, which a
+        // browser reads as a host name and goes to http://samples/.
+        res.writeHead(301, { location: `${req.url.split("?")[0].replace(/^\/+/, "/")}/` });
         res.end();
         return;
       }

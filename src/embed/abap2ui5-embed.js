@@ -84,7 +84,7 @@
   // applies to a fence that declares nothing, which the playground reports for
   // itself.
   function fileNameFor(code) {
-    const declared = /^\s*(?:CLASS|INTERFACE)\s+([a-zA-Z_]\w*)\s+(?:DEFINITION|PUBLIC)/im.exec(code);
+    const declared = /^[ \t]*(?:CLASS|INTERFACE)\s+([a-zA-Z_]\w*)\s+(?:DEFINITION|PUBLIC)/im.exec(code);
     const kind = /^\s*INTERFACE\s/im.test(code) && !/^\s*CLASS\s/im.test(code) ? "intf" : "clas";
     return `${(declared?.[1] || "zcl_playground").toLowerCase()}.${kind}.abap`;
   }
