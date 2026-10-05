@@ -13,6 +13,8 @@ export function setUpSplitter() {
   const apply = (percent) => {
     const clamped = Math.min(MAX, Math.max(MIN, percent));
     panes.style.setProperty("--left", `${clamped}%`);
+    // A focusable separator owes a screen reader its value.
+    splitter.setAttribute("aria-valuenow", String(Math.round(clamped)));
     return clamped;
   };
 

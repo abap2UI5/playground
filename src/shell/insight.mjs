@@ -182,7 +182,10 @@ export function setUpInsight() {
 function setUpResize() {
   const grip = document.getElementById("insight-grip");
   const stored = Number(readStored(HEIGHT_KEY));
-  if (Number.isFinite(stored) && stored >= MIN_HEIGHT) panel.style.height = `${stored}px`;
+  if (Number.isFinite(stored) && stored >= MIN_HEIGHT) {
+    panel.style.height = `${stored}px`;
+    grip.setAttribute("aria-valuenow", String(Math.round(stored)));
+  }
 
   const apply = (px) => {
     // Bounded against the page: the editor and the app above have to keep
@@ -191,6 +194,10 @@ function setUpResize() {
     const room = document.body.getBoundingClientRect().height;
     const height = Math.round(Math.min(Math.max(px, MIN_HEIGHT), room - 120));
     panel.style.height = `${height}px`;
+    // What a screen reader is told about the separator: it said 50 of 100
+    // for ever, whatever the panel's height.
+    grip.setAttribute("aria-valuenow", String(height));
+    grip.setAttribute("aria-valuemax", String(Math.max(MIN_HEIGHT, Math.round(room - 120))));
     return height;
   };
 
@@ -283,6 +290,10 @@ const VIEWS = {
   abap2ui5: linterConfig,
 };
 
+// Which view the body last drew, so a redraw of the SAME view - every edit
+// redraws Problems, Outline and View, twice - keeps the reader's place.
+let rendered;
+
 function render() {
   if (!panel) return;
   for (const tab of tabs) {
@@ -290,7 +301,24 @@ function render() {
     tab.classList.toggle("is-active", active);
     tab.setAttribute("aria-selected", String(active));
   }
+  // A reader working down a long problem list or outline was thrown back
+  // up it and lost the focused row on every keystroke in the editor. The
+  // scroll offset and the focused row (by the file and line it names) are
+  // carried over the redraw of the same view; a different view starts at
+  // its top.
+  const same = rendered === view;
+  const top = body.scrollTop;
+  const focused = body.contains(document.activeElement) ? document.activeElement.closest?.("[data-file][data-line]") : null;
+  const at = focused ? { file: focused.dataset.file, line: focused.dataset.line } : undefined;
   body.replaceChildren((VIEWS[view] ?? problemList)());
+  rendered = view;
+  if (!same) return;
+  body.scrollTop = top;
+  if (at) {
+    const again = [...body.querySelectorAll("[data-file][data-line]")]
+      .find((el) => el.dataset.file === at.file && el.dataset.line === at.line);
+    again?.focus({ preventScroll: true });
+  }
 }
 
 const SEVERITY_LABEL = { 1: "error", 2: "warning", 3: "info", 4: "hint" };
@@ -493,11 +521,11 @@ function outlineOf(file) {
         if (view === "outline" && `${currentFile()}@${fileVersion(currentFile())}` === key) render();
       });
   }
-  try {
-    return outline.symbols;
-  } catch {
-    return [];
-  }
+  // Until the answer for this file arrives, the last answer only if it was
+  // about THIS file (an older version of it is near enough). Another file's
+  // symbols were drawn with this file's name on them, and a click went to
+  // that file's line numbers in this one.
+  return outline.key?.startsWith(`${file}@`) ? outline.symbols : [];
 }
 
 function flatten(symbols, depth) {

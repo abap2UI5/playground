@@ -161,7 +161,22 @@ export function abapGitEntries(files, url) {
     if (!parseName(file.name)) continue;
     entries.push({ name: `src/${file.name}`, data: normalisedSource(file.source) });
     const sidecar = sidecarFor(file.name);
-    if (sidecar) entries.push({ name: `src/${sidecar.name}`, data: sidecar.source + "\n" });
+    if (!sidecar) continue;
+    // A class whose test include travels with it says so in its XML, as
+    // abapGit writes it: without <WITH_UNIT_TESTS> the import carries a
+    // testclasses file its class does not declare (abaplint's
+    // local_testclass_consistency), and the next serialisation is a diff.
+    // Here rather than in sidecarFor( ), which the editor's registry reads
+    // for one file at a time.
+    let xml = sidecar.source;
+    const tests = file.name.replace(/\.clas\.abap$/, ".clas.testclasses.abap");
+    if (tests !== file.name && files.some((f) => f.name === tests)) {
+      xml = xml.replace("   </VSEOCLASS>", "    <WITH_UNIT_TESTS>X</WITH_UNIT_TESTS>\n   </VSEOCLASS>");
+    }
+    // With the byte order mark abapGit writes on every XML file - the same
+    // reason .abapgit.xml carries one: a later pull is otherwise a diff on
+    // line 1 of every sidecar.
+    entries.push({ name: `src/${sidecar.name}`, data: `\uFEFF${xml}\n` });
   }
   return entries;
 }
