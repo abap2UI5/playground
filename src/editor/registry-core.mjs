@@ -285,15 +285,40 @@ export const semanticTokensLegend = () => abaplint.LanguageServer.semanticTokens
 // Bounded: a rule whose fix does not settle would otherwise spin here. Ten
 // passes is far past what a single class needs (the framework downport, over
 // nine hundred files, takes 106) and stops a bug from becoming a hang.
+// The fixes of one pass that can be applied together: applyEditList( ) works
+// from the end of a file backwards and does not look for overlaps, so two
+// rules fixing the same stretch (double_space and space_before_dot on
+// `x = |a| && |b|   .`) cut it twice and took the period - or the whole
+// statement - with them. Kept the way `abaplint --fix` keeps them: an edit
+// that touches a row an earlier one touches waits for the next pass, which
+// re-reads the file and asks again.
+function nonOverlapping(edits) {
+  const kept = [];
+  const rows = (edit) =>
+    Object.entries(edit).flatMap(([file, list]) =>
+      list.map((e) => ({ file, from: e.range.start.getRow(), to: e.range.end.getRow() })));
+  const taken = [];
+  for (const edit of edits) {
+    const mine = rows(edit);
+    const clash = mine.some((a) => taken.some((b) => a.file === b.file && a.from <= b.to && b.from <= a.to));
+    if (clash) continue;
+    kept.push(edit);
+    taken.push(...mine);
+  }
+  return kept;
+}
+
 export function applyAbaplintFixes(files) {
   updateFiles(files);
   let touched = 0;
-  for (let pass = 0; pass < 10; pass++) {
-    const edits = registry
+  // More passes than before, because a pass now applies only what does not
+  // overlap - still bounded, so a fix that never settles is not a hang.
+  for (let pass = 0; pass < 30; pass++) {
+    const edits = nonOverlapping(registry
       .findIssues()
       .filter((i) => held.has(nameOf(i.getFilename())))
       .map((i) => i.getDefaultFix())
-      .filter(Boolean);
+      .filter(Boolean));
     if (edits.length === 0) break;
     abaplint.Edits.applyEditList(registry, edits);
     registry.parse();
@@ -351,7 +376,9 @@ const FORMAT_RULES = {
   align_type_expressions: true,
   align_pseudo_comments: true,
   colon_missing_space: true,
-  contains_tab: true,
+  // Not contains_tab: its fix replaces everything from a line's first tab to
+  // the column the count of its tabs reaches with one space, so
+  // `\tCLEAR \t x` lost its CLEAR. Tabs are taken out by untab( ) below.
   double_space: true,
   empty_line_in_statement: true,
   line_only_punc: true,
@@ -387,15 +414,66 @@ function formatConfig() {
 // statement's column), and because a fix can uncover the next. Three rounds
 // is one more than any file has needed; a rule whose fix does not settle
 // would otherwise spin here.
+// An issue's fix as Format applies it. empty_line_in_statement's own fix
+// deletes from the blank line through the NEXT line's indentation, and the
+// printer only indents the first line of a statement - so the continuation
+// line of a chain with a blank line in it came back in column zero. Here the
+// deletion stops at the start of that line, which takes the blank line and
+// leaves the indentation where it was.
+function formatFix(issue) {
+  const fix = issue.getDefaultFix();
+  if (!fix || issue.getKey() !== "empty_line_in_statement") return fix;
+  const out = {};
+  for (const [file, list] of Object.entries(fix)) {
+    out[file] = list.map((e) => {
+      const end = e.range.end;
+      if (e.newText !== "" || end.getCol() <= 1 || end.getRow() <= e.range.start.getRow()) return e;
+      return { ...e, range: { start: e.range.start, end: new abaplint.Position(end.getRow(), 1) } };
+    });
+  }
+  return out;
+}
+
+// Every tab outside a literal becomes a space - the indentation is the
+// printer's to decide, and double_space folds what is left - while a tab
+// inside 'a text', `a text` or |a template| is part of the value and stays.
+function untab(source) {
+  if (!source.includes("\t")) return source;
+  return source
+    .split("\n")
+    .map((line) => {
+      let out = "";
+      let quote;
+      let comment = line.startsWith("*");
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (comment) out += ch === "\t" ? " " : ch;
+        else if (quote) {
+          out += ch;
+          if (ch === "\\" && quote === "|" && i + 1 < line.length) out += line[++i];
+          else if (ch === quote) quote = undefined;
+        } else if (ch === "'" || ch === "`" || ch === "|") {
+          quote = ch;
+          out += ch;
+        } else {
+          if (ch === '"') comment = true;
+          out += ch === "\t" ? " " : ch;
+        }
+      }
+      return out;
+    })
+    .join("\n");
+}
+
 export function formatFiles(files) {
   const reg = new abaplint.Registry(formatConfig());
-  for (const file of files) addFile(reg, file);
+  for (const file of files) addFile(reg, { ...file, source: untab(file.source) });
   reg.parse();
 
   for (let round = 0; round < 3; round++) {
     let touched = false;
-    for (let pass = 0; pass < 10; pass++) {
-      const edits = reg.findIssues().map((i) => i.getDefaultFix()).filter(Boolean);
+    for (let pass = 0; pass < 30; pass++) {
+      const edits = nonOverlapping(reg.findIssues().map(formatFix).filter(Boolean));
       if (edits.length === 0) break;
       abaplint.Edits.applyEditList(reg, edits);
       reg.parse();

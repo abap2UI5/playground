@@ -84,14 +84,45 @@ const TOKENS = new RegExp(
   "g",
 );
 
+// Where a string template that opens at `from` ends: the `|` that closes it
+// at brace depth zero, with the literals and nested templates inside its
+// `{ }` stepped over - a regex ending at the first `|` split
+// `|a { 'x|y' } b|` in two and coloured the rest of the line as a string.
+// Unterminated on this line: the line's end.
+function templateEnd(text, from) {
+  let depth = 0;
+  for (let i = from + 1; i < text.length; i++) {
+    const ch = text[i];
+    if (depth === 0) {
+      if (ch === "\\") i += 1;
+      else if (ch === "{") depth += 1;
+      else if (ch === "|") return i + 1;
+    } else if (ch === "}") depth -= 1;
+    else if (ch === "{") depth += 1;
+    else if (ch === "'" || ch === "`") {
+      const close = text.indexOf(ch, i + 1);
+      if (close === -1) return text.length;
+      i = close;
+    } else if (ch === "|") {
+      i = templateEnd(text, i) - 1;
+    }
+  }
+  return text.length;
+}
+
 function line(text) {
   // A `*` in the first column comments out the whole line, whatever is on it.
   if (text.startsWith("*")) return span("code-comment", text);
 
   let out = "";
   let at = 0;
-  for (const match of text.matchAll(TOKENS)) {
-    const token = match[0];
+  TOKENS.lastIndex = 0;
+  for (let match = TOKENS.exec(text); match; match = TOKENS.exec(text)) {
+    let token = match[0];
+    if (token[0] === "|") {
+      token = text.slice(match.index, templateEnd(text, match.index));
+      TOKENS.lastIndex = match.index + token.length;
+    }
     if (match.index > at) out += esc(text.slice(at, match.index));
     at = match.index + token.length;
 
@@ -99,8 +130,12 @@ function line(text) {
     if (head === '"') out += span("code-comment", token);
     else if (head === "'" || head === "`" || head === "|") out += span("code-string", token);
     else if (head >= "0" && head <= "9") out += span("code-number", token);
-    else if (KEYWORDS.has(token.toUpperCase())) out += span("code-key", token);
-    else out += esc(token);
+    // A word straight after `-`, `->`, `=>` or `~` is a component, a method
+    // or an attribute - ls_row-type, lo->table( ) - and a name, however much
+    // it looks like a keyword.
+    else if (KEYWORDS.has(token.toUpperCase()) && !/(?:-|[-=]>|~)$/.test(text.slice(0, match.index))) {
+      out += span("code-key", token);
+    } else out += esc(token);
   }
   return out + esc(text.slice(at));
 }

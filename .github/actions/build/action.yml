@@ -25,7 +25,10 @@ runs:
     - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.ui5
-        key: ui5-${{ hashFiles('tools/build-ui5.mjs') }}
+        # UI5_VERSION and UI5_LIBRARIES live in src/shell/ui5-libraries.mjs: a
+        # bump there restored the old download as an exact hit and never saved
+        # the new one, so every job downloaded OpenUI5 again.
+        key: ui5-${{ hashFiles('tools/build-ui5.mjs', 'src/shell/ui5-libraries.mjs') }}
 
     # The downport is three minutes of abaplint rewriting the framework, and it
     # is deterministic. build-framework.mjs stamps the tree with a hash of its

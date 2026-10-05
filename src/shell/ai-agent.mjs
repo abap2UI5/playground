@@ -321,6 +321,10 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         message = await stream.finalMessage();
         jsonRetries = 0;
       } catch (err) {
+        // The stream reports a failure without ending its request: left
+        // alone, a retry below would leave the first one generating (and
+        // billed) in the background, out of reach of Stop.
+        stream.abort();
         if (stopped) return;
         // A tool input that could not be parsed at all - the one failure that
         // is worth re-asking for. Everything the API itself refused (a key,
@@ -338,7 +342,15 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
       ui.usage({ ...total });
 
       if (message.stop_reason === "refusal") {
-        messages.push({ role: "assistant", content: message.content });
+        // Not the refused content itself: a classifier that stops a turn mid
+        // stream can leave a tool_use that is never answered, or a thinking
+        // block without its signature, and either one makes every later
+        // request of this conversation a 400. A plain placeholder keeps the
+        // history valid and append-only.
+        for (const u of message.content.filter((b) => b.type === "tool_use")) {
+          ui.tool({ id: u.id, summary: `not run: ${u.name}`, error: true });
+        }
+        messages.push({ role: "assistant", content: [{ type: "text", text: "(The request was declined.)" }] });
         ui.notice("The model declined this request.");
         return;
       }
@@ -347,35 +359,66 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         continue;
       }
       const uses = message.content.filter((b) => b.type === "tool_use");
+      // Cut off, either way: the answer's own budget, or the conversation
+      // having filled the model's context window. Both leave the last block
+      // half written, and a tool input that is cut off parses as a shorter,
+      // valid one.
+      const full = message.stop_reason === "model_context_window_exceeded";
+      const cut = message.stop_reason === "max_tokens" || full;
       if (uses.length === 0) {
         messages.push({ role: "assistant", content: message.content });
-        if (message.stop_reason === "max_tokens") ui.notice("The answer was cut off - it ran out of room.");
+        if (full) ui.notice("The conversation has filled the model's context - New chat starts a fresh one.");
+        else if (cut) ui.notice("The answer was cut off - it ran out of room.");
         return;
       }
-      if (message.stop_reason === "max_tokens") {
+      if (full) {
+        // Asking again would only overflow again; nothing is run.
+        messages.push({ role: "assistant", content: message.content });
+        messages.push({
+          role: "user",
+          content: uses.map((u) => {
+            ui.tool({ id: u.id, summary: `not run: ${u.name}`, error: true });
+            return { type: "tool_result", tool_use_id: u.id, is_error: true, content: "Not run: the context window is full." };
+          }),
+        });
+        ui.notice("The conversation has filled the model's context - New chat starts a fresh one.");
+        return;
+      }
+      if (cut) {
         // A file cut off half way would parse as a shorter, valid file. Never
         // write it; the turn ends and says why.
         messages.push({ role: "assistant", content: message.content });
         messages.push({
           role: "user",
-          content: uses.map((u) => ({
-            type: "tool_result",
-            tool_use_id: u.id,
-            is_error: true,
-            content: "Not run: the answer hit max_tokens and this input may be cut off. Write smaller pieces (edit_file).",
-          })),
+          content: uses.map((u) => {
+            // The row drawn while the input streamed is finished here, or it
+            // would go on shimmering as if the call were still running.
+            ui.tool({ id: u.id, summary: `not run: ${u.name} (cut off)`, error: true });
+            return {
+              type: "tool_result",
+              tool_use_id: u.id,
+              is_error: true,
+              content: "Not run: the answer hit max_tokens and this input may be cut off. Write smaller pieces (edit_file).",
+            };
+          }),
         });
         ui.notice("The answer ran out of room before a tool call was complete - asking for smaller steps.");
         continue;
       }
 
       messages.push({ role: "assistant", content: message.content });
+      // Whether the reader changed the editor by hand while the model was
+      // thinking - something the model has not been told yet, and must still
+      // be told on the next message rather than absorbed into what its own
+      // tools did.
+      const untold = snapshot() !== seen;
       const results = [];
       // The last successful change, and whether a run_app came after it.
       let lastChange;
       let ranSince = false;
       for (const use of uses) {
         if (stopped) {
+          ui.tool({ id: use.id, summary: `not run: ${use.name} (stopped)`, error: true });
           results.push({ type: "tool_result", tool_use_id: use.id, is_error: true, content: "Stopped by the user." });
           continue;
         }
@@ -418,8 +461,9 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         ui.tool({ id, summary: report.summary, error: false });
         lastChange.content = clip(`${lastChange.content}\n\nThe page ran the app after these changes:\n${report.text}`);
       }
-      // Whatever the tools changed, the model has just been told.
-      seen = snapshot();
+      // Whatever the tools changed, the model has just been told - unless a
+      // hand edit came in first, which the next user message has to carry.
+      if (!untold) seen = snapshot();
       // All results in one message - split across several, the model learns
       // to stop making parallel calls.
       messages.push({ role: "user", content: results });
@@ -466,15 +510,22 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
 
   function editFile(input) {
     const name = str(input.name)?.trim();
-    const oldText = str(input.old_text);
-    const newText = str(input.new_text);
-    if (!name || oldText === undefined || newText === undefined) {
+    const rawOld = str(input.old_text);
+    const rawNew = str(input.new_text);
+    if (!name || rawOld === undefined || rawNew === undefined) {
       return { error: "edit_file needs name, old_text and new_text (all strings)." };
     }
     const files = host.files();
     const file = files.find((f) => f.name === name);
     if (!file) return { error: `There is no file ${name} in the editor. Open files: ${files.map((f) => f.name).join(", ")}.` };
-    if (oldText === "") return { error: "old_text is empty - use write_file to replace a whole file." };
+    if (rawOld === "") return { error: "old_text is empty - use write_file to replace a whole file." };
+    // A file that came in with CRLF (a gist, a stored draft) keeps it in its
+    // model, and the model writes \n: matched as typed, every edit of more
+    // than one line was "does not occur". The texts take the file's ending.
+    const crlf = file.source.includes("\r\n");
+    const eol = (t) => (crlf ? t.replace(/\r?\n/g, "\r\n") : t);
+    const oldText = eol(rawOld);
+    const newText = eol(rawNew);
     const first = file.source.indexOf(oldText);
     if (first === -1) return { error: `old_text does not occur in ${name}. Call read_files to see the file as it is.` };
     if (file.source.indexOf(oldText, first + 1) !== -1) {

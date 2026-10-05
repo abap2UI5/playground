@@ -204,7 +204,14 @@ if (failures) {
 function checkFrontendProvenance() {
   const file = path.join(DEPS_DIR, "abap2ui5-frontend", "result", "cloud", "VERSION");
   const framework = PINS.find((p) => p.name === "abap2ui5");
-  if (useLatest || !fs.existsSync(file)) return;
+  if (useLatest) return;
+  // A missing VERSION is the check silently switching itself off - the
+  // drift it guards against would then go unnoticed for good.
+  if (!fs.existsSync(file)) {
+    console.error("fetch-deps: result/cloud/VERSION is missing from the frontend pin - the provenance check cannot run;");
+    console.error("  update checkFrontendProvenance in this file to wherever the frontend records it now.");
+    process.exit(1);
+  }
   const text = fs.readFileSync(file, "utf8");
   const m = text.match(/abap2UI5\/abap2UI5@([0-9a-f]{40})/);
   if (!m) {

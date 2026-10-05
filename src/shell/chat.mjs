@@ -45,6 +45,22 @@ const SUGGESTIONS = [
 
 let host;
 let agent;
+// The agent whose turn is running, which is not always `agent`: a new key or
+// New chat replaces `agent` while a turn may still be under way, and Stop has
+// to reach the turn that is actually running.
+let active;
+// Stop pressed while the chat's chunk was still downloading, before there
+// was an agent to tell.
+let stopAsked = false;
+// Bumped by everything that starts the conversation over. A turn still
+// running from before draws nothing into the new log.
+let generation = 0;
+// What the running turn is drawing: the answer being written, its raw
+// markdown, the progress note, and each tool call's row by its id.
+let current;
+let raw = "";
+let note;
+const rows = new Map();
 let busy = false;
 let open = false;
 let el;
@@ -112,8 +128,9 @@ export function setUpChat(chatHost, { onToggle } = {}) {
     if (workspace === "") removeStored(WORKSPACE_STORAGE);
     else writeStored(WORKSPACE_STORAGE, workspace);
     el.keyInput.value = "";
-    // A new key is a new client; the conversation so far went with the old one.
-    agent = undefined;
+    // A new key is a new client; the conversation so far went with the old one,
+    // and so does a turn still running on the old key.
+    startOver();
     showKeyForm(false);
     el.input.focus();
   });
@@ -121,14 +138,14 @@ export function setUpChat(chatHost, { onToggle } = {}) {
     removeStored(KEY_STORAGE);
     removeStored(WORKSPACE_STORAGE);
     el.workspaceInput.value = "";
-    agent = undefined;
+    startOver();
     showKeyForm(true);
   });
   el.keyButton.addEventListener("click", () => showKeyForm(el.keyForm.hidden));
 
   el.compose.addEventListener("submit", (e) => {
     e.preventDefault();
-    if (busy) agent?.stop();
+    if (busy) stopTurn();
     else submit();
   });
   // Enter sends, Shift+Enter is a new line - what every chat does.
@@ -140,8 +157,7 @@ export function setUpChat(chatHost, { onToggle } = {}) {
   });
 
   el.reset.addEventListener("click", () => {
-    if (busy) agent?.stop();
-    agent = undefined;
+    startOver();
     el.usage.textContent = "";
     showWelcome();
   });
@@ -171,6 +187,31 @@ export function setUpChat(chatHost, { onToggle } = {}) {
 
 export const chatOpen = () => open;
 
+function stopTurn() {
+  stopAsked = true;
+  active?.stop();
+}
+
+// The conversation is over: the turn still running (if any) is stopped, and
+// whatever it still says goes nowhere - see `generation`.
+function startOver() {
+  if (busy) stopTurn();
+  agent = undefined;
+  generation += 1;
+  finishRows();
+}
+
+// Every tool row still drawn as pending is a call that will not finish now -
+// stopped, refused, or the request failed under it. Left as it was, it went
+// on shimmering as if the work were still going on.
+function finishRows() {
+  for (const row of rows.values()) {
+    row.className = "chat-msg chat-tool is-error";
+    row.textContent = `${row.textContent.replace(/…$/, "")} - not finished`;
+  }
+  rows.clear();
+}
+
 function setOpen(value) {
   open = value;
   el.toggle.setAttribute("aria-checked", String(open));
@@ -178,6 +219,8 @@ function setOpen(value) {
   el.chat.hidden = !open;
   el.bar.hidden = !open;
   document.body.classList.toggle("is-studio", open);
+  // A turn that kept running while the studio was closed is still working.
+  document.body.classList.toggle("is-ai-working", busy && open);
   if (!open) {
     delete document.body.dataset.stage;
     document.body.classList.remove("is-ai-working");
@@ -296,6 +339,10 @@ function setBusy(value) {
   el.send.classList.toggle("primary", !busy);
   el.chat.classList.toggle("is-busy", busy);
   document.body.classList.toggle("is-ai-working", busy && open);
+  // The answer is redrawn on every delta, inside a live region: busy, a
+  // screen reader waits for the turn rather than reading it from the top on
+  // each redraw.
+  el.log.setAttribute("aria-busy", String(busy));
 }
 
 async function submit() {
@@ -311,85 +358,104 @@ async function submit() {
   el.input.value = "";
   addLine("user", text);
   setBusy(true);
+  stopAsked = false;
+  current = undefined;
+  note = undefined;
+  raw = "";
 
-  let current;
-  let raw = "";
-  let note;
-  // The row of each tool call, by its id: written while the call streams in
-  // and runs, and finished in place when it is done.
-  const rows = new Map();
+  // This turn's conversation; anything it says after the conversation was
+  // started over is dropped.
+  const gen = generation;
+  const live = () => gen === generation;
   let mod;
+  let turn;
   try {
     mod = await import("./ai-agent.mjs");
+    if (stopAsked || !live()) {
+      if (live()) addLine("notice", "Stopped.");
+      setStatus("stopped");
+      return;
+    }
     if (!agent) {
+      // Every callback asks whether its conversation is still the one on
+      // screen - `ui` belongs to this agent for as long as it lives.
+      const ui = {
+        assistantStart() {
+          current = undefined;
+          note = undefined;
+        },
+        thinkingStart() {
+          note = undefined;
+        },
+        thinking(delta) {
+          current = undefined;
+          if (!note) note = addLine("progress", "");
+          note.textContent += delta;
+          scrollDown();
+        },
+        toolPending({ id, text }) {
+          current = undefined;
+          note = undefined;
+          let row = rows.get(id);
+          if (!row) {
+            row = addLine("tool is-pending", "");
+            rows.set(id, row);
+          }
+          row.textContent = text;
+          scrollDown();
+        },
+        text(delta) {
+          if (!current) {
+            current = addLine("assistant", "");
+            raw = "";
+          }
+          // Rendered again on every delta: an answer is a few paragraphs,
+          // and a half-written **bold** has to become bold once it closes.
+          raw += delta;
+          renderMarkdown(current, raw);
+          scrollDown();
+        },
+        tool({ id, summary, error }) {
+          current = undefined;
+          note = undefined;
+          const row = rows.get(id) ?? addLine("tool", "");
+          rows.delete(id);
+          row.className = `chat-msg chat-tool${error ? " is-error" : ""}`;
+          row.textContent = summary;
+          scrollDown();
+          if (!error && /^ran: running/.test(summary)) appUpdated();
+        },
+        usage({ input, output, cached }) {
+          const k = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+          el.usage.textContent = `${k(input + cached)} in · ${k(output)} out`;
+          el.usage.title = `${input} input tokens, ${cached} of them from the cache, ${output} output tokens - billed to your key`;
+        },
+        notice(t) {
+          current = undefined;
+          addLine("notice", t);
+        },
+      };
+      const agentGen = generation;
+      const guarded = Object.fromEntries(
+        Object.entries(ui).map(([k, f]) => [k, (...args) => (agentGen === generation ? f(...args) : undefined)]),
+      );
       agent = mod.createAgent({
         apiKey: key,
         workspace: readStored(WORKSPACE_STORAGE) ?? undefined,
         host,
         speed: () => el.speed.value,
-        ui: {
-          assistantStart() {
-            current = undefined;
-            note = undefined;
-          },
-          thinkingStart() {
-            note = undefined;
-          },
-          thinking(delta) {
-            current = undefined;
-            if (!note) note = addLine("progress", "");
-            note.textContent += delta;
-            scrollDown();
-          },
-          toolPending({ id, text }) {
-            current = undefined;
-            note = undefined;
-            let row = rows.get(id);
-            if (!row) {
-              row = addLine("tool is-pending", "");
-              rows.set(id, row);
-            }
-            row.textContent = text;
-            scrollDown();
-          },
-          text(delta) {
-            if (!current) {
-              current = addLine("assistant", "");
-              raw = "";
-            }
-            // Rendered again on every delta: an answer is a few paragraphs,
-            // and a half-written **bold** has to become bold once it closes.
-            raw += delta;
-            renderMarkdown(current, raw);
-            scrollDown();
-          },
-          tool({ id, summary, error }) {
-            current = undefined;
-            note = undefined;
-            const row = rows.get(id) ?? addLine("tool", "");
-            rows.delete(id);
-            row.className = `chat-msg chat-tool${error ? " is-error" : ""}`;
-            row.textContent = summary;
-            scrollDown();
-            if (!error && /^ran: running/.test(summary)) appUpdated();
-          },
-          usage({ input, output, cached }) {
-            const k = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
-            el.usage.textContent = `${k(input + cached)} in · ${k(output)} out`;
-            el.usage.title = `${input} input tokens, ${cached} of them from the cache, ${output} output tokens - billed to your key`;
-          },
-          notice(t) {
-            current = undefined;
-            addLine("notice", t);
-          },
-        },
+        ui: guarded,
       });
     }
+    turn = agent;
+    active = turn;
     setStatus("the AI is working…");
-    const { stopped } = await agent.send(text);
+    const { stopped } = await turn.send(text);
+    if (!live()) return;
     if (stopped) addLine("notice", "Stopped.");
     setStatus(stopped ? "stopped" : "the AI is done");
   } catch (e) {
+    if (!live()) return;
     const said = mod ? mod.explainError(e) : { text: `The AI part of the page could not be loaded: ${String(e?.message ?? e)}` };
     addLine(said.stopped ? "notice" : "notice is-error", said.text);
     setStatus(said.stopped ? "stopped" : "the AI request failed", !said.stopped);
@@ -400,6 +466,8 @@ async function submit() {
       (said.workspace ? el.workspaceInput : el.keyInput).focus();
     }
   } finally {
+    if (active === turn) active = undefined;
+    if (live()) finishRows();
     setBusy(false);
   }
 }

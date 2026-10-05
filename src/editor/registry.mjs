@@ -196,7 +196,9 @@ function revive(described) {
 // again, which is the same "silently dropped" the Config tab promises.
 export async function buildRegistry(filesReady, progress) {
   onProgress = progress ?? (() => {});
-  filesReady.then((files) => call("files", files));
+  // Heard: with the worker already dead (a corpus that 404s), call( ) rejects
+  // here with nobody awaiting it - the build below reports that failure.
+  filesReady.then((files) => call("files", files)).catch(() => {});
   let told;
   try {
     told = await call("build", { settings });
@@ -248,7 +250,9 @@ export const compile = (files) => call("compile", files);
 export function knownObjectNames(fileNames) {
   const own = fileNames
     .map((n) => parseName(n))
-    .filter((p) => p && (p.kind === "clas" || p.kind === "intf"))
+    // Not a test include: it is parsed as its class's name, and an open class
+    // with its tests was offered twice.
+    .filter((p) => p && !p.include && (p.kind === "clas" || p.kind === "intf"))
     .map((p) => ({ name: p.object.toUpperCase(), type: p.kind.toUpperCase() }))
     .sort(byName);
   return own.length === 0 ? corpusNames : merge(own, corpusNames);

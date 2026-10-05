@@ -120,7 +120,11 @@ async function matchesBuild(rel, response) {
 // version, so for them the HTTP cache is exactly the right answer - and
 // fetching them past it cost a first visit about five megabytes over the
 // wire a second time, right after it had finished downloading them.
-const RELOAD = (rel) => rel in CORE_HASHES || rel === "app/Component-preload.js";
+// The two documents as well: a worker installing from a tab whose index.html
+// is still fresh in the HTTP cache stored the previous build's document under
+// the new build's cache, and an installed playground opened offline paired it
+// with the new bundle - the mix CORE_HASHES exists to prevent.
+const RELOAD = (rel) => rel in CORE_HASHES || rel === "app/Component-preload.js" || DOCUMENTS.includes(rel);
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {

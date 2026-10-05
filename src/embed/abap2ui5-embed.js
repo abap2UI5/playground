@@ -44,7 +44,10 @@
 
   // The playground lives wherever this file was served from - so a fork that
   // publishes its own copy gets its own playground without editing anything.
-  const defaultOrigin = script ? new URL("../", script.src).href : "/";
+  // Pasted inline, the script has no src ("" - and new URL("../", "") throws,
+  // which took the whole loader with it, data-origin or not): the page's own
+  // origin is the only guess left, the same "/" as no script at all.
+  const defaultOrigin = script && script.src ? new URL("../", script.src).href : "/";
 
   // The URL of a playground showing this. Everything the loader does is in a
   // URL, so this is also the whole of it: `window.abap2ui5Embed.url({ code })`

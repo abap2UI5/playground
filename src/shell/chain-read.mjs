@@ -40,6 +40,17 @@
 // because the mask is also what "is this argument exactly one literal" is
 // decided on, and a literal that had become whitespace was trimmed away by
 // that question before it could be asked.
+// Whether `source` has a comment anywhere in [start, end): a position the mask
+// blanked to a space that held something other than whitespace. A rewrite of
+// that range would drop the comment, and what nobody edited is not rewritten.
+export function commentIn(source, start, end) {
+  const { mask } = maskSource(source);
+  for (let i = start; i < end; i++) {
+    if (mask[i] === " " && !/\s/.test(source[i])) return true;
+  }
+  return false;
+}
+
 function maskSource(source) {
   const mask = source.split("");
   const strings = [];
@@ -174,9 +185,12 @@ export function readViewChain(source) {
   const { mask, strings } = maskSource(source);
   const statements = statementsOf(mask);
 
-  const first = statements.findIndex((s) => mask.slice(s.start, s.end).includes(FACTORY));
+  // ABAP does not care how a name is cased, so neither does this:
+  // `Z2UI5_CL_UI5_VIEW_BUILDER=>FACTORY( )` builds the same view.
+  const buildsView = (s) => mask.slice(s.start, s.end).toLowerCase().includes(FACTORY);
+  const first = statements.findIndex(buildsView);
   if (first === -1) return fail("Nothing here builds a view with z2ui5_cl_ui5_view_builder.");
-  if (statements.some((s, i) => i > first && mask.slice(s.start, s.end).includes(FACTORY))) {
+  if (statements.some((s, i) => i > first && buildsView(s))) {
     return fail("This file builds more than one view. Editing is for a method that builds one.");
   }
 
@@ -341,8 +355,8 @@ function walkCalls({ mask, source, literalAt, from, to, cursor }) {
   }
 }
 
-// The named arguments of one call, as ranges - `n`, `ns`, `v` and `b`, the
-// only four the builder has - plus the positional form `ele( \`Page\` )`. A
+// The named arguments of one call, as ranges - `n`, `ns`, `v`, `b` and `t`,
+// the only five the builder has - plus the positional form `ele( \`Page\` )`. A
 // keyword only counts at depth zero, so a `v = xsdbool( a = b )` is one
 // argument rather than two.
 function readArgs(mask, source, literalAt, from, to) {
@@ -355,9 +369,9 @@ function readArgs(mask, source, literalAt, from, to) {
     if (ch === "(" || ch === "[") depth += 1;
     else if (ch === ")" || ch === "]") depth -= 1;
     else if (depth === 0) {
-      const m = /^\b(ns|n|v|b)\s*=(?!=)/.exec(mask.slice(at, to));
+      const m = /^\b(ns|n|v|b|t)\s*=(?!=)/i.exec(mask.slice(at, to));
       if (m && (at === from || /[\s(]/.test(mask[at - 1]))) {
-        marks.push({ key: m[1], from: at, valueAt: at + m[0].length });
+        marks.push({ key: m[1].toLowerCase(), from: at, valueAt: at + m[0].length });
         at += m[0].length - 1;
       }
     }
@@ -413,13 +427,18 @@ function apply(cursor, method, args, span) {
     if (target.name === "") return fail("An attribute is set before any element was added.");
     const name = args.n?.literal;
     if (name === undefined) return fail("An attribute is set under a name this cannot read as a literal.");
-    const value = args.v ?? args.b;
+    // `t` is the builder's third way to pass a value - text escaped as a
+    // literal at run time. Kept under its own key so an untouched one is
+    // written back as `t =`; its rendering is the escaped text, so it is not
+    // read as a literal to compare against the view.
+    const value = args.v ?? args.b ?? args.t;
     if (value === undefined) return fail("An attribute is set without a value.");
     target.attrs.push({
       name,
       raw: value.raw,
       literal: args.v ? args.v.literal : undefined,
       boolean: args.b !== undefined,
+      key: args.v ? "v" : args.b ? "b" : "t",
       // The call's own range, and the value's inside it.
       span,
       keyAt: value.keyAt,

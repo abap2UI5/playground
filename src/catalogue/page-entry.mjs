@@ -14,7 +14,10 @@ import { setUpLines } from "./lines.mjs";
 /* Where the reader is, in the samples: this page. Then the bar - the other
    sections lifted to where they were left, the step back to a page still in
    the tab's history, the offset a bar link hands over. */
-rememberHere("samples");
+/* Not on the page for an address that is not a page (404.html loads this
+   module too): written down, it was where every bar's Samples item went
+   next - straight back to the miss. */
+if (!document.body.hasAttribute("data-not-found")) rememberHere("samples");
 keepSiteLinksCurrent();
 setUpOutline();
 setUpLines();

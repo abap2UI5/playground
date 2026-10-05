@@ -251,12 +251,19 @@ function transpile() {
 const stampPath = path.join(BUILD, "downport.stamp");
 const hash = inputHash();
 const force = process.argv.includes("--force");
+let downportDone;
 
 if (!force && fs.existsSync(stampPath) && fs.readFileSync(stampPath, "utf8").trim() === hash && fs.existsSync(DOWNPORT)) {
   log("downport up to date, reusing build/downport");
 } else {
+  // The stamp goes first and comes back last - only once the transpile has
+  // taken the tree. abaplint exiting with a number is also what a crash
+  // looks like, and a stamp written straight after it recorded a half-done
+  // downport as finished: every rebuild then reused it and died in the
+  // transpiler until somebody passed --force.
+  fs.rmSync(stampPath, { force: true });
   downport();
-  fs.writeFileSync(stampPath, hash);
+  downportDone = hash;
 }
 
 // The transpile and the bundle, skipped together when nothing that feeds them
@@ -291,6 +298,7 @@ if (outputIsCurrent) {
   await bundle();
   fs.writeFileSync(outStampPath, outHash);
 }
+if (downportDone) fs.writeFileSync(stampPath, downportDone);
 
 // -------------------------------------------------------------------- bundle
 

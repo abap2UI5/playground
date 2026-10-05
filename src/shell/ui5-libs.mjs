@@ -28,6 +28,7 @@ const SAPUI5_ONLY_LIBS = [
   "sap.suite.ui.generic", "sap.ui.vk", "sap.ui.vbm", "sap.viz", "sap.gantt",
   "sap.ndc", "sap.ushell", "sap.collaboration", "sap.ui.generic",
   "sap.ui.richtexteditor", "sap.ui.export", "sap.fe",
+  "sap.chart", "sap.ca.ui", "sap.me", "sap.ui.vtm", "sap.ovp",
 ];
 
 // Every library a control in the three corpora can come from. The ones this
