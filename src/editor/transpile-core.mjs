@@ -116,9 +116,22 @@ function listTests() {
     if (obj.getType() !== "CLAS") continue;
     for (const file of obj.getABAPFiles()) {
       if (!file.getFilename().includes(".testclasses.")) continue;
-      for (const def of file.getInfo().listClassDefinitions()) {
+      const defs = file.getInfo().listClassDefinitions();
+      const byName = new Map(defs.map((d) => [d.name.toLowerCase(), d]));
+      // A test class's methods FOR TESTING include the ones it inherits from
+      // a local base class in the same include - the common shape of an
+      // abstract ltcl_base with the shared tests and one subclass per setup.
+      // Listed off the class alone, the subclass had none and never ran.
+      const testMethods = (def) => {
+        const names = new Set();
+        for (let at = def, hops = 0; at && hops < 20; at = byName.get(at.superClassName?.toLowerCase() ?? ""), hops++) {
+          for (const m of at.methods) if (m.isForTesting) names.add(m.name.toUpperCase());
+        }
+        return [...names];
+      };
+      for (const def of defs) {
         if (!def.isForTesting || def.isGlobal || def.isAbstract) continue;
-        const methods = def.methods.filter((m) => m.isForTesting).map((m) => m.name.toUpperCase());
+        const methods = testMethods(def);
         if (methods.length === 0) continue;
         tests.push({
           class: obj.getName(),

@@ -212,6 +212,10 @@ test("Fast in the header sends the next message to Sonnet 5.5, and is remembered
   await page.locator("#chat-send").click();
   await expect(page.locator(".chat-assistant").last()).toHaveText("Hi.");
   expect(models).toEqual(["claude-sonnet-5-5"]);
+  // The key itself is in no storage the page's ABAP could read - only the
+  // speed is remembered.
+  const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }));
+  expect(stored).not.toContain(KEY);
 
   await page.reload();
   await expect(page.locator("#status")).toHaveText("ready - describe the app you want", { timeout: 120000 });

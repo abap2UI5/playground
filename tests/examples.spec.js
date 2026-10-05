@@ -248,10 +248,10 @@ test("the index is listed by learning-path stage, and an entry runs through the 
   // The frame's src carries a counter that goes up once per run, so waiting on
   // it is what proves a new app started - the status line alone still says
   // "running" from the app before (see runSample in helpers.mjs).
-  const before = await page.locator("#app").getAttribute("src");
+  const before = await page.locator("#app").getAttribute("data-src");
   await page.locator(".example-row", { hasText: "z2ui5_cl_smp_app_493" }).click();
   await expect(page.locator("#examples-dialog")).toBeHidden();
-  await expect(page.locator("#app")).not.toHaveAttribute("src", before ?? "", { timeout: 60000 });
+  await expect(page.locator("#app")).not.toHaveAttribute("data-src", before ?? "", { timeout: 60000 });
   await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
 
   // The class kept the name the repository gave it, and it is what runs.
@@ -582,9 +582,9 @@ test("without the index the browser degrades to the samples in the page, quietly
   await expect(page.locator("#examples-body")).not.toContainText("404");
 
   // And they open: the degraded browser is still a browser.
-  const before = await page.locator("#app").getAttribute("src");
+  const before = await page.locator("#app").getAttribute("data-src");
   await page.locator(`.example-row[data-sample="${SAMPLES[1].id}"]`).click();
-  await expect(page.locator("#app")).not.toHaveAttribute("src", before ?? "", { timeout: 60000 });
+  await expect(page.locator("#app")).not.toHaveAttribute("data-src", before ?? "", { timeout: 60000 });
   await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
   await expect(page.frameLocator("#app").getByText(SAMPLES[1].title)).toBeVisible({ timeout: 30000 });
 

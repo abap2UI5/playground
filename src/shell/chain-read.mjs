@@ -180,6 +180,8 @@ const fail = (why) => ({ ok: false, why });
  *   assignment   the text before the factory call (`DATA(view) = `), kept so
  *                the variable the rest of the method uses keeps its name
  *   root         the builder root; its children are the top-level elements
+ *   usedAfter    the variables the chain binds that the method uses after it,
+ *                which the full rewrite cannot keep (an edit in place can)
  */
 export function readViewChain(source) {
   const { mask, strings } = maskSource(source);
@@ -256,19 +258,23 @@ export function readViewChain(source) {
     return fail("The chain does not build exactly one root element - nothing to show as one view.");
   }
 
-  // Every name the chain bound has to be gone by the end of the region: the
+  // The names the chain bound that the method still uses after it. The full
   // rewrite is one statement and declares one variable, so a `page` or a
   // `cols` used further down would be a reference to something that no longer
-  // exists. The one that survives is the one the assignment names.
+  // exists - but only the full rewrite has that problem. A value changed in
+  // place leaves every statement where it was, and refusing it here kept Edit
+  // off for the whole view over `page->stringify( )`. So they are reported,
+  // and view-edit.mjs refuses exactly the change that would break them. The
+  // one that survives a rewrite is the one the assignment names.
+  //
+  // Looked for up to the end of the method rather than the end of the file: a
+  // local `page` in some other method is a different variable, and finding it
+  // there refused a view that nothing after its chain touches.
   const kept = /DATA\(\s*(\w+)\s*\)|^\s*(\w+)\s*=/i.exec(assignment ?? "");
   const keptName = (kept?.[1] ?? kept?.[2] ?? "").toLowerCase();
-  const after = mask.slice(regionEnd);
-  for (const name of vars.keys()) {
-    if (name === keptName) continue;
-    if (new RegExp(`\\b${name}\\b`, "i").test(after)) {
-      return fail(`\`${name}\` is used after the chain, so the chain cannot be rewritten as one statement.`);
-    }
-  }
+  const methodEnd = /\bENDMETHOD\b/i.exec(mask.slice(regionEnd));
+  const after = mask.slice(regionEnd, methodEnd ? regionEnd + methodEnd.index : mask.length);
+  const usedAfter = [...vars.keys()].filter((name) => name !== keptName && new RegExp(`\\b${name}\\b`, "i").test(after));
 
   // The replaced range starts at the beginning of the line when nothing but
   // whitespace stands in front of the chain, so the new statement is written
@@ -282,6 +288,7 @@ export function readViewChain(source) {
     indent: alone ? regionStart - lineStart : 0,
     assignment,
     root,
+    usedAfter,
   };
 }
 
@@ -342,12 +349,16 @@ function walkCalls({ mask, source, literalAt, from, to, cursor }) {
     if (at >= to) return { ok: true, cursor };
     const call = /^->\s*(\w+)\s*(?=\()/.exec(mask.slice(at, to + 1));
     if (!call) return fail("The chain has a call this cannot read.");
+    // Where the `->` stands. For the first call of a continuation statement
+    // there is no `start`, and this is what chain-patch.mjs measures the
+    // statement's column from instead when it opens an attribute block there.
+    const head = at;
     at += call[0].length;
     const open = at;
     const close = closingParen(mask, open);
     if (close === -1 || close > to) return fail("A parenthesis in the chain is never closed.");
     const args = readArgs(mask, source, literalAt, open + 1, close);
-    const applied = apply(cursor, call[1].toLowerCase(), args, { start: segment, end: close });
+    const applied = apply(cursor, call[1].toLowerCase(), args, { start: segment, end: close, head });
     if (!applied.ok) return applied;
     cursor = applied.cursor;
     segment = close;
@@ -418,6 +429,10 @@ function apply(cursor, method, args, span) {
     }
     const node = newNode(name, args.ns?.literal ?? "");
     node.span = span;
+    // `tag` or `ele`: a leaf added with `tag( )` and nothing under it can be
+    // taken out of the chain as its own lines (chain-patch.mjs); one added with
+    // `ele( )` has an `end( )` somewhere that would then ascend one level too far.
+    node.call = method;
     node.parent = cursor;
     cursor.children.push(node);
     return { ok: true, cursor: method === "ele" ? node : cursor };
@@ -433,6 +448,13 @@ function apply(cursor, method, args, span) {
     // read as a literal to compare against the view.
     const value = args.v ?? args.b ?? args.t;
     if (value === undefined) return fail("An attribute is set without a value.");
+    // The same attribute twice on one control. The view shows one of them, an
+    // edit is matched by name, and whichever one the rewrite kept, the other
+    // was gone - on Save with nothing changed. Which of the two is meant is
+    // not something to guess.
+    if (target.attrs.some((a) => a.name === name)) {
+      return fail(`\`${name}\` is set twice on \`${qnameOf(target)}\`. Take one of them out in the ABAP first.`);
+    }
     target.attrs.push({
       name,
       raw: value.raw,
@@ -443,6 +465,9 @@ function apply(cursor, method, args, span) {
       span,
       keyAt: value.keyAt,
       valueEnd: value.valueEnd,
+      // Where the name's literal ends - what stands between it and `v =` is
+      // the call's own layout, kept by chain-patch.mjs when it is a line break.
+      nameEnd: args.n.valueEnd,
     });
     return { ok: true, cursor };
   }

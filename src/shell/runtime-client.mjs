@@ -29,7 +29,8 @@
 const SCRIPT = "runtime/framework.mjs";
 
 export function startRuntime() {
-  const worker = window.__abap2ui5Runtime ?? new Worker(new URL(SCRIPT, document.baseURI), { type: "module" });
+  // `let`: a worker running ABAP that never returns is replaced (see call( )).
+  let worker = window.__abap2ui5Runtime ?? new Worker(new URL(SCRIPT, document.baseURI), { type: "module" });
 
   const pending = new Map();
   let next = 0;
@@ -136,15 +137,81 @@ export function startRuntime() {
     return ready;
   };
 
+  // A WORKER THAT NEVER ANSWERS AGAIN. ABAP with a loop that never ends -
+  // a WHILE whose condition nothing changes - transpiles to a loop that only
+  // ever yields to microtasks, so the worker never reads another message. The
+  // next Run then waited on defineClasses( ) for ever with Run disabled, and
+  // since boot( ) runs the stored draft again, so did every reload. So the
+  // calls that run the reader's ABAP are bounded: past the limit the worker
+  // is terminated - the one thing that stops a thread spinning - and a fresh
+  // one started in its place, which the next call waits for. What the old
+  // one held (the classes, the database) goes with it; the next Run defines
+  // and resets both anyway.
+  const WATCHED = new Set(["roundtrip", "defineClasses", "runUnitTests"]);
+  let restarted;
+  const restart = () => {
+    worker.terminate();
+    const fresh = new Worker(new URL(SCRIPT, document.baseURI), { type: "module" });
+    worker = fresh;
+    restarted = new Promise((resolve, reject) => {
+      fresh.addEventListener("message", (event) => {
+        const message = event.data;
+        if (message?.type === "ready") {
+          resolve();
+          return;
+        }
+        const waiting = pending.get(message?.id);
+        if (waiting === undefined) return;
+        pending.delete(message.id);
+        if (message.ok) waiting.resolve(message.value);
+        else waiting.reject(revive(message.error));
+      });
+      fresh.addEventListener("error", (event) => reject(new Error(event.message || `${SCRIPT} could not be restarted`)));
+      // Bounded like the first start (whenReady): a module worker whose
+      // script cannot be fetched - offline, no cached copy - is silent, and
+      // every Run after the watchdog waited on this for ever with Run off.
+      const timer = setTimeout(() => reject(new Error(`${SCRIPT} did not start again`)), patience());
+      fresh.addEventListener("message", (event) => {
+        if (event.data?.type === "ready") clearTimeout(timer);
+      });
+    });
+    restarted.catch(() => {});
+  };
+
   // Every call waits for the runtime to be up first, so nothing is posted to a
   // worker that has not yet installed its listener - and so a failure to start
   // is reported by the call that needed the runtime, not lost.
   const call = async (op, ...args) => {
     await whenReady();
+    if (restarted) {
+      try {
+        await restarted;
+      } catch (e) {
+        // Said by this call; the next one tries a fresh worker again.
+        restart();
+        throw e;
+      }
+    }
     return new Promise((resolve, reject) => {
       const id = next++;
-      pending.set(id, { resolve, reject });
+      let watchdog;
+      const done = (fn) => (value) => {
+        clearTimeout(watchdog);
+        fn(value);
+      };
+      pending.set(id, { resolve: done(resolve), reject: done(reject) });
       worker.postMessage({ id, op, args });
+      if (!WATCHED.has(op)) return;
+      watchdog = setTimeout(() => {
+        if (!pending.has(id)) return;
+        const error = new Error(
+          `The ABAP ran for more than ${Math.round(limit() / 1000)} seconds without finishing - ` +
+            "a loop that never ends? It was stopped, and the runtime started again.",
+        );
+        error.name = RUNAWAY;
+        failAll(error);
+        restart();
+      }, limit());
     });
   };
 
@@ -164,6 +231,13 @@ export function startRuntime() {
 
 // The name on the error whenReady( ) gives up with, for boot( ) to test.
 export const STALLED = "RuntimeStalled";
+
+// The name on the error a call gives up with when the ABAP it ran did not
+// finish (see call( )), and how long that is: generous, because a roundtrip
+// on a phone under load is slow and a stopped run is a lost one. The hook is
+// for tests/run.spec.js.
+export const RUNAWAY = "RuntimeRunaway";
+const limit = () => window.__abap2ui5RunLimit ?? 30000;
 
 // How long a runtime that has loaded is given to say "ready" once the page
 // is waiting on it: a minute, where a phone under a 4x throttle needs seconds.

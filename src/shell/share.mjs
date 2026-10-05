@@ -43,12 +43,41 @@ export async function encodeFiles(files) {
   return VERSION + toBase64Url(deflated);
 }
 
+// What a link may inflate to. Deflate packs a run of one character a
+// thousand to one, so a fragment of a few kilobytes could unpack to
+// gigabytes and take the tab down as it opened - read as a stream and given
+// up past this, which is far more ABAP than anybody shares.
+const MAX_INFLATED = 8 * 1024 * 1024;
+
+async function inflateCapped(bytes) {
+  const reader = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw")).getReader();
+  const parts = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.length;
+    if (size > MAX_INFLATED) {
+      await reader.cancel();
+      throw new Error("This link unpacks to more code than the playground opens.");
+    }
+    parts.push(value);
+  }
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const part of parts) {
+    out.set(part, at);
+    at += part.length;
+  }
+  return out;
+}
+
 export async function decodeFiles(fragment, mainFile) {
   const version = fragment?.[0];
   if (version !== "1" && version !== "2") {
     throw new Error("This link was not written by this playground.");
   }
-  const inflated = await through(new DecompressionStream("deflate-raw"), fromBase64Url(fragment.slice(1)));
+  const inflated = await inflateCapped(fromBase64Url(fragment.slice(1)));
   const text = new TextDecoder().decode(inflated);
 
   if (version === "1") return [{ name: mainFile, source: text }];

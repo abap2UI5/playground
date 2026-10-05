@@ -44,12 +44,14 @@ export const STEP = 4;
  *
  * `indent` is the column the statement starts in, `assignment` the text before
  * the factory call (`DATA(view) = `) - kept from the chain that was read, so
- * whatever the rest of the method calls the view keeps its name.
+ * whatever the rest of the method calls the view keeps its name. `eol` is the
+ * file's own line ending: the chain goes back into the middle of that file,
+ * and a CRLF file came back with a block of LF lines in it.
  *
  * Every node is `{ name, ns, attrs: [{ name, raw, boolean }], children }`,
  * where `raw` is ABAP written out as it stands.
  */
-export function writeViewChain({ indent, assignment, element }) {
+export function writeViewChain({ indent, assignment, element, eol = "\n" }) {
   const pad = " ".repeat(indent);
   const lines = [`${pad}${assignment}z2ui5_cl_ui5_view_builder=>factory(`];
   emit(element, 0, lines, { indent, previous: undefined, first: true, parentHasAttrs: false });
@@ -60,7 +62,7 @@ export function writeViewChain({ indent, assignment, element }) {
   // Rule 3: one closing parenthesis for the call the last line opened, and the
   // full stop of the statement - never a row of them.
   lines[lines.length - 1] += " ).";
-  return lines.join("\n");
+  return lines.join(eol);
 }
 
 // One element and everything under it. `state` carries what the blank-line
@@ -121,14 +123,28 @@ function nameArguments(node) {
 // chain it is otherwise leaving alone: the alignment is a property of the
 // block, so the block is the smallest thing that can be rewritten and still
 // be right.
-export function attributeLines(node, column) {
+//
+// `verbatim` is how it does that without touching the values nobody edited:
+// given an attribute, it answers the text that stands right of the name -
+// `v = …` as the source has it, continuation lines and all - or undefined for
+// one to write here. Only the padding in front of it is this function's,
+// unless that text opens with a line break of its own (a `v =` written on the
+// line under its name), which is then kept as it was too. A wrapped value
+// re-anchored by wrapped( ) below was correct and still a diff over lines
+// nobody edited, and adding an attribute and taking it out again did not
+// arrive back at the file that was there.
+export function attributeLines(node, column, verbatim) {
   const pad = " ".repeat(column);
   const names = node.attrs.map((attr) => `n = ${abapLiteral(attr.name)}`);
   const width = Math.max(0, ...names.map((n) => n.length));
-  return node.attrs.map(
-    (attr, i) =>
-      `${pad})->a( ${names[i].padEnd(width)} ${attr.key ?? (attr.boolean ? "b" : "v")} = ${wrapped(attr.raw, column + STEP)}`,
-  );
+  return node.attrs.map((attr, i) => {
+    const kept = verbatim?.(attr);
+    if (kept !== undefined && /^[^\S\n]*\r?\n/.test(kept)) return `${pad})->a( ${names[i]}${kept}`;
+    return (
+      `${pad})->a( ${names[i].padEnd(width)} ` +
+      (kept ?? `${attr.key ?? (attr.boolean ? "b" : "v")} = ${wrapped(attr.raw, column + STEP)}`)
+    );
+  });
 }
 
 // A value that runs over several lines - a `&&` concatenation, a wrapped
@@ -141,12 +157,15 @@ export function attributeLines(node, column) {
 // their shape RELATIVE to each other; what is replaced is where the block
 // starts, which is one level in from the call, the same as any other content.
 function wrapped(raw, column) {
-  const lines = String(raw).split("\n");
+  // Split on either ending and joined again with the one the value came
+  // with, so a CRLF file's continuation lines stay CRLF - a blank one too.
+  const eol = String(raw).includes("\r\n") ? "\r\n" : "\n";
+  const lines = String(raw).split(/\r?\n/);
   if (lines.length === 1) return raw;
   const rest = lines.slice(1);
   const common = Math.min(...rest.filter((l) => l.trim() !== "").map((l) => l.length - l.trimStart().length));
   const pad = " ".repeat(column);
-  return [lines[0], ...rest.map((l) => (l.trim() === "" ? "" : pad + l.slice(common)))].join("\n");
+  return [lines[0], ...rest.map((l) => (l.trim() === "" ? "" : pad + l.slice(common)))].join(eol);
 }
 
 // A value as an ABAP string literal. Backticks rather than quotes throughout -

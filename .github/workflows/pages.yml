@@ -44,10 +44,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # The tests, in the same three shards check.yml runs them in - the build
+  # The tests, in the same four shards check.yml runs them in - the build
   # is two minutes with its caches warm and the tests seventeen on one
-  # runner, so three runners each take a third (Playwright's --shard) and the
-  # wall clock is the build plus a third of the tests.
+  # runner, so three runners each take a third of the Chromium specs
+  # (Playwright's --shard), a fourth runs WebKit, and the wall clock is the
+  # build plus a third of the tests.
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -55,15 +56,16 @@ jobs:
       # The same tests as check.yml, which means the WebKit project too:
       # without this a push straight to main was tested on Chromium alone and
       # deployed past the specs written for Safari's engine.
-      PW_WEBKIT: "1"
+      # On the WebKit shard - see check.yml for why it is one of its own.
+      PW_WEBKIT: ${{ matrix.shard == 'webkit' && '1' || '' }}
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: ["1", "2", "3", webkit]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/build
-      - run: npm test -- --shard=${{ matrix.shard }}/3
+      - run: npm test -- ${{ matrix.shard == 'webkit' && '--project=webkit' || format('--project=chromium --shard={0}/3', matrix.shard) }}
 
   # The artefact that is published: the same build, once more, on a runner
   # of its own - a cache hit, and it runs beside the shards rather than after

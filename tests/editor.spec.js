@@ -43,8 +43,10 @@ test("a syntax error is marked on its own line", async ({ page }) => {
   await open(page);
   await setSource(page, CLEAN.replace("me->client = client.", "me->client = = client."));
 
+  // Polled: the analysis answers from a worker, and under load later than
+  // the 400ms setSource( ) waits.
+  await expect.poll(async () => (await markers(page)).length).toBeGreaterThan(0);
   const found = await markers(page);
-  expect(found.length).toBeGreaterThan(0);
   expect(found[0].line).toBe(9);
 });
 
@@ -52,8 +54,7 @@ test("a name the framework does not have is reported", async ({ page }) => {
   await open(page);
   await setSource(page, CLEAN.replace("z2ui5_cl_ui5_view_builder", "z2ui5_cl_does_not_exist"));
 
-  const found = await markers(page);
-  expect(found.map((m) => m.message).join("\n")).toMatch(/z2ui5_cl_does_not_exist/i);
+  await expect.poll(async () => (await markers(page)).map((m) => m.message).join("\n")).toMatch(/z2ui5_cl_does_not_exist/i);
 });
 
 test("a missing method implementation is reported", async ({ page }) => {
@@ -68,8 +69,7 @@ CLASS ${MAIN_CLASS} IMPLEMENTATION.
 ENDCLASS.`,
   );
 
-  const found = await markers(page);
-  expect(found.map((m) => m.message).join("\n")).toMatch(/main/i);
+  await expect.poll(async () => (await markers(page)).map((m) => m.message).join("\n")).toMatch(/main/i);
 });
 
 test("completion offers the framework's class names", async ({ page }) => {

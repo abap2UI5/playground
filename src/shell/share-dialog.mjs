@@ -11,7 +11,7 @@
 // click. Nothing is stored, and the dialog is rebuilt on every open.
 import { abapGitZip, download } from "./export.mjs";
 import { copyToClipboard } from "./share.mjs";
-import { setStatus } from "./ui.mjs";
+import { closeOnBackdrop, setStatus } from "./ui.mjs";
 
 let dialog;
 let body;
@@ -20,9 +20,7 @@ export function setUpShareDialog() {
   dialog = document.getElementById("share-dialog");
   body = document.getElementById("share-body");
   // A click on the backdrop closes it, the way a modal is expected to.
-  dialog.addEventListener("click", (e) => {
-    if (e.target === dialog) dialog.close();
-  });
+  closeOnBackdrop(dialog);
 }
 
 // The embed kit lives beside the playground - see src/embed - so its URL is
@@ -46,7 +44,11 @@ function embedSnippet(files, url) {
   }
   const embedded = new URL(url);
   embedded.search = "?embed=1";
-  return `<iframe src="${embedded.href}" width="100%" height="520" style="border:0"></iframe>`;
+  // Named, and loaded when it nears the screen: the frame is a whole ABAP
+  // runtime and a corpus parse, and the embed kit's own rule is that nothing
+  // boots before it is wanted. A frame with no title is also a frame a screen
+  // reader can only call "frame".
+  return `<iframe src="${embedded.href}" title="abap2UI5 example" loading="lazy" width="100%" height="520" style="border:0"></iframe>`;
 }
 
 // The fence the documentation writes an example in. One per file, the app

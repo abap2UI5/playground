@@ -177,10 +177,10 @@ test("Undo takes the last edit back, Redo brings it again, and both are inactive
 
 test("Ctrl+S runs, instead of offering to save the page", async ({ page }) => {
   await open(page);
-  const before = await page.locator("#app").getAttribute("src");
+  const before = await page.locator("#app").getAttribute("data-src");
   await clickEditor(page);
   await page.keyboard.press("Control+s");
-  await expect(page.locator("#app")).not.toHaveAttribute("src", before ?? "", { timeout: 60000 });
+  await expect(page.locator("#app")).not.toHaveAttribute("data-src", before ?? "", { timeout: 60000 });
   await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
 });
 
@@ -197,10 +197,10 @@ test("Auto runs the edit by itself, and hands Run back when it is switched off",
 
   // An edit with the switch off changes nothing on the right: that is what
   // Run is for, and it is the behaviour the switch exists to change.
-  const before = await page.locator("#app").getAttribute("src");
+  const before = await page.locator("#app").getAttribute("data-src");
   await setSource(page, (await getSource(page)).replace(MAIN_MARK, "not run yet"));
   await page.waitForTimeout(1500);
-  await expect(page.locator("#app")).toHaveAttribute("src", before ?? "");
+  await expect(page.locator("#app")).toHaveAttribute("data-src", before ?? "");
 
   // On: Run goes inactive, because there is nothing left for it to do - and
   // what was typed while it was off is run at once rather than waiting for
@@ -209,13 +209,13 @@ test("Auto runs the edit by itself, and hands Run back when it is switched off",
   await expect(auto).toHaveAttribute("aria-checked", "true");
   await expect(page.locator("#run")).toBeDisabled();
   expect(await stored()).toBe("on");
-  await expect(page.locator("#app")).not.toHaveAttribute("src", before ?? "", { timeout: 60000 });
+  await expect(page.locator("#app")).not.toHaveAttribute("data-src", before ?? "", { timeout: 60000 });
   await expect(page.frameLocator("#app").getByText("not run yet")).toBeVisible();
 
   // And from here on every change reaches the app on its own.
-  const running = await page.locator("#app").getAttribute("src");
+  const running = await page.locator("#app").getAttribute("data-src");
   await setSource(page, (await getSource(page)).replace("not run yet", "run by itself"));
-  await expect(page.locator("#app")).not.toHaveAttribute("src", running ?? "", { timeout: 60000 });
+  await expect(page.locator("#app")).not.toHaveAttribute("data-src", running ?? "", { timeout: 60000 });
   await expect(page.frameLocator("#app").getByText("run by itself")).toBeVisible();
 
   // Off again: Run comes back, the setting is forgotten rather than stored as
@@ -224,13 +224,15 @@ test("Auto runs the edit by itself, and hands Run back when it is switched off",
   await expect(auto).toHaveAttribute("aria-checked", "false");
   await expect(page.locator("#run")).toBeEnabled();
   expect(await stored()).toBeNull();
-  const last = await page.locator("#app").getAttribute("src");
+  const last = await page.locator("#app").getAttribute("data-src");
   await setSource(page, (await getSource(page)).replace("run by itself", "not run either"));
   await page.waitForTimeout(1500);
-  await expect(page.locator("#app")).toHaveAttribute("src", last ?? "");
+  await expect(page.locator("#app")).toHaveAttribute("data-src", last ?? "");
 });
 
 test("Auto is remembered between visits, and never in an embedded playground", async ({ page }) => {
+  // Several playground boots in one test: three times the time budget.
+  test.slow();
   await open(page);
   await page.locator("#autorun").click();
   await expect(page.locator("#autorun")).toHaveAttribute("aria-checked", "true");
@@ -318,6 +320,8 @@ test("picking a sample replaces the draft, and says how to get it back", async (
 });
 
 test("a sample that was only read is not kept as a draft", async ({ page }) => {
+  // Several playground boots in one test: three times the time budget.
+  test.slow();
   await open(page);
   await runSample(page, OTHER.id);
 
@@ -490,6 +494,19 @@ test.describe("under a thumb", () => {
   });
 });
 
+/* The narrowest phones most people have: 360px (most Android phones). The
+ * About button used to wrap onto a third toolbar row of its own there. */
+test.describe("on a 360px phone", () => {
+  test.use({ hasTouch: true, viewport: { width: 360, height: 740 } });
+
+  test("the header keeps to two toolbar rows", async ({ page }) => {
+    await open(page);
+    const bar = await page.locator(".bar").boundingBox();
+    const toolbar = await page.locator(".toolbar").boundingBox();
+    expect(bar.height + toolbar.height, "the header is still not a fifth of the phone").toBeLessThan(152);
+  });
+});
+
 test("both panes stay visible when a wide window gets narrow and wide again", async ({ page }) => {
   await open(page);
   await page.setViewportSize({ width: 480, height: 800 });
@@ -510,7 +527,7 @@ test("the app follows the system theme, and a change does not restart it", async
   await runSample(page, "binding");
 
   // The frame is started in UI5's dark theme, matching the rest of the page.
-  await expect(page.locator("#app")).toHaveAttribute("src", /sap-ui-theme=sap_horizon_dark/);
+  await expect(page.locator("#app")).toHaveAttribute("data-src", /sap-ui-theme=sap_horizon_dark/);
   const dark = await page.frameLocator("#app").locator("body").evaluate((b) => getComputedStyle(b).backgroundColor);
 
   // Type something, then switch the system theme: the app changes colour but
@@ -567,7 +584,7 @@ test("the switch in the bar overrides the system theme, and is forgotten again w
   expect(await chosen()).toBe("dark");
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
   await expect(theme).toHaveAttribute("aria-checked", "true");
-  await expect(page.locator("#app")).toHaveAttribute("src", /sap-ui-theme=sap_horizon_dark/);
+  await expect(page.locator("#app")).toHaveAttribute("data-src", /sap-ui-theme=sap_horizon_dark/);
 
   // Switching back to what the system says is not a choice to keep: the
   // page follows the system again, and nothing is stored.
@@ -653,4 +670,7 @@ test("the Share dialog offers an embed block, a markdown fence and an abapGit zi
   expect(entries[2].text).not.toContain("\r");
   expect(entries[2].text.endsWith("\n")).toBe(true);
   expect(entries[3].text).toContain(`<CLSNAME>${MAIN_CLASS.toUpperCase()}</CLSNAME>`);
+  // Every sidecar starts with the byte order mark abapGit writes, or a pull
+  // into a system is a diff on line 1 of it.
+  expect([...entries[3].bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
 });

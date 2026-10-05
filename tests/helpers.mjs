@@ -39,7 +39,9 @@ export const MAIN_MARK = SAMPLES[0].title;
 // the editor. Everything downstream depends on that, so every test starts here.
 export async function open(page) {
   await page.goto("/");
-  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  // Under the test's own 120s, so a boot that does not finish says so
+  // here rather than as a bare "Test timeout" with no line.
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 90000 });
 }
 
 // UI5 prefixes every control id with the id of the view that holds it
@@ -141,9 +143,9 @@ export const outputText = (page) => page.locator(".log-body").textContent();
 // app that is about to be replaced. The frame's src carries a counter that goes
 // up once per run, which is unambiguous.
 export async function runSample(page, id) {
-  const before = await page.locator("#app").getAttribute("src");
+  const before = await page.locator("#app").getAttribute("data-src");
   await pickSample(page, id);
-  await expect(page.locator("#app")).not.toHaveAttribute("src", before ?? "", { timeout: 60000 });
+  await expect(page.locator("#app")).not.toHaveAttribute("data-src", before ?? "", { timeout: 60000 });
   // "running", or "running - your draft is one Undo away" when the sample
   // went in over somebody's own work.
   await expect(page.locator("#status")).toHaveText(/^running/, { timeout: 60000 });

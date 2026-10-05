@@ -21,9 +21,10 @@
  * and one of them is written 772 times by a build script.
  *
  * Nothing is fetched until somebody OPENS the box: the index is 700 kB (180
- * over the wire) and a reader who never searches must not pay for it. Opened,
- * it is fetched at once rather than on the first keystroke, so the first
- * character typed already has something to match against.
+ * over the wire) and a reader who never searches must not pay for it. Opened -
+ * or pointed at, or tabbed to - it is fetched at once rather than on the first
+ * keystroke, so the first character typed already has something to match
+ * against.
  */
 import { search, grouped, highlight, loadIndex, rememberQuery, recallQuery, forgetQuery } from "./search-engine.mjs";
 import { arrivedBy } from "./site-memory.mjs";
@@ -282,8 +283,14 @@ export function mountSearch(host) {
     rows[active]?.scrollIntoView({ block: "nearest" });
   }
 
+  /* The page behind the panel is inert while it is open: the panel says it
+     is modal (aria-modal), and Shift+Tab out of the field walked straight
+     into the page underneath. Only what this made inert is given back. */
+  let madeInert = [];
   async function open() {
     scrim.hidden = false;
+    madeInert = [...document.body.children].filter((n) => n !== scrim && !n.inert);
+    for (const n of madeInert) n.inert = true;
     /* The last thing that was searched for, if a hit was opened recently
        (search-engine.mjs). Selected, not merely filled in: the reader who
        wants it presses Enter or arrows, and the reader who wants something
@@ -314,6 +321,8 @@ export function mountSearch(host) {
        on the scrim must not take the focus away from wherever that reader
        actually is. */
     const leaving = scrim.contains(document.activeElement);
+    for (const n of madeInert) n.inert = false;
+    madeInert = [];
     scrim.hidden = true;
     input.value = "";
     rows = [];
@@ -338,6 +347,14 @@ export function mountSearch(host) {
   });
 
   button.addEventListener("click", open);
+  /* A pointer over the button, or the keyboard focus on it, is the moment a
+     reader is about to search - so the fetch starts there, a hundred-odd
+     milliseconds before the click, and the box opens on a loaded index more
+     often than not. Still nothing for the reader who never comes near it.
+     A failure is open( )'s to report; loadIndex forgets it and tries again. */
+  const warm = () => { if (!entries) loadIndex(INDEX_URL).catch(() => {}); };
+  button.addEventListener("pointerenter", warm, { once: true });
+  button.addEventListener("focus", warm, { once: true });
   close.addEventListener("click", hide);
   scrim.addEventListener("click", (e) => { if (e.target === scrim) hide(); });
   input.addEventListener("input", draw);
@@ -358,8 +375,14 @@ export function mountSearch(host) {
       if (e.key === "/" || ((e.metaKey || e.ctrlKey) && e.key === "k")) { e.preventDefault(); open(); }
       return;
     }
-    if (e.key === "Escape") { e.preventDefault(); hide(); }
-    else if (e.key === "ArrowDown") { e.preventDefault(); move(1); }
+    if (e.key === "Escape") { e.preventDefault(); hide(); return; }
+    /* The arrows and Enter belong to the FIELD. A result reached with Tab, or
+       the Esc button, is a link or a button that answers Enter itself - taken
+       over here, Enter on the third result opened the first, and Enter on
+       Esc opened a result. And an Enter that confirms an input method's
+       composition (Japanese, Chinese) is not a request to leave the page. */
+    if (e.target !== input || e.isComposing) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); move(1); }
     else if (e.key === "ArrowUp") { e.preventDefault(); move(-1); }
     else if (e.key === "Enter" && rows[active]) { e.preventDefault(); rows[active].click(); }
   });

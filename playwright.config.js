@@ -12,9 +12,22 @@ export default defineConfig({
   reporter: process.env.CI ? [["html"], ["list"]] : "list",
   timeout: 120000,
   expect: { timeout: 30000 },
+  // Two workers in CI, said rather than left to the default: one playground
+  // boot keeps three threads busy at once (the page with Monaco, the corpus
+  // parse, the runtime evaluating its bundle), so two already fill a 4-core
+  // runner, and more only turn boots into timeouts.
+  workers: process.env.CI ? 2 : undefined,
   use: {
     baseURL: "http://localhost:8080",
-    trace: "retain-on-failure",
+    // In CI only for a retried test: a trace on every attempt recorded a
+    // screencast and every network body for 300 tests that passed. A failure
+    // that reproduces is retried (retries: 1) and gets its trace there.
+    trace: process.env.CI ? "on-first-retry" : "retain-on-failure",
+    // Blocked everywhere but tests/worker.spec.js, which is about it: after
+    // the first run the worker installs and re-downloads the core assets
+    // while the test is acting, and a reload was answered by the network or
+    // the worker depending on whether that install had finished.
+    serviceWorkers: "block",
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },

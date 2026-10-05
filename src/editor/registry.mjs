@@ -194,7 +194,17 @@ function revive(described) {
 // A stored setting that names a rule abaplint no longer has fails the build
 // once - then the page is told, the defaults go in, and the build runs
 // again, which is the same "silently dropped" the Config tab promises.
-export async function buildRegistry(filesReady, progress) {
+// What applyAbaplintSettings( ) waits for: the Config tab is on screen while
+// the corpus is still parsing, and an Apply sent then reached a worker with no
+// registry yet - a TypeError in the tab, the boot's progress redirected into
+// it, and the worker's settings out of step with its config.
+let built;
+export function buildRegistry(filesReady, progress) {
+  built = buildNow(filesReady, progress);
+  return built;
+}
+
+async function buildNow(filesReady, progress) {
   onProgress = progress ?? (() => {});
   // Heard: with the worker already dead (a corpus that 404s), call( ) rejects
   // here with nobody awaiting it - the build below reports that failure.
@@ -216,6 +226,7 @@ export async function buildRegistry(filesReady, progress) {
 // Applies an edited configuration: validated here and in the worker, then the
 // startup parse over again with the same progress the corpus parse reported.
 export async function applyAbaplintSettings(next, progress) {
+  await built;
   const checked = validated(next);
   await call("validateSettings", checked);
   onProgress = progress ?? (() => {});
@@ -238,7 +249,7 @@ export const formatFiles = (files) => call("format", files);
 export const documentSymbols = (fileName) => call("symbols", fileName);
 
 // One language server call, by name, with plain LSP objects both ways.
-export const languageServer = (method, params) => call("ls", method, params);
+export const languageServer = (method, params, files) => call("ls", method, params, files);
 
 // Compiles the editor's files in the worker; rejects with an Error that
 // carries `problems` when the transpiler refused something at a line.
@@ -276,7 +287,7 @@ function merge(left, right) {
 // off the text rather than out of the registry, because the interesting case
 // is exactly the one where the registry refuses to build the object.
 export function declaredObjectName(source) {
-  return /^\s*(?:CLASS|INTERFACE)\s+([a-zA-Z_]\w*)\s+(?:DEFINITION|PUBLIC)/im.exec(source)?.[1]?.toUpperCase();
+  return /^[ \t]*(?:CLASS|INTERFACE)\s+([a-zA-Z_]\w*)\s+(?:DEFINITION|PUBLIC)/im.exec(source)?.[1]?.toUpperCase();
 }
 
 // The class the playground starts: the one the first file declares.

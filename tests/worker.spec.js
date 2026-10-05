@@ -1,4 +1,8 @@
 import { test, expect } from "@playwright/test";
+
+// The one spec about the service worker - everything else runs with it
+// blocked (playwright.config.js).
+test.use({ serviceWorkers: "allow" });
 import { control, getSource, MAIN_MARK, open, runSample, SAMPLES, setSource } from "./helpers.mjs";
 
 // The sample with an input and a button in it, and the word this test writes
@@ -56,6 +60,8 @@ test("the heavy assets come out of the worker's cache on a second visit", async 
 });
 
 test("the documents are answered from the network first, and the cache is only the fallback", async ({ page }) => {
+  // Several playground boots in one test: three times the time budget.
+  test.slow();
   await open(page);
   expect(await workerReady(page)).toBe(true);
 
@@ -171,6 +177,8 @@ test("the app frame's stylesheets and component come out of the cache as well", 
 });
 
 test("the playground opens and runs with no network, on what the last visit left in the cache", async ({ page, context }) => {
+  // Several playground boots in one test: three times the time budget.
+  test.slow();
   // Installed from a home screen, opened on a train: the manifest makes the
   // page installable, and this is the half the worker has to hold up - every
   // asset the page and the app frame ask for is in the cache, the two
@@ -249,6 +257,8 @@ test("the worker is served under a project path as well as at the root", async (
 });
 
 test("a cached runtime from another build is thrown away, not waited on forever", async ({ page }) => {
+  // Several playground boots in one test: three times the time budget.
+  test.slow();
   // The failure a deploy used to leave behind: a service worker cache holding
   // the new shell beside an old framework - the old one a page module that,
   // started as a worker, loads cleanly and never says a word. Put that shape
@@ -287,6 +297,8 @@ test("a cached runtime from another build is thrown away, not waited on forever"
 });
 
 test("a core asset the worker fetches on a miss is hashed against the build, and kept when it matches", async ({ page }) => {
+  // Several playground boots in one test: three times the time budget.
+  test.slow();
   // What install and serve( ) put in the cache under a core asset's name is
   // checked against the hash the build wrote into the worker: a copy the
   // CDN or the HTTP cache still had from the previous deploy is not kept.
@@ -373,6 +385,8 @@ test("a startup failure on a page the worker is serving throws the cached site a
 });
 
 test("the catalogue's index is answered from the network first, and a cached copy never outlives a deploy", async ({ page }) => {
+  // Several playground boots in one test: three times the time budget.
+  test.slow();
   await open(page);
   expect(await workerReady(page)).toBe(true);
 

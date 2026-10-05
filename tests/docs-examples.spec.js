@@ -42,9 +42,9 @@ for (const [i, ex] of EXAMPLES.entries()) {
     // The frame's src carries a counter that goes up once per run, so waiting
     // on it is unambiguous where the status line is not: it still says
     // "running" from the sample the page opened on while this one compiles.
-    const before = await page.locator("#app").getAttribute("src");
+    const before = await page.locator("#app").getAttribute("data-src");
     await page.locator("#run").click();
-    await expect(page.locator("#app")).not.toHaveAttribute("src", before ?? "", { timeout: 90000 });
+    await expect(page.locator("#app")).not.toHaveAttribute("data-src", before ?? "", { timeout: 90000 });
     await expect(page.locator("#status")).toHaveText(/^running/, { timeout: 90000 });
 
     // Compiled and started is not the same as on screen, and an example that

@@ -49,6 +49,7 @@
   --accent: #0a6ed1;
   --accent-fg: #ffffff;
   --danger: #b5253a;
+  --ok: #237a35;
   /* The same two stacks as the documentation carries
      (--vp-font-family-base / -mono in theme/style.css over there), character
      for character. They led with different families - `system-ui` here,
@@ -87,6 +88,7 @@
     --accent: #4aa3ff;
     --accent-fg: #0b1620;
     --danger: #ff8092;
+    --ok: #5cc472;
     --code-name: #ef9a95;
     --code-value: #8ab8ff;
     --code-string: #7ed49a;
@@ -103,6 +105,7 @@
   --accent: #4aa3ff;
   --accent-fg: #0b1620;
   --danger: #ff8092;
+  --ok: #5cc472;
   --code-name: #ef9a95;
   --code-value: #8ab8ff;
   --code-string: #7ed49a;
@@ -628,7 +631,17 @@ iframe {
   line-height: 1.5;
   text-align: center;
 }
-.insight-badge.is-error { background: var(--danger); color: #fff; }
+.insight-badge.is-error { background: var(--danger); color: var(--bg); }
+/* The search panel's results and button get the ring the catalogue gives
+   them (catalogue.css), not the browser's default one. */
+.search-scrim a:focus-visible,
+.search-scrim button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-control);
+}
+/* The page's own background on the danger colour, not white: white on the
+   dark scheme's light red (#ff8092) was 2.4:1, unreadable at 11px. */
 .insight-badge.is-warning { background: var(--line); color: var(--fg); }
 
 .insight-gap { flex: 1; }
@@ -879,6 +892,12 @@ iframe {
   border: 1px solid var(--line); border-radius: 8px;
   padding: .1rem .35rem .1rem .1rem;
   background: var(--bg);
+  /* Eight hundred rows, redrawn on every keystroke of the search: laid out
+     only when they come near the screen, as the catalogue's cards are.
+     Measured on a desk, a broad query went from 175-300ms per keystroke to
+     45-80. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 3.4rem;
 }
 .example-item:has(.example-row:hover) { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .example-item.is-unavailable { background: none; }
@@ -1193,16 +1212,19 @@ button.insight-row {
 
 /* ------------------------------------------------------------------ tests */
 
-.insight-badge.is-ok { background: #2f9e44; color: #fff; }
+/* A green with contrast in both schemes (5.4:1 against the light page,
+   more against the dark one); #2f9e44 was 3.45:1, under what WCAG AA asks of
+   11-12px text. The badge sets the page colour on it, as the error one does. */
+.insight-badge.is-ok { background: var(--ok); color: var(--bg); }
 .tests-summary { margin: .4rem .6rem .2rem; font-size: 12px; color: var(--fg-dim); }
 .tests-summary.is-error { color: var(--danger); }
 .tests .insight-list > li { flex-wrap: wrap; }
 .tests .insight-list > li > .test-row { flex: 1 1 100%; }
 .test-row { display: flex; gap: .6rem; align-items: baseline; }
-.test-row.is-ok { border-left-color: #2f9e44; }
+.test-row.is-ok { border-left-color: var(--ok); }
 .test-row.is-error { border-left-color: var(--danger); }
 .test-mark { flex: none; font-weight: 600; }
-.test-row.is-ok .test-mark { color: #2f9e44; }
+.test-row.is-ok .test-mark { color: var(--ok); }
 .test-row.is-error .test-mark { color: var(--danger); }
 .test-name { flex: 1; }
 .test-detail {
@@ -1369,6 +1391,17 @@ button.insight-row {
      2.1rem out of a 320px demo in somebody's documentation page. */
   .is-app-only .panes { padding-top: 0; }
   .is-app-only .pane { inset: 0; }
+}
+
+/* 360 and 375px - most Android phones, the small iPhones - are a few pixels
+   short of the two rows the 390px phone above gets, and the About button
+   wrapped onto a third row of its own. A little less air between and inside
+   the controls is what it takes; tests/shell.spec.js holds the header at 360
+   as well as at 390. */
+@media (max-width: 380px) {
+  .toolbar { gap: .2rem; padding: .25rem .3rem; }
+  .toolbar button, .toolbar .source-link { padding: .25rem .38rem; }
+  .toolbar button.icon { padding: .2rem .35rem; }
 }
 
 

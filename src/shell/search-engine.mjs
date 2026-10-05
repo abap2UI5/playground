@@ -87,8 +87,12 @@ function scoreField(value, term, weight) {
   if (at === 0) return weight * 2;
   if (/[^\p{L}\p{N}]/u.test(hay[at - 1] || "")) return weight;
   if (term.length <= 2) {
-    const next = hay.indexOf(term, at + 1);
-    return next > 0 && /[^\p{L}\p{N}]/u.test(hay[next - 1]) ? weight : 0;
+    // Every later occurrence, not only the next one: "ui" sits inside
+    // "build" and "guide" before it starts a word in "Build guide UI".
+    for (let i = hay.indexOf(term, at + 1); i > 0; i = hay.indexOf(term, i + 1)) {
+      if (/[^\p{L}\p{N}]/u.test(hay[i - 1])) return weight;
+    }
+    return 0;
   }
   return weight / 2;
 }
@@ -372,8 +376,11 @@ export function highlight(text, query) {
     for (;;) {
       const at = low.indexOf(term, from);
       if (at < 0) break;
-      marks.push([at, at + term.length]);
       from = at + term.length;
+      // A one- or two-letter term is a hit at a word start only (scoreField),
+      // so only there is it marked - not the "ui" inside "Build".
+      if (term.length <= 2 && at > 0 && !/[^\p{L}\p{N}]/u.test(low[at - 1])) continue;
+      marks.push([at, at + term.length]);
     }
   }
   if (!marks.length) return [[hay, false]];

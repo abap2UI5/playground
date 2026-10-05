@@ -56,9 +56,15 @@ function collapse() {
   paintToggle();
 }
 
+// The panel's height held to the window it is in now (setUpResize( )). A
+// height kept from a taller window - stored, or from before a collapse - left
+// the editor squeezed to nothing and the panel cut off at the bottom.
+let refit = () => {};
+
 function expand() {
   panel.classList.remove("is-collapsed", "is-tucked");
   if (heightBeforeCollapse !== "") panel.style.height = heightBeforeCollapse;
+  refit();
   paintToggle();
 }
 
@@ -170,6 +176,19 @@ export function setUpInsight() {
     // row that was open would otherwise reopen as the new run's #1.
     if (roundtripList().length === 0) openedRoundtrip = undefined;
     paintRoundtripCount();
+    if (view !== "roundtrips") return;
+    // Not under a selection somebody is making in a request or a response:
+    // the redraw replaced the text they were selecting. The list catches up
+    // once the selection is let go.
+    if (selectingInBody()) {
+      roundtripsBehind = true;
+      return;
+    }
+    render();
+  });
+  document.addEventListener("selectionchange", () => {
+    if (!roundtripsBehind || selectingInBody()) return;
+    roundtripsBehind = false;
     if (view === "roundtrips") render();
   });
 
@@ -181,8 +200,6 @@ export function setUpInsight() {
 // only person who knows which is happening is the one looking at it.
 function setUpResize() {
   const grip = document.getElementById("insight-grip");
-  const stored = Number(readStored(HEIGHT_KEY));
-  if (Number.isFinite(stored) && stored >= MIN_HEIGHT) panel.style.height = `${stored}px`;
 
   const apply = (px) => {
     // Bounded against the page: the editor and the app above have to keep
@@ -191,8 +208,28 @@ function setUpResize() {
     const room = document.body.getBoundingClientRect().height;
     const height = Math.round(Math.min(Math.max(px, MIN_HEIGHT), room - 120));
     panel.style.height = `${height}px`;
+    // What a screen reader is told about the separator: it said 50 of 100
+    // for ever, whatever the panel's height.
+    grip.setAttribute("aria-valuenow", String(height));
+    grip.setAttribute("aria-valuemax", String(Math.max(MIN_HEIGHT, Math.round(room - 120))));
     return height;
   };
+
+  // The stored height is the reader's choice for a window of the size they
+  // made it in; in a smaller one it is held to what fits, and the choice is
+  // kept for when the window is large again - nothing is written back here.
+  refit = () => {
+    if (!panel.style.height || panel.classList.contains("is-collapsed")) return;
+    // A document with no layout yet (a frame not shown) has no room to measure.
+    if (document.body.getBoundingClientRect().height === 0) return;
+    apply(parseFloat(panel.style.height));
+  };
+  const stored = Number(readStored(HEIGHT_KEY));
+  if (Number.isFinite(stored) && stored >= MIN_HEIGHT) {
+    panel.style.height = `${stored}px`;
+    refit();
+  }
+  addEventListener("resize", refit);
 
   grip.addEventListener("pointerdown", (e) => {
     // The primary button only, as on the splitter (src/shell/layout.mjs): a
@@ -200,6 +237,8 @@ function setUpResize() {
     // dragging until it was touched again.
     if (e.button !== 0 || !e.isPrimary) return;
     grip.setPointerCapture(e.pointerId);
+    // Opened by hand is a request to have it open, as the toggle's is.
+    if (panel.classList.contains("is-collapsed")) remember(false);
     expand();
     grip.classList.add("is-dragging");
     e.preventDefault();
@@ -229,6 +268,7 @@ function setUpResize() {
     const step = e.key === "ArrowUp" ? 24 : e.key === "ArrowDown" ? -24 : 0;
     if (step === 0) return;
     e.preventDefault();
+    if (panel.classList.contains("is-collapsed")) remember(false);
     expand();
     writeStored(HEIGHT_KEY, String(apply(panel.getBoundingClientRect().height + step)));
   });
@@ -283,6 +323,16 @@ const VIEWS = {
   abap2ui5: linterConfig,
 };
 
+// Which view the body last drew, so a redraw of the SAME view - every edit
+// redraws Problems, Outline and View, twice - keeps the reader's place.
+let rendered;
+
+let roundtripsBehind = false;
+function selectingInBody() {
+  const sel = document.getSelection();
+  return !!sel && !sel.isCollapsed && sel.rangeCount > 0 && body.contains(sel.getRangeAt(0).commonAncestorContainer);
+}
+
 function render() {
   if (!panel) return;
   for (const tab of tabs) {
@@ -290,7 +340,30 @@ function render() {
     tab.classList.toggle("is-active", active);
     tab.setAttribute("aria-selected", String(active));
   }
+  // A reader working down a long problem list or outline was thrown back
+  // up it and lost the focused row on every keystroke in the editor. The
+  // scroll offset and the focused row (by the file and line it names) are
+  // carried over the redraw of the same view; a different view starts at
+  // its top.
+  const same = rendered === view;
+  const top = body.scrollTop;
+  const focused = body.contains(document.activeElement) ? document.activeElement.closest?.("[data-file][data-line]") : null;
+  const at = focused ? { file: focused.dataset.file, line: focused.dataset.line } : undefined;
+  // Rows that name no line (a roundtrip, its Copy buttons) carry a key of
+  // their own instead: Enter on a roundtrip, or the next one landing every
+  // second from a timer app, dropped the focus to <body>.
+  const keyed = body.contains(document.activeElement) ? document.activeElement.closest?.("[data-focus]")?.dataset.focus : undefined;
   body.replaceChildren((VIEWS[view] ?? problemList)());
+  rendered = view;
+  if (!same) return;
+  body.scrollTop = top;
+  if (at) {
+    const again = [...body.querySelectorAll("[data-file][data-line]")]
+      .find((el) => el.dataset.file === at.file && el.dataset.line === at.line);
+    again?.focus({ preventScroll: true });
+  } else if (keyed !== undefined) {
+    [...body.querySelectorAll("[data-focus]")].find((el) => el.dataset.focus === keyed)?.focus({ preventScroll: true });
+  }
 }
 
 const SEVERITY_LABEL = { 1: "error", 2: "warning", 3: "info", 4: "hint" };
@@ -493,11 +566,11 @@ function outlineOf(file) {
         if (view === "outline" && `${currentFile()}@${fileVersion(currentFile())}` === key) render();
       });
   }
-  try {
-    return outline.symbols;
-  } catch {
-    return [];
-  }
+  // Until the answer for this file arrives, the last answer only if it was
+  // about THIS file (an older version of it is near enough). Another file's
+  // symbols were drawn with this file's name on them, and a click went to
+  // that file's line numbers in this one.
+  return outline.key?.startsWith(`${file}@`) ? outline.symbols : [];
 }
 
 function flatten(symbols, depth) {
@@ -990,6 +1063,7 @@ function roundtripView() {
     row.type = "button";
     row.className = `insight-row roundtrip-row${entry.status >= 400 ? " is-error" : ""}${entry.n === openedRoundtrip ? " is-open" : ""}`;
     row.setAttribute("aria-expanded", String(entry.n === openedRoundtrip));
+    row.dataset.focus = `roundtrip ${entry.n}`;
 
     const n = document.createElement("span");
     n.className = "insight-where";
@@ -1033,6 +1107,7 @@ function roundtripDetail(entry) {
     copy.type = "button";
     copy.className = "ghost";
     copy.textContent = "Copy";
+    copy.dataset.focus = `roundtrip ${entry.n} ${title}`;
     copy.addEventListener("click", async () => {
       copy.textContent = (await copyToClipboard(text)) ? "copied" : "Copy";
     });

@@ -45,6 +45,7 @@ import { SAMPLES } from "../editor/samples.mjs";
 import { termsOf, matchesTerms } from "./search-terms.mjs";
 import { deleteDraft, draftNameProblem, listDrafts, saveDraft } from "./drafts.mjs";
 import { readStoredJson, writeStoredJson } from "./storage.mjs";
+import { closeOnBackdrop } from "./ui.mjs";
 
 // The boxes, as the dialog's side names them - see index.html: the three
 // repositories (on), "Only what runs here" (off), "OpenUI5 only" (off - it
@@ -237,7 +238,16 @@ let loadedGroups = [];
 // The reader's own drafts, first in the list: what one saved is what one
 // is most likely to be looking for. Read on every render, because saving
 // and deleting happen in the same dialog. See src/shell/drafts.mjs.
+// Read once per change to the drafts, not once per keystroke: listDrafts( )
+// parses every stored draft with its full sources, and the search redraws on
+// every character. Saving and deleting drop it.
+let draftsCache;
 function draftsGroup() {
+  draftsCache ??= buildDraftsGroup();
+  return draftsCache;
+}
+
+function buildDraftsGroup() {
   const entries = listDrafts().map((draft) => ({
     title: draft.name,
     note: `${draft.files.map((f) => f.name).join(", ")} · saved ${new Date(draft.at).toLocaleString()}`,
@@ -289,7 +299,11 @@ function saveRow() {
       said.textContent = "This browser would not store it.";
       return;
     }
+    draftsCache = undefined;
     render();
+    // The button that was pressed is gone with the redraw; the focus goes
+    // back into the dialog rather than to <body> behind the modal.
+    body.querySelector(".drafts-save input")?.focus();
   };
   button.addEventListener("click", save);
   input.addEventListener("keydown", (e) => {
@@ -345,9 +359,7 @@ export function setUpExamples(handlers) {
 
   search.addEventListener("input", () => render());
   // A click on the backdrop closes it, the way a modal is expected to.
-  dialog.addEventListener("click", (e) => {
-    if (e.target === dialog) dialog.close();
-  });
+  closeOnBackdrop(dialog);
 
   // What was kept from last time, if anything, and every change both
   // re-renders and is kept. A stored value of the wrong type is ignored
@@ -399,6 +411,8 @@ function reflect() {
 
 export function openExamples() {
   if (!dialog) return;
+  // Read afresh on every open: another tab may have saved one meanwhile.
+  draftsCache = undefined;
   if (!started) {
     started = true;
     loading = true;
@@ -595,7 +609,9 @@ function row(entry) {
     remove.setAttribute("aria-label", `Delete the draft ${entry.draft.name}`);
     remove.addEventListener("click", () => {
       deleteDraft(entry.draft.name);
+      draftsCache = undefined;
       render();
+      body.querySelector(".drafts-save input")?.focus();
     });
     item.append(remove);
   }

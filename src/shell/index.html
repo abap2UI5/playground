@@ -557,7 +557,7 @@
     <div id="editor" class="editor"></div>
     <div class="insight" id="insight">
       <div class="insight-grip" id="insight-grip" role="separator" aria-orientation="horizontal"
-           aria-valuenow="50" aria-valuemin="0" aria-valuemax="100"
+           aria-valuenow="176" aria-valuemin="80" aria-valuemax="600"
            tabindex="0" aria-label="Resize the panel"></div>
       <!-- The strip is the tablist plus one control that is not a view of
            anything: the toggle that folds the panel away. It sits outside the
@@ -627,8 +627,8 @@
         <div class="chat-key-row">
           <input id="chat-workspace-input" type="text" autocomplete="off" spellcheck="false" placeholder="wrkspc_… (optional)">
         </div>
-        <p class="chat-key-note">Kept in this browser only and sent to api.anthropic.com and nowhere else - there is
-          no server behind this page. Usage is billed to your key. Get one at
+        <p class="chat-key-note">Held for this visit only, never stored, and sent to api.anthropic.com and nowhere
+          else - there is no server behind this page. Usage is billed to your key. Get one at
           <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.</p>
       </form>
       <div class="chat-log" id="chat-log" role="log" aria-live="polite" aria-label="Conversation"></div>
@@ -641,6 +641,7 @@
   </section>
 
   <div class="splitter" id="splitter" role="separator" aria-orientation="vertical" tabindex="0"
+       aria-valuenow="50" aria-valuemin="20" aria-valuemax="80"
        aria-label="Resize the editor"></div>
 
   <section class="pane pane-right" id="pane-right" role="tabpanel" aria-labelledby="tab-right">

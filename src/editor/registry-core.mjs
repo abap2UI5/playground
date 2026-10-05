@@ -115,6 +115,9 @@ export const validateSettings = (next) => validated(next);
 // are validated before anything is changed, so a rejected edit leaves the
 // registry exactly as it was.
 export async function applyAbaplintSettings(next, onProgress) {
+  // Checked before anything changes, so a call that comes too early leaves
+  // the settings and the config in step.
+  if (!registry) throw new Error("The sources are still being read - apply again once the editor is ready.");
   useAbaplintSettings(next);
   registry.setConfig(config());
   await parseWithYields(registry, onProgress);
@@ -374,7 +377,11 @@ export function abaplintFixable() {
 // behind "Fix them" in the Problems tab, where it says how many and why.
 const FORMAT_RULES = {
   align_type_expressions: true,
-  align_pseudo_comments: true,
+  // Not align_pseudo_comments: on a pseudo comment ending a multi-line
+  // statement it measures from where the PREVIOUS statement ended and deletes
+  // code up to the comment - `WHERE x IS NOT INITIAL "#EC …` lost its
+  // `NOT INITIAL` (two framework classes).
+
   colon_missing_space: true,
   // Not contains_tab: its fix replaces everything from a line's first tab to
   // the column the count of its tabs reaches with one space, so
@@ -434,35 +441,74 @@ function formatFix(issue) {
   return out;
 }
 
-// Every tab outside a literal becomes a space - the indentation is the
+// Every tab outside a literal becomes whitespace - the indentation is the
 // printer's to decide, and double_space folds what is left - while a tab
-// inside 'a text', `a text` or |a template| is part of the value and stays.
+// inside 'a text', `a text`, a |template| or a comment is part of what the
+// reader wrote and stays. One scan over the whole source with a stack, not a
+// line at a time: a template whose { } spans lines, or a template nested in
+// one, used to end at the first | and turn the tab in its literal tail into
+// a space. A LEADING tab is a level of indentation and becomes four spaces,
+// because the printer re-indents only a statement's first line and a chain's
+// continuation lines kept one column per tab - out of the house layout.
 function untab(source) {
   if (!source.includes("\t")) return source;
-  return source
-    .split("\n")
-    .map((line) => {
-      let out = "";
-      let quote;
-      let comment = line.startsWith("*");
-      for (let i = 0; i < line.length; i++) {
-        const ch = line[i];
-        if (comment) out += ch === "\t" ? " " : ch;
-        else if (quote) {
-          out += ch;
-          if (ch === "\\" && quote === "|" && i + 1 < line.length) out += line[++i];
-          else if (ch === quote) quote = undefined;
-        } else if (ch === "'" || ch === "`" || ch === "|") {
-          quote = ch;
-          out += ch;
-        } else {
-          if (ch === '"') comment = true;
-          out += ch === "\t" ? " " : ch;
+  let out = "";
+  // "code" or "tpl"; a template's { } pushes "code" on top of its "tpl".
+  const stack = ["code"];
+  let lineStart = true;
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i];
+    const top = stack[stack.length - 1];
+    if (ch === "\n") {
+      out += ch;
+      lineStart = true;
+      continue;
+    }
+    if (top === "tpl") {
+      out += ch;
+      lineStart = false;
+      if (ch === "\\" && i + 1 < source.length) out += source[++i];
+      else if (ch === "{") stack.push("code");
+      else if (ch === "|") stack.pop();
+      continue;
+    }
+    if (ch === "\t") {
+      out += lineStart ? "    " : " ";
+      continue;
+    }
+    if (ch === " ") {
+      out += ch;
+      continue;
+    }
+    const firstColumn = i === 0 || source[i - 1] === "\n";
+    lineStart = false;
+    if ((ch === "*" && firstColumn && stack.length === 1) || ch === '"') {
+      // A comment, to the end of the line, as it was written.
+      const eol = source.indexOf("\n", i);
+      const stop = eol === -1 ? source.length : eol;
+      out += source.slice(i, stop);
+      i = stop - 1;
+      continue;
+    }
+    if (ch === "'" || ch === "`") {
+      // A literal, to its closing quote (doubled is an escape) or the line's end.
+      let j = i + 1;
+      for (; j < source.length && source[j] !== "\n"; j++) {
+        if (source[j] === ch) {
+          if (source[j + 1] === ch) j++;
+          else break;
         }
       }
-      return out;
-    })
-    .join("\n");
+      const stop = j < source.length && source[j] === ch ? j + 1 : j;
+      out += source.slice(i, stop);
+      i = stop - 1;
+      continue;
+    }
+    out += ch;
+    if (ch === "|") stack.push("tpl");
+    else if (ch === "}" && stack.length > 1) stack.pop();
+  }
+  return out;
 }
 
 export function formatFiles(files) {
@@ -594,5 +640,5 @@ function merge(left, right) {
 // name does not match its file produces "Class definition name must match
 // filename", which is a true statement about a file the writer never saw.
 export function declaredObjectName(source) {
-  return /^\s*(?:CLASS|INTERFACE)\s+([a-zA-Z_]\w*)\s+(?:DEFINITION|PUBLIC)/im.exec(source)?.[1]?.toUpperCase();
+  return /^[ \t]*(?:CLASS|INTERFACE)\s+([a-zA-Z_]\w*)\s+(?:DEFINITION|PUBLIC)/im.exec(source)?.[1]?.toUpperCase();
 }

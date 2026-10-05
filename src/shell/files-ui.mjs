@@ -57,10 +57,19 @@ export function render() {
   // A name is being typed. Rewriting the strip now would take the input away
   // mid-word - and the strip is rendered on every change to the file set,
   // which includes the ones the editor makes while somebody is still typing.
-  if (naming) return;
-
+  // So the input stays, and the tabs are rebuilt around it: a strip left as
+  // it was kept the tab of a file closed meanwhile (whose click and ✕ then
+  // did nothing), lit the wrong tab, and showed the previous sample's names
+  // until the name was given. Removing the input's siblings leaves it - and
+  // its focus and half a word - where it is.
   const files = getFiles();
   const open = currentFile();
+  const input = naming ? strip.querySelector("input.file-new") : null;
+  if (input) {
+    for (const c of [...strip.children]) if (c !== input) c.remove();
+    input.before(...files.map((file, index) => fileTab(file, index, open)));
+    return;
+  }
 
   strip.hidden = false;
   /* The role comes with the first tab: a tablist with nothing in it is a role

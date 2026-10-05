@@ -11,6 +11,12 @@ export function setUpExtra() {
   document.addEventListener("click", (e) => {
     if (extra.open && !extra.contains(e.target)) extra.open = false;
   });
+  // A click into the app frame is no click in this document - the menu stayed
+  // open over the app. The window losing the focus to a frame of its own is
+  // what such a click looks like from here.
+  addEventListener("blur", () => {
+    if (extra.open && document.activeElement?.tagName === "IFRAME") extra.open = false;
+  });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && extra.open) {
       extra.open = false;

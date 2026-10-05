@@ -4,12 +4,13 @@ name: check
 # The Pages deployment refuses to publish anything this workflow has not seen
 # green, so this is the gate, not a formality.
 #
-# IN THREE SHARDS. Measured on one runner: the build is two minutes with its
+# IN FOUR SHARDS. Measured on one runner: the build is two minutes with its
 # caches warm and the browser tests are seventeen - a hundred-odd specs, each
 # of which boots a whole ABAP runtime in a real browser, on four cores. Three
-# runners each take a third of the specs (Playwright's --shard, which splits
-# the list and needs no coordination), so the wall clock is the build plus a
-# third of the tests, at the price of two more builds that are all cache hits.
+# runners each take a third of the Chromium specs (Playwright's --shard, which
+# splits the list and needs no coordination) and a fourth runs the WebKit
+# project alone, so the wall clock is the build plus a third of the tests, at
+# the price of three more builds that are all cache hits.
 
 on:
   push:
@@ -40,18 +41,25 @@ jobs:
     env:
       # The WebKit project of playwright.config.js: boot, embed and shell on
       # Safari's engine, the browser the two costliest incidents here were
-      # specific to. Opt-in, so a desk's `npm test` stays Chromium-only.
-      PW_WEBKIT: "1"
+      # specific to. Opt-in, so a desk's `npm test` stays Chromium-only - and
+      # here only on the shard that runs it.
+      PW_WEBKIT: ${{ matrix.shard == 'webkit' && '1' || '' }}
     strategy:
       # Every shard reports, so one red shard does not hide what the other two
       # found.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+      # WebKit is a shard of its own. Run as a fourth third of one combined
+      # list, Playwright split it by test COUNT: 53 near-free file checks
+      # (bfcache.spec.js) filled the first shard and every WebKit boot landed
+      # in the last, which set the wall clock at about 1.4x the mean. On its
+      # own, the three Chromium shards are even and skip installing WebKit's
+      # system libraries - the apt step that has hung for half an hour.
+        shard: ["1", "2", "3", webkit]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/build
-      - run: npm test -- --shard=${{ matrix.shard }}/3
+      - run: npm test -- ${{ matrix.shard == 'webkit' && '--project=webkit' || format('--project=chromium --shard={0}/3', matrix.shard) }}
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()

@@ -30,23 +30,29 @@
 //                          line, because the `v =` column is aligned across a
 //                          block and a line spliced into it would leave the
 //                          others pointing at nothing.
+//   a leaf control         its own lines, when they are the whole of it: a
+//   taken out              `tag( )` with its attributes directly behind it,
+//                          each opening its own line (leafRemoval( ) below).
 //   anything else          nothing: this returns undefined and the caller
-//                          writes the chain again, which is what an added or
-//                          deleted control has always done.
+//                          writes the chain again, which is what an added
+//                          control has always done.
 //
 // The claim that makes it safe is narrow and checked before a single character
 // moves: the edited tree and the chain's tree are the same tree - same
 // elements, same order, every one of them paired with the original it came
-// from - and each control carries exactly the attributes it carried, as a
-// bijection onto them. Under that, the ABAP around the edit still builds
-// exactly what it built, so leaving it alone is not an optimisation, it is the
-// correct rewrite.
+// from, bar at most one leaf per control taken out - and each control carries
+// exactly the attributes it carried, as a bijection onto them. Under that, the
+// ABAP around the edit still builds exactly what it built, so leaving it alone
+// is not an optimisation, it is the correct rewrite. And it is checked again
+// after: the patched source is read back and has to build the tree that was
+// asked for, or the edit goes to the writer instead.
 //
 // One thing it deliberately does not do: attributes reordered in the XML are
-// left in the order the chain has them. Order is not a property of the view
-// worth a diff across a control's whole block.
+// left in the order the chain has them (view-edit.mjs sorts them back into it,
+// new ones last). Order is not a property of the view worth a diff across a
+// control's whole block.
 import { STEP, attributeLines } from "./chain-write.mjs";
-import { commentIn } from "./chain-read.mjs";
+import { commentIn, qnameOf, readViewChain } from "./chain-read.mjs";
 
 /**
  * `source` with `built` written back over the chain it came from, or
@@ -59,8 +65,25 @@ import { commentIn } from "./chain-read.mjs";
 export function patchChain(source, built, node) {
   const edits = [];
   if (!collect(built, node, source, edits)) return undefined;
-  return applyEdits(source, edits);
+  const patched = applyEdits(source, edits);
+  if (!patched) return undefined;
+  // And the claim checked on what came out rather than trusted: the patched
+  // source, read back, has to build exactly the tree that was asked for -
+  // every control, every attribute in its order, every value's ABAP. Ranges
+  // cut out of a chain somebody else wrote are where a wrong assumption would
+  // show, and one that shows here costs the full rewrite instead of a broken
+  // view.
+  const again = readViewChain(patched.source);
+  if (!again.ok || treeOf(again.root.children[0]) !== treeOf(built)) return undefined;
+  return patched;
 }
+
+// A tree as the ABAP that builds it, for the comparison above. Runs of
+// whitespace count as one: a wrapped value is the same value however its
+// continuation lines are indented.
+const treeOf = (node) =>
+  `${qnameOf(node)}(${node.attrs.map((a) => `${a.name}|${a.key}|${String(a.raw).replace(/\s+/g, " ")}`).join(",")})` +
+  `[${node.children.map(treeOf).join(";")}]`;
 
 // One element against the original it came from. Returns false the moment the
 // two are not the same element, which is what confines this to the case it can
@@ -85,11 +108,70 @@ function collect(built, node, source, edits) {
     edits.push(block);
   }
 
-  if (built.children.length !== node.children.length) return false;
+  // One control taken out is still an edit in place when it is a leaf whose
+  // lines can go on their own (see leafRemoval( ) below); any other change in
+  // the number of children is a change of shape, and the writer's.
+  let kept = node.children;
+  if (built.children.length === node.children.length - 1) {
+    const gone = node.children.findIndex((child, i) => built.children[i]?.from !== child);
+    const removal = leafRemoval(node.children[gone], source);
+    if (!removal) return false;
+    edits.push(removal);
+    kept = node.children.filter((_, i) => i !== gone);
+  }
+  if (built.children.length !== kept.length) return false;
   for (let i = 0; i < built.children.length; i++) {
-    if (!collect(built.children[i], node.children[i], source, edits)) return false;
+    if (!collect(built.children[i], kept[i], source, edits)) return false;
   }
   return true;
+}
+
+// The edit that takes one control out of the chain, or undefined when it is
+// not one this can cut out exactly. Only a leaf added with `tag( )` whose
+// attributes follow it directly, in the same statement, each opening its own
+// line: then its lines are the whole of it. Taking them out changes nothing
+// else the chain builds - `tag( )` leaves the cursor on the parent, and every
+// `a( )` that landed on this leaf is among those lines - so the rest of the
+// method, comments and the split shape included, stays what it was. It used
+// to be the full rewrite, which a comment anywhere in the chain refuses.
+function leafRemoval(leaf, source) {
+  if (!leaf || leaf.call !== "tag" || leaf.children.length > 0) return undefined;
+  if (!leaf.span || leaf.span.start === undefined) return undefined;
+  let previous = leaf.span;
+  for (const attr of leaf.attrs) {
+    if (!attr.span || attr.span.start !== previous.end) return undefined;
+    previous = attr.span;
+  }
+  // The `)` that closes the leaf's last call - the character the next
+  // segment's line opens with, or the one in front of the statement's full
+  // stop.
+  const last = previous.end;
+  const column = columnOf(source, leaf.span.start);
+  if (column === undefined) return undefined;
+  const start = leaf.span.start - column;
+
+  if (columnOf(source, last) !== undefined) {
+    // Whole lines: from the leaf's own line to the end of the line its last
+    // value ends on. What follows - a blank, a comment, the next segment -
+    // belongs to what comes next and stays. A blank line on each side would
+    // then stand together, which the house layout never has, so one goes.
+    let end = source.indexOf("\n", beforeTrailingSpace(source, last)) + 1;
+    const lineBefore = source.slice(source.lastIndexOf("\n", start - 2) + 1, start);
+    const nextBreak = source.indexOf("\n", end);
+    const lineAfter = nextBreak === -1 ? "x" : source.slice(end, nextBreak + 1);
+    if (start > 0 && lineBefore.trim() === "" && lineAfter.trim() === "") end = nextBreak + 1;
+    if (commentIn(source, start, end)) return undefined;
+    return { start, end, text: "" };
+  }
+  // The leaf ends the statement: from the end of what stands before it to
+  // the end of its last value, so the ` ).` that closes the statement closes
+  // whatever comes before it now. Not over a comment - on the line before
+  // either, where the ` ).` would land inside it.
+  if (!source.slice(last + 1).trimStart().startsWith(".")) return undefined;
+  const from = beforeTrailingSpace(source, leaf.span.start);
+  const to = beforeTrailingSpace(source, last);
+  if (commentIn(source, source.lastIndexOf("\n", from - 1) + 1, to)) return undefined;
+  return { start: from, end: to, text: "" };
 }
 
 // Whether this control carries exactly the attributes it carried - a bijection
@@ -148,7 +230,21 @@ function replacingBlock(built, node, source) {
   // Lines joined with the file's own ending - a CRLF file got LF lines in the
   // middle of it.
   const eol = source.includes("\r\n") ? "\r\n" : "\n";
-  const lines = attributeLines(built, column);
+  // Every attribute nobody edited keeps the text it has, from its `v =` to
+  // the end of its value - only the padding in front of that is written
+  // again, because the `v =` column moves with the longest name in the block.
+  // Generated instead, a wrapped value came back re-anchored: the
+  // continuation lines lined up under `val =` moved to one level in, a diff
+  // over lines nobody touched, and taking an added attribute out again did
+  // not give back the file that was there.
+  const verbatim = (attr) => {
+    if (!untouched(attr, node)) return undefined;
+    const { nameEnd, keyAt, valueEnd } = attr.from;
+    // A `v =` on the line under its name keeps that line break and its indent.
+    const gap = nameEnd === undefined ? "" : source.slice(nameEnd, keyAt);
+    return (gap.includes("\n") ? gap : "") + source.slice(keyAt, valueEnd);
+  };
+  const lines = attributeLines(built, column, verbatim);
   // Nothing left to write: the block's own line goes as well, or the closing
   // parenthesis would be left standing in column zero. A chain that opens the
   // file has no such line to take, and is left to the writer.
@@ -161,13 +257,28 @@ function replacingBlock(built, node, source) {
   return { start: first - column, end, text: lines.join(eol) };
 }
 
+// Whether an attribute is the one the chain has, unedited: same ABAP, same
+// key, and a range in the source to copy it from.
+function untouched(attr, node) {
+  const from = attr.from;
+  if (!from || !node.attrs.includes(from)) return false;
+  if (from.keyAt === undefined || from.valueEnd === undefined) return false;
+  return attr.raw === from.raw && attr.key === from.key && attr.boolean === from.boolean;
+}
+
 // A control that had none and has some now: the block opens directly behind
 // the control's own arguments, one level in - in front of whatever whitespace
 // stood between them and the parenthesis that closes the call, so that
 // parenthesis stays on the line it was on.
+//
+// "One level in" from the column the call stands in - or, for a control that
+// is the first call of its statement (`page->tag( \`Text\` ).`, the split
+// shape's every subtree), from the column the statement does: there is no
+// `)` opening that call's line to measure from, and declining it sent an
+// added attribute to the full rewrite and collapsed the method's shape.
 function openingBlock(built, node, source) {
-  if (!node.span || node.span.start === undefined) return undefined;
-  const column = columnOf(source, node.span.start);
+  if (!node.span) return undefined;
+  const column = node.span.start !== undefined ? columnOf(source, node.span.start) : statementColumn(source, node.span.head);
   if (column === undefined) return undefined;
   const lines = attributeLines(built, column + STEP);
   if (lines.length === 0) return undefined;
@@ -192,6 +303,16 @@ function columnOf(source, at) {
   const lineStart = source.lastIndexOf("\n", at - 1) + 1;
   if (source.slice(lineStart, at).trim() !== "") return undefined;
   return at - lineStart;
+}
+
+// The indent of the line the call at `head` stands on - the statement's own
+// column, for the first call of a statement. Undefined when there is no such
+// position to measure from.
+function statementColumn(source, head) {
+  if (head === undefined) return undefined;
+  const lineStart = source.lastIndexOf("\n", head - 1) + 1;
+  const line = source.slice(lineStart, head);
+  return line.length - line.trimStart().length;
 }
 
 // The edits applied, back to front so that every range still means what it

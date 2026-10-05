@@ -277,3 +277,216 @@ ENDCLASS.`,
   await expect(page.locator("#view-edit")).toBeDisabled();
   await expect(page.locator("#view-edit")).toHaveAttribute("title", /more than a chain/);
 });
+
+// A class of the playground's own around a method body, for the cases below
+// that need a chain shaped a particular way rather than the sample's.
+const viewClass = (body) => `CLASS ${MAIN_CLASS} DEFINITION PUBLIC CREATE PUBLIC.
+  PUBLIC SECTION.
+    INTERFACES z2ui5_if_app.
+  PROTECTED SECTION.
+    DATA client TYPE REF TO z2ui5_if_client.
+ENDCLASS.
+
+CLASS ${MAIN_CLASS} IMPLEMENTATION.
+
+  METHOD z2ui5_if_app~main.
+
+    me->client = client.
+
+${body}
+
+  ENDMETHOD.
+
+ENDCLASS.`;
+
+// Opens the View tab's editor on whatever the main file holds, once the view
+// it builds is on screen and Edit is on.
+async function editMain(page, shown) {
+  // Only when it is not the open tab already: a click on the open tab folds
+  // the panel away (src/shell/insight.mjs), Edit button and all.
+  const tab = page.locator('[data-insight="view"]');
+  if ((await tab.getAttribute("aria-selected")) !== "true") await tab.click();
+  await expect(page.locator(".view-xml")).toContainText(shown, { timeout: 30000 });
+  await expect(page.locator("#view-edit")).toBeEnabled();
+  await page.locator("#view-edit").click();
+  await expect(page.locator("#view-editor")).toBeVisible();
+  return page.locator("#view-editor");
+}
+
+async function saveView(page) {
+  await page.locator("#view-save").click();
+  await expect(page.locator("#view-editor")).toHaveCount(0);
+}
+
+// The split shape at its plainest: a control that is the first call of its
+// own statement, a wrapped value, a root whose `height` was written before its
+// namespaces - and `page->stringify( )`, a chain variable used after the
+// chain, which only the full rewrite cannot keep. None of it is a reason for
+// an attribute edit to touch more than the block it is in.
+const SPLIT = viewClass(`    DATA(view) = z2ui5_cl_ui5_view_builder=>factory(
+        )->ele( n = \`View\` ns = \`mvc\`
+            )->a( n = \`height\`    v = \`100%\`
+            )->a( n = \`xmlns\`     v = \`sap.m\`
+            )->a( n = \`xmlns:mvc\` v = \`sap.ui.core.mvc\` ).
+
+    DATA(page) = view->ele( \`Page\` ).
+
+    page->tag( \`Text\`
+        )->a( n = \`text\`  v = \`Lorem ipsum \` &&
+                              \`dolor sit amet\`
+        )->a( n = \`class\` v = \`sapUiSmallMargin\` ).
+
+    client->view_display( page->stringify( ) ).`);
+
+test("an attribute added where a statement opens, or to a block in front of a wrapped value, moves nothing else", async ({
+  page,
+}) => {
+  await open(page);
+  await setSource(page, SPLIT);
+  const before = await getSource(page);
+
+  // A control written as the first call of its statement has no `)` opening
+  // its line to measure a column from; the block opens one level in from the
+  // statement instead, rather than the whole chain being written again.
+  let area = await editMain(page, "<Page");
+  await area.fill((await area.inputValue()).replace("<Page>", '<Page title="T">'));
+  await saveView(page);
+  expect(await getSource(page)).toBe(
+    before.replace("DATA(page) = view->ele( `Page` ).", "DATA(page) = view->ele( `Page`\n        )->a( n = `title` v = `T` )."),
+  );
+
+  // The root's block, written again with one more attribute: in the order the
+  // chain has them - the parser lists namespace declarations first, and the
+  // block used to follow it - and the new one after them.
+  area = await editMain(page, 'title="T"');
+  await area.fill((await area.inputValue()).replace('height="100%">', 'height="100%" displayBlock="true">'));
+  await saveView(page);
+  expect(await getSource(page)).toContain(
+    "            )->a( n = `height`       v = `100%`\n" +
+      "            )->a( n = `xmlns`        v = `sap.m`\n" +
+      "            )->a( n = `xmlns:mvc`    v = `sap.ui.core.mvc`\n" +
+      "            )->a( n = `displayBlock` v = `true` ).",
+  );
+
+  // And the Text's block, around a value wrapped onto a second line: that
+  // value keeps its own text, continuation line and all, and only the padding
+  // in front of `v =` moves with the longer name.
+  area = await editMain(page, 'displayBlock="true"');
+  await area.fill((await area.inputValue()).replace('class="sapUiSmallMargin"', 'class="sapUiSmallMargin" wrapping="false"'));
+  await saveView(page);
+  const grown = await getSource(page);
+  expect(grown).toContain(
+    "        )->a( n = `text`     v = `Lorem ipsum ` &&\n" +
+      "                              `dolor sit amet`\n" +
+      "        )->a( n = `class`    v = `sapUiSmallMargin`\n" +
+      "        )->a( n = `wrapping` v = `false` ).",
+  );
+
+  // Taking all three out again arrives back at the file that was there.
+  area = await editMain(page, 'wrapping="false"');
+  await area.fill(
+    (await area.inputValue())
+      .replace(' title="T"', "")
+      .replace(' displayBlock="true"', "")
+      .replace(' wrapping="false"', ""),
+  );
+  await saveView(page);
+  expect(await getSource(page)).toBe(before);
+});
+
+test("a control added where the method uses a chain variable afterwards is refused at Save, and says why", async ({
+  page,
+}) => {
+  await open(page);
+  await setSource(page, SPLIT);
+  const before = await getSource(page);
+  // Edit is on - an attribute edit is made in place - but a new control means
+  // the whole chain as one statement, and `page` would then name nothing.
+  const area = await editMain(page, "<Page");
+  await area.fill((await area.inputValue()).replace("<Text ", '<Label text="new"/>\n<Text '));
+  await page.locator("#view-save").click();
+  await expect(page.locator("#view-said")).toContainText("`page` is used after it");
+  expect(await getSource(page)).toBe(before);
+});
+
+test("deleting one of two controls that read the same but raise different events is refused, not guessed", async ({
+  page,
+}) => {
+  await open(page);
+  // Every event shows as `.eB()`, so the two Buttons are the same text on
+  // screen - and the one that goes decides whether FIRST or SECOND survives.
+  await setSource(
+    page,
+    viewClass(`    DATA(view) = z2ui5_cl_ui5_view_builder=>factory(
+        )->ele( n = \`View\` ns = \`mvc\`
+            )->a( n = \`xmlns\`     v = \`sap.m\`
+            )->a( n = \`xmlns:mvc\` v = \`sap.ui.core.mvc\`
+
+            )->ele( \`Page\`
+
+                )->tag( \`Button\`
+                    )->a( n = \`text\`  v = \`Go\`
+                    )->a( n = \`press\` v = client->_event( \`FIRST\` )
+
+                )->tag( \`Button\`
+                    )->a( n = \`text\`  v = \`Go\`
+                    )->a( n = \`press\` v = client->_event( \`SECOND\` ) ).
+
+    client->view_display( view->stringify( ) ).`),
+  );
+  const before = await getSource(page);
+  const area = await editMain(page, "<Button");
+  const lines = (await area.inputValue()).split("\n");
+  lines.splice(
+    lines.findIndex((line) => line.includes("<Button")),
+    1,
+  );
+  await area.fill(lines.join("\n"));
+  await page.locator("#view-save").click();
+  await expect(page.locator("#view-said")).toContainText("cannot be told");
+  await expect(page.locator("#view-said")).toHaveClass(/is-error/);
+  expect(await getSource(page)).toBe(before);
+});
+
+test("a control taken out is taken out where it stands, comments and all", async ({ page }) => {
+  await open(page);
+  // A comment in the chain is what the full rewrite refuses, and most of
+  // abap2UI5/samples has one. A leaf added with `tag( )` is its own lines,
+  // so taking it out is cutting those lines and nothing else.
+  await setSource(
+    page,
+    viewClass(`    DATA(view) = z2ui5_cl_ui5_view_builder=>factory(
+        )->ele( n = \`View\` ns = \`mvc\`
+            )->a( n = \`xmlns\`     v = \`sap.m\`
+            )->a( n = \`xmlns:mvc\` v = \`sap.ui.core.mvc\`
+
+            " the two actions of the page
+            )->ele( \`Page\`
+
+                )->tag( \`Button\`
+                    )->a( n = \`text\`  v = \`Save\`
+                    )->a( n = \`press\` v = client->_event( \`SAVE\` )
+                )->tag( \`Button\`
+                    )->a( n = \`text\`  v = \`Cancel\`
+                    )->a( n = \`press\` v = client->_event( \`CANCEL\` ) ).
+
+    client->view_display( view->stringify( ) ).`),
+  );
+  const before = await getSource(page);
+  const area = await editMain(page, "<Button");
+  await area.fill(
+    (await area.inputValue())
+      .split("\n")
+      .filter((line) => !line.includes('text="Cancel"'))
+      .join("\n"),
+  );
+  await saveView(page);
+  expect(await getSource(page)).toBe(
+    before.replace(
+      "\n                )->tag( `Button`\n" +
+        "                    )->a( n = `text`  v = `Cancel`\n" +
+        "                    )->a( n = `press` v = client->_event( `CANCEL` )",
+      "",
+    ),
+  );
+});

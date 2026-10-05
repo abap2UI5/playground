@@ -163,9 +163,12 @@ const openui5Sample = (entity, id) => {
   return `https://sdk.openui5.org/entity/${entity}/sample/${id}`;
 };
 
+// Cut by code point, not by UTF-16 unit: a cut through an emoji left half a
+// surrogate pair, which the page's UTF-8 wrote out as U+FFFD before the "…".
 const cut = (text, max) => {
   const one = String(text ?? "").replace(/\s+/g, " ").trim();
-  return one.length <= max ? one : `${one.slice(0, max - 1).replace(/[\s,;:.-]+$/, "")}…`;
+  const points = [...one];
+  return points.length <= max ? one : `${points.slice(0, max - 1).join("").replace(/[\s,;:.-]+$/, "")}…`;
 };
 
 /* The stored theme before the first paint - the same two lines as the
@@ -220,6 +223,18 @@ const MENU_SCRIPT = `<script>
         else localStorage.setItem("abap2ui5-playground:theme", next);
       } catch (e) { /* a browser that refuses storage still gets the switch, just not the memory */ }
     });
+    /* Read again when the page comes back from the back/forward cache or
+       another tab flips it - the catalogue's own setUpTheme( ) does the
+       same. */
+    var resync = function () {
+      var stored = null;
+      try { stored = localStorage.getItem("abap2ui5-playground:theme"); } catch (e) { /* blocked storage */ }
+      if (stored === "dark" || stored === "light") document.documentElement.dataset.theme = stored;
+      else delete document.documentElement.dataset.theme;
+      tell();
+    };
+    addEventListener("pageshow", function (e) { if (e.persisted) resync(); });
+    addEventListener("storage", function (e) { if (e.key === "abap2ui5-playground:theme" || e.key === null) resync(); });
   })();
 </script>`;
 
