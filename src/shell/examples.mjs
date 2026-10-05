@@ -285,6 +285,7 @@ function saveRow() {
   button.textContent = "Save what is open";
   const said = document.createElement("span");
   said.className = "config-said";
+  said.setAttribute("role", "status");
   const save = () => {
     const problem = draftNameProblem(input.value);
     if (problem) {

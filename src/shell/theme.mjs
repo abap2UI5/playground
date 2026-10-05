@@ -88,9 +88,12 @@ function apply() {
   if (!switchButton) return;
   const dark = isDark();
   switchButton.setAttribute("aria-checked", String(dark));
-  const label = dark ? "Switch to light theme" : "Switch to dark theme";
-  switchButton.setAttribute("aria-label", label);
-  switchButton.title = label;
+  // A switch is named for what it turns on and says whether it is on; named
+  // for the action ("Switch to light"), a screen reader heard
+  // "Switch to light, on" while the page was dark. The tooltip keeps the
+  // action, for the eye.
+  switchButton.setAttribute("aria-label", "Dark theme");
+  switchButton.title = dark ? "Switch to light theme" : "Switch to dark theme";
 }
 
 // After a click, or after the system changed under a page that follows it -

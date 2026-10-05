@@ -21,6 +21,8 @@ import "monaco-editor/editor/contrib/wordHighlighter/browser/wordHighlighter.js"
 import "monaco-editor/editor/contrib/comment/browser/comment.js";
 import "monaco-editor/editor/contrib/contextmenu/browser/contextmenu.js";
 import "monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching.js";
+// Ctrl+M (Ctrl+Shift+M on a Mac): Tab moves the focus instead of indenting.
+import "monaco-editor/editor/contrib/toggleTabFocusMode/browser/toggleTabFocusMode.js";
 import { applyLinterFixes, fixableAmong, checkFor, ruleUrl } from "./abap2ui5-lint.mjs";
 
 import { uriFor } from "./files.mjs";
@@ -76,7 +78,14 @@ export function createEditor(container, files, options = {}) {
   editorContainer = container;
 
   monaco.editor.defineTheme(THEME_LIGHT, { base: "vs", inherit: true, rules: [], colors: {} });
-  monaco.editor.defineTheme(THEME_DARK, { base: "vs-dark", inherit: true, rules: [], colors: {} });
+  // Comments a shade lighter than vs-dark's #608b4e, which is 4.2:1 on the
+  // editor's background - below the 4.5:1 text needs.
+  monaco.editor.defineTheme(THEME_DARK, {
+    base: "vs-dark",
+    inherit: true,
+    rules: [{ token: "comment", foreground: "6A9955" }],
+    colors: {},
+  });
 
   fileOrder = files.map((f) => f.name);
   for (const file of files) createModel(file);
@@ -106,6 +115,24 @@ export function createEditor(container, files, options = {}) {
   editor.addCommand(monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF, () => {
     editor.getAction("editor.action.formatDocument")?.run();
   });
+  // A way out for the keyboard. Tab indents in a code editor, which is right,
+  // and it left a keyboard reader no way to reach the panel, the splitter or
+  // the running app once the focus was in here - Escape did nothing and the
+  // Ctrl+M toggle was not in the build. Now Escape arms ONE Tab or Shift+Tab
+  // that moves the focus on, and any other key disarms it, so a plain Tab
+  // still indents.
+  const K = monaco.KeyCode;
+  let tabLeaves = false;
+  const leaveOnTab = (on) => {
+    if (tabLeaves === on) return;
+    tabLeaves = on;
+    editor.updateOptions({ tabFocusMode: on });
+  };
+  editor.onKeyDown((e) => {
+    if (e.keyCode === K.Escape) leaveOnTab(true);
+    else if (e.keyCode !== K.Tab && e.keyCode !== K.Shift) leaveOnTab(false);
+  });
+  editor.onDidBlurEditorText(() => leaveOnTab(false));
 
   return editor;
 }
