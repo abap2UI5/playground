@@ -15,8 +15,15 @@
 // describe an app that is gone), and bounded, because an app with a timer
 // can produce one every second for as long as the tab is open.
 const LIMIT = 200;
+// And bounded by size, not only by count: each entry keeps both bodies parsed,
+// and two hundred answers of an app with a 500-row table held 12 MB in
+// 300,000 objects - a 5,000-row one, past 100. Measured in characters of the
+// two bodies as they came over the bridge; the oldest go first, the newest
+// always stays.
+const BUDGET = 8 * 1024 * 1024;
 
 let entries = [];
+let size = 0;
 /* The number a roundtrip is listed under. Its own counter rather than the
    list's length: once the list is full and the oldest entry is dropped for
    each new one, the length stands still, and two rows called #200 are one
@@ -33,6 +40,7 @@ function notify() {
 
 export function clearRoundtrips() {
   entries = [];
+  size = 0;
   seq = 0;
   notify();
 }
@@ -53,8 +61,11 @@ export function recordRoundtrip({ request, response, ms }) {
     response: res ?? response.body,
     ...summarise(req, res, response.status),
   };
+  entry.size = (typeof request === "string" ? request.length : 0)
+    + (typeof response.body === "string" ? response.body.length : 0);
   entries.push(entry);
-  if (entries.length > LIMIT) entries.shift();
+  size += entry.size;
+  while (entries.length > LIMIT || (size > BUDGET && entries.length > 1)) size -= entries.shift().size;
   notify();
   return entry;
 }

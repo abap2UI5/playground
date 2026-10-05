@@ -27,6 +27,7 @@ import {
   setFiles,
   undo,
   whenAnalysed,
+  analysisPending,
 } from "../editor/editor.mjs";
 import { buildRegistry, corpusLanded, declaredObjectName, entryClass, startRegistry } from "../editor/registry.mjs";
 import { loadLinter } from "../editor/abap2ui5-lint.mjs";
@@ -712,7 +713,13 @@ function remember(files) {
   // same debounce), and the analysis is kept under a key made of the models'
   // version ids - so this reads that result back rather than running a second
   // analysis of text that has not changed since the first.
-  updateInsight(refresh());
+  //
+  // Only when nothing newer is on its way: an analysis under way answers
+  // through whenAnalysed( ) in a moment, and drawing the panel now as well
+  // drew it twice (three times with Outline open) per pause in the typing -
+  // the first time with the problems from before the change.
+  const known = refresh();
+  if (!analysisPending()) updateInsight(known);
   // Neither an embedding nor the AI Studio keeps a draft: the one shows what
   // its page asked for, the other starts on the same minimal class every time and
   // must not write over the playground's own work.

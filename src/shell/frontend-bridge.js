@@ -122,4 +122,52 @@
       },
     });
   };
+
+  // A LEAK IN UI5, worked around here until it is fixed there. sap.m.Shell's
+  // init attaches a Theming "applied" listener (a bound function) and its exit
+  // never detaches it - so every Shell a view_display destroys stays in that
+  // listener list, and with it the models propagated to it: the whole data
+  // model of every roundtrip. Every sample puts a Shell at its root, and a
+  // timer app with a 500-row list grew the page by about 80 KB a roundtrip
+  // until the next Run (OpenUI5 1.152, sap/m/Shell.js init/exit).
+  //
+  // The patch keeps the handler Shell.init attaches and detaches it in exit.
+  // It is applied once the app itself has loaded sap/m/Shell - the one-argument
+  // sap.ui.require only probes, it loads nothing, so the frame's requests stay
+  // exactly what the app asks for. Checked every 100 ms for a minute: an app
+  // with no Shell costs a few hundred no-op probes.
+  function patchShellLeak() {
+    var require = window.sap && window.sap.ui && window.sap.ui.require;
+    var Shell = typeof require === "function" ? require("sap/m/Shell") : undefined;
+    var Theming = Shell ? require("sap/ui/core/Theming") : undefined;
+    if (!Shell || !Theming || Shell.prototype.__playgroundDetaches) return Boolean(Shell && Theming);
+    var init = Shell.prototype.init;
+    var exit = Shell.prototype.exit;
+    Shell.prototype.init = function () {
+      var self = this;
+      var attach = Theming.attachApplied;
+      Theming.attachApplied = function (fn) {
+        self.__playgroundThemeApplied = fn;
+        return attach.apply(Theming, arguments);
+      };
+      try {
+        return init ? init.apply(this, arguments) : undefined;
+      } finally {
+        Theming.attachApplied = attach;
+      }
+    };
+    Shell.prototype.exit = function () {
+      if (this.__playgroundThemeApplied) {
+        Theming.detachApplied(this.__playgroundThemeApplied);
+        this.__playgroundThemeApplied = undefined;
+      }
+      return exit ? exit.apply(this, arguments) : undefined;
+    };
+    Shell.prototype.__playgroundDetaches = true;
+    return true;
+  }
+  var shellProbes = 0;
+  var shellTimer = setInterval(function () {
+    if (patchShellLeak() || ++shellProbes > 600) clearInterval(shellTimer);
+  }, 100);
 })();
