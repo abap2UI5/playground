@@ -70,7 +70,7 @@ let el;
  * currentFiles for the export. `onToggle(open)` lets the page bring the
  * left pane forward on a phone.
  */
-export function setUpChat(chatHost, { onToggle } = {}) {
+export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
   host = chatHost;
   el = {
     toggle: document.getElementById("ai"),
@@ -97,10 +97,13 @@ export function setUpChat(chatHost, { onToggle } = {}) {
     stage: document.getElementById("pane-right"),
   };
 
-  el.toggle.addEventListener("click", () => {
+  // The switch is optional: the studio's own page opens it with startOpen and
+  // carries no switch, and no way out to a playground under it.
+  el.toggle?.addEventListener("click", () => {
     setOpen(!open);
     onToggle?.(open);
   });
+  el.exit.hidden = startOpen;
   el.exit.addEventListener("click", () => {
     setOpen(false);
     onToggle?.(false);
@@ -182,7 +185,8 @@ export function setUpChat(chatHost, { onToggle } = {}) {
   });
 
   showWelcome();
-  el.toggle.disabled = false;
+  if (el.toggle) el.toggle.disabled = false;
+  if (startOpen) setOpen(true);
 }
 
 export const chatOpen = () => open;
@@ -214,8 +218,8 @@ function finishRows() {
 
 function setOpen(value) {
   open = value;
-  el.toggle.setAttribute("aria-checked", String(open));
-  el.toggle.title = open ? "Back to the ABAP editor" : "Build an app by describing it - an AI chat";
+  el.toggle?.setAttribute("aria-checked", String(open));
+  if (el.toggle) el.toggle.title = open ? "Back to the ABAP editor" : "Build an app by describing it - an AI chat";
   el.chat.hidden = !open;
   el.bar.hidden = !open;
   document.body.classList.toggle("is-studio", open);
@@ -255,8 +259,13 @@ function setStage(stage, chosen = false) {
 
 // The app's name in the window bar of the stage: the class Run starts.
 function showAppName() {
-  const app = host.files()[0]?.name.replace(/\.clas\.abap$/, "").toUpperCase();
-  if (app) el.url.textContent = `${app} · running in your browser`;
+  const first = host.files()[0];
+  // An empty class is nothing running yet.
+  if (!first || first.source.trim() === "") {
+    el.url.textContent = "your app";
+    return;
+  }
+  el.url.textContent = `${first.name.replace(/\.clas\.abap$/, "").toUpperCase()} · running in your browser`;
 }
 
 // A run that started the app, said in the conversation as a card: it brings

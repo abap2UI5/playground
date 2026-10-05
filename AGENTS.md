@@ -644,11 +644,24 @@ changing anything near it.
 
 ## The AI chat — `src/shell/chat.mjs`, `src/shell/ai-agent.mjs`
 
-**AI** in the toolbar turns the page into the **AI Studio** (`body.is-studio`,
-"AI Studio" at the end of `shell.css`): the site's bar, the toolbar, the ABAP/App
-tabs and the splitter step aside, the studio's own bar (`#studio-bar`: the
-stages, the status line mirrored by `setStatus( )`, browser full screen, the way
-out) runs across the top, the chat down the left, and a stage beside it shows
+**The studio has a page of its own and no door from the playground** while it
+is being built: `ai/index.html`, written by `writeAiPage( )` in
+`tools/build-site.mjs` from the playground's finished `index.html` - the same
+document one directory down, with `<base href="../">` (so the bundle, the
+workers the inline script starts, the app frame and the service worker's scope
+all resolve where the playground's do: one build, two doors), `data-page="ai"`
+on `<html>`, its own title, no canonical link and `noindex`. `main.mjs` reads
+`data-page`: only there is `setUpChat( )` called (with `startOpen`), the editor
+starts on one empty class (`AI_FILE`) without a run - the placeholder says
+where the app will appear and `run( )` takes it away when an app first starts
+- and no draft is restored or stored, so the studio never writes over the
+playground's own work. The model's first `write_file` drops the empty class
+(`writeFile( )` in `ai-agent.mjs`). The studio is the **AI Studio**
+(`body.is-studio`, "AI Studio" at the end of `shell.css`): the site's bar, the
+toolbar, the ABAP/App tabs and the splitter step aside, the studio's own bar
+(`#studio-bar`: the stages, the status line mirrored by `setStatus( )`, browser
+full screen; ✕ exists for a studio opened over the playground and is hidden on
+its own page) runs across the top, the chat down the left, and a stage beside it shows
 what `body[data-stage]` says - `preview` (the app frame, in a window of its
 own), `code` (file strip, editor, panel), `split` (both), or on a phone `chat`,
 where the stages take turns and the chat comes first. **Nothing is moved in

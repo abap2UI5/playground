@@ -83,6 +83,14 @@ const frame = document.getElementById("app");
 const params = new URLSearchParams(window.location.search);
 const embedded = params.get("embed") === "1";
 
+// The AI Studio's page (ai/index.html, written by tools/build-site.mjs from
+// this document): the studio opens on its own, on an empty class, and what is
+// built there is neither restored from nor stored over the playground's own
+// draft. The playground itself has no way into the studio while it is being
+// built - its address is the door.
+const aiPage = document.documentElement.dataset.page === "ai";
+const AI_FILE = "zcl_app.clas.abap";
+
 /* Opened from the sample catalogue - see showSourceLink( ). `back` is that
  * page's own query string, passed through so the reader lands on the search
  * they had narrowed the list to. It is rebuilt through URLSearchParams rather
@@ -125,6 +133,7 @@ let linkFailure;
 // the sample is the fallback. An embedded playground never restores a draft -
 // it shows what the page that embedded it asked for.
 async function startingFiles() {
+  if (aiPage) return { files: [{ name: AI_FILE, source: "" }], from: "an empty class" };
   try {
     const shared = await filesFromLocation(MAIN_FILE);
     if (shared) return { files: checkFileSet(shared), from: "a shared link" };
@@ -278,7 +287,7 @@ async function boot() {
   //
   // Not when embedded (furniture in somebody else's page) and not in an
   // app-only view (a running app, not a place to come back to).
-  if (!embedded && !appOnly) {
+  if (!embedded && !appOnly && !aiPage) {
     const writeHere = () => rememberHere("playground");
     writeHere();
     addEventListener("pagehide", writeHere);
@@ -427,9 +436,9 @@ async function boot() {
   showSourceLink();
 
   // The AI chat (src/shell/chat.mjs, src/shell/ai-agent.mjs): the model works
-  // on the same editor and presses the same Run, through these three. Not in
-  // an embedded playground, whose bar does not carry the switch.
-  if (!embedded) {
+  // on the same editor and presses the same Run, through these. Only on the
+  // studio's own page - the playground carries no way into it.
+  if (aiPage && !embedded) {
     setUpChat(
       {
         files: () => getFiles(),
@@ -440,9 +449,9 @@ async function boot() {
         run: () => runForAgent(),
         show: (name) => openFile(name),
       },
-      // Leaving the studio comes back to the editor - on a phone, the ABAP
-      // tab, whose pane the narrow layout may have hidden meanwhile.
-      { onToggle: (open) => !open && tabs.show("left") },
+      // The studio is the page: it opens at once, and there is no playground
+      // under it to leave to.
+      { startOpen: true },
     );
   }
 
@@ -506,11 +515,21 @@ async function boot() {
     }
   });
 
-  await run();
+  if (aiPage && getFiles().every((f) => f.source.trim() === "")) {
+    // The studio starts on an empty class: nothing to run yet, and the
+    // placeholder says where the app will appear. run( ) takes it away the
+    // first time an app starts.
+    const what = document.querySelector(".app-placeholder-what");
+    if (what) what.textContent = "Your app appears here as soon as Claude has built it.";
+    document.querySelector(".app-placeholder-help")?.setAttribute("hidden", "");
+    setStatus("ready - describe the app you want");
+  } else {
+    await run();
+  }
   // The frame has something to show, so the placeholder that stood over it
   // during the boot goes - for good: a later run replaces the app in place,
   // and a run that fails is said in the status line and the panel.
-  document.getElementById("app-placeholder")?.setAttribute("hidden", "");
+  if (!aiPage) document.getElementById("app-placeholder")?.setAttribute("hidden", "");
   // Said once the playground has something to show, not once it has loaded -
   // an embedding page revealing the frame any earlier would reveal a blank one.
   announceReady();
@@ -672,7 +691,10 @@ function remember(files) {
   // version ids - so this reads that result back rather than running a second
   // analysis of text that has not changed since the first.
   updateInsight(refresh());
-  if (embedded) return;
+  // Neither an embedding nor the AI Studio keeps a draft: the one shows what
+  // its page asked for, the other starts on an empty class every time and
+  // must not write over the playground's own work.
+  if (embedded || aiPage) return;
   // A sample that was picked and read is not a draft, and is forgotten rather
   // than stored - the rule the checker settings already follow. Kept, it pinned
   // the reader to a frozen copy: the sample was improved in a later deploy and
@@ -1104,6 +1126,10 @@ export async function run() {
       frame.addEventListener("load", loaded, { once: true });
       frame.src = src.href;
     });
+    // An app is on screen: whatever placeholder stood over the frame goes -
+    // after boot's first run, or in the AI Studio, after the first app the
+    // model built.
+    document.getElementById("app-placeholder")?.setAttribute("hidden", "");
     if (testsFailed > 0) {
       const total = tests.reduce((n, t) => n + t.methods.length, 0);
       setStatus(`running - ${testsFailed} of ${total} test${total === 1 ? "" : "s"} failed`, true);
