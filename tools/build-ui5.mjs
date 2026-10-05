@@ -89,6 +89,10 @@ function inputHash() {
   // reuse build/ui5dist (build-framework.mjs hashes the same for its bundle).
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
   h.update(JSON.stringify(pkg.devDependencies));
+  // And the lockfile: what is installed is decided there, not by the ranges
+  // above - a lockfile-only update (a transitive package the bundle carries,
+  // @ui5/builder under the CLI) left the stamp current over stale output.
+  h.update(fs.readFileSync(path.join(ROOT, "package-lock.json")));
   h.update(fs.readFileSync(fileURLToPath(import.meta.url)));
   return h.digest("hex");
 }
@@ -271,6 +275,10 @@ const force = process.argv.includes("--force");
 if (!force && fs.existsSync(stampPath) && fs.readFileSync(stampPath, "utf8").trim() === hash && fs.existsSync(UI5_DIST)) {
   log("frontend up to date, reusing build/ui5dist");
 } else {
+  // The stamp goes first, as in build-framework.mjs: a rebuild interrupted
+  // half way left the old stamp beside a half-built ui5dist, and the next
+  // build with the same inputs reused it.
+  fs.rmSync(stampPath, { force: true });
   build();
   trim();
   writeVersionInfo();

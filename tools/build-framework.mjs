@@ -101,6 +101,11 @@ function outputHash() {
   }
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
   h.update(JSON.stringify(pkg.devDependencies));
+  // And the lockfile: what is installed is decided there, not by the ranges
+  // above - a lockfile-only update (temporal-polyfill, base64-js and the other
+  // transitive packages the bundle carries) left the stamp current over
+  // stale output.
+  h.update(fs.readFileSync(path.join(ROOT, "package-lock.json")));
   // The runtime the bundle is built from, and the esbuild plugins that build
   // it. A change to either has to rebuild framework.mjs.
   // And the standard library: the transpile writes open-abap-core's classes

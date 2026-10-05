@@ -30,8 +30,12 @@ permissions:
 # commit. `github.head_ref` is the source branch on a pull request and empty
 # otherwise, so this collapses both to one name and `cancel-in-progress` keeps
 # the newer run.
+#
+# And the repository the branch lives in, in front of it: `head_ref` is only
+# the fork's branch name, so two contributors' `patch-1` PRs shared one group
+# and the newer cancelled the other's shards mid-run.
 concurrency:
-  group: check-${{ github.head_ref || github.ref_name }}
+  group: check-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:

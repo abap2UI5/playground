@@ -34,10 +34,11 @@ on:
     - cron: '0 4 * * *'
   workflow_dispatch:
 
+# Read-only by default. Writing to Pages and minting the OIDC token are the
+# deploy job's alone - the test shards and the build run npm ci, a full build
+# and remotely fetched content, and none of that needs to be able to publish.
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
@@ -73,9 +74,26 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      pages: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/build
+      # The catalogue is fetched afresh by this job, and a fetch that failed
+      # (a timeout on raw.githubusercontent.com, a 5xx) only warns: the build
+      # goes on without that repository, and its few hundred sample pages
+      # would be published as 404s - the shards fetched fine, so the run is
+      # green. Nothing is published then, and the last good site stays up.
+      - name: Refuse to publish a partial catalogue
+        run: |
+          node -e '
+            const a = require("./dist/samples/apps.json");
+            const bad = a.sources.filter((s) => !s.ok);
+            if (bad.length) {
+              console.error("catalogue unavailable for " + bad.map((s) => s.repo).join(", ") + " - not publishing");
+              process.exit(1);
+            }'
 
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
@@ -86,6 +104,9 @@ jobs:
     needs: [test, build]
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

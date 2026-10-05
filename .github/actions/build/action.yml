@@ -54,7 +54,10 @@ runs:
     - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/ms-playwright
-        key: playwright-${{ hashFiles('package-lock.json') }}
+        # And whether WebKit is in it: the first shard to finish saved the
+        # cache, so either the WebKit shard downloaded WebKit on every run or
+        # the Chromium shards restored a hundred megabytes they never use.
+        key: playwright-${{ env.PW_WEBKIT == '1' && 'webkit-' || '' }}${{ hashFiles('package-lock.json') }}
 
     # Only the browser, not --with-deps. The runner image already carries the
     # shared libraries Chromium needs, and the apt-get run that --with-deps adds
