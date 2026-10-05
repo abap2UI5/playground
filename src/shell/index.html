@@ -533,6 +533,23 @@
 
 <main class="panes" id="panes" aria-label="Editor and app">
   <h1 class="visually-hidden">abap2UI5 Playground</h1>
+  <!-- The AI Studio's own bar (src/shell/chat.mjs, "The AI Studio" in
+       shell.css): while the AI switch is on, the page is the studio - the
+       site's bar and the workbench toolbar step aside, and this bar says what
+       the stage beside the chat shows. Hidden everywhere else. -->
+  <header class="studio-bar" id="studio-bar" hidden>
+    <span class="studio-brand"><span class="studio-spark" aria-hidden="true">✦</span><span class="studio-brand-name">abap2UI5</span> <b>AI Studio</b></span>
+    <div class="studio-stages" role="tablist" aria-label="What the stage shows">
+      <button type="button" role="tab" data-stage="chat" class="studio-stage only-narrow" aria-selected="false">Chat</button>
+      <button type="button" role="tab" data-stage="preview" class="studio-stage" aria-selected="false">Preview</button>
+      <button type="button" role="tab" data-stage="code" class="studio-stage" aria-selected="false">Code</button>
+      <button type="button" role="tab" data-stage="split" class="studio-stage only-wide" aria-selected="false">Split</button>
+    </div>
+    <span class="studio-status" id="studio-status" role="status" aria-live="polite"></span>
+    <button type="button" id="studio-fullscreen" class="studio-icon" title="Full screen" aria-label="Full screen">⛶</button>
+    <button type="button" id="studio-exit" class="studio-icon" title="Leave the AI Studio - back to the playground"
+            aria-label="Leave the AI Studio">✕</button>
+  </header>
   <nav class="tabs" role="tablist" aria-label="Panes">
     <button class="tab is-active" data-pane="left" id="tab-left" role="tab" aria-selected="true"
             aria-controls="pane-left">ABAP</button>
@@ -634,6 +651,12 @@
        aria-label="Resize the editor"></div>
 
   <section class="pane pane-right" id="pane-right" role="tabpanel" aria-labelledby="tab-right">
+    <!-- The window chrome the app wears on the AI Studio's stage; nothing
+         outside the studio shows it (shell.css). -->
+    <div class="studio-window" aria-hidden="true">
+      <span class="studio-dots"><i></i><i></i><i></i></span>
+      <span class="studio-url" id="studio-url">your app</span>
+    </div>
     <div class="app-frame">
       <!-- What the right half says while the runtime boots. It used to say
            nothing: for the 3.4 seconds a desk waits and the 14 a throttled

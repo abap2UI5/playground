@@ -427,9 +427,9 @@ async function boot() {
         run: () => runForAgent(),
         show: (name) => openFile(name),
       },
-      // On a phone the chat lives in the left pane, so opening it brings
-      // that pane forward.
-      { onToggle: (open) => open && tabs.show("left") },
+      // Leaving the studio comes back to the editor - on a phone, the ABAP
+      // tab, whose pane the narrow layout may have hidden meanwhile.
+      { onToggle: (open) => !open && tabs.show("left") },
     );
   }
 
