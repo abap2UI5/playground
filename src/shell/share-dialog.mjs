@@ -11,7 +11,7 @@
 // click. Nothing is stored, and the dialog is rebuilt on every open.
 import { abapGitZip, download } from "./export.mjs";
 import { copyToClipboard } from "./share.mjs";
-import { setStatus } from "./ui.mjs";
+import { closeOnBackdrop, setStatus } from "./ui.mjs";
 
 let dialog;
 let body;
@@ -20,9 +20,7 @@ export function setUpShareDialog() {
   dialog = document.getElementById("share-dialog");
   body = document.getElementById("share-body");
   // A click on the backdrop closes it, the way a modal is expected to.
-  dialog.addEventListener("click", (e) => {
-    if (e.target === dialog) dialog.close();
-  });
+  closeOnBackdrop(dialog);
 }
 
 // The embed kit lives beside the playground - see src/embed - so its URL is

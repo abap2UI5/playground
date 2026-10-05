@@ -45,6 +45,7 @@ import { SAMPLES } from "../editor/samples.mjs";
 import { termsOf, matchesTerms } from "./search-terms.mjs";
 import { deleteDraft, draftNameProblem, listDrafts, saveDraft } from "./drafts.mjs";
 import { readStoredJson, writeStoredJson } from "./storage.mjs";
+import { closeOnBackdrop } from "./ui.mjs";
 
 // The boxes, as the dialog's side names them - see index.html: the three
 // repositories (on), "Only what runs here" (off), "OpenUI5 only" (off - it
@@ -358,9 +359,7 @@ export function setUpExamples(handlers) {
 
   search.addEventListener("input", () => render());
   // A click on the backdrop closes it, the way a modal is expected to.
-  dialog.addEventListener("click", (e) => {
-    if (e.target === dialog) dialog.close();
-  });
+  closeOnBackdrop(dialog);
 
   // What was kept from last time, if anything, and every change both
   // re-renders and is kept. A stored value of the wrong type is ignored

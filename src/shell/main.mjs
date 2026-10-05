@@ -58,7 +58,7 @@ import { RUNAWAY, STALLED, startRuntime } from "./runtime-client.mjs";
 import { readStored, readStoredJson, removeStored, writeStored, writeStoredJson } from "./storage.mjs";
 import { isDark, onThemeChange, setUpTheme } from "./theme.mjs";
 import { setUpExtra } from "./extra.mjs";
-import { currentLog, describeError, hideOutput, setStatus, showOutput } from "./ui.mjs";
+import { closeOnBackdrop, currentLog, describeError, hideOutput, setStatus, showOutput } from "./ui.mjs";
 import { warmUpAppFrame } from "./warm-up.mjs";
 
 // Built rather than written as a literal, so it resolves under a GitHub Pages
@@ -601,9 +601,7 @@ function setUpAbout() {
     if (!dialog.open) dialog.showModal();
   });
   // A click on the backdrop closes it, the way a modal is expected to.
-  dialog.addEventListener("click", (e) => {
-    if (e.target === dialog) dialog.close();
-  });
+  closeOnBackdrop(dialog);
 }
 
 const uiTheme = () => (isDark() ? "sap_horizon_dark" : "sap_horizon");
@@ -726,10 +724,18 @@ function remember(files) {
   }
 }
 
+// Which pick in the samples browser is the latest. A catalogue example is
+// fetched, so a slow one picked first could land AFTER a sample picked
+// second - and replace it in the editor and run it, the reader having asked
+// for the other. Each pick takes a number; a fetch that comes back to find a
+// newer one drops what it fetched.
+let latestPick = 0;
+
 // One of the samples the page carries, chosen in the samples browser.
 function loadSample(id, tabs) {
   const sample = sampleById(id);
   if (!sample) return;
+  latestPick++;
   forgetOrigins();
   const keptHow = replaceWith(sample.files);
   // Picking a sample is a request to see it, so it runs without a second click.
@@ -751,6 +757,7 @@ function loadDraft(files, tabs) {
     showOutput("Drafts", String(e.message || e));
     return;
   }
+  latestPick++;
   forgetOrigins();
   const keptHow = replaceWith(checked);
   runWhenFree().then((started) => {
@@ -818,16 +825,19 @@ function sayDraftIsKept(how) {
 // the page reload a link would cost, because the registry this page has
 // already built serves the new files as well as it served the old.
 async function loadLinked(url, tabs) {
+  const pick = ++latestPick;
   try {
     setStatus("fetching the example…");
     const linked = checkFileSet(await fetchLinkedFiles(new URLSearchParams([["src", url]])));
     const alongside = await followNavigation(linked);
+    if (pick !== latestPick) return;
     const keptHow = replaceWith(checkFileSet([...linked, ...alongside]));
     if (await runWhenFree()) {
       tabs.show("right");
       if (keptHow) sayDraftIsKept(keptHow);
     }
   } catch (e) {
+    if (pick !== latestPick) return;
     // The catalogue said the class is there and it was not, or the fetch
     // failed under way. Somebody clicked expecting particular code, so this
     // failure is said out loud - unlike a catalogue that never loaded.

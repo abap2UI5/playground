@@ -72,11 +72,28 @@ export function describeError(e) {
   const stack = typeof e?.stack === "string" ? e.stack : "";
   if (stack === "") return headline;
   // Where the browser did put the message at the top, this would repeat it.
-  return stack.split("\n", 1)[0].includes(message) ? stack : `${headline}\n${stack}`;
+  // Compared on the message's first line: V8's stack starts with the WHOLE
+  // message, so a message of two lines never matched the stack's first line
+  // and was printed twice.
+  return stack.split("\n", 1)[0].includes(message.split("\n", 1)[0]) ? stack : `${headline}\n${stack}`;
 }
 
 export function hideOutput() {
   if (log.title === "" && log.body === "") return;
   log = { title: "", body: "" };
   announce();
+}
+
+// A click on a modal's backdrop closes it, the way a modal is expected to -
+// but only a click that also STARTED there. A click goes to the nearest
+// element both ends share, so a text selection dragged out of a field and let
+// go over the backdrop arrived as a click on the dialog and closed it, taking
+// the selection with it.
+export function closeOnBackdrop(dialog) {
+  let downOnBackdrop = false;
+  dialog.addEventListener("pointerdown", (e) => { downOnBackdrop = e.target === dialog; });
+  dialog.addEventListener("click", (e) => {
+    if (e.target === dialog && downOnBackdrop) dialog.close();
+    downOnBackdrop = false;
+  });
 }
