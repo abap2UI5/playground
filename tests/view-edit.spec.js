@@ -302,7 +302,10 @@ ENDCLASS.`;
 // Opens the View tab's editor on whatever the main file holds, once the view
 // it builds is on screen and Edit is on.
 async function editMain(page, shown) {
-  await page.locator('[data-insight="view"]').click();
+  // Only when it is not the open tab already: a click on the open tab folds
+  // the panel away (src/shell/insight.mjs), Edit button and all.
+  const tab = page.locator('[data-insight="view"]');
+  if ((await tab.getAttribute("aria-selected")) !== "true") await tab.click();
   await expect(page.locator(".view-xml")).toContainText(shown, { timeout: 30000 });
   await expect(page.locator("#view-edit")).toBeEnabled();
   await page.locator("#view-edit").click();
