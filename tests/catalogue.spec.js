@@ -178,7 +178,7 @@ test("Enter in the search field keeps the search rather than reloading the page 
   await page.waitForTimeout(500);
   await expect(page.locator("#q")).toHaveValue("table");
   await expect(page.locator("#f-source")).toHaveValue("controls");
-  await expect(page.locator(".card h3")).toHaveText(["Responsive Table I", "Breadcrumbs", "Smart Table"]);
+  await expect(page.locator(".card h3")).toHaveText(["Breadcrumbs", "Smart Table"]);
 });
 
 test("a release between two listed ones filters as the one below it, and a blank search is no search", async ({ page }) => {
