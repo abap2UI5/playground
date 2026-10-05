@@ -240,6 +240,10 @@ code:
   worker: the HTTP cache the warm-up primes is the only cache that answers
   it. `tests/worker.spec.js` names it as the one request under `app/` a
   second visit's first app still makes, and holds the rest to the worker.
+  It also carries the frame's second wave - the core's and `sap.m`'s texts,
+  the locale data, the version file, the manifest, the full layout preload
+  and its stylesheet, and the four fonts the first app draws in - each a
+  round trip the frame only started once the one before had answered.
 - **The service worker** (`src/shell/sw.js`, `tests/worker.spec.js`). Cache
   first, over an allow list, in a cache named after the build. Its own comment
   is the long form: what it caches (the core assets and the chunks by name,
@@ -274,10 +278,12 @@ code:
   same build id, same cache — so a cache-first copy of `apps.json` was
   yesterday's catalogue for every returning visitor, indefinitely. And the
   install step fetches past the HTTP cache (`cache: "reload"`) only for the
-  entries it can check against the build (`CORE_HASHES`) and the frontend's
-  unhashed component bundle; the hashed chunks and the version-pinned UI5
-  files come out of the HTTP cache, which used to cost a first visit about
-  five megabytes over the wire a second time. The
+  two documents and the frontend's unhashed component bundle and bridge; the
+  entries it can check against the build (`CORE_HASHES`) try the HTTP cache
+  first and go past it only when that copy fails the check, and the hashed
+  chunks and the version-pinned UI5 files come out of the HTTP cache - which
+  used to cost a first visit about five megabytes over the wire a second
+  time. The
   frontend's own `navigator.onLine` check is answered "yes" by
   `frontend-bridge.js` for the same reason: the backend is the page around
   the frame.
@@ -552,21 +558,34 @@ as a whole: **what nobody edited is not rewritten.** A changed value is written
 over exactly itself (`chain-read.mjs` keeps a source range per attribute
 alongside its ABAP); a control whose attribute set changed has its attribute
 block written again in its own column — the block rather than the one line,
-because the `v =` column is aligned across it; anything that changes the shape
-of the view, a control added, removed or renamed, falls back to
-`chain-write.mjs` and the full single-chain rewrite, which is what it always
-did. The patch runs only when the two trees are provably the same tree, node
-for node and attribute for attribute, so leaving the surrounding ABAP alone is
-the correct rewrite rather than a cheaper one. `tests/view-edit.spec.js` holds
-the three cases: one value changed and the file otherwise byte for byte what it
-was, Save with nothing changed changing nothing, and an attribute added and
-taken out again arriving back at the file that was there.
+because the `v =` column is aligned across it — in the chain's own attribute
+order, new ones last, with every untouched value copied verbatim (a wrapped
+`&&` value keeps its continuation lines); a `tag( )` leaf that was taken out
+has its own lines cut; anything else that changes the shape of the view, a
+control added or renamed, falls back to `chain-write.mjs` and the full
+single-chain rewrite, which is what it always did. The patch runs only when the
+two trees are provably the same tree, node for node and attribute for
+attribute (bar one leaf taken out per control), so leaving the surrounding ABAP
+alone is the correct rewrite rather than a cheaper one - and its result is read
+back with `readViewChain` to check it builds the tree asked for, or the writer
+takes over. `tests/view-edit.spec.js` holds the cases: one value changed and
+the file otherwise byte for byte what it was, Save with nothing changed
+changing nothing, an attribute added and taken out again arriving back at the
+file that was there (in the split shape too, with the root's order and a
+wrapped value kept), a leaf removed in place beside a comment, and the two
+refusals below.
 
 What it will not do it says instead of guessing: a view built with a LOOP or an
-IF, a control name held in a variable, two views in one method, a variable used
-after the chain, text between two tags (the builder sets attributes; it has no
-call for a text node), a value with a line break in it. The button is disabled
-with that sentence as its title. While the editor is open the ABAP editor is
+IF, a control name held in a variable, two views in one method, the same
+attribute set twice on one control, text between two tags (the builder sets
+attributes; it has no call for a text node), a value with a line break in it.
+The button is disabled with that sentence as its title. Two more are refused
+at Save, because only the edit decides them: a change that needs the full
+rewrite while a chain variable is used later in the method (the rewrite is one
+statement and declares one variable), and a change that cannot tell which of
+two controls that read the same in the view but carry different ABAP it keeps
+(every event reads `.eB()`, so two "Go" buttons are indistinguishable there),
+and a full rewrite over a chain with comments in it, which it would drop. While the editor is open the ABAP editor is
 read-only (`setEditorReadOnly()`) — the ABAP is derived from the XML for as
 long as it is, and two editable copies of one view would mean deciding which is
 the truth on every keystroke. It also *looks* read-only: the same call puts
@@ -682,8 +701,13 @@ talks to a model or needs a key.
   problems, the tests, the roundtrips and the Log. `describeRun( )` turns that
   into what the model reads. So what the model is told is what the reader
   sees; keep it that way when adding a tool.
-- **The key is the reader's, the request is the browser's.** Stored under
-  `abap2ui5-playground:anthropic-key` through `storage.mjs`, sent by the
+- **The key is the reader's, the request is the browser's.** Held in the
+  page's memory for the visit and **never stored**: the playground runs ABAP
+  from any link in this same origin, and both a view's `core:HTML` in the app
+  frame and a `WRITE '@KERNEL …'` in the runtime worker can read this origin's
+  localStorage - a stored key was one shared link away from somebody else's
+  account. A key an earlier version stored under
+  `abap2ui5-playground:anthropic-key` is removed on load. Sent by the
   Anthropic SDK straight from the page (`dangerouslyAllowBrowser`, which sends
   the `anthropic-dangerous-direct-browser-access` header CORS needs). A key
   that is not tied to a workspace needs `anthropic-workspace-id` on every
@@ -1246,8 +1270,8 @@ a sample without a test is not possible. CI:
 
 | | |
 |---|---|
-| `check.yml` | every non-main branch and pull request: the composite build action (`.github/actions/build`, with caches for `deps/`, `~/.ui5` and the downport), the size budget, `npm test`. The tests run in **three shards** (`npm test -- --shard=n/3`, one runner each): the build is two minutes with its caches warm and the tests seventeen on one runner, so the wall clock is the build plus a third of the tests |
-| `pages.yml` | pushes to `main`: the same three test shards, a fourth runner that builds the artefact beside them, then deploy `dist/` to GitHub Pages once all four are green — a red test never publishes |
+| `check.yml` | every non-main branch and pull request: the composite build action (`.github/actions/build`, with caches for `deps/`, `~/.ui5` and the downport), the size budget, `npm test`. The tests run in **four shards**, one runner each: three thirds of the Chromium project (`--project=chromium --shard=n/3`) and the WebKit project on its own (`--project=webkit`, the only runner that installs WebKit) - split by test count over one combined list, the near-free file checks filled the first shard and every WebKit boot landed in the last. The build is two minutes with its caches warm, so the wall clock is the build plus the slowest shard. In CI, two Playwright workers per runner, traces on a retry only, and the service worker blocked in every spec but `worker.spec.js` (`playwright.config.js`) |
+| `pages.yml` | pushes to `main`: the same four test shards, a fifth runner that builds the artefact beside them, then deploy `dist/` to GitHub Pages once all five are green — a red test never publishes |
 | `upstream.yml` | weekly: build and test against upstream `HEAD` without moving the pins, and open or extend an issue when that fails, so a bump stays a two-line commit |
 
 ## Three traps the browser sets, and what they cost

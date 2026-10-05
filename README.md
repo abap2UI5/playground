@@ -179,9 +179,10 @@ talk; ask for changes until it fits, then
 with abapGit.
 
 - **Your own key, and no server.** The first message asks for an
-  [Anthropic API key](https://console.anthropic.com/settings/keys). It is kept
-  in this browser's local storage and sent to `api.anthropic.com` and nowhere
-  else — there is still nothing behind this page. Usage is billed to that key;
+  [Anthropic API key](https://console.anthropic.com/settings/keys). It is held
+  in the page's memory for the visit, never stored — the playground runs ABAP
+  from any link, and stored it would be readable by that code — and sent to
+  `api.anthropic.com` and nowhere else; there is still nothing behind this page. Usage is billed to that key;
   the chat's header counts the tokens. A key that is not tied to a workspace
   (the API answers *"This API key is not scoped to a workspace"*) also needs
   the workspace ID (`wrkspc_…`, in the Console under Settings → Workspaces),

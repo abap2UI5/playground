@@ -108,7 +108,7 @@ test("an embedded playground follows its reader's system theme, not a choice mad
   expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBeNull();
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
   expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBeNull();
-  await expect(page.locator("#app")).toHaveAttribute("src", /sap-ui-theme=sap_horizon(&|$)/);
+  await expect(page.locator("#app")).toHaveAttribute("data-src", /sap-ui-theme=sap_horizon(&|$)/);
 });
 
 test("a playground that is not embedded stays silent", async ({ page }) => {

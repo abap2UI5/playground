@@ -296,6 +296,8 @@ test("the abap2UI5 lint config decides which UI5 release the view is held to", a
 });
 
 test("a changed checker setting is still there after a reload", async ({ page }) => {
+  // Several playground boots in one test: three times the time budget.
+  test.slow();
   await open(page);
 
   // The UI5 floor, because it is the one somebody has a real reason to move:

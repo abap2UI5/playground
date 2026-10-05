@@ -17,7 +17,11 @@ const appStart = (app = APP) =>
   JSON.stringify({ value: { S_FRONT: { SEARCH: `?app_start=${app}` } } });
 
 async function boot(page) {
-  await page.goto("/");
+  // A blank page on the site's origin, not the playground: goto("/") booted a
+  // whole playground in the background - two workers, the corpus parse, a
+  // first run - for a test that only imports the framework module.
+  await page.route("**/__blank.html", (route) => route.fulfill({ contentType: "text/html", body: "<!doctype html><title>blank</title>" }));
+  await page.goto("/__blank.html");
   return page.evaluate(async () => {
     const t0 = performance.now();
     window.pg = await import("./runtime/framework.mjs");

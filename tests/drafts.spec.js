@@ -9,6 +9,8 @@ const OTHER = SAMPLES[1];
 const MARKER = "kept as a named draft";
 
 test("a draft saved under a name comes back another day, and can be deleted", async ({ page }) => {
+  // Several playground boots in one test: three times the time budget.
+  test.slow();
   await open(page);
   await setSource(page, (await getSource(page)).replace(MAIN_MARK, MARKER));
 

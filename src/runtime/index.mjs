@@ -148,6 +148,12 @@ let lastChunks;
 
 export async function defineClasses(chunks) {
   lastChunks = chunks;
+  // Only the chunks of THIS set keep a line table: every class name ever
+  // defined used to keep one for the session, and locate( ) builds its
+  // pattern over all of them on every dump - a catalogue session or an AI
+  // chat inventing names grew both without bound.
+  const names = new Set(chunks.map((c) => (typeof c === "string" ? undefined : c.name)).filter(Boolean));
+  for (const name of [...lineTables.keys()]) if (!names.has(name)) lineTables.delete(name);
   try {
     for (const chunk of chunks) {
       const { js, name, lines } = typeof chunk === "string" ? { js: chunk } : chunk;

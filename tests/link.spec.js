@@ -156,6 +156,8 @@ test("the embedded playground drops the chrome and keeps the code", async ({ pag
 });
 
 test("an embedded playground does not write over the draft of a normal one", async ({ page }) => {
+  // Several playground boots in one test: three times the time budget.
+  test.slow();
   await page.goto("/");
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
   await setSource(

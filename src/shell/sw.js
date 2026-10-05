@@ -124,8 +124,14 @@ async function matchesBuild(rel, response) {
 // is still fresh in the HTTP cache stored the previous build's document under
 // the new build's cache, and an installed playground opened offline paired it
 // with the new bundle - the mix CORE_HASHES exists to prevent.
+//
+// The core assets try the HTTP cache first all the same, because they CAN be
+// checked: the page that registered this worker has just downloaded them, and
+// on all but the first install after a deploy that copy is this build's and
+// passes. Only a copy that fails the check goes to the network again - so the
+// megabyte or so of core bundle is not downloaded twice on every first visit.
 const RELOAD = (rel) =>
-  rel in CORE_HASHES || rel === "app/Component-preload.js" || rel === "app/frontend-bridge.js" || DOCUMENTS.includes(rel);
+  rel === "app/Component-preload.js" || rel === "app/frontend-bridge.js" || DOCUMENTS.includes(rel);
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
@@ -133,9 +139,13 @@ self.addEventListener("install", (event) => {
       await Promise.allSettled(
         [...CORE, ...APP_FIRST_LOAD, ...DOCUMENTS].map(async (rel) => {
           const url = new URL(rel, BASE);
-          const response = await fetch(url, { credentials: "same-origin", cache: RELOAD(rel) ? "reload" : "default" });
+          const get = (mode) => fetch(url, { credentials: "same-origin", cache: mode });
+          let response = await get(RELOAD(rel) ? "reload" : "default");
+          if (response.status === 200 && !(await matchesBuild(rel, response.clone())) && rel in CORE_HASHES) {
+            response = await get("reload");
+            if (response.status === 200 && !(await matchesBuild(rel, response.clone()))) return;
+          }
           if (response.status !== 200) return;
-          if (!(await matchesBuild(rel, response.clone()))) return;
           await cache.put(url, response);
         }),
       );

@@ -21,9 +21,10 @@
  * and one of them is written 772 times by a build script.
  *
  * Nothing is fetched until somebody OPENS the box: the index is 700 kB (180
- * over the wire) and a reader who never searches must not pay for it. Opened,
- * it is fetched at once rather than on the first keystroke, so the first
- * character typed already has something to match against.
+ * over the wire) and a reader who never searches must not pay for it. Opened -
+ * or pointed at, or tabbed to - it is fetched at once rather than on the first
+ * keystroke, so the first character typed already has something to match
+ * against.
  */
 import { search, grouped, highlight, loadIndex, rememberQuery, recallQuery, forgetQuery } from "./search-engine.mjs";
 import { arrivedBy } from "./site-memory.mjs";
@@ -346,6 +347,14 @@ export function mountSearch(host) {
   });
 
   button.addEventListener("click", open);
+  /* A pointer over the button, or the keyboard focus on it, is the moment a
+     reader is about to search - so the fetch starts there, a hundred-odd
+     milliseconds before the click, and the box opens on a loaded index more
+     often than not. Still nothing for the reader who never comes near it.
+     A failure is open( )'s to report; loadIndex forgets it and tries again. */
+  const warm = () => { if (!entries) loadIndex(INDEX_URL).catch(() => {}); };
+  button.addEventListener("pointerenter", warm, { once: true });
+  button.addEventListener("focus", warm, { once: true });
   close.addEventListener("click", hide);
   scrim.addEventListener("click", (e) => { if (e.target === scrim) hide(); });
   input.addEventListener("input", draw);

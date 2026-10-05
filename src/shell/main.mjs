@@ -1168,7 +1168,25 @@ export async function run() {
         reject(new Error("The app frame did not load."));
       }, 30000);
       frame.addEventListener("load", loaded, { once: true });
-      frame.src = src.href;
+      // The address of this run, readable whatever navigated the frame.
+      frame.dataset.src = src.href;
+      // A REPLACE, not a navigation that pushes: setting `src` on an iframe
+      // adds an entry to the TAB's history, so after a few Runs the Back
+      // button stepped through old app frames instead of leaving the page,
+      // and past Chromium's fifty entries the page the reader came from -
+      // the one the bar's step back returns to - fell off the end. The
+      // first load has nothing to replace; it sets `src` as before.
+      const current = frame.contentWindow;
+      let replaced = false;
+      try {
+        if (current && current.location.href !== "about:blank") {
+          current.location.replace(src.href);
+          replaced = true;
+        }
+      } catch {
+        // A frame on another origin (an error page) - set src instead.
+      }
+      if (!replaced) frame.src = src.href;
     });
     if (testsFailed > 0) {
       const total = tests.reduce((n, t) => n + t.methods.length, 0);

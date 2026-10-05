@@ -25,8 +25,9 @@
 // And the chain is only *written* again when it has to be. A value changed or
 // an attribute added is put back as an edit to the ABAP that is there
 // (chain-patch.mjs), so the method keeps the shape somebody wrote it in and
-// the diff is the change. Writing the whole chain is what an added or removed
-// control falls back to.
+// the diff is the change - a leaf control taken out included. Writing the
+// whole chain is what an added control, or a removed one that is more than a
+// leaf's own lines, falls back to.
 import { abapLiteral, unwritable, writeViewChain } from "./chain-write.mjs";
 import { alignWithXml, commentIn, readViewChain } from "./chain-read.mjs";
 import { patchChain } from "./chain-patch.mjs";
@@ -88,9 +89,10 @@ export function sourceWithView(source, xml, edited) {
   const patched = patchChain(source, built.element, chain.root.children[0]);
   if (patched) return patched;
 
-  // A view whose shape changed: a control added, removed or renamed. There is
-  // no edit to make here - the chain is written again, in the house layout,
-  // out of a tree that still carries the ABAP of every value nobody touched.
+  // A view whose shape changed: a control added, renamed, or removed with
+  // more than its own lines. There is no edit to make here - the chain is
+  // written again, in the house layout, out of a tree that still carries the
+  // ABAP of every value nobody touched.
   // Except over a comment: the writer has no idea where one belonged, and
   // dropping somebody's notes is rewriting what they did not edit.
   if (commentIn(source, chain.start, chain.end)) {
@@ -99,7 +101,18 @@ export function sourceWithView(source, xml, edited) {
         "Take the comments out of the chain, or make the change in the ABAP.",
     );
   }
-  const text = writeViewChain({ indent: chain.indent, assignment: chain.assignment, element: built.element });
+  // And not over a variable the method goes on using: the rewrite is one
+  // statement declaring one variable, so a `page` used after the chain would
+  // name something that no longer exists. Only here - an edit in place leaves
+  // every statement standing, so it is no reason to keep Edit off.
+  if (chain.usedAfter.length > 0) {
+    return no(
+      `This change rewrites the whole chain as one statement, and \`${chain.usedAfter[0]}\` is used after it. ` +
+        "Make the change in the ABAP.",
+    );
+  }
+  const eol = source.includes("\r\n") ? "\r\n" : "\n";
+  const text = writeViewChain({ indent: chain.indent, assignment: chain.assignment, element: built.element, eol });
   return { ok: true, source: source.slice(0, chain.start) + text + source.slice(chain.end) };
 }
 
@@ -110,7 +123,12 @@ function parse(text) {
   const doc = new DOMParser().parseFromString(text, "application/xml");
   const error = doc.getElementsByTagName("parsererror")[0];
   if (error) {
-    const said = (error.textContent || "").split("\n").find((line) => line.trim() !== "") ?? "";
+    // Chromium wraps its message in a sentence of its own ("This page
+    // contains the following errors:") and glues it to the first line.
+    const said = (error.querySelector("div")?.textContent ?? error.textContent ?? "")
+      .replace(/^This page contains the following errors:\s*/i, "")
+      .split("\n")
+      .find((line) => line.trim() !== "") ?? "";
     return no(`That is not valid XML yet${said ? ` - ${said.trim()}` : ""}.`);
   }
   if (!doc.documentElement) return no("There is no view here.");
@@ -152,17 +170,35 @@ function merge(wanted, was, node) {
 
   // And the attributes the reconstruction never showed (see alignNode( ) in
   // chain-read.mjs): they are in the chain, they were not on screen, so they
-  // cannot have been edited and they cannot have been deleted either. Written
-  // after the ones that were shown, because there is nowhere better to put
-  // them - the document being merged from has no opinion about where they sat.
+  // cannot have been edited and they cannot have been deleted either.
   for (const attr of node?.attrs ?? []) {
     if (!attr.hidden || built.attrs.some((a) => a.name === attr.name)) continue;
     built.attrs.push({ name: attr.name, raw: attr.raw, boolean: attr.boolean, key: attr.key, literal: attr.literal, from: attr });
   }
 
+  // In the order the chain has them, and what is new after them - not in the
+  // order of the document. The parser lists namespace declarations before
+  // every other attribute whatever order they were written in, so a control's
+  // block written in document order moved `height` below the `xmlns` lines of
+  // a root that had it first (and a hidden attribute, which the document does
+  // not have at all, to the end). Order is not a property of the view; the
+  // chain's is the one somebody chose. A stable sort, so new attributes keep
+  // the order they were typed in.
+  if (node) {
+    const at = (attr) => (attr.from && node.attrs.includes(attr.from) ? node.attrs.indexOf(attr.from) : Infinity);
+    built.attrs.sort((a, b) => at(a) - at(b));
+  }
+
   const wantedKids = [...wanted.children];
   const wasKids = was ? [...was.children] : [];
-  const paired = pairChildren(wantedKids, wasKids);
+  const { paired, ambiguous } = pairChildren(wantedKids, wasKids, node?.children ?? []);
+  if (ambiguous !== undefined) {
+    return no(
+      `\`${wantedKids[ambiguous].tagName}\` appears more than once in \`${wanted.tagName}\` reading the same in the ` +
+        "view but with different ABAP behind it (an event or a binding shows as the same text), so which of them " +
+        "this edit keeps cannot be told. Make this change in the ABAP.",
+    );
+  }
   for (let i = 0; i < wantedKids.length; i++) {
     const at = paired[i];
     const child = merge(wantedKids[i], at === undefined ? undefined : wasKids[at], at === undefined ? undefined : node?.children[at]);
@@ -190,7 +226,17 @@ const splitName = (tagName) => {
 // agreement is a fraction below 1, so it only ever breaks ties between
 // pairings of the same length; two identical `<Column>`s still pair first
 // with first.
-function pairChildren(wanted, was) {
+//
+// Which is a guess whenever the two read the same and are NOT the same ABAP.
+// Every event shows as `.eB()`: delete the first of two `<Button text="Go"
+// press=".eB()"/>`s and nothing on screen says which one went, yet one of them
+// raises FIRST and the other SECOND. So an edited child that some best pairing
+// gives to one original and another, equally good, gives to a different one
+// is reported as `ambiguous` (its index) when the ABAP behind those originals
+// differs - and the edit is refused rather than one of them picked. Identical
+// ABAP is no ambiguity at all: either way the same code comes back.
+// `origins` is the chain nodes behind `was`, index for index.
+function pairChildren(wanted, was, origins = []) {
   const rows = wanted.length;
   const cols = was.length;
   const score = (i, j) => {
@@ -219,5 +265,36 @@ function pairChildren(wanted, was) {
     } else if (table[i + 1][j] >= table[i][j + 1]) i += 1;
     else j += 1;
   }
-  return paired;
+
+  // The same table from the front: `ahead[i][j]` is the best pairing of the
+  // first i edited children with the first j originals. A pair (i, j) is in
+  // SOME best pairing exactly when the best before it, its own score and the
+  // best after it add up to the best there is. The scores are fractions, so
+  // the comparison allows for rounding - two pairings that really differ do so
+  // by far more than that.
+  const ahead = Array.from({ length: rows + 1 }, () => new Array(cols + 1).fill(0));
+  for (let r = 1; r <= rows; r++) {
+    for (let c = 1; c <= cols; c++) {
+      const s = scores[r - 1][c - 1];
+      ahead[r][c] = Math.max(ahead[r - 1][c], ahead[r][c - 1], s >= 0 ? ahead[r - 1][c - 1] + s : -Infinity);
+    }
+  }
+  const best = table[0][0];
+  for (let r = 0; r < rows; r++) {
+    const options = [];
+    for (let c = 0; c < cols; c++) {
+      const s = scores[r][c];
+      if (s >= 0 && Math.abs(ahead[r][c] + s + table[r + 1][c + 1] - best) < 1e-9) options.push(c);
+    }
+    if (new Set(options.map((c) => (origins[c] ? abapOf(origins[c]) : ""))).size > 1) return { paired, ambiguous: r };
+  }
+  return { paired, ambiguous: undefined };
 }
+
+// A chain node and everything under it as the ABAP that builds it - what two
+// originals have to agree on for it not to matter which one an edited child
+// is paired with. Runs of whitespace count as one: a value wrapped onto a
+// second line in one of them is the same code.
+const abapOf = (node) =>
+  `${node.ns}:${node.name}(${node.attrs.map((a) => `${a.name}|${a.key}|${String(a.raw).replace(/\s+/g, " ")}`).join(",")})` +
+  `[${node.children.map(abapOf).join(";")}]`;

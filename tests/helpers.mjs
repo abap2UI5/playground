@@ -39,7 +39,9 @@ export const MAIN_MARK = SAMPLES[0].title;
 // the editor. Everything downstream depends on that, so every test starts here.
 export async function open(page) {
   await page.goto("/");
-  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  // Under the test's own 120s, so a boot that does not finish says so
+  // here rather than as a bare "Test timeout" with no line.
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 90000 });
 }
 
 // UI5 prefixes every control id with the id of the view that holds it

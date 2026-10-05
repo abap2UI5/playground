@@ -50,6 +50,22 @@ export const appFirstLoad = (theme) => [
   // it as the one request under app/ a second visit still makes.
   "app/resources/sap/ui/layout/messagebundle_en.properties",
   "app/resources/sap/ui/unified/library-preload-lazy.js",
+  // The second wave: what the frame asks for only once the core has run and
+  // read its configuration - its texts, the locale data, the version file,
+  // the manifest - and once the app's first view has reached for sap.ui.layout
+  // and its fonts. Each of these was a round trip that began seconds after the
+  // network had gone quiet, one dependency at a time. English and the
+  // manifest's EN for the same reason as the layout texts above.
+  "app/resources/sap/ui/core/messagebundle_en.properties",
+  "app/resources/sap/ui/core/cldr/en.json",
+  "app/resources/sap-ui-version.json",
+  "app/manifest.json?sap-language=EN",
+  "app/resources/sap/m/messagebundle_en.properties",
+  "app/resources/sap/ui/layout/library-preload.js",
+  `app/resources/sap/ui/layout/themes/${theme}/library.css?sap-ui-dist-version=${UI5_VERSION}`,
+  ...["72-Regular", "72-Bold", "72-SemiboldDuplex", "SAP-icons"].map(
+    (font) => `app/resources/sap/ui/core/themes/${theme}/fonts/${font}.woff2`,
+  ),
 ];
 
 export function warmUpAppFrame(theme) {

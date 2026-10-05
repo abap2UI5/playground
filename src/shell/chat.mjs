@@ -13,16 +13,23 @@
 // time somebody sends a message: a reader who never opens the chat downloads
 // none of it. What stays here is the markup's behaviour and the key.
 //
-// The key is the reader's own Anthropic API key. It is kept in this browser's
-// localStorage under KEY_STORAGE (through storage.mjs, which survives a
-// browser that refuses storage) and sent to api.anthropic.com and nowhere
-// else. An embedded playground never shows the chat at all: a demo in
+// The key is the reader's own Anthropic API key. It is held in this page's
+// memory for as long as the page is open, and sent to api.anthropic.com and
+// nowhere else. It is NOT kept in localStorage any more: the playground runs
+// ABAP from any link it is handed, in this same origin - a view's core:HTML
+// in the app frame, a `WRITE '@KERNEL …'` in the runtime worker - and both
+// can read this origin's storage. A key stored there was one shared link
+// away from somebody else's account. A key typed again per visit is the
+// price; one that was stored by an earlier version is removed on load. An embedded playground never shows the chat at all: a demo in
 // somebody's documentation page is not where a reader types a key.
 import { abapGitZip, download } from "./export.mjs";
 import { readStored, removeStored, writeStored } from "./storage.mjs";
 import { setStatus } from "./ui.mjs";
 
 const KEY_STORAGE = "abap2ui5-playground:anthropic-key";
+// The key, for this page's lifetime only (see above).
+let sessionKey = null;
+const storedKey = () => sessionKey;
 // The workspace a key that is not tied to one sends its requests to - the
 // API refuses such a key without the anthropic-workspace-id header. Empty
 // for the ordinary key, which belongs to a workspace already.
@@ -72,6 +79,9 @@ let el;
  */
 export function setUpChat(chatHost, { onToggle } = {}) {
   host = chatHost;
+  // A key an earlier version of this page stored is taken out of storage,
+  // where any code a link runs on this origin could read it (see above).
+  removeStored(KEY_STORAGE);
   el = {
     toggle: document.getElementById("ai"),
     pane: document.getElementById("pane-left"),
@@ -122,8 +132,8 @@ export function setUpChat(chatHost, { onToggle } = {}) {
     e.preventDefault();
     const key = el.keyInput.value.trim();
     // The workspace can be added later on its own, to a key already stored.
-    if (key === "" && readStored(KEY_STORAGE) === null) return;
-    if (key !== "") writeStored(KEY_STORAGE, key);
+    if (key === "" && storedKey() === null) return;
+    if (key !== "") sessionKey = key;
     const workspace = el.workspaceInput.value.trim();
     if (workspace === "") removeStored(WORKSPACE_STORAGE);
     else writeStored(WORKSPACE_STORAGE, workspace);
@@ -135,7 +145,7 @@ export function setUpChat(chatHost, { onToggle } = {}) {
     el.input.focus();
   });
   el.keyRemove.addEventListener("click", () => {
-    removeStored(KEY_STORAGE);
+    sessionKey = null;
     removeStored(WORKSPACE_STORAGE);
     el.workspaceInput.value = "";
     startOver();
@@ -236,7 +246,7 @@ function setOpen(value) {
   // seen yet; a wide screen on the chat beside code and app.
   setStage(narrow() ? "chat" : stored ?? (window.innerWidth >= 1500 ? "split" : "preview"));
   showAppName();
-  showKeyForm(readStored(KEY_STORAGE) === null);
+  showKeyForm(storedKey() === null);
   if (el.keyForm.hidden) el.input.focus();
   else el.keyInput.focus();
 }
@@ -289,7 +299,7 @@ function flashStage() {
 
 function showKeyForm(show) {
   el.keyForm.hidden = !show;
-  el.keyRemove.hidden = readStored(KEY_STORAGE) === null;
+  el.keyRemove.hidden = storedKey() === null;
   if (show) el.workspaceInput.value = readStored(WORKSPACE_STORAGE) ?? "";
 }
 
@@ -348,7 +358,7 @@ function setBusy(value) {
 async function submit() {
   const text = el.input.value.trim();
   if (text === "") return;
-  const key = readStored(KEY_STORAGE);
+  const key = storedKey();
   if (key === null) {
     showKeyForm(true);
     el.keyInput.focus();
