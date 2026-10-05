@@ -1807,7 +1807,6 @@ button.insight-row {
 
 /* The AI chat lives in the AI Studio - see "The AI Studio" at the end of
    this file for the layout it is drawn in. */
-.is-embedded #ai { display: none; }
 
 .chat {
   flex: 1;

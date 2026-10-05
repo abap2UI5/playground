@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
-import { open } from "./helpers.mjs";
 
-// The AI chat (src/shell/chat.mjs, src/shell/ai-agent.mjs). No test talks to
+// The AI Studio (src/shell/chat.mjs, src/shell/ai-agent.mjs), on its own page
+// ai/index.html - the playground carries no way into it. No test talks to
 // a model: api.anthropic.com is answered here, with the server-sent events
 // the Messages API streams, so what is held is the playground's half of the
 // conversation - the key, the tools reaching the real editor and the real
@@ -66,8 +66,14 @@ function sse({ text = "", tools = [], stop, note }) {
   return events.join("");
 }
 
+// The studio's page: it opens on its own, on an empty class, without a run.
+async function openStudio(page) {
+  await page.goto("/ai/");
+  await expect(page.locator("#status")).toHaveText("ready - describe the app you want", { timeout: 120000 });
+  await expect(page.locator("body")).toHaveClass(/is-studio/);
+}
+
 async function saveKey(page) {
-  await page.locator("#ai").click();
   await expect(page.locator("#chat-key")).toBeVisible();
   await page.locator("#chat-key-input").fill(KEY);
   await page.locator("#chat-key button[type=submit]").click();
@@ -93,7 +99,7 @@ test("the chat builds an app in the editor, runs it and tells the model what hap
     await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: answer });
   });
 
-  await open(page);
+  await openStudio(page);
   await saveKey(page);
   // AI turns the page into the studio: the site's bar and the toolbar step
   // aside, the chat beside the app on the stage (Preview at this width).
@@ -141,16 +147,13 @@ test("the chat builds an app in the editor, runs it and tells the model what hap
   expect(results[1].content).toContain("status: running");
   expect(results[1].content).toContain(MARK);
 
-  // Leaving the studio comes back to the playground and its editor: the
-  // model's class is there, and it is the app.
-  await page.locator("#studio-exit").click();
-  await expect(page.locator("body")).not.toHaveClass(/is-studio/);
-  await expect(page.locator("header.bar")).toBeVisible();
-  await expect(page.locator("#editor")).toBeVisible();
+  // The model's class is the app, and the empty class the studio started on
+  // went with its first write.
   const files = await page.evaluate(() =>
     window.monaco.editor.getModels().filter((m) => m.uri.scheme === "file").map((m) => m.uri.path.slice(1)));
-  expect(files).toContain(APP_FILE);
-  await expect(page.locator("#files")).toContainText(APP_FILE);
+  expect(files).toEqual([APP_FILE]);
+  // Nothing the studio built was stored as the playground's draft.
+  expect(await page.evaluate(() => localStorage.getItem("abap2ui5-playground:files"))).toBeNull();
 });
 
 test("a change is run by the page itself, its report rides on the change, and the turn shows what it is doing", async ({ page }) => {
@@ -165,7 +168,7 @@ test("a change is run by the page itself, its report rides on the change, and th
     await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: answer });
   });
 
-  await open(page);
+  await openStudio(page);
   await saveKey(page);
   await page.locator("#chat-input").fill("A page");
   await page.locator("#chat-input").press("Enter");
@@ -202,7 +205,7 @@ test("Fast in the header sends the next message to Sonnet 5.5, and is remembered
     return route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: sse({ text: "Hi." }) });
   });
 
-  await open(page);
+  await openStudio(page);
   await saveKey(page);
   await page.locator("#chat-speed").selectOption("fast");
   await page.locator("#chat-input").fill("hello");
@@ -211,8 +214,7 @@ test("Fast in the header sends the next message to Sonnet 5.5, and is remembered
   expect(models).toEqual(["claude-sonnet-5-5"]);
 
   await page.reload();
-  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
-  await page.locator("#ai").click();
+  await expect(page.locator("#status")).toHaveText("ready - describe the app you want", { timeout: 120000 });
   await expect(page.locator("#chat-speed")).toHaveValue("fast");
 });
 
@@ -226,7 +228,7 @@ test("a key the API refuses brings the key form back and says why", async ({ pag
           body: JSON.stringify({ type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } }),
         }));
 
-  await open(page);
+  await openStudio(page);
   await saveKey(page);
   await page.locator("#chat-input").fill("anything");
   await page.locator("#chat-send").click();
@@ -258,7 +260,7 @@ test("a key without a workspace is told which one to use, and the workspace goes
         });
   });
 
-  await open(page);
+  await openStudio(page);
   await saveKey(page);
   await page.locator("#chat-input").fill("hi");
   await page.locator("#chat-send").click();
@@ -277,10 +279,9 @@ test("a key without a workspace is told which one to use, and the workspace goes
   expect(seen).toEqual([undefined, "wrkspc_test"]);
 });
 
-test("on a phone the studio opens on the chat, the stages take turns, and the way out stays on screen", async ({ page }) => {
+test("on a phone the studio opens on the chat, the stages take turns, and the bar stays on screen", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await open(page);
-  await page.locator("#ai").click();
+  await openStudio(page);
   await expect(page.locator("#chat")).toBeVisible();
   await expect(page.locator("#app")).toBeHidden();
   await expect(page.locator(".studio-stage[aria-selected=true]")).toHaveText("Chat");
@@ -291,19 +292,16 @@ test("on a phone the studio opens on the chat, the stages take turns, and the wa
   // The stage fits the screen, from under the bar to the bottom edge.
   expect(stage.y + stage.height).toBeLessThanOrEqual(844 + 1);
 
-  // Every control of the bar is inside the screen - the way out above all.
-  for (const id of ["#studio-exit", '.studio-stage[data-stage="code"]']) {
+  // Every control of the bar is inside the screen.
+  for (const id of ["#studio-fullscreen", '.studio-stage[data-stage="code"]']) {
     const box = await page.locator(id).boundingBox();
     expect(box.x + box.width, id).toBeLessThanOrEqual(390);
   }
-  await page.locator("#studio-exit").click();
-  await expect(page.locator("#editor")).toBeVisible();
 });
 
 test("on a wide screen the studio opens on Split: chat, code and app side by side", async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
-  await open(page);
-  await page.locator("#ai").click();
+  await openStudio(page);
   await expect(page.locator(".studio-stage[aria-selected=true]")).toHaveText("Split");
   const chat = await page.locator("#chat").boundingBox();
   const editor = await page.locator("#editor").boundingBox();
@@ -314,10 +312,27 @@ test("on a wide screen the studio opens on Split: chat, code and app side by sid
   expect(app.height).toBeGreaterThan(500);
 });
 
-test("the chat is not offered in an embedded playground", async ({ page }) => {
-  await page.goto("/?embed=1");
-  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
-  await expect(page.locator("#ai")).toBeHidden();
+test("the playground carries no way into the studio, embedded or not", async ({ page }) => {
+  for (const url of ["/", "/?embed=1"]) {
+    await page.goto(url);
+    await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+    await expect(page.locator("#ai")).toHaveCount(0);
+    await expect(page.locator("#studio-bar")).toBeHidden();
+    await expect(page.locator("#chat")).toBeHidden();
+  }
+});
+
+test("the studio's page starts on an empty class: no run, no sample, and no way out to a playground under it", async ({ page }) => {
+  await openStudio(page);
+  const files = await page.evaluate(() =>
+    window.monaco.editor.getModels().filter((m) => m.uri.scheme === "file").map((m) => ({ name: m.uri.path.slice(1), source: m.getValue() })));
+  expect(files).toEqual([{ name: "zcl_app.clas.abap", source: "" }]);
+  await expect(page.locator(".app-placeholder-what")).toHaveText("Your app appears here as soon as Claude has built it.");
+  await expect(page.locator("#studio-url")).toHaveText("your app");
+  await expect(page.locator("#studio-exit")).toBeHidden();
+  await expect(page).toHaveTitle("AI Studio · abap2UI5");
+  // Kept out of search engines while it is being built.
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex");
 });
 
 function cors() {
