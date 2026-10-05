@@ -393,6 +393,10 @@ function bind() {
     reflect();
     writeUrl();
     render();
+    /* The button hides itself once nothing is filtered, and a hidden button
+       hands the focus to <body> - a screen reader lost its place on the
+       page. The search field is where a fresh start begins. */
+    el.q.focus();
   });
   /* Back and forward through pasted links, which is the only way the history
    * gets entries here. */
