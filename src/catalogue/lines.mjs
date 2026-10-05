@@ -59,7 +59,13 @@ export function setUpLines() {
          so a link into what was cut has to be answered by saying so rather
          than by silently highlighting nothing. */
       if (first === null) {
-        say("Line " + range.from + " is not on this page — the first " + lines.length + " lines are printed.");
+        /* And Copy link stays away from a range that marks nothing. A class
+           printed whole has no "first N lines": a line past its end is past
+           the end, not cut. */
+        if (copy) copy.hidden = true;
+        say(document.querySelector(".source-note")
+          ? "Line " + range.from + " is not on this page — the first " + lines.length + " lines are printed."
+          : "Line " + range.from + " is past the end — the class has " + lines.length + " lines.");
         return;
       }
       // The range as far as it is printed, not as far as the address claims.
@@ -76,7 +82,9 @@ export function setUpLines() {
       if (e.shiftKey && anchor) hash = "#L" + Math.min(anchor, line) + "-L" + Math.max(anchor, line);
       else anchor = line;
       e.preventDefault();
-      history.replaceState(null, "", hash);
+      /* Safari throws past 100 replaceState calls in 30 seconds; the line is
+         marked all the same, as the catalogue's own writes are guarded. */
+      try { history.replaceState(null, "", hash); } catch (err) { /* rate-limited */ }
       mark(false);
     });
 

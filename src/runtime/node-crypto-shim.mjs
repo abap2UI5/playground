@@ -18,8 +18,17 @@ const unavailable = (name) => () => {
   );
 };
 
+// randomUUID exists only in a secure context (https, or localhost); served
+// over plain http - a phone on the LAN, an http mirror - every roundtrip failed
+// with "randomUUID is not a function". getRandomValues exists everywhere, and a
+// version 4 UUID is sixteen random bytes with two fields set.
 export function randomUUID() {
-  return globalThis.crypto.randomUUID();
+  if (typeof globalThis.crypto.randomUUID === "function") return globalThis.crypto.randomUUID();
+  const b = globalThis.crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
 export function randomBytes(size) {

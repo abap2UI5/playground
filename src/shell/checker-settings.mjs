@@ -24,10 +24,22 @@ import { readStoredJson, removeStored, writeStoredJson } from "./storage.mjs";
 const ABAPLINT_KEY = "abap2ui5-playground:abaplint";
 const LINTER_KEY = "abap2ui5-playground:abap2ui5-lint";
 
-const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+// The same settings, whatever order the keys were typed in: compared as
+// JSON with sorted keys, so the defaults typed in another order are
+// forgotten rather than stored as a frozen copy.
+const sorted = (value) => Array.isArray(value) ? value.map(sorted)
+  : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map((k) => [k, sorted(value[k])]))
+    : value;
+const same = (a, b) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
+
+// An embedded playground restores nothing (main.mjs) - and so keeps nothing
+// either: an Apply in somebody's documentation was written to this origin's
+// storage, and the reader's next visit to the full playground started with it.
+const embedded = new URLSearchParams(globalThis.location?.search ?? "").get("embed") === "1";
 
 // Keeps what was applied, or forgets it when it is the default again.
 function keep(key, settings, defaults) {
+  if (embedded) return;
   if (same(settings, defaults)) removeStored(key);
   else writeStoredJson(key, settings);
 }

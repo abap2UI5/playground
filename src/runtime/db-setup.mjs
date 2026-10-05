@@ -31,13 +31,13 @@ class BrowserSQLiteClient extends SQLiteDatabaseClient {
 }
 
 // The empty database, as bytes. Taken once, right after the transpiled init has
-// created the schema and seeded it (the client row in T000, the TADIR entries
-// the framework's own reflection reads), and every reset after that starts
-// from this image rather than from the DDL.
+// created the schema and seeded it (the client row in T000 - the TADIR rows
+// the transpiler can seed are left out at build time, nothing reads them),
+// and every reset after that starts from this image rather than from the DDL.
 //
 // Rebuilding from the DDL is what a reset used to do, and it is what makes a
-// Run slow where it shows: twenty-seven CREATE TABLEs and seven hundred
-// INSERTs, one prepared statement each, about 85 ms per press of Run on a
+// Run slow where it shows: twenty-seven CREATE TABLEs and (while TADIR was
+// still seeded) seven hundred INSERTs, about 85 ms per press of Run on a
 // desk and several times that on a phone. Opening SQLite on a 140 KB image is
 // a copy of the bytes into its file system - under a millisecond - and the
 // result is byte-for-byte the database the DDL would have produced, because
@@ -79,6 +79,11 @@ export async function resetDatabase() {
   if (image === undefined) {
     throw new Error("resetDatabase called before setup");
   }
+  // WRITE goes to abap.context.console, which nothing reads and nothing ever
+  // emptied: the same app, run again and again, grew it by its output each
+  // time until a WRITE hit the string length limit and dumped - from the
+  // sixth Run on for an app that writes a lot. A Run starts with it empty.
+  globalThis.abap.context.console?.clear?.();
   const previous = globalThis.abap.context.databaseConnections["DEFAULT"];
   await open(image);
   try {

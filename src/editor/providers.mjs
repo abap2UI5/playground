@@ -8,7 +8,7 @@
 // snippet provider needs no registry at all and is taken from the package.
 import * as monaco from "monaco-editor/editor/editor.api.js";
 import { ABAPSnippetProvider } from "@abaplint/monaco/build/abap_snippet_provider.js";
-import { formatFiles, languageServer as askServer, semanticTokensLegend } from "./registry.mjs";
+import { languageServer as askServer, semanticTokensLegend } from "./registry.mjs";
 
 const uriOf = (model) => model.uri.toString();
 const positionOf = (position) => ({ line: position.lineNumber - 1, character: position.column - 1 });
@@ -56,19 +56,21 @@ export function registerProviders(host) {
   // same files behind. They used to differ: the key formatted the open file
   // and dropped the rest, while README, AGENTS.md and the About dialog each
   // described a different one of the two.
+  //
+  // And now it IS the button's format( ), every file written by it and
+  // nothing handed back to Monaco. The current file used to go back as the
+  // edit, which Monaco first passed through its editor worker - stubbed
+  // here, so that call only ended at its one-second timeout - and then
+  // dropped if the cursor had moved meanwhile, while the status line already
+  // said every file was formatted. The other files were written with no
+  // check that they were still as they had been sent.
   monaco.languages.registerDocumentFormattingEditProvider("abap", {
-    async provideDocumentFormattingEdits(model) {
-      const name = model.uri.path.replace(/^\//, "");
-      const result = await formatFiles(host?.files?.() ?? []);
-      for (const file of result.files) {
-        if (file.name !== name) host?.write?.(file.name, file.source);
-      }
+    async provideDocumentFormattingEdits() {
+      const result = host?.format ? await host.format() : { formatted: 0 };
       // The status line is the bar's to write (src/shell/main.mjs listens),
       // and it says the same thing for both ways in.
       document.dispatchEvent(new CustomEvent("abap2ui5-formatted", { detail: { formatted: result.formatted } }));
-      const formatted = result.files.find((f) => f.name === name);
-      if (!formatted) return undefined;
-      return [{ range: model.getFullModelRange(), text: formatted.source }];
+      return [];
     },
   });
 
@@ -96,6 +98,13 @@ export function registerProviders(host) {
   monaco.languages.registerRenameProvider("abap", {
     async provideRenameEdits(model, position, newName) {
       const rename = await languageServer("rename", { ...at(model, position), newName });
+      // A global class or interface renamed is a file renamed as well (the
+      // answer carries rename operations and an XML edit): applied as text
+      // edits only, the file would declare one name under another, and on
+      // the first file Run would break. Refused, rather than half done.
+      if ((rename?.documentChanges ?? []).some((c) => c.kind)) {
+        return { edits: [], rejectReason: "A global class or interface is renamed by renaming its file." };
+      }
       const edits = [];
       for (const change of rename?.documentChanges ?? []) {
         // A TextDocumentEdit carries `edits`; the other kinds (create, rename,
@@ -114,6 +123,13 @@ export function registerProviders(host) {
       return { edits };
     },
     async resolveRenameLocation(model, position) {
+      // Defined in the framework, not in a file of the page: abaplint labels
+      // the definition's edit with the reader's own file, so the rename put a
+      // method name into the wrong file at a line from another one.
+      const def = await languageServer("gotoDefinition", at(model, position));
+      if (def && !monaco.editor.getModel(monaco.Uri.parse(def.uri))) {
+        throw new Error("Defined in abap2UI5, not in these files - it cannot be renamed here");
+      }
       const rename = await languageServer("prepareRename", at(model, position));
       if (rename) return { range: rangeOf(rename.range), text: rename.placeholder };
       throw new Error("Cannot be renamed");

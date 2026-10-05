@@ -96,6 +96,10 @@ function collect(built, node, source, edits) {
     for (const attr of built.attrs) {
       if (attr.raw === attr.from.raw && attr.boolean === attr.from.boolean && attr.key === attr.from.key) continue;
       if (attr.from.keyAt === undefined || attr.from.valueEnd === undefined) return false;
+      // A value wrapped over lines with a comment between them: replaced as a
+      // whole, the comment went with it, silently. Handed on instead, to the
+      // paths that refuse a chain with a comment where they would write.
+      if (commentIn(source, attr.from.keyAt, attr.from.valueEnd)) return false;
       edits.push({
         start: attr.from.keyAt,
         end: attr.from.valueEnd,

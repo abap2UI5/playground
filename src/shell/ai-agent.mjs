@@ -275,6 +275,11 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
 
   async function loop() {
     let jsonRetries = 0;
+    // Answers in a row cut off at max_tokens with a tool call in them. Each
+    // one is a full, billed request, and thinking counts towards the limit:
+    // a long think before a large write could be cut on every attempt, and
+    // the loop asked again without end until Stop was pressed.
+    let cuts = 0;
     while (!stopped) {
       ui.assistantStart();
       const settings = SPEEDS[speed()] ?? SPEEDS[DEFAULT_SPEED];
@@ -403,16 +408,24 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
             };
           }),
         });
+        if (++cuts >= 2) {
+          ui.notice("The answer ran out of room twice in a row - ask for a smaller step, or New chat.");
+          return;
+        }
         ui.notice("The answer ran out of room before a tool call was complete - asking for smaller steps.");
         continue;
       }
+      cuts = 0;
 
       messages.push({ role: "assistant", content: message.content });
       // Whether the reader changed the editor by hand while the model was
       // thinking - something the model has not been told yet, and must still
       // be told on the next message rather than absorbed into what its own
       // tools did.
-      const untold = snapshot() !== seen;
+      // Checked before every tool as well, not just once here: a change by
+      // hand between two tools is as untold as one made before them.
+      let untold = snapshot() !== seen;
+      let expected = snapshot();
       const results = [];
       // The last successful change, and whether a run_app came after it.
       let lastChange;
@@ -423,6 +436,7 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
           results.push({ type: "tool_result", tool_use_id: use.id, is_error: true, content: "Stopped by the user." });
           continue;
         }
+        if (snapshot() !== expected) untold = true;
         if (use.name === "run_app") ui.toolPending({ id: use.id, text: pendingText("run_app", {}) });
         let result;
         try {
@@ -444,7 +458,14 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         } else if (use.name === "run_app") {
           ranSince = true;
         }
+        expected = snapshot();
       }
+      // What the tools left, taken BEFORE the automatic run: the run takes
+      // seconds, and what the reader typed meanwhile was recorded as seen by a
+      // snapshot taken after it - the model was never told, and rewrote the
+      // file from its own copy, the typing with it. Typed during the run, it
+      // now differs from this at the next send( ) and goes with that message.
+      const afterTools = snapshot();
       // The run every change is followed by, done here rather than asked
       // for: a model that has to call run_app after writing spends a whole
       // turn - the request, the thinking, the answer - on pressing a button.
@@ -464,7 +485,7 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
       }
       // Whatever the tools changed, the model has just been told - unless a
       // hand edit came in first, which the next user message has to carry.
-      if (!untold) seen = snapshot();
+      if (!untold) seen = afterTools;
       // All results in one message - split across several, the model learns
       // to stop making parallel calls.
       messages.push({ role: "user", content: results });

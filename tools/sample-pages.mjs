@@ -855,11 +855,12 @@ function samplePage(row, ctx) {
 
   /* What a search result shows: the sample's own sentence, then what it is,
    * because a description that could be any of 770 rows is worth nothing. */
-  const description = cut(
-    `${lede ? `${lede} — ` : ""}the abap2UI5 sample ${row.class.toUpperCase()}`
-    + `${source ? ` from ${source.repo}` : ""}. Read the ABAP or run it in the browser.`,
-    180,
-  );
+  /* The lede is what gets cut, never the tail: cut as one string, a lede of
+   * 120 characters took the class name with it on 175 pages, and three pairs
+   * of pages ended up with the same description. */
+  const tail = `the abap2UI5 sample ${row.class.toUpperCase()}`
+    + `${source ? ` from ${source.repo}` : ""}. Read the ABAP or run it in the browser.`;
+  const description = lede ? `${cut(lede, Math.max(40, 180 - tail.length - 3))} — ${tail}` : tail;
 
   const github = safe(row.github);
   const docs = safe((row.docs || [])[0]);
@@ -1368,7 +1369,11 @@ ${foot(BASE)}
      listed: the class prefixes are the three repositories business and change
      without this file hearing about it. */
   var words = parts.filter(function (w) {
-    if (w === "samples" || w === "playground" || w === "html" || w === "index") return false;
+    /* And the words of an abapGit file name: /z2ui5_cl_x.clas.abap is how a
+       ?src= link names a class, and "abap" began "abap2UI5" in three page
+       titles while "clas" began "Classes". */
+    if (w === "samples" || w === "playground" || w === "html" || w === "index"
+        || w === "clas" || w === "intf" || w === "abap" || w === "xml") return false;
     var seen = 0;
     for (var i = 0; i < rows.length; i++) if (rows[i][0].indexOf(w) >= 0) seen++;
     return seen * 4 < rows.length;
@@ -1396,7 +1401,14 @@ ${foot(BASE)}
 
   var scored = [];
   var byWord = false;
-  if (words.length) {
+  /* A segment that IS a class name is the answer, whatever else the address
+     says - /samples/z2ui5_cl_smp_app_004.clas.abap, or a page asked for with
+     something after it. */
+  var segsAll = here.toLowerCase().split(/[\/.]+/);
+  for (var e = 0; e < rows.length; e++) {
+    if (segsAll.indexOf(rows[e][0]) >= 0) scored.push([1e9, "samples/" + rows[e][0] + "/", rows[e][1], rows[e][0].toUpperCase()]);
+  }
+  if (words.length && !scored.length) {
     for (var k = 0; k < pages.length; k++) {
       var page = pages[k];
       var pageHit = 0;
@@ -1425,8 +1437,10 @@ ${foot(BASE)}
      what is left over in between. The whole segment, not the words above: it
      is the name that is nearly right, and splitting it on its underscores is
      what threw the part that was wrong away. */
+  /* The segment that looks like a class name, not merely the last one:
+     /samples/z2ui5_cl_x_y/foo/ named the class and then something else. */
   var segs = here.split("/").filter(Boolean);
-  var last = (segs.length ? segs[segs.length - 1] : "").toLowerCase().split(".")[0];
+  var last = (segs.filter(function (s) { return s.toLowerCase().indexOf("z2ui5") === 0; }).pop() || "").toLowerCase().split(".")[0];
   if (!scored.length && last.indexOf("z2ui5") === 0) {
     for (var n = 0; n < rows.length; n++) {
       var name = rows[n][0];

@@ -101,6 +101,11 @@ function outputHash() {
   }
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
   h.update(JSON.stringify(pkg.devDependencies));
+  // And the lockfile: what is installed is decided there, not by the ranges
+  // above - a lockfile-only update (temporal-polyfill, base64-js and the other
+  // transitive packages the bundle carries) left the stamp current over
+  // stale output.
+  h.update(fs.readFileSync(path.join(ROOT, "package-lock.json")));
   // The runtime the bundle is built from, and the esbuild plugins that build
   // it. A change to either has to rebuild framework.mjs.
   // And the standard library: the transpile writes open-abap-core's classes
@@ -231,8 +236,11 @@ function transpile() {
       addCommonJS: true,
       unknownTypes: "runtimeError",
       // REPOSRC would carry the ABAP source of every object into the bundle;
-      // nothing in the playground reads it.
-      populateTables: { reposrc: false },
+      // nothing in the playground reads it. Nor TADIR: 760 seed INSERTs, 180 KB
+      // of the bundle and about a quarter of a second of every boot (each one
+      // a statement of its own into sql.js), for a table nothing in the
+      // framework, the samples or the runtime selects from.
+      populateTables: { reposrc: false, tadir: false },
       keywords: ["return", "in", "class", "for", "delete", "var", "with"],
       // Runs before any ABAP does and puts a sql.js database behind the
       // framework's SELECT/INSERT. Path is relative to output_folder.

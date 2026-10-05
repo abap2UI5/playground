@@ -74,6 +74,7 @@ export function sourceWithView(source, xml, edited) {
   const was = parse(xml);
   if (!was.ok) return was;
 
+  rendered = renderedNonLiterals(was.element, chain.root.children[0]);
   const built = merge(wanted.element, was.element, chain.root.children[0]);
   if (!built.ok) return built;
 
@@ -87,7 +88,7 @@ export function sourceWithView(source, xml, edited) {
   // a diff over the whole method - the split shape collapsed into a single
   // chain, every line re-anchored. See chain-patch.mjs.
   const patched = patchChain(source, built.element, chain.root.children[0]);
-  if (patched) return patched;
+  if (patched) return withinLineLimit(source, patched);
 
   // A view whose shape changed: a control added, renamed, or removed with
   // more than its own lines. There is no edit to make here - the chain is
@@ -113,7 +114,25 @@ export function sourceWithView(source, xml, edited) {
   }
   const eol = source.includes("\r\n") ? "\r\n" : "\n";
   const text = writeViewChain({ indent: chain.indent, assignment: chain.assignment, element: built.element, eol });
-  return { ok: true, source: source.slice(0, chain.start) + text + source.slice(chain.end) };
+  return withinLineLimit(source, { ok: true, source: source.slice(0, chain.start) + text + source.slice(chain.end) });
+}
+
+// ABAP stops at 255 characters a line, and a literal at 255 too: a long value
+// changed in the view was written as one literal on one line - the wrapped
+// `…` && `…` pieces of the original collapsed into 400 characters - and the
+// class no longer activated once exported. abaplint only calls that style, so
+// nothing else here notices. A line of that length the edit did not bring is
+// left to its author.
+const LINE_LIMIT = 255;
+function withinLineLimit(before, result) {
+  if (!result?.ok) return result;
+  const had = new Set(before.split(/\r?\n/).filter((line) => line.length > LINE_LIMIT));
+  const long = result.source.split(/\r?\n/).find((line) => line.length > LINE_LIMIT && !had.has(line));
+  if (long === undefined) return result;
+  return no(
+    `This would write a line of ${long.length} characters, and ABAP takes ${LINE_LIMIT} at most. ` +
+      "Make the value shorter, or split it with && in the ABAP.",
+  );
 }
 
 // The edited text as a document, or the parser's complaint in a form somebody
@@ -133,6 +152,30 @@ function parse(text) {
   }
   if (!doc.documentElement) return no("There is no view here.");
   return { ok: true, element: doc.documentElement };
+}
+
+// What an event or a binding of the original view renders as, by attribute
+// name - `press=".eB()"`, `value="{/NAME}"`. A control that is MOVED (or
+// copied) is not paired with its original, which only pairs on one level, so
+// it arrives as a new element written from its text - and its event became
+// the literal `.eB()`, its binding the string `{/NAME}`: a Save that worked
+// and an app whose button raised nothing. A new element carrying one of these
+// renderings is refused rather than frozen into a string.
+let rendered = new Set();
+const renderedKey = (name, value) => `${name}\u0000${value}`;
+function renderedNonLiterals(was, node) {
+  const out = new Set();
+  const walk = (el, n) => {
+    if (!el || !n) return;
+    for (const attr of n.attrs ?? []) {
+      if (attr.literal !== undefined || !el.hasAttribute(attr.name)) continue;
+      out.add(renderedKey(attr.name, el.getAttribute(attr.name)));
+    }
+    const kids = [...el.children];
+    for (let i = 0; i < kids.length; i++) walk(kids[i], n.children?.[i]);
+  };
+  walk(was, node);
+  return out;
 }
 
 // One element of the edited document, against the one it came from and the
@@ -157,6 +200,13 @@ function merge(wanted, was, node) {
   }
 
   for (const attr of wanted.attributes) {
+    if (!node && rendered.has(renderedKey(attr.name, attr.value))) {
+      return no(
+        `\`${wanted.tagName}\` reads like a control that was moved or copied: its \`${attr.name}\` shows what an ` +
+          "event or a binding renders as, and written back from the view it would become a plain string. " +
+          "Move or copy the control in the ABAP.",
+      );
+    }
     const before = node?.attrs.find((a) => a.name === attr.name);
     // Untouched: the value reads exactly as it was shown, so whatever ABAP
     // produced it goes back unchanged - a bind stays a bind.

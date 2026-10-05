@@ -526,7 +526,11 @@ html { scroll-padding-top: 62px; }
 .card h3 a { color: inherit; text-decoration: none; }
 .card h3 a::after { content: ""; position: absolute; inset: 0; border-radius: 8px; }
 .card:hover h3 a { color: var(--accent); }
-.card h3 a:focus-visible::after { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The ring goes on the card, not on the stretched link: `content-visibility:
+   auto` on .card clips its descendants to its padding box, and an outline 2px
+   outside it was never drawn - a keyboard reader saw no ring at all. */
+.card h3 a:focus-visible { outline: none; }
+.card:has(h3 a:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .card .sub { margin: 0; font-size: 13px; color: var(--fg-dim); }
 /* A CLASS NAME IS NOT A WORD, and may be broken when it has to be. The line

@@ -28,7 +28,10 @@ updates:
         update-types: [major]
 
   - package-ecosystem: github-actions
-    directory: /
+    # The composite action too: `directory: /` reads .github/workflows and a
+    # root action.yml only, so the actions pinned in .github/actions/build
+    # (actions/cache is used nowhere else) were never bumped.
+    directories: ["/", "/.github/actions/*"]
     schedule:
       interval: monthly
       time: "06:00"
