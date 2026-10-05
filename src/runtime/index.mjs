@@ -27,6 +27,12 @@ export { resetDatabase };
 // then points at.
 export async function roundtrip(body) {
   lastDump = undefined;
+  // A dialog step starts with the current time in SY, as it does on a system.
+  // The runtime sets sy-datum and sy-uzeit only when it starts and as a side
+  // effect of GET TIME (STAMP) - which the framework calls while saving the
+  // draft at the END of a roundtrip - so an app's main( ) saw the time the
+  // previous roundtrip ended, and a click after UTC midnight got yesterday.
+  globalThis.abap.statements.getTime();
   const res = await globalThis.abap.Classes["ZCL_PG_BRIDGE"].post({ iv_body: body });
   const fields = res.get();
   const status = fields.status_code.get();

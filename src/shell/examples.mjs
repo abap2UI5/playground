@@ -42,7 +42,7 @@
 // what is always here: the samples the page carries and the reader's drafts.
 // No error, no console noise of this module's making.
 import { SAMPLES } from "../editor/samples.mjs";
-import { termsOf, matchesTerms } from "./search-terms.mjs";
+import { foldCase, termsOf, matchesTerms } from "./search-terms.mjs";
 import { deleteDraft, draftNameProblem, listDrafts, saveDraft } from "./drafts.mjs";
 import { readStoredJson, writeStoredJson } from "./storage.mjs";
 import { closeOnBackdrop } from "./ui.mjs";
@@ -115,15 +115,23 @@ function isNarrowed() {
 // a cache hit rather than a failure.
 async function loadIndex() {
   try {
-    const response = await fetch("samples/apps.json");
+    // Bounded: a connection that hung left "looking in the sample
+    // repositories…" on screen for the rest of the visit.
+    const response = await fetch("samples/apps.json", { signal: AbortSignal.timeout(20000) });
     if (!response.ok) return undefined;
     return await response.json();
   } catch {
-    // Offline, refused, or an answer that is not JSON - all the same: no
-    // catalogue today, and no error either. The carried samples are the menu.
+    // Offline, refused, timed out, or an answer that is not JSON - all the
+    // same: no catalogue this time. The carried samples are the menu, the
+    // list says so, and the next open asks again.
     return undefined;
   }
 }
+
+// Whether the last attempt at the index came back empty-handed - said in the
+// list, and the reason the next open tries again rather than keeping the
+// carried samples for the rest of the visit.
+let indexMissing = false;
 
 // The index's flat list of entries, as the groups this dialog draws: the
 // learning path in its own reading order first, then one group per library
@@ -172,9 +180,9 @@ function groupsFrom(data) {
       ].filter(Boolean),
       controlNames: controls,
       libraries,
-      haystack: `${entry.title} ${entry.note} ${entry.summary || ""} ${entry.class} `
+      haystack: foldCase(`${entry.title} ${entry.note} ${entry.summary || ""} ${entry.class} `
         + `${entry.entity || ""} ${entry.sample || ""} ${entry.group || ""} ${entry.runsOn || ""} `
-        + `${(entry.keywords || []).join(" ")} ${libraries.join(" ")} ${controls.join(" ")}`.toLowerCase(),
+        + `${(entry.keywords || []).join(" ")} ${libraries.join(" ")} ${controls.join(" ")}`),
     };
     if (row.url === "") continue;
 
@@ -221,7 +229,7 @@ const builtIn = {
     who: "in the page",
     group: sample.group,
     docs: sample.docs,
-    haystack: `${sample.title} ${sample.note} ${sample.group}`.toLowerCase(),
+    haystack: foldCase(`${sample.title} ${sample.note} ${sample.group}`),
     sampleId: sample.id,
     runs: true,
     // The same file every catalogued row links to, in the same repository:
@@ -250,9 +258,9 @@ function draftsGroup() {
 function buildDraftsGroup() {
   const entries = listDrafts().map((draft) => ({
     title: draft.name,
-    note: `${draft.files.map((f) => f.name).join(", ")} · saved ${new Date(draft.at).toLocaleString()}`,
+    note: `${draft.files.map((f) => f.name).join(", ")} · saved ${new Date(draft.at).toLocaleString("en-US")}`,
     who: "draft",
-    haystack: `${draft.name} ${draft.files.map((f) => f.name).join(" ")}`.toLowerCase(),
+    haystack: foldCase(`${draft.name} ${draft.files.map((f) => f.name).join(" ")}`),
     draft,
     runs: true,
   }));
@@ -414,11 +422,12 @@ export function openExamples() {
   if (!dialog) return;
   // Read afresh on every open: another tab may have saved one meanwhile.
   draftsCache = undefined;
-  if (!started) {
+  if (!started || (indexMissing && !loading)) {
     started = true;
     loading = true;
     loadIndex()
       .then((data) => {
+        indexMissing = data === undefined;
         let facets = false;
         try {
           loadedGroups = data === undefined ? [] : groupsFrom(data);
@@ -507,6 +516,12 @@ function render() {
     const note = document.createElement("p");
     note.className = "insight-empty";
     note.textContent = "Nothing here matches that.";
+    frag.append(note);
+  }
+  if (!loading && indexMissing) {
+    const note = document.createElement("p");
+    note.className = "insight-empty";
+    note.textContent = "The sample repositories could not be reached - showing the samples this page carries. Open this again to retry.";
     frag.append(note);
   }
 

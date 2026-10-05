@@ -14,8 +14,14 @@
 // The bar's search box is a different question ("where is X in this project",
 // ranked, with typo relaxation - src/shell/search-engine.mjs) and stays its own.
 
+/** Lower-cased without changing the length: "İ" (a Turkish keyboard's capital
+ *  I) lower-cases to two code units and "İNPUT" matched nothing at all; the
+ *  dotless "ı" is folded with it, so all four spellings find the same rows.
+ *  Haystacks go through the same function as queries. */
+export const foldCase = (text) => String(text ?? "").replace(/\u0130/g, "I").toLowerCase().replace(/\u0131/g, "i");
+
 /** The words of a query, lower-cased; an empty query is no words at all. */
-export const termsOf = (query) => String(query ?? "").trim().toLowerCase().split(/\s+/).filter(Boolean);
+export const termsOf = (query) => foldCase(String(query ?? "").trim()).split(/\s+/).filter(Boolean);
 
 /** Whether every term is somewhere in the (already lower-cased) haystack. */
 export const matchesTerms = (haystack, terms) => terms.every((t) => haystack.includes(t));
