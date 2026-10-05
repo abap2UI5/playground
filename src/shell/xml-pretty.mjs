@@ -23,6 +23,12 @@ export function prettyXml(xml, indent = "  ") {
       lines.push(`${pad}<!--${node.nodeValue}-->`);
       return;
     }
+    // Kept as written: it went the way of every other non-element node, and
+    // the Roundtrips tab showed a view's CDATA content as nothing at all.
+    if (node.nodeType === Node.CDATA_SECTION_NODE) {
+      lines.push(`${pad}<![CDATA[${node.nodeValue}]]>`);
+      return;
+    }
     if (node.nodeType !== Node.ELEMENT_NODE) return;
     const attributes = [...node.attributes].map((a) => ` ${a.name}="${escapeAttribute(a.value)}"`).join("");
     const name = node.tagName;
@@ -45,13 +51,17 @@ export function prettyXml(xml, indent = "  ") {
   return lines.join("\n");
 }
 
-const escapeText = (text) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;");
+const escapeMarkup = (text) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;");
+// And `>` in text: text holding `]]>` is not well-formed XML unless it is
+// escaped. Not in attribute values, where it is legal and an expression
+// binding (`{= ${a} > 1 }`) reads better without it.
+const escapeText = (text) => escapeMarkup(text).replaceAll(">", "&gt;");
 // A line break or a tab inside a value is written as a character reference,
 // the way the reconstruction writes it: printed raw, the parser's attribute
 // normalisation turns it into a space, and Save with nothing changed replaced
 // the original ABAP of that value with a literal of the spaced-out text.
 const escapeAttribute = (text) =>
-  escapeText(text)
+  escapeMarkup(text)
     .replaceAll('"', "&quot;")
     .replaceAll("\n", "&#xA;")
     .replaceAll("\r", "&#xD;")

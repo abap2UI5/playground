@@ -448,6 +448,13 @@ function apply(cursor, method, args, span) {
     // read as a literal to compare against the view.
     const value = args.v ?? args.b ?? args.t;
     if (value === undefined) return fail("An attribute is set without a value.");
+    // More than one of them (the builder still takes the old `v = `` b = x`):
+    // read as the first, an edit dropped the others or wrote a second value
+    // beside them - ABAP the builder refuses at run time - and the read-back
+    // check, making the same mistake again, let it through. Not guessed at.
+    if ([args.v, args.b, args.t].filter((x) => x !== undefined).length > 1) {
+      return fail(`\`${name}\` is given more than one of v, b and t. Pass exactly one in the ABAP first.`);
+    }
     // The same attribute twice on one control. The view shows one of them, an
     // edit is matched by name, and whichever one the rewrite kept, the other
     // was gone - on Save with nothing changed. Which of the two is meant is
