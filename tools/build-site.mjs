@@ -525,9 +525,9 @@ function writeServiceWorker() {
      go on serving the document it holds for good. app/index.html is in the
      id already, with the rest of app/ outside resources/. */
   const docs = {};
-  for (const rel of ["index.html", "app/index.html"]) {
+  for (const rel of ["index.html", "app/index.html", "ai/index.html"]) {
     const bytes = fs.readFileSync(path.join(DIST, rel));
-    if (rel === "index.html") id.update(bytes);
+    if (rel !== "app/index.html") id.update(bytes);
     docs[rel] = crypto.createHash("sha256").update(bytes).digest("hex");
   }
 

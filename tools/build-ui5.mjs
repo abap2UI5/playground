@@ -74,7 +74,7 @@ const log = (m) => console.log(`build-ui5: ${m}`);
 function inputHash() {
   const h = crypto.createHash("sha256");
   const addTree = (dir) => {
-    for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
       const p = path.join(dir, e.name);
       if (e.isDirectory()) addTree(p);
       // The path relative to the tree, not the base name: a restructure that
@@ -263,6 +263,16 @@ function patchFrontend() {
     throw new Error("build-ui5: the frontend index.html no longer sets frameOptions - check what it does now");
   }
   html = html.replace(FRAME_OPTIONS[0], FRAME_OPTIONS[1]);
+  // The frame speaks the language of what it shows. UI5 took its language from
+  // the browser, and the apps here are English ABAP: an Arabic or Hebrew reader
+  // got the English labels laid out right to left (":your name"), a screen
+  // reader was told they were Arabic, and every non-English reader fetched a
+  // second set of texts and locale data that the warm-up and the service
+  // worker (src/shell/warm-up.mjs, English) never held. English, as the page
+  // around the frame is (<html lang="en">).
+  if (!html.includes("data-sap-ui-language=")) {
+    html = html.replace('data-sap-ui-theme=', 'data-sap-ui-language="en"\n        data-sap-ui-theme=');
+  }
   html = withCheckLocal(html);
   fs.writeFileSync(indexPath, html);
   fs.copyFileSync(path.join(ROOT, "src", "shell", "frontend-bridge.js"), path.join(UI5_DIST, "frontend-bridge.js"));

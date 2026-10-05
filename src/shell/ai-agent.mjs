@@ -328,7 +328,13 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         // A tool input that could not be parsed at all - the one failure that
         // is worth re-asking for. Everything the API itself refused (a key,
         // a rate limit, an overload) goes to the chat as it is.
-        if (err instanceof Anthropic.APIError || err instanceof Anthropic.APIUserAbortError || jsonRetries++ >= 2) {
+        //
+        // Only that: a stream whose connection dropped half way is a plain
+        // AnthropicError as well, and every such drop was sent again twice -
+        // three billed requests, three half answers in the chat, then a bare
+        // "network error". Recognised by the SDK's own message for it.
+        const unparsable = /Unable to parse tool parameter JSON/.test(String(err?.message ?? ""));
+        if (!unparsable || err instanceof Anthropic.APIError || jsonRetries++ >= 2) {
           throw err;
         }
         continue;

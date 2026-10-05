@@ -195,7 +195,10 @@ export async function followNavigation(files) {
         [...wanted].slice(0, MAX_FOLLOWED - found.length).map(async ([name, href]) => {
           try {
             checkAllowed(new URL(href));
-            const response = await fetch(href);
+            // A sibling that does not answer is a sibling that is not there:
+            // optional, and it held the whole boot at "checking the
+            // sources… 100%" for as long as the connection hung.
+            const response = await fetch(href, { signal: AbortSignal.timeout(8000) });
             if (!response.ok) return undefined;
             const source = await response.text();
             // A 404 page served with 200 is a real thing on some hosts, and an
@@ -244,16 +247,27 @@ export async function fetchLinkedFiles(params) {
   // startup path of every documentation link.
   return Promise.all(
     links.map(async ({ name, url }) => {
-      const response = await fetch(url.href).catch(() => {
-        // A cross-origin fetch that the other host does not allow fails without
-        // a status, so this is the only place the reason can be guessed at.
-        throw new Error(`${url.href} could not be fetched. The host has to allow being read from a browser.`);
+      // Bounded, body and all: a link whose host never answered left the boot
+      // on "checking the sources… 100%" with no editor and no error, for good.
+      const signal = AbortSignal.timeout(20000);
+      const failed = (e) => {
+        if (e?.name === "TimeoutError") return new Error(`${url.href} did not answer within 20 seconds.`);
+        // Offline, or a connection that dropped: not the host's CORS setting,
+        // which is the only reason left to guess at when there is no status.
+        if (!navigator.onLine) return new Error(`${url.href} could not be fetched - the browser is offline.`);
+        return new Error(`${url.href} could not be fetched. The host has to allow being read from a browser, or the network is down.`);
+      };
+      const response = await fetch(url.href, { signal }).catch((e) => {
+        throw failed(e);
       });
       if (!response.ok) {
         throw new Error(`${url.href} answered ${response.status}.`);
       }
+      const source = await response.text().catch((e) => {
+        throw failed(e);
+      });
       origins.set(name, url.href);
-      return { name, source: await response.text() };
+      return { name, source };
     }),
   );
 }

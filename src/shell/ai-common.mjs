@@ -22,6 +22,12 @@ export const DEFAULT_SPEED = "balanced";
 // conversation stays where it was.
 export function explainError(err) {
   if (err instanceof Anthropic.APIUserAbortError) return { text: "Stopped.", stopped: true };
+  // A stream that broke off: the SDK says so in a plain AnthropicError (no
+  // status), which fell through to its raw text.
+  if (!(err instanceof Anthropic.APIError) && (err instanceof Anthropic.AnthropicError || err instanceof TypeError)
+      && /network|Failed to fetch|ended without|Unexpected event order|terminated|aborted/i.test(String(err.message))) {
+    return { text: "The connection to api.anthropic.com dropped mid-answer - check the connection and send again." };
+  }
   if (err instanceof Anthropic.AuthenticationError) {
     return { text: "The API key was not accepted. Enter a valid Anthropic API key.", key: true };
   }

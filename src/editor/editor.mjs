@@ -535,6 +535,11 @@ export function refresh() {
   return currentProblems();
 }
 
+// Whether an analysis is under way - after refresh( ), whether its answer is
+// still to come through whenAnalysed( ). analyse( ) sets this before its first
+// await, so it is already true when refresh( ) returns.
+export const analysisPending = () => inFlight !== undefined;
+
 export async function refreshNow() {
   await analyse();
   return currentProblems();

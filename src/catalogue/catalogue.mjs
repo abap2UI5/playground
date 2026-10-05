@@ -23,7 +23,7 @@
 // The round trip is still the point: find it here, read it there, run it, come
 // back and keep looking.
 import { cmpVersion } from "../shell/ui5-libs.mjs";
-import { termsOf, matchesTerms } from "../shell/search-terms.mjs";
+import { foldCase, termsOf, matchesTerms } from "../shell/search-terms.mjs";
 import { rememberHere, keepSiteLinksCurrent } from "../shell/site-memory.mjs";
 
 const $ = (id) => document.getElementById(id);
@@ -167,12 +167,12 @@ function prepare(data) {
        * typing "wizard" finds a port that BUILDS a Wizard as well as the one
        * named after it - which is the whole difference between this and
        * scrolling SAMPLES.md. */
-      haystack: [
+      haystack: foldCase([
         entry.title, entry.note, entry.summary, entry.class, entry.group,
         entry.entity, entry.sample, entry.runsOn,
         (entry.keywords || []).join(" "),
         controls.join(" "),
-      ].filter(Boolean).join(" ").toLowerCase(),
+      ].filter(Boolean).join(" ")),
     };
   });
 }
@@ -447,13 +447,25 @@ async function start() {
   keepSiteLinksCurrent();
 
   let data;
+  /* Which failure it was decides what is said: an HTTP error or an answer
+   * that is not JSON is the deploy's; a fetch that never completed (offline,
+   * a dropped connection) is the network's, and blaming the deploy for it
+   * was the wrong thing to tell a reader on a train. */
+  let broken = false;
   try {
     const response = await fetch("apps.json");
-    if (!response.ok) throw new Error(String(response.status));
-    data = await response.json();
+    if (!response.ok) {
+      broken = true;
+      throw new Error(String(response.status));
+    }
+    const body = await response.text();
+    broken = true;
+    data = JSON.parse(body);
   } catch {
     el.results.replaceChildren(
-      text("p", "empty", "The catalogue could not be loaded. It is written when this site is built, so this is a broken deploy rather than something you did - the three repositories are readable on GitHub in the meantime."),
+      text("p", "empty", broken
+        ? "The catalogue could not be loaded. It is written when this site is built, so this is a broken deploy rather than something you did - the three repositories are readable on GitHub in the meantime."
+        : "The catalogue did not arrive - the network dropped it. Reload the page to try again; the three repositories are readable on GitHub in the meantime."),
     );
     return;
   }
