@@ -581,6 +581,7 @@ function writeIndex() {
   fs.writeFileSync(path.join(DIST, "index.html"), html);
   log(`index.html (${tags.length} chunk${tags.length === 1 ? "" : "s"} preloaded)`);
   writeAiPage(html);
+  writePilotPage(html);
 }
 
 // The AI Studio's page, ai/index.html: the playground's own document, one
@@ -608,14 +609,62 @@ function writeAiPage(html) {
   log("ai/index.html (the AI Studio)");
 }
 
-// The chunk the AI chat loads (src/shell/ai-agent.mjs: the Anthropic SDK and
-// the app-building guide) is left out of the worker's precache. Precached, it
-// would be downloaded by every visitor the worker installs for, and the point
-// of the chunk is that only somebody who opens the chat pays for it; the
-// worker still keeps it once it has been used (`assets/*.mjs` is on its allow
-// list), and the chat needs the network to do anything anyway.
+// The AI Pilot's page, pilot/index.html: the same document again, one
+// directory down, the way ai/index.html is - see writeAiPage( ). main.mjs
+// reads `data-page="pilot"` and src/shell/pilot.mjs turns the page into the
+// Pilot: the app on the stage, Claude operating it from the chat beside it.
+// Not linked and not indexed while it is being built.
+function writePilotPage(html) {
+  const page = html
+    .replace(/<html([^>]*)>/, '<html$1 data-page="pilot">')
+    .replace("<head>", '<head>\n<base href="../">\n<meta name="robots" content="noindex">')
+    .replace(/<title>[^<]*<\/title>/, "<title>AI Pilot · abap2UI5</title>")
+    .replace(/<link rel="canonical"[^>]*>\n?/, "");
+  for (const mark of ['data-page="pilot"', '<base href="../">', "<title>AI Pilot"]) {
+    if (!page.includes(mark)) {
+      console.error(`build-site: ERROR the Pilot page could not be written - ${mark} did not land in src/shell/index.html's copy`);
+      process.exit(1);
+    }
+  }
+  fs.mkdirSync(path.join(DIST, "pilot"), { recursive: true });
+  fs.writeFileSync(path.join(DIST, "pilot", "index.html"), page);
+  log("pilot/index.html (the AI Pilot)");
+}
+
+// The chunks the two AI pages load (src/shell/ai-agent.mjs, the AI Studio's
+// conversation with the app-building guide; src/shell/pilot-agent.mjs, the
+// AI Pilot's with the vendored agent client) are left out of the worker's
+// precache, and so is everything only they reach - the Anthropic SDK, which
+// both import and esbuild therefore splits into a `chunk-<hash>.mjs` of its
+// own, a name that says nothing about who needs it. Precached, they would be
+// downloaded by every visitor the worker installs for, and the point of the
+// chunks is that only somebody on one of those pages pays for them; the
+// worker still keeps them once used (`assets/*.mjs` is on its allow list),
+// and a chat needs the network to do anything anyway. So the precache is
+// what the page bundle reaches WITHOUT crossing into one of those two - read
+// off esbuild's own module graph rather than off the file names.
+// A function rather than a constant: the service worker is written above
+// this line, and a const read there would still be in its temporal dead zone.
+function precachedChunks() {
+  const ON_USE_ENTRIES = /^src\/shell\/(?:ai|pilot)-agent\.mjs$/;
+  const outputs = result.metafile.outputs;
+  const shell = Object.keys(outputs).find((o) => outputs[o].entryPoint === "src/shell/main.mjs");
+  const reached = new Set();
+  const stack = [shell];
+  while (stack.length > 0) {
+    const output = stack.pop();
+    if (reached.has(output)) continue;
+    reached.add(output);
+    for (const { path: to, kind, external } of outputs[output]?.imports ?? []) {
+      if (external || !outputs[to]) continue;
+      if (kind === "dynamic-import" && ON_USE_ENTRIES.test(outputs[to].entryPoint ?? "")) continue;
+      stack.push(to);
+    }
+  }
+  return new Set([...reached].map((o) => path.relative(DIST, path.resolve(ROOT, o)).split(path.sep).join("/")));
+}
 function onUseOnly(chunk) {
-  return /^assets\/ai-agent-[\w-]+\.mjs$/.test(chunk);
+  return !precachedChunks().has(chunk);
 }
 
 // The bundle's chunks, as paths relative to dist/: every module under assets/

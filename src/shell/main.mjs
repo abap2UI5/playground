@@ -41,7 +41,7 @@ import {
   forgetOrigins,
   originOf,
 } from "./deep-link.mjs";
-import { DEFAULT_FILES, isSample, sampleById } from "../editor/samples.mjs";
+import { DEFAULT_FILES, isSample, SAMPLES, sampleById } from "../editor/samples.mjs";
 import { openExamples, setUpExamples } from "./examples.mjs";
 import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
 import { setTestResults, setUpInsight, showInsight, updateInsight } from "./insight.mjs";
@@ -54,6 +54,7 @@ import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mj
 import { openShare, setUpShareDialog } from "./share-dialog.mjs";
 import { clearRoundtrips, recordRoundtrip, roundtripList } from "./roundtrips.mjs";
 import { setUpChat } from "./chat.mjs";
+import { pilotPicked, pilotRan, sawRoundtrip, setUpPilot, takePilotRequest } from "./pilot.mjs";
 import { AI_FILE, AI_STARTER, isUntouchedStarter } from "./ai-starter.mjs";
 import { state } from "./state.mjs";
 import { RUNAWAY, STALLED, startRuntime } from "./runtime-client.mjs";
@@ -91,6 +92,13 @@ const embedded = params.get("embed") === "1";
 // over the playground's own draft. The playground itself has no way into the studio while it is being
 // built - its address is the door.
 const aiPage = document.documentElement.dataset.page === "ai";
+
+// The AI Pilot's page (pilot/index.html, written the same way): a chat in
+// which Claude operates the running app while the reader watches - see
+// src/shell/pilot.mjs. It opens on what a link carries, else on the default
+// sample, and like the studio it neither restores nor stores the
+// playground's draft.
+const pilotPage = document.documentElement.dataset.page === "pilot";
 
 /* Opened from the sample catalogue - see showSourceLink( ). `back` is that
  * page's own query string, passed through so the reader lands on the search
@@ -163,7 +171,7 @@ async function startingFiles() {
       linkFailure = e;
     }
   }
-  if (!embedded) {
+  if (!embedded && !pilotPage) {
     try {
       // A draft that will not parse, or a storage that will not answer, is a
       // draft that is gone - readStoredJson says so with undefined. What is
@@ -288,7 +296,7 @@ async function boot() {
   //
   // Not when embedded (furniture in somebody else's page) and not in an
   // app-only view (a running app, not a place to come back to).
-  if (!embedded && !appOnly && !aiPage) {
+  if (!embedded && !appOnly && !aiPage && !pilotPage) {
     const writeHere = () => rememberHere("playground");
     writeHere();
     addEventListener("pagehide", writeHere);
@@ -301,7 +309,9 @@ async function boot() {
   // Not when embedded - an embedded playground is furniture in somebody
   // else's page, and a dialog that covers it belongs to nobody.
   if (!embedded) setUpSearch();
-  setUpAutorun({ restore: !embedded });
+  // Never on the Pilot's page: a change to the files there is an app opened
+  // beside the others, and a run would restart every one of them.
+  setUpAutorun({ restore: !embedded && !pilotPage });
   setUpSplitter();
   setUpAbout();
   setUpShareDialog();
@@ -356,8 +366,10 @@ async function boot() {
   // link goes through. It is the one way to a sample - there is no sample
   // menu beside it, and the built-ins are its first group.
   setUpExamples({
-    openSample: (id) => loadSample(id, tabs),
-    openLinked: (url) => loadLinked(url, tabs),
+    // On the Pilot's page a pick goes to the Pilot, which opens it in place
+    // of the app on screen or beside it (src/shell/pilot.mjs).
+    openSample: (id) => (pilotPage ? pilotPicked(sampleById(id)?.files) : loadSample(id, tabs)),
+    openLinked: (url) => (pilotPage ? pilotPicked(carriedFiles(url) ?? linkedFiles(url)) : loadLinked(url, tabs)),
     // The reader's own drafts (src/shell/drafts.mjs): what is open, to save,
     // and a saved one to open - which runs, the way a sample does.
     currentFiles: () => getFiles(),
@@ -388,16 +400,25 @@ async function boot() {
         // that says nothing (an older bridge script) is served as before.
         const run = from ? new URL(from, document.baseURI).searchParams.get("run") : null;
         if (run !== null && run !== String(state.runCounter)) throw new Error("this app was replaced by a newer Run");
+        // The AI Pilot's act (src/shell/pilot.mjs): the frame was made to send
+        // a roundtrip so that it renders the answer, and what goes to the
+        // framework is the Pilot's request in place of the frame's. Every
+        // answer, the reader's clicks included, is shown to the Pilot after.
+        const pilot = takePilotRequest(from);
+        if (pilot) body = pilot.body;
         const started = performance.now();
         try {
           const response = await state.runtime.roundtrip(body);
           recordRoundtrip({ request: body, response, ms: performance.now() - started });
+          sawRoundtrip(body, response, from);
+          pilot?.resolve(response);
           if (response.location) pointAtDump(response.location, firstLine(response.body));
           return response;
         } catch (e) {
           // A JavaScript error out of the transpiled code, rather than an
           // ABAP exception the framework turned into a dump: the frame's
           // fetch rejects, and the line is still worth pointing at.
+          pilot?.reject(e);
           if (e?.location) pointAtDump(e.location, String(e.message ?? e));
           // ABAP that did not finish, stopped by the runtime's watchdog: the
           // frame only sees a failed request, so the page says what happened.
@@ -476,6 +497,40 @@ async function boot() {
       // under it to leave to.
       { startOpen: true },
     );
+  }
+
+  // The AI Pilot (src/shell/pilot.mjs): the model operates the app in the
+  // frame. It opens the samples the way the samples browser does and
+  // restarts the app the way Run does - these, and nothing else.
+  if (pilotPage && !embedded) {
+    setUpPilot({
+      files: () => getFiles(),
+      run: () => runForAgent(),
+      // A catalogued class by its raw URL, and the classes it needs beside it -
+      // the ?src= path, as loadLinked( ) takes it.
+      fetchLinked: (url) => linkedFiles(url),
+      // Further apps, beside the one Run starts: their files go into the
+      // editor beside the others and everything is compiled and defined
+      // again - WITHOUT a fresh database and without counting a Run, so the
+      // apps already open keep their state and their frames stay current.
+      addFiles: (files, options) => addAppFiles(files, options),
+      // The address a Pilot frame loads an app from - Run's own, plus the
+      // frame's name, which tells the bridge whose roundtrip it is.
+      frameSrc: (cls, params = {}) => {
+        const src = new URL("app/index.html", document.baseURI);
+        src.searchParams.set("app_start", cls);
+        src.searchParams.set("run", String(state.runCounter));
+        for (const [key, value] of Object.entries(params)) src.searchParams.set(key, value);
+        src.searchParams.set("sap-ui-theme", uiTheme());
+        return src.href;
+      },
+      mainFrame: frame,
+      // One of the samples the page carries, by its class - no network.
+      carried: (cls) => carriedClass(cls),
+      openSamples: () => openExamples(),
+      frame: () => frame.contentWindow?.__z2ui5PlaygroundPilot,
+      appClass: () => entryClass(getFiles()),
+    });
   }
 
   // A click on Run is a request to see the app, so on a narrow screen it brings
@@ -725,8 +780,9 @@ function remember(files) {
   if (!analysisPending()) updateInsight(known);
   // Neither an embedding nor the AI Studio keeps a draft: the one shows what
   // its page asked for, the other starts on the same minimal class every time and
-  // must not write over the playground's own work.
-  if (embedded || aiPage) return;
+  // must not write over the playground's own work. The AI Pilot neither: it
+  // operates an app rather than editing one.
+  if (embedded || aiPage || pilotPage) return;
   // A sample that was picked and read is not a draft, and is forgotten rather
   // than stored - the rule the checker settings already follow. Kept, it pinned
   // the reader to a frozen copy: the sample was improved in a later deploy and
@@ -882,6 +938,60 @@ async function loadLinked(url, tabs) {
     // failure is said out loud - unlike a catalogue that never loaded.
     setStatus("the example could not be opened", true);
     showOutput("Samples", String(e.message || e));
+  }
+}
+
+// One of the samples the page carries, by its class - no network.
+const carriedClass = (cls) => SAMPLES.find((s) => s.files[0].name === `${cls.toLowerCase()}.clas.abap`)?.files;
+// ...and by the raw URL the samples browser hands over for its catalogue row:
+// the AI Pilot opens the copy the page carries rather than fetching it.
+const carriedFiles = (url) => carriedClass(String(url).split("/").pop().replace(/\.clas\.abap$/, ""));
+
+// A catalogued class by its raw URL and the classes it needs beside it, as
+// files - the ?src= path without the run.
+async function linkedFiles(url) {
+  const linked = checkFileSet(await fetchLinkedFiles(new URLSearchParams([["src", url]])));
+  return checkFileSet([...linked, ...(await followNavigation(linked))]);
+}
+
+// The AI Pilot's further apps (src/shell/pilot.mjs): `files` go into the
+// editor beside what is there (a file of the same name is replaced), `first`
+// names the file Run is to start from now on, and the whole set is checked,
+// compiled and defined - the same steps as run( ) up to the classes, and not
+// one step further: no fresh database, no Run counted, no frame reloaded. The
+// runtime defines a set of classes as a whole (defineClasses( ) puts back what
+// the last set shadowed), which is why the apps already open are compiled
+// again with the new one rather than the new one alone.
+async function addAppFiles(files, { first } = {}) {
+  while (running) await new Promise((resolve) => setTimeout(resolve, 100));
+  running = true;
+  reflectRunButton();
+  try {
+    let next = getFiles().map((f) => ({ ...f }));
+    for (const file of files) {
+      const at = next.findIndex((f) => f.name === file.name);
+      if (at === -1) next.push({ ...file });
+      else next[at] = { ...file };
+    }
+    if (first) {
+      const lead = next.find((f) => f.name === first);
+      if (lead) next = [lead, ...next.filter((f) => f !== lead)];
+    }
+    replaceWith(checkFileSet(next), { asOpened: false });
+    const problems = await refreshNow();
+    updateInsight(problems);
+    const errors = problems.filter((i) => i.severity === 1 && i.source === "abaplint");
+    if (errors.length > 0) {
+      return { started: false, status: `${errors.length} error${errors.length > 1 ? "s" : ""} in the ABAP`, problems };
+    }
+    const { chunks } = await compile(getFiles());
+    await state.runtime.defineClasses(chunks.map(({ name, js, lines }) => ({ name, js, lines })));
+    return { started: true, status: "running", problems };
+  } catch (e) {
+    return { started: false, status: String(e?.message ?? e), problems: [] };
+  } finally {
+    running = false;
+    reflectRunButton();
   }
 }
 
@@ -1295,6 +1405,9 @@ export async function run() {
     }
     // After the load event, so the app has rendered and has a height to report.
     if (appOnly) announceAppHeight(frame);
+    // The AI Pilot's further apps start again with this Run - same fresh
+    // database, new Run number (src/shell/pilot.mjs).
+    if (pilotPage) pilotRan();
     // Answered rather than returned blank, because on a narrow screen the
     // caller brings the app forward - and every path out of here above this
     // line is one where there is no app to bring: nothing compiled, or the

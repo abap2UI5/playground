@@ -2468,3 +2468,545 @@ body.is-studio.is-ai-working #chat-send { background: var(--st-surface-strong); 
 }
 .studio-status.error { color: var(--danger); }
 body.is-studio .chat-key button.primary { border: 0; background: var(--st-grad); color: #fff; border-radius: 999px; }
+
+
+/* -------------------------------------------------------------- AI Pilot */
+
+/* The AI Pilot's page (src/shell/pilot.mjs): Claude operates the app, the
+   reader steers from the chat. A room of its own again, and deliberately not
+   the studio's: the studio is a workshop where something is being MADE, so
+   it glows; the Pilot is an instrument panel where something is being
+   FLOWN - a warm, quiet console with one signal colour (amber: the Pilot is
+   acting) and one status colour (green: the app is live). The app has the
+   stage, the co-pilot's chat stands to its right, and "What Claude sees"
+   opens between the two. Built, like the studio, from the same elements:
+   the app frame is never moved (a moved iframe reloads), the editor is
+   hidden rather than removed, and body[data-view] decides on a phone which
+   of app and chat is on screen. */
+body.is-pilot {
+  --pl-ink: #17202e;
+  --pl-dim: #5d6677;
+  --pl-bg: #f3efe6;
+  --pl-panel: #fffdf8;
+  --pl-panel-2: #f8f4ea;
+  --pl-line: rgba(23, 32, 46, .12);
+  --pl-signal: #f59e0b;
+  --pl-signal-2: #ea580c;
+  --pl-signal-ink: #1c1206;
+  --pl-signal-soft: rgba(245, 158, 11, .16);
+  --pl-live: #10b981;
+  --pl-sees-bg: #121823;
+  --pl-sees-ink: #d9e1ee;
+  --pl-grad: linear-gradient(120deg, #f59e0b 0%, #ea580c 100%);
+  --pl-shadow: 0 1px 0 rgba(255, 255, 255, .7) inset, 0 8px 30px rgba(40, 28, 8, .08);
+  background:
+    linear-gradient(rgba(23, 32, 46, .035) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(90deg, rgba(23, 32, 46, .035) 1px, transparent 1px) 0 0 / 28px 28px,
+    var(--pl-bg);
+  color: var(--pl-ink);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) body.is-pilot {
+    --pl-ink: #e8edf5;
+    --pl-dim: #8b96a8;
+    --pl-bg: #0c1016;
+    --pl-panel: #141a23;
+    --pl-panel-2: #10151d;
+    --pl-line: rgba(255, 255, 255, .09);
+    --pl-signal-soft: rgba(245, 158, 11, .14);
+    --pl-sees-bg: #0a0e14;
+    --pl-shadow: 0 1px 0 rgba(255, 255, 255, .04) inset, 0 10px 34px rgba(0, 0, 0, .35);
+    background:
+      radial-gradient(900px 500px at 100% 0%, rgba(245, 158, 11, .08), transparent 60%),
+      linear-gradient(rgba(255, 255, 255, .025) 1px, transparent 1px) 0 0 / 28px 28px,
+      linear-gradient(90deg, rgba(255, 255, 255, .025) 1px, transparent 1px) 0 0 / 28px 28px,
+      var(--pl-bg);
+  }
+}
+:root[data-theme="dark"] body.is-pilot {
+  --pl-ink: #e8edf5;
+  --pl-dim: #8b96a8;
+  --pl-bg: #0c1016;
+  --pl-panel: #141a23;
+  --pl-panel-2: #10151d;
+  --pl-line: rgba(255, 255, 255, .09);
+  --pl-signal-soft: rgba(245, 158, 11, .14);
+  --pl-sees-bg: #0a0e14;
+  --pl-shadow: 0 1px 0 rgba(255, 255, 255, .04) inset, 0 10px 34px rgba(0, 0, 0, .35);
+  background:
+    radial-gradient(900px 500px at 100% 0%, rgba(245, 158, 11, .08), transparent 60%),
+    linear-gradient(rgba(255, 255, 255, .025) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(90deg, rgba(255, 255, 255, .025) 1px, transparent 1px) 0 0 / 28px 28px,
+    var(--pl-bg);
+}
+
+/* What steps aside: the site's bar, the workbench, the editor and its panel. */
+body.is-pilot > header.bar,
+body.is-pilot > .toolbar,
+body.is-pilot .tabs,
+body.is-pilot .splitter,
+body.is-pilot .pane-left,
+body.is-pilot .studio-window { display: none; }
+.pilot-bar[hidden],
+.pilot[hidden],
+.pilot-sees[hidden],
+.pilot-hud[hidden],
+.pilot-key[hidden] { display: none; }
+
+/* The grid: the bar across the top; the app, what Claude sees (when open)
+   and the chat beside each other below it. */
+body.is-pilot .panes {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(21rem, 27rem);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 0 14px 14px;
+}
+body.is-pilot.is-pilot-sees .panes {
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 24rem) minmax(21rem, 27rem);
+}
+body.is-pilot .panes > h1 { position: absolute; }
+body.is-pilot .pilot-bar { grid-column: 1 / -1; grid-row: 1; }
+body.is-pilot .pane-right { grid-column: 1; grid-row: 2; }
+body.is-pilot .pilot-sees { grid-column: 2; grid-row: 2; }
+body.is-pilot .pilot { grid-column: -2; grid-row: 2; }
+
+@media (max-width: 820px) {
+  body.is-pilot .panes,
+  body.is-pilot.is-pilot-sees .panes { grid-template-columns: minmax(0, 1fr); padding: 0 8px 8px; gap: 8px; }
+  body.is-pilot .pane-right,
+  body.is-pilot .pilot { grid-column: 1; }
+  body.is-pilot .pilot-sees,
+  body.is-pilot #pilot-sees { display: none; }
+  body.is-pilot[data-view="app"] .pilot { display: none; }
+  body.is-pilot[data-view="chat"] .pane-right { display: none; }
+}
+
+/* The bar. */
+.pilot-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 2px;
+  min-width: 0;
+  font-size: 13px;
+}
+.pilot-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  font-size: 15px;
+  white-space: nowrap;
+  letter-spacing: -.01em;
+}
+.pilot-brand b { font-weight: 750; }
+.pilot-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--pl-grad);
+  color: var(--pl-signal-ink);
+  font-size: 14px;
+  transform: rotate(-12deg);
+}
+.pilot-app {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  min-width: 0;
+  max-width: 28rem;
+  padding: .25rem .7rem;
+  border: 1px solid var(--pl-line);
+  border-radius: 999px;
+  background: var(--pl-panel);
+  font: 12px var(--font-mono);
+  color: var(--pl-dim);
+}
+.pilot-app > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pilot-live {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pl-live);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, .18);
+  animation: pilot-pulse 2s ease-in-out infinite;
+}
+body.is-pilot button.pilot-button,
+body.is-pilot button.pilot-icon,
+body.is-pilot button.pilot-view {
+  border: 1px solid var(--pl-line);
+  border-radius: 999px;
+  background: var(--pl-panel);
+  color: var(--pl-ink);
+  padding: .3rem .8rem;
+  font-weight: 600;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+body.is-pilot button.pilot-icon { width: 32px; height: 32px; padding: 0; font-size: 15px; }
+body.is-pilot button.pilot-button:hover:not(:disabled),
+body.is-pilot button.pilot-icon:hover:not(:disabled) { border-color: var(--pl-signal); }
+body.is-pilot button.pilot-button[aria-pressed="true"] {
+  background: var(--pl-sees-bg);
+  color: #fff;
+  border-color: var(--pl-sees-bg);
+}
+.pilot-status {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  font-size: 12px;
+  color: var(--pl-dim);
+}
+.pilot-status.error { color: var(--danger); }
+.pilot-views { display: inline-flex; gap: 4px; }
+/* Both are on screen at desk width - the turns are a phone's. */
+@media (min-width: 821px) {
+  .pilot-views { display: none; }
+}
+body.is-pilot button.pilot-view[aria-selected="true"] { background: var(--pl-grad); color: var(--pl-signal-ink); border-color: transparent; }
+@media (max-width: 820px) {
+  .pilot-bar { flex-wrap: wrap; gap: 8px; padding: 8px 2px; }
+  .pilot-brand-name,
+  .pilot-status,
+  .pilot-app { display: none; }
+  .pilot-views { order: 3; flex: 1 1 100%; }
+  body.is-pilot button.pilot-view { flex: 1; }
+  .pilot-brand { margin-right: auto; }
+}
+
+/* The stage: the app in a console bezel. */
+body.is-pilot .pane-right {
+  position: relative;
+  inset: auto;
+  display: flex;
+  border: 1px solid var(--pl-line);
+  border-radius: 16px;
+  background: var(--pl-panel);
+  box-shadow: var(--pl-shadow);
+  overflow: hidden;
+}
+body.is-pilot .app-frame { background: var(--pl-panel); }
+/* While the Pilot is flying, the bezel says so: an amber line that runs
+   round the app, the one moving thing on the page. */
+@property --pilot-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+body.is-pilot.is-pilot-flying .pane-right::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(from var(--pilot-angle), transparent 0 55%, #f59e0b 75%, #ea580c 90%, transparent 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 3;
+  animation: pilot-sweep 1.6s linear infinite;
+}
+body.is-pilot .pane-right.is-flash { animation: pilot-flash .9s ease-out; }
+
+/* The apps on the stage, a tab each. A frame behind another keeps its full
+   size - only out of sight, never display: none, under which UI5 would
+   measure nothing and lay the app out for no room at all. */
+.pilot-tabs[hidden] { display: none; }
+.pilot-tabs {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--pl-line);
+  background: var(--pl-panel-2);
+}
+body.is-pilot .pane-right { flex-direction: column; }
+body.is-pilot .app-frame iframe { position: absolute; inset: 0; }
+body.is-pilot .app-frame iframe.is-behind { visibility: hidden; }
+body.is-pilot button.pilot-tab,
+body.is-pilot button.pilot-tab-add {
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--pl-dim);
+  padding: .25rem .65rem;
+  font: 11.5px var(--font-mono);
+  white-space: nowrap;
+}
+body.is-pilot button.pilot-tab[aria-selected="true"] {
+  background: var(--pl-panel);
+  color: var(--pl-ink);
+  border-color: var(--pl-line);
+  box-shadow: inset 0 -2px 0 var(--pl-signal);
+}
+body.is-pilot button.pilot-tab-close {
+  flex: none;
+  margin-left: -6px;
+  border: 0;
+  background: transparent;
+  color: var(--pl-dim);
+  padding: 0 .35rem;
+  font-size: 14px;
+}
+body.is-pilot button.pilot-tab-add { border-style: dashed; border-color: var(--pl-line); color: var(--pl-signal-2); font-weight: 600; }
+body.is-pilot button.pilot-tab-add:hover:not(:disabled) { border-color: var(--pl-signal); }
+
+/* What the Pilot is doing right now, over the app. */
+.pilot-hud {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 4;
+  transform: translate(-50%, -8px);
+  opacity: 0;
+  max-width: calc(100% - 24px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: .4rem .9rem .4rem .75rem;
+  border-radius: 999px;
+  background: var(--pl-grad);
+  color: var(--pl-signal-ink);
+  font-weight: 650;
+  font-size: 13px;
+  box-shadow: 0 8px 26px rgba(234, 88, 12, .35);
+  pointer-events: none;
+  transition: opacity .2s ease, transform .2s ease;
+}
+.pilot-hud::before { content: "✈  " / ""; }
+.pilot-hud.is-on { opacity: 1; transform: translate(-50%, 0); }
+
+/* What Claude sees: the snapshot, on a dark instrument panel in both themes. */
+.pilot-sees {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-radius: 16px;
+  background: var(--pl-sees-bg);
+  color: var(--pl-sees-ink);
+  box-shadow: var(--pl-shadow);
+  overflow: hidden;
+  --code-name: #f5b04b;
+  --code-string: #8fd6a8;
+  --code-value: #8fd6a8;
+  --code-atom: #8cc3ff;
+  --fg-dim: #6f7c90;
+}
+.pilot-sees-head { padding: .7rem .9rem .5rem; border-bottom: 1px solid rgba(255, 255, 255, .08); }
+.pilot-sees-head h2 { margin: 0; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: #f5b04b; }
+.pilot-sees-note { font-size: 11.5px; color: #8b96a8; }
+.pilot-sees-body {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: .7rem .9rem;
+  overflow: auto;
+  font: 11.5px/1.55 var(--font-mono);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* The co-pilot: the chat. */
+.pilot {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--pl-line);
+  border-radius: 16px;
+  background: var(--pl-panel);
+  box-shadow: var(--pl-shadow);
+  overflow: hidden;
+}
+.pilot-head {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .4rem;
+  padding: .55rem .75rem;
+  border-bottom: 1px solid var(--pl-line);
+  background: var(--pl-panel-2);
+}
+.pilot-head .spacer { flex: 1; }
+.pilot-title { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--pl-dim); }
+.pilot-usage { color: var(--pl-dim); font: 11px var(--font-mono); white-space: nowrap; }
+body.is-pilot .pilot-head button,
+.pilot-speed {
+  font: inherit;
+  font-size: 12px;
+  padding: .2rem .55rem;
+  border: 1px solid var(--pl-line);
+  border-radius: 999px;
+  background: var(--pl-panel);
+  color: var(--pl-ink);
+}
+.pilot-key {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+  padding: .75rem;
+  border-bottom: 1px solid var(--pl-line);
+  background: var(--pl-signal-soft);
+  font-size: 13px;
+}
+.pilot-key label { font-weight: 650; }
+.pilot-key-optional { font-weight: 400; color: var(--pl-dim); }
+.pilot-key-row { display: flex; gap: .5rem; }
+.pilot-key-row input {
+  flex: 1;
+  min-width: 0;
+  font: 13px var(--font-mono);
+  padding: .4rem .55rem;
+  border: 1px solid var(--pl-line);
+  border-radius: 8px;
+  background: var(--pl-panel);
+  color: var(--pl-ink);
+}
+.pilot-key-note { margin: 0; color: var(--pl-dim); line-height: 1.45; font-size: 12px; }
+.pilot-key-note a { color: var(--pl-signal-2); }
+body.is-pilot .pilot-key button.primary,
+body.is-pilot #pilot-send.primary {
+  border: 0;
+  border-radius: 10px;
+  background: var(--pl-grad);
+  color: var(--pl-signal-ink);
+  font-weight: 700;
+}
+
+.pilot-log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: .9rem .85rem .5rem;
+  display: flex;
+  flex-direction: column;
+  gap: .55rem;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.pilot-welcome h2 { margin: .2rem 0 .5rem; font-size: 19px; letter-spacing: -.015em; }
+.pilot-welcome p { margin: 0 0 .9rem; color: var(--pl-dim); }
+.pilot-suggestions { display: flex; flex-direction: column; align-items: stretch; gap: .4rem; }
+body.is-pilot button.pilot-suggestion {
+  text-align: left;
+  white-space: normal;
+  padding: .5rem .7rem;
+  border: 1px dashed var(--pl-line);
+  border-radius: 10px;
+  background: var(--pl-panel-2);
+  color: var(--pl-ink);
+}
+body.is-pilot button.pilot-suggestion::before { content: "→ " / ""; color: var(--pl-signal-2); }
+body.is-pilot button.pilot-suggestion:hover { border-color: var(--pl-signal); border-style: solid; }
+
+.pilot-msg { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; }
+.pilot-user {
+  align-self: flex-end;
+  max-width: 88%;
+  padding: .5rem .8rem;
+  border-radius: 14px 14px 3px 14px;
+  background: var(--pl-ink);
+  color: var(--pl-panel);
+}
+.pilot-assistant { align-self: stretch; white-space: normal; }
+.pilot-assistant > :first-child { margin-top: 0; }
+.pilot-assistant > :last-child { margin-bottom: 0; }
+.pilot-assistant p,
+.pilot-assistant ul,
+.pilot-assistant ol { margin: .4rem 0; }
+.pilot-assistant ul,
+.pilot-assistant ol { padding-left: 1.2rem; }
+.pilot-assistant code { font: 12.5px var(--font-mono); background: var(--pl-panel-2); border-radius: 4px; padding: .05rem .3rem; }
+.pilot-assistant pre { margin: .4rem 0; padding: .5rem .6rem; background: var(--pl-panel-2); border-radius: 8px; overflow-x: auto; white-space: pre; }
+.pilot-assistant pre code { background: none; padding: 0; }
+/* The flight log: what the Pilot did to the app, one line a step. */
+.pilot-tool,
+.pilot-notice {
+  align-self: stretch;
+  font: 12px var(--font-mono);
+  color: var(--pl-dim);
+  padding: .2rem .55rem;
+  border-left: 3px solid var(--pl-line);
+  background: var(--pl-panel-2);
+  border-radius: 0 6px 6px 0;
+}
+.pilot-tool::before { content: "✈ " / ""; color: var(--pl-signal-2); }
+.pilot-tool.is-pending { color: var(--pl-ink); border-left-color: var(--pl-signal); background: var(--pl-signal-soft); }
+.pilot-tool.is-error,
+.pilot-notice.is-error { color: var(--danger); border-left-color: var(--danger); }
+.pilot-progress { align-self: flex-start; font-size: 13px; font-style: italic; color: var(--pl-dim); }
+button.pilot-card {
+  align-self: flex-start;
+  display: inline-flex;
+  gap: .6rem;
+  align-items: center;
+  padding: .35rem .75rem;
+  border: 1px solid var(--pl-signal);
+  border-radius: 999px;
+  background: var(--pl-signal-soft);
+  color: var(--pl-ink);
+  font-weight: 650;
+  font-size: 12.5px;
+}
+button.pilot-card span { color: var(--pl-dim); font-weight: 400; }
+.pilot.is-busy .pilot-log::after {
+  content: "flying…";
+  align-self: flex-start;
+  font: 12px var(--font-mono);
+  color: var(--pl-signal-2);
+}
+
+.pilot-compose {
+  flex: none;
+  display: flex;
+  gap: .5rem;
+  align-items: flex-end;
+  padding: .6rem .7rem;
+  border-top: 1px solid var(--pl-line);
+  background: var(--pl-panel-2);
+}
+.pilot-compose textarea {
+  flex: 1;
+  min-width: 0;
+  resize: vertical;
+  min-height: 2.8rem;
+  max-height: 40vh;
+  font: inherit;
+  font-size: 14px;
+  padding: .5rem .65rem;
+  border: 1px solid var(--pl-line);
+  border-radius: 10px;
+  background: var(--pl-panel);
+  color: var(--pl-ink);
+}
+.pilot-compose textarea:focus,
+.pilot-key-row input:focus { outline: 2px solid var(--pl-signal); outline-offset: -1px; }
+body.is-pilot #pilot-send { border-radius: 10px; padding: .55rem 1rem; }
+
+@keyframes pilot-pulse { 50% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); } }
+@keyframes pilot-sweep { to { --pilot-angle: 360deg; } }
+@keyframes pilot-flash {
+  0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, .5); }
+  40% { box-shadow: 0 0 0 6px rgba(245, 158, 11, .35); }
+  100% { box-shadow: var(--pl-shadow); }
+}
+/* The Pilot's animations are its own, so it answers for them: less motion
+   means none of them - the flying line stands still, the HUD just appears. */
+@media (prefers-reduced-motion: reduce) {
+  .pilot-live,
+  body.is-pilot .pane-right,
+  body.is-pilot .pane-right::after { animation: none !important; }
+  .pilot-hud { transition: none; }
+}

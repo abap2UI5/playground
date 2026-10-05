@@ -123,6 +123,94 @@
     });
   };
 
+  // The AI Pilot (src/shell/pilot.mjs) operates the app in this frame, and
+  // the reader watches it do so: these are the three things it needs of the
+  // frontend, and the one place the playground reaches into it rather than
+  // only through the fetch above. Everything is looked up when called, never
+  // kept, and every miss answers false - a frontend that moved its modules
+  // makes the Pilot say "the app on screen could not be updated", which
+  // tests/pilot.spec.js holds, rather than break the playground.
+  //
+  //   roundtrip()           a roundtrip the frontend sends as if a control had
+  //                         fired: busy, timers cancelled, the answer rendered
+  //                         by its own code. The BODY is the Pilot's, put in
+  //                         its place by the page (main.mjs) - this only makes
+  //                         the frontend ask, so that it renders what comes back.
+  //   frontend(args)        a frontend-only wire, e.g. closing the popup
+  //                         (["CONTROL_GLOBAL","VIEW_SLOTS","destroy","POPUP"])
+  //   fill(slot, path, v)   a value typed into a field without an event: set in
+  //                         the slot's model and marked changed, the way typing
+  //                         marks it, so the next event carries it
+  //   slots()               the slots that hold a view now
+  //   busy()                whether a roundtrip is still being answered or
+  //                         rendered - the Pilot reads the screen only after.
+  //                         An app's first answer is rendered without the
+  //                         frontend ever saying busy, so a frame whose main
+  //                         view is not there yet counts as busy too
+  function frontend() {
+    var require_ = window.sap && sap.ui && sap.ui.require;
+    if (!require_) return null;
+    var Component = require_("sap/ui/core/Component");
+    var Server = require_("z2ui5/core/Server");
+    var ViewSlots = require_("z2ui5/core/ViewSlots");
+    if (!Component || !Server || !ViewSlots) return null;
+    var component;
+    if (Component.registry && typeof Component.registry.filter === "function") {
+      component = Component.registry.filter(function (c) {
+        return c.ctx && c.ctx.state;
+      })[0];
+    }
+    if (!component && Component.getComponentById) component = Component.getComponentById("container-z2ui5");
+    if (!component || !component.ctx || !component.ctx.state) return null;
+    return { ctx: component.ctx, Server: Server, ViewSlots: ViewSlots };
+  }
+
+  window.__z2ui5PlaygroundPilot = {
+    roundtrip: function () {
+      var f = frontend();
+      if (!f) return false;
+      var state = f.ctx.state;
+      var Lib = sap.ui.require("z2ui5/core/Lib");
+      if (Lib && Lib.cancelPendingTimers) Lib.cancelPendingTimers(f.ctx);
+      state.isBusy = true;
+      var BusyIndicator = sap.ui.require("sap/ui/core/BusyIndicator");
+      if (BusyIndicator) BusyIndicator.show(0);
+      f.Server.roundtrip(f.ctx, { ID: state.oResponse && state.oResponse.ID });
+      return true;
+    },
+    frontend: function (args) {
+      var f = frontend();
+      var controller = f && f.ViewSlots.getController(f.ctx, "MAIN");
+      if (!controller || typeof controller.eF !== "function") return false;
+      controller.eF.apply(controller, args);
+      return true;
+    },
+    fill: function (slot, path, value) {
+      var f = frontend();
+      var view = f && f.ViewSlots.getView(f.ctx, slot);
+      var model = view && (f.ViewSlots.trackedModel(view) || view.getModel());
+      if (!model || typeof model.setProperty !== "function") return false;
+      model.setProperty(path, value);
+      f.ViewSlots.markChanged(view, path);
+      return true;
+    },
+    busy: function () {
+      var f = frontend();
+      return Boolean(f && (f.ctx.state.isBusy || !f.ViewSlots.getView(f.ctx, "MAIN")));
+    },
+    slots: function () {
+      var f = frontend();
+      if (!f) return null;
+      return f.ViewSlots.slots
+        .map(function (s) {
+          return s.key;
+        })
+        .filter(function (key) {
+          return Boolean(f.ViewSlots.getView(f.ctx, key));
+        });
+    },
+  };
+
   // A LEAK IN UI5, worked around here until it is fixed there. sap.m.Shell's
   // init attaches a Theming "applied" listener (a bound function) and its exit
   // never detaches it - so every Shell a view_display destroys stays in that

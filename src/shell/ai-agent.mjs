@@ -24,6 +24,7 @@
 // static page can have a chat at all. `dangerouslyAllowBrowser` is the SDK's
 // name for exactly that choice.
 import Anthropic from "@anthropic-ai/sdk";
+import { catalogueEntries, DEFAULT_SPEED, SPEEDS } from "./ai-common.mjs";
 // The framework's own guide to building an app, from the abap2UI5 commit
 // tools/fetch-deps.mjs pins - the same commit the runtime in this page is
 // transpiled from, so the API the guide describes is the API that runs here.
@@ -31,16 +32,8 @@ import GUIDE from "../../deps/abap2ui5/docs/agents/building-apps.md";
 import { parseName } from "../editor/files.mjs";
 import { isUntouchedStarter } from "./ai-starter.mjs";
 
-// How much the reader trades speed for care - the chat header's select. The
-// model is the reader's choice, not this page's: Balanced is the default and
-// stays on Opus 5.5 at the effort that model defaults to; Thorough lets it
-// think longer; Fast is Sonnet 5.5, which answers sooner.
-export const SPEEDS = {
-  thorough: { model: "claude-opus-5-5", effort: "high", label: "Thorough · Opus 5.5" },
-  balanced: { model: "claude-opus-5-5", effort: "medium", label: "Balanced · Opus 5.5" },
-  fast: { model: "claude-sonnet-5-5", effort: "medium", label: "Fast · Sonnet 5.5" },
-};
-export const DEFAULT_SPEED = "balanced";
+// The speeds and the errors are the AI Pilot's as well (src/shell/ai-common.mjs).
+export { SPEEDS, DEFAULT_SPEED, explainError } from "./ai-common.mjs";
 
 // The tools that change the editor, after which the page runs the app by
 // itself (see loop( )).
@@ -593,41 +586,6 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
   };
 }
 
-// A failed request, as the chat says it. `key` marks the one failure the
-// reader answers by entering another key; everything else is said and the
-// conversation stays where it was.
-export function explainError(err) {
-  if (err instanceof Anthropic.APIUserAbortError) return { text: "Stopped.", stopped: true };
-  // A stream that broke off: the SDK says so in a plain AnthropicError (no
-  // status), which fell through to its raw text.
-  if (!(err instanceof Anthropic.APIError) && (err instanceof Anthropic.AnthropicError || err instanceof TypeError)
-      && /network|Failed to fetch|ended without|Unexpected event order|terminated|aborted/i.test(String(err.message))) {
-    return { text: "The connection to api.anthropic.com dropped mid-answer - check the connection and send again." };
-  }
-  if (err instanceof Anthropic.AuthenticationError) {
-    return { text: "The API key was not accepted. Enter a valid Anthropic API key.", key: true };
-  }
-  if (err instanceof Anthropic.PermissionDeniedError) {
-    return { text: `This key may not use the model - try another speed in the header, or another key: ${err.message}`, key: true };
-  }
-  if (err instanceof Anthropic.RateLimitError) return { text: "Rate limited - wait a moment and send again." };
-  if (err instanceof Anthropic.BadRequestError && /anthropic-workspace-id/.test(err.message)) {
-    return {
-      text:
-        "This key is not tied to a workspace, so the API needs to be told which one to use. Enter the workspace ID " +
-        "(wrkspc_…, in the Console under Settings → Workspaces) in the key form - or create a key inside a workspace.",
-      key: true,
-      workspace: true,
-    };
-  }
-  if (err instanceof Anthropic.BadRequestError) return { text: `The request was refused: ${err.message}` };
-  if (err instanceof Anthropic.APIConnectionError) {
-    return { text: "api.anthropic.com could not be reached - check the connection, or whether a proxy or extension blocks it." };
-  }
-  if (err instanceof Anthropic.APIError) return { text: `The API answered ${err.status ?? "with an error"}: ${err.message}` };
-  return { text: String(err?.message ?? err) };
-}
-
 // What a tool call is doing while it is still under way - written while its
 // input streams in, so it reads whatever of the input has arrived.
 export function pendingText(name, input) {
@@ -697,46 +655,14 @@ export function describeRun(report) {
 
 // ------------------------------------------------------------------ samples
 //
-// The catalogue this site already publishes for its samples page and the
-// samples browser - same origin, so the service worker has it after a first
-// visit. The source of a sample comes from raw.githubusercontent.com, the
-// host ?src= links already read from.
-
-let index;
-async function loadIndex() {
-  if (!index) {
-    index = fetch("samples/apps.json")
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`samples/apps.json answered ${r.status}`))))
-      .catch((e) => {
-        index = undefined;
-        throw e;
-      });
-  }
-  return index;
-}
-
-function entriesOf(data) {
-  const names = data.controls || [];
-  return (data.entries || [])
-    .filter((e) => typeof e.raw === "string" && typeof e.class === "string")
-    .map((e) => {
-      const controls = (e.controls || []).map((i) => names[i]).filter(Boolean);
-      return {
-        class: e.class.toLowerCase(),
-        title: str(e.title) ?? e.class,
-        summary: str(e.summary) ?? str(e.note) ?? "",
-        raw: e.raw,
-        runs: e.runs === true,
-        controls,
-        haystack: `${e.title} ${e.note ?? ""} ${e.summary ?? ""} ${e.class} ${e.group ?? ""} ${(e.keywords || []).join(" ")} ${controls.join(" ")}`.toLowerCase(),
-      };
-    });
-}
+// Over the catalogue this site publishes for its samples page - loaded and
+// shaped by catalogueEntries( ) in ai-common.mjs, which the AI Pilot's
+// find_apps reads too.
 
 async function searchSamples(input) {
   const query = str(input.query)?.trim().toLowerCase();
   if (!query) return { error: "search_samples needs a query." };
-  const entries = entriesOf(await loadIndex());
+  const entries = await catalogueEntries();
   const words = query.split(/\s+/).filter(Boolean);
   const scored = entries
     .map((e) => ({ e, score: words.reduce((n, w) => n + (e.haystack.includes(w) ? 1 : 0), 0) + (e.runs ? 0.5 : 0) }))
@@ -755,7 +681,7 @@ async function searchSamples(input) {
 async function readSample(input) {
   const name = str(input.class)?.trim().toLowerCase();
   if (!name) return { error: "read_sample needs a class name." };
-  const entry = entriesOf(await loadIndex()).find((e) => e.class === name);
+  const entry = (await catalogueEntries()).find((e) => e.class === name);
   if (!entry) return { error: `${name} is not in the sample catalogue - use search_samples first.` };
   const url = new URL(entry.raw);
   if (url.protocol !== "https:" || url.hostname !== "raw.githubusercontent.com") {

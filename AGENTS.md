@@ -18,14 +18,15 @@ them before touching `tools/` or `src/runtime`.
 
 | Path | Purpose |
 | --- | --- |
-| `src/shell/` | The page: boot and Run (`main.mjs`, which also owns the **Auto** switch beside Run - the debounce, the stored setting and the three reasons Run may be inactive), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the samples browser over the sample catalogue (`examples.mjs`, reading the built index — a near-full-screen modal with the filters and the catalogue's three facets down its side), which UI5 library a control ships in (`ui5-libs.mjs`) beside the closed list of the ones this site carries (`ui5-libraries.mjs`), the bottom panel (`insight.mjs`), the syntax colour it prints XML and JSON in (`highlight.mjs`) and the View tab's edit mode - the builder chain read back out of the ABAP (`chain-read.mjs`), the edited document matched against the one that was shown (`view-edit.mjs`), the change put back as an edit to the ABAP that is there (`chain-patch.mjs`) and, when it cannot be, the chain written again in the house layout (`chain-write.mjs`), the AI chat (`chat.mjs` on screen, `ai-agent.mjs` the conversation and its tools, a chunk loaded on first use, `ai-starter.mjs` the class the AI Studio starts on - see "The AI chat" below), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch in the menu behind the bar's last button, applied as `data-theme` on `<html>` and handed to the editor and the app frame; `extra.mjs` is the six lines that close that menu), where the reader was on each of the neighbouring sites (`site-memory.mjs` — see "One site in three places" below), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the search box in the bar and the matcher under it (`search-box.mjs`, `search-engine.mjs` — one box over the documentation AND every sample, see "One site in three places" below), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
+| `src/shell/` | The page: boot and Run (`main.mjs`, which also owns the **Auto** switch beside Run - the debounce, the stored setting and the three reasons Run may be inactive), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the samples browser over the sample catalogue (`examples.mjs`, reading the built index — a near-full-screen modal with the filters and the catalogue's three facets down its side), which UI5 library a control ships in (`ui5-libs.mjs`) beside the closed list of the ones this site carries (`ui5-libraries.mjs`), the bottom panel (`insight.mjs`), the syntax colour it prints XML and JSON in (`highlight.mjs`) and the View tab's edit mode - the builder chain read back out of the ABAP (`chain-read.mjs`), the edited document matched against the one that was shown (`view-edit.mjs`), the change put back as an edit to the ABAP that is there (`chain-patch.mjs`) and, when it cannot be, the chain written again in the house layout (`chain-write.mjs`), the AI chat (`chat.mjs` on screen, `ai-agent.mjs` the conversation and its tools, a chunk loaded on first use, `ai-starter.mjs` the class the AI Studio starts on - see "The AI chat" below), the AI Pilot (`pilot.mjs` on screen and the bridge's half, `pilot-agent.mjs` the mirror, the operator and the conversation, a chunk - see "The AI Pilot" below), what the two share (`ai-common.mjs`: the speeds and how a failed request is said), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch in the menu behind the bar's last button, applied as `data-theme` on `<html>` and handed to the editor and the app frame; `extra.mjs` is the six lines that close that menu), where the reader was on each of the neighbouring sites (`site-memory.mjs` — see "One site in three places" below), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the search box in the bar and the matcher under it (`search-box.mjs`, `search-engine.mjs` — one box over the documentation AND every sample, see "One site in three places" below), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
 | `src/editor/` | Monaco plus the abaplint registry — in a worker: `registry-core.mjs` and `transpile-core.mjs` are abaplint and the single-object transpile as they run there, `registry-worker.mjs` the worker's entry, `registry.mjs` the page's client with a promise in front of everything, `providers.mjs` Monaco's language providers answered over it — the abap2UI5 linter wrapper (`abap2ui5-lint.mjs`), the file set, and the samples the page carries - `sample-list.mjs`, which is nothing but the class names of a handful of apps in **abap2UI5/samples**, and `samples.mjs`, which pairs what the build resolved them into (`build/samples/`) with the ABAP itself |
 | `src/runtime/` | The ABAP side of the page: the framework entry (`index.mjs`, `roundtrip()` and `defineClasses()`), `worker.mjs` around it, which is the bundle's entry and answers those over `postMessage` when it runs as the worker the page starts, the sql.js database (`db-setup.mjs`), and the browser shims for Node modules |
+| `src/vendor/agent/` | abap2UI5/mcp-server's agent client - `appclient.mjs`, `snapshot.mjs`, `viewxml.mjs` - copied **unchanged** at a recorded commit by `tools/vendor-agent.mjs`, which writes `source.json` (the commit and each copy's sha256); `--check` holds the copies to it, and `tests/pilot.spec.js` runs that check. Never edited here: a change goes upstream and is vendored again |
 | `src/abap/` | The playground's own ABAP - `zcl_pg_bridge` and nothing else; it travels through the same downport and transpile as the framework. There was a `zcl_pg_hello` beside it, a copy of the hello world in **abap2UI5/samples**; the runtime tests drive the framework's own `z2ui5_cl_ui5_app_hi_world` instead, so this repository holds no app of its own to keep in step with one somebody else maintains |
 | `src/examples/` | ABAP served as static files, so `?src=` has same-origin targets and the link tests depend on no foreign host |
 | `src/embed/` | The embed loader (`abap2ui5-embed.js`) and a worked example page; copied verbatim to `dist/embed/` |
 | `src/catalogue/` | The sample catalogue at `/samples/`: one page, one stylesheet and three bundles over the index `tools/build-catalogue.mjs` writes - `catalogue.mjs` (the page; see "The sample catalogue" below), `search-entry.mjs` (the bar's search box, as `samples/search.mjs`, the one file the catalogue and all per-sample pages load) and `page-entry.mjs` (the per-sample pages' site memory, outline marker and line links, as `samples/page.mjs`, over `outline.mjs` and `lines.mjs`) |
-| `tools/` | The build (`build.mjs`, which drives `fetch-deps`, `build-framework`, `build-ui5`, `build-catalogue` — which writes the index and, through `sample-pages.mjs`, one static page per sample plus the full list, the sitemap and `404.html`, with the ABAP on those pages fetched by `sample-sources.mjs` and coloured by `abap-highlight.mjs` —, `build-site`), the size budget (`check-size`) and the dev server (`serve`, which mounts `dist/` at the root, under a subpath and under the deployment's own path, and answers a miss with `404.html` the way GitHub Pages does) |
+| `tools/` | `vendor-agent.mjs` (see `src/vendor/agent/`), the build (`build.mjs`, which drives `fetch-deps`, `build-framework`, `build-ui5`, `build-catalogue` — which writes the index and, through `sample-pages.mjs`, one static page per sample plus the full list, the sitemap and `404.html`, with the ABAP on those pages fetched by `sample-sources.mjs` and coloured by `abap-highlight.mjs` —, `build-site`), the size budget (`check-size`) and the dev server (`serve`, which mounts `dist/` at the root, under a subpath and under the deployment's own path, and answers a miss with `404.html` the way GitHub Pages does) |
 | `tests/` | Playwright specs — the only test layer; everything is tested through a real browser against the built `dist/`. One of them, `bfcache.spec.js`, reads rather than runs: the sources and the three documents the build writes, for an unload listener or a `no-store` that would keep a page out of the back/forward cache and turn the bar's step back into a reload |
 
 `deps/`, `build/` and `dist/` are generated and gitignored. Never commit them.
@@ -149,8 +150,11 @@ component ComponentSupport names `container-z2ui5`) — and `Component.init()`
 reads the flag from its component data and from nowhere else, so a flag set
 on the window is ignored, every roundtrip goes to the manifest's path, which
 this site does not have, and nothing renders. Nothing in the playground reads
-the frontend's state: the Roundtrips tab is fed by the bridge in `main.mjs`,
-below. `frontend-bridge.js` replaces `window.fetch` for exactly that one
+the frontend's state - the Roundtrips tab is fed by the bridge in `main.mjs`,
+below - with one exception, on one page: the AI Pilot asks the frontend to
+send a roundtrip, to type a value and to say which slots are open, through
+`__z2ui5PlaygroundPilot` at the end of `frontend-bridge.js` (see "The AI
+Pilot"). `frontend-bridge.js` replaces `window.fetch` for exactly that one
 request (comparing origin and pathname
 only — the run counter lives in the query) and hands the body to the parent
 page, which hands it to the transpiled handler — running in a **dedicated
@@ -743,12 +747,17 @@ talks to a model or needs a key.
   here (no database, the libraries in `UI5_LIBRARIES`, Run as the validation).
   A pin bump moves the guide with the framework it describes; a guide moved or
   renamed upstream fails the build on the import.
-- **One chunk, downloaded on use.** The SDK and the guide are
-  `assets/ai-agent-<hash>.mjs`, imported the first time a message is sent. It
-  counts towards the `assets/*.mjs` budget like every chunk, but it is left
-  out of the service worker's precache (`onUseOnly( )` in `build-site.mjs`):
-  precached, every visitor the worker installs for would download it. Once
-  used, the worker keeps it like any chunk.
+- **One chunk, downloaded on use.** The guide is in
+  `assets/ai-agent-<hash>.mjs`, imported the first time a message is sent; the
+  SDK, which the AI Pilot's chunk imports as well, is a `chunk-<hash>.mjs` of
+  its own (with `ai-common.mjs`). They count towards the `assets/*.mjs` budget
+  like every chunk, but they are left out of the service worker's precache:
+  precached, every visitor the worker installs for would download them.
+  `onUseOnly( )` in `build-site.mjs` reads that off esbuild's module graph -
+  the precache is what `shell.mjs` reaches without a dynamic import of
+  `ai-agent.mjs` or `pilot-agent.mjs` - because a shared chunk's name says
+  nothing about who needs it. Once used, the worker keeps them like any
+  chunk.
 - **The conversation is append-only.** `messages` in `createAgent( )` is only
   ever pushed to — the model's thinking blocks are bound to the history they
   were written in. Hand edits between two messages are told to the model as an
@@ -779,6 +788,111 @@ talks to a model or needs a key.
   place when it has run. Errors are
   said in the chat by `explainError( )` from the SDK's typed errors; a refused
   key brings the key form back.
+
+## The AI Pilot — `src/shell/pilot.mjs`, `src/shell/pilot-agent.mjs`
+
+**Claude operates the running app; the reader steers in the chat.** A page of
+its own and, like the studio, no door from the playground while it is being
+built: `pilot/index.html`, written by `writePilotPage( )` in
+`tools/build-site.mjs` exactly as `writeAiPage( )` writes the studio's -
+`<base href="../">`, `data-page="pilot"`, its own title, `noindex`, no
+canonical link. `main.mjs` reads `data-page`: the editor opens on what a link
+carries (`#` fragment or `?src=`) or on the default sample, never on the
+stored draft, and nothing is stored over it; `setUpPilot( )` gets a small host
+(Run as `runForAgent( )`, files in place of the open ones, a carried sample by
+class, a catalogued class by its raw URL, the samples browser, the frame's
+Pilot API). The room is `body.is-pilot` ("AI Pilot" at the end of
+`shell.css`), its own palette in both themes and deliberately not the
+studio's: the app has the stage, the chat stands to its right, **What Claude
+sees** (the snapshot, `describeMirror( )`) opens between them, and on a phone
+the app and the chat take turns (`body[data-view]`). The editor and its panel
+are hidden, never removed.
+
+**How the model reaches the app is the abap2UI5 agent protocol** - the agent
+snapshot and the act of `abap2UI5/mcp-server` (`docs/agent-snapshot.md`
+there), through that server's own client, vendored unchanged into
+`src/vendor/agent/`. The client takes a `transport`; here the transport is
+**the app frame**, so nothing is simulated and the reader sees every step:
+
+1. `drive(body)` in `pilot.mjs` parks the client's request and asks the frame
+   to send a roundtrip (`__z2ui5PlaygroundPilot.roundtrip( )` in
+   `frontend-bridge.js`: busy, timers cancelled, `Server.roundtrip( )` of the
+   frontend's own component).
+2. The bridge's `roundtrip( )` in `main.mjs` takes the parked request
+   (`takePilotRequest( )`) and sends **it** to the framework in place of the
+   frame's body.
+3. The answer goes back to the frame, which renders it with its own code - a
+   popup opens, a MessageBox comes up - and to the client.
+
+**Two copies of the screen, kept apart on purpose.** The *mirror*
+(`createMirror( )`) is the screen as it is: every answer the frame got, the
+reader's clicks included, passes `sawRoundtrip( )` and is folded with the
+snapshot module's own `applyResponse( )`; a request without a draft id (an
+app start - Run, a sample, a restart) starts it over. The client's *session*
+is what the model acts through: whenever the mirror has moved on, a new one is
+started from it (`replayOf( )` - the mirror as ONE answer, given to the
+client's start by the transport instead of being sent). So the model always
+acts on the screen the reader is looking at, and the reader can take the
+controls at any moment - the next message carries the new screen in a
+`<screen>` block, as the first message does. Four details are easy to undo:
+
+- **Read the screen after the frame has settled** (`settled( )`, the bridge's
+  `busy( )`): the answer is in the mirror the moment the framework gives it,
+  the popup it opens a moment later, and a frame asked too early reads as one
+  whose popup was closed. An app's FIRST answer is rendered without the
+  frontend ever saying busy, so `busy( )` also counts a frame with no main
+  view yet - under load the Pilot otherwise acted on a frame that had not
+  drawn the app, and the values it typed went nowhere on screen.
+- **The mirror folds the request's model delta too** (`withDelta( )`). An
+  answer without a `MODEL` means "nothing bound changed", and the client keeps
+  what it sent - the reader's typing or the Pilot's. Folded from the answers
+  alone, the mirror kept the values from BEFORE, and the model was told a
+  field it had just filled was empty.
+- **A popup closed in the browser costs no roundtrip**, so the mirror would
+  never hear of it: `catchUpWithFrame( )` asks the frame which slots hold a
+  view and closes the others. The model's own `@CLOSE_POPUP` is performed in
+  the frame through the frontend's `eF` and in the mirror alike.
+- **Values are typed, then the button pressed** - an act with both runs as
+  two client acts, values first: they are pending in the session and are
+  written into the frame's model and marked changed (`fill( )`, the way
+  typing marks them), so the reader sees them arrive, and a click of the
+  reader's own would carry them on. The request that goes out is the one a
+  single act would send.
+
+**Several apps, a tab each** (at most four, `.pilot-tabs` over the stage). Tab
+1 is Run's own frame and the class of the first file; the others are frames
+`pilot.mjs` creates, loading their class at the current Run with
+`?pilot=<tab>` in their address - which is how the bridge knows whose
+roundtrip it is (`takePilotRequest(from)`, `sawRoundtrip(…, from)`) and each
+tab keeps a mirror of its own. The runtime defines a set of classes as a
+whole (`defineClasses( )` puts back whatever the last set shadowed), so an
+app opened beside the others is not compiled alone: `addAppFiles( )` in
+`main.mjs` puts its files into the editor beside the rest and compiles and
+defines the WHOLE set - and stops there, with no fresh database and no Run
+counted, so the apps already open keep their drafts and their frames stay
+current. Replacing tab 1's app makes its file the first, so Restart starts it
+from then on. A Run (Restart, `restart_app`) is one fresh database for all of
+them, so `pilotRan( )` reloads every other tab on the new Run number, or
+closes one whose class left the files. A pick in the samples browser goes to
+the Pilot on this page (`pilotPicked( )`): in place of the app on screen, or
+beside after the strip's **+ App**, and a catalogue row of a sample the page
+carries opens that copy instead of fetching it. Autorun is never restored on
+this page: a change to the files is an app opened beside, and a run would
+restart them all.
+
+The tools are `look`, `act`, `restart_app`, `find_apps`, `open_app` (with
+`beside`), `show_app`, `close_app` and `read_source` - the apps, Run and the
+catalogue, and nothing else. `look` and `act` take `app` (a tab number or a
+class) and default to the app on screen; an act on another tab brings it on
+screen first, and every snapshot the model reads carries its `tab`. The
+conversation is append-only and asks the same model at the same speeds as
+the studio (`ai-common.mjs`); the key follows the studio's rule word for word
+(memory only, never stored). `tests/pilot.spec.js` answers `api.anthropic.com`
+itself and holds the act in the real app (the ABAP ran, the frontend rendered
+the answer), a refused act sending nothing, the reader's own click reaching the
+model, a popup worked through in another app, a value typed without an event,
+two apps worked side by side and one closed, Restart restarting every tab, the
+snapshot panel, the phone, and the vendored copies against `source.json`.
 
 ## The public surfaces — the docs site consumes these
 
