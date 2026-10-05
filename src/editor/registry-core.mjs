@@ -275,7 +275,12 @@ export function diagnostics(fileName) {
 export function languageServer(method, params) {
   const ls = new abaplint.LanguageServer(registry);
   if (typeof ls[method] !== "function") throw new Error(`The language server has no ${method}.`);
-  return ls[method](params);
+  const out = ls[method](params);
+  // prepareRename's answer carries the whole parsed file beside the range -
+  // token class instances, which structuredClone refuses - so the message to
+  // the page failed, and F2 never opened its box. The page needs two fields.
+  if (method === "prepareRename") return out ? { range: out.range, placeholder: out.placeholder } : out;
+  return out;
 }
 
 export const semanticTokensLegend = () => abaplint.LanguageServer.semanticTokensLegend();

@@ -138,6 +138,7 @@ export function setEditorReadOnly(readOnly) {
 // Same door the fixers use; see writeSource( ) at the bottom of this file.
 export function setSourceOf(name, source) {
   writeSource(name, source);
+  closeUndoSteps();
   refresh();
 }
 
@@ -161,7 +162,7 @@ export function connectRegistry() {
   // The formatting provider - Shift+Alt+F, which is Monaco's own binding -
   // formats through the same worker call the bar's button does, and needs the
   // whole file set to do it: an include is not an object on its own.
-  registerProviders({ files: () => getFiles(), write: writeSource });
+  registerProviders({ files: () => getFiles(), write: writeSource, format: () => format() });
   monaco.languages.registerCompletionItemProvider("abap", abapNameCompletion());
   connected = true;
   refresh();
@@ -279,6 +280,7 @@ export function setFiles(files) {
     if (modelFor(file.name)) writeSource(file.name, file.source);
     else createModel(file);
   }
+  closeUndoSteps();
   editor.setModel(modelFor(files[0].name));
   // The leftovers go only once the editor is showing one of the new models.
   // Disposing the model the editor holds leaves the editor with NO model, and
@@ -627,6 +629,7 @@ export async function format() {
   const result = await formatFiles(getFiles());
   const files = result.files.filter((file) => unchanged(file.name));
   for (const file of files) writeSource(file.name, file.source);
+  closeUndoSteps();
   if (files.length > 0) refresh();
   editor.focus();
   return { ...result, formatted: files.length, files };
@@ -762,8 +765,9 @@ export async function applyFixes() {
 
   const unchanged = versionGuard();
   const afterAbaplint = await applyAbaplintFixes(getFiles());
+  closeUndoSteps();
   fixed += afterAbaplint.fixed;
-  for (const file of afterAbaplint.files) if (unchanged(file.name)) writeSource(file.name, file.source);
+  for (const file of afterAbaplint.files) if (unchanged(file.name)) writeSource(file.name, file.source, { sameStep: true });
 
   // Repeated, because one fix can uncover the next - the same reason abaplint
   // loops - and bounded for the same reason.
@@ -772,23 +776,36 @@ export async function applyFixes() {
     for (const file of getFiles()) {
       const result = applyLinterFixes(file.source);
       if (result.fixed === 0) continue;
-      writeSource(file.name, result.source);
+      // The passes after abaplint's join the step its write opened: one
+      // Ctrl+Z per file for the whole of Fix them.
+      writeSource(file.name, result.source, { sameStep: true });
       changed += result.fixed;
     }
     if (changed === 0) break;
     fixed += changed;
   }
 
+  closeUndoSteps();
   refresh();
   return fixed;
 }
 
-function writeSource(name, source) {
+// The undo step the reader's typing left open is closed first. Without that
+// Monaco added the edit to it, and ONE Ctrl+Z after a Format, a Fix them or a
+// write from the AI took back the format and the last words typed with it.
+// The step the edit opens is closed by the caller once its batch is done
+// (closeUndoSteps( )), so Fix them's passes over a file are still one step.
+function writeSource(name, source, { sameStep = false } = {}) {
   const model = modelFor(name);
   if (!model || model.getValue() === source) return;
+  if (!sameStep) model.pushStackElement();
   model.pushEditOperations(
     null,
     [{ range: model.getFullModelRange(), text: source }],
     () => null,
   );
+}
+
+function closeUndoSteps() {
+  for (const model of orderedModels()) model.pushStackElement();
 }
