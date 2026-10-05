@@ -497,6 +497,10 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
     const at = files.findIndex((f) => f.name === name);
     let next = at === -1 ? [...files, { name, source }] : files.map((f) => (f.name === name ? { name, source } : f));
     if (input.as_app === true) next = [next.find((f) => f.name === name), ...next.filter((f) => f.name !== name)];
+    // A file with nothing in it - the AI Studio's empty starting class - goes
+    // as soon as something real is written: it compiles to nothing, and left
+    // first it would stay the app the page tries to start.
+    next = next.filter((f) => f.name === name || f.source.trim() !== "");
     host.setFiles(next);
     // The file it just wrote is the one on screen, so the reader watches
     // the code arrive rather than the app file it may not have touched.

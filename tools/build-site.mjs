@@ -562,8 +562,35 @@ function writeIndex() {
   }
   /* After the substitution, without the comments: 9.8 kB of the 37 kB document,
      a third of its compressed weight (tools/html.mjs). */
-  fs.writeFileSync(path.join(DIST, "index.html"), stripHtmlComments(source.replace(marker, tags.join("\n"))));
+  const html = stripHtmlComments(source.replace(marker, tags.join("\n")));
+  fs.writeFileSync(path.join(DIST, "index.html"), html);
   log(`index.html (${tags.length} chunk${tags.length === 1 ? "" : "s"} preloaded)`);
+  writeAiPage(html);
+}
+
+// The AI Studio's page, ai/index.html: the playground's own document, one
+// directory down, marked as the studio. Not linked from anywhere - the
+// studio is still being built, so it is reached by its address alone and
+// kept out of search engines. `<base href="../">` makes every relative URL
+// in it - the bundle, the workers the inline script starts, the app frame,
+// the service worker's scope - resolve where the playground's own do, so
+// there is one build of everything and two doors into it. main.mjs reads
+// `data-page="ai"` and opens the studio on an empty class.
+function writeAiPage(html) {
+  const page = html
+    .replace(/<html([^>]*)>/, '<html$1 data-page="ai">')
+    .replace("<head>", '<head>\n<base href="../">\n<meta name="robots" content="noindex">')
+    .replace(/<title>[^<]*<\/title>/, "<title>AI Studio · abap2UI5</title>")
+    .replace(/<link rel="canonical"[^>]*>\n?/, "");
+  for (const mark of ['data-page="ai"', '<base href="../">', "<title>AI Studio"]) {
+    if (!page.includes(mark)) {
+      console.error(`build-site: ERROR the AI page could not be written - ${mark} did not land in src/shell/index.html's copy`);
+      process.exit(1);
+    }
+  }
+  fs.mkdirSync(path.join(DIST, "ai"), { recursive: true });
+  fs.writeFileSync(path.join(DIST, "ai", "index.html"), page);
+  log("ai/index.html (the AI Studio)");
 }
 
 // The chunk the AI chat loads (src/shell/ai-agent.mjs: the Anthropic SDK and
