@@ -293,7 +293,11 @@ code:
   `index.html`'s bytes into the build id): a reload does not let a waiting
   worker take over, so after a deploy a reload got the new document over the
   old worker's cached bundle - now a document that is not the worker's build
-  is answered with the copy that build kept. The
+  is answered with the copy that build kept. The two AI pages
+  (`ai/index.html`, `pilot/index.html`) run on the same bundle and are
+  precached and hashed the same way (`DOCUMENTS` in `sw.js`, the list in
+  `writeServiceWorker( )`) - a page left out of both lists is the mix this
+  prevents, waiting for the next deploy. The
   frontend's own `navigator.onLine` check is answered "yes" by
   `frontend-bridge.js` for the same reason: the backend is the page around
   the frame.
