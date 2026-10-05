@@ -427,7 +427,10 @@ async function boot() {
       })
       .catch((e) => showOutput("abap2UI5 lint", `The abap2UI5 linter could not be loaded: ${String(e?.message ?? e)}`));
   } catch (e) {
-    if (e?.name === STALLED) {
+    // Only where a service worker serves the page is there a cached copy to
+    // throw away; without one, saying it was discarded was untrue and the
+    // reload asked for changed nothing.
+    if (e?.name === STALLED && navigator.serviceWorker?.controller) {
       // A runtime that loaded and never spoke is a copy from another build,
       // and the copy lives in this browser: the service worker's cache, or
       // the worker itself, which would serve the same bytes again on every
@@ -1223,10 +1226,30 @@ export async function run() {
       };
       // Taken off again when it gives up, or the next run's load would fire
       // this one as well - one more stale listener per timed-out run.
-      const gaveUp = setTimeout(() => {
+      //
+      // Thirty seconds, unless the frame is visibly still arriving: on a slow
+      // first visit (Slow 3G, nothing cached) the frame's first load is two
+      // megabytes, the run gave up on it at thirty seconds and the app came
+      // up forty-five seconds later under "the app could not be started".
+      // A frame that is on this run's address and still loading is given
+      // more time, ten seconds at a turn, up to three minutes in all.
+      const started = Date.now();
+      let gaveUp;
+      const check = () => {
+        let arriving = false;
+        try {
+          arriving = frame.contentWindow.location.href === src.href && frame.contentDocument?.readyState !== "complete";
+        } catch {
+          // Another origin (an error page): not arriving.
+        }
+        if (arriving && Date.now() - started < 180000) {
+          gaveUp = setTimeout(check, 10000);
+          return;
+        }
         frame.removeEventListener("load", loaded);
         reject(new Error("The app frame did not load."));
-      }, 30000);
+      };
+      gaveUp = setTimeout(check, 30000);
       frame.addEventListener("load", loaded, { once: true });
       // The address of this run, readable whatever navigated the frame.
       frame.dataset.src = src.href;
@@ -1248,6 +1271,17 @@ export async function run() {
       }
       if (!replaced) frame.src = src.href;
     });
+    // A load is not an app. Offline on a first visit (no worker yet) the
+    // frame's document arrived from the HTTP cache but sap-ui-core.js did
+    // not, or Chrome's own error page loaded - both fire `load`, and the
+    // status said "running" over a blank frame.
+    let booted = false;
+    try {
+      booted = Boolean(frame.contentWindow.sap?.ui);
+    } catch {
+      // An error page is another origin: not booted.
+    }
+    if (!booted) throw new Error("The app frame loaded without UI5 - is the network down? Run again once it is back.");
     // An app is on screen: whatever placeholder stood over the frame goes -
     // after boot's first run, or in the AI Studio, after the first app the
     // model built.

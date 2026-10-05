@@ -335,7 +335,13 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         // A tool input that could not be parsed at all - the one failure that
         // is worth re-asking for. Everything the API itself refused (a key,
         // a rate limit, an overload) goes to the chat as it is.
-        if (err instanceof Anthropic.APIError || err instanceof Anthropic.APIUserAbortError || jsonRetries++ >= 2) {
+        //
+        // Only that: a stream whose connection dropped half way is a plain
+        // AnthropicError as well, and every such drop was sent again twice -
+        // three billed requests, three half answers in the chat, then a bare
+        // "network error". Recognised by the SDK's own message for it.
+        const unparsable = /Unable to parse tool parameter JSON/.test(String(err?.message ?? ""));
+        if (!unparsable || err instanceof Anthropic.APIError || jsonRetries++ >= 2) {
           throw err;
         }
         continue;
@@ -592,6 +598,12 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
 // conversation stays where it was.
 export function explainError(err) {
   if (err instanceof Anthropic.APIUserAbortError) return { text: "Stopped.", stopped: true };
+  // A stream that broke off: the SDK says so in a plain AnthropicError (no
+  // status), which fell through to its raw text.
+  if (!(err instanceof Anthropic.APIError) && (err instanceof Anthropic.AnthropicError || err instanceof TypeError)
+      && /network|Failed to fetch|ended without|Unexpected event order|terminated|aborted/i.test(String(err.message))) {
+    return { text: "The connection to api.anthropic.com dropped mid-answer - check the connection and send again." };
+  }
   if (err instanceof Anthropic.AuthenticationError) {
     return { text: "The API key was not accepted. Enter a valid Anthropic API key.", key: true };
   }
