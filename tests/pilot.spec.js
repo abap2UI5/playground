@@ -266,6 +266,33 @@ test("Restart starts every app on the stage again", async ({ page }) => {
   await expect(second.locator('input[placeholder="quantity"]')).not.toHaveValue("7", { timeout: 30000 });
 });
 
+test("what the reader typed stays on the model's screen when the answer carries no model", async ({ page }) => {
+  // Send in the value help sample changes nothing bound, so the framework
+  // answers without a MODEL - and the client keeps what it sent, here the
+  // reader's 5, which the model must be told about.
+  const requests = await answerWith(page, [
+    { tools: [{ name: "open_app", input: { class: "z2ui5_cl_smp_app_009" } }] },
+    { text: "Opened." },
+    { text: "You sent 5." },
+  ]);
+  await openPilot(page);
+  await useKey(page);
+  await say(page, "Open the value help sample");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("Opened.", { timeout: 90000 });
+  const app = page.frameLocator("#app");
+  await app.locator('input[placeholder="quantity"]').fill("5");
+  await app.locator('input[placeholder="quantity"]').press("Tab");
+  await app.getByRole("button", { name: "Send to Server" }).click();
+  await expect(app.getByText("success - values sent to the server")).toBeVisible();
+  await say(page, "What did I send?");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("You sent 5.", { timeout: 60000 });
+  // The message carried the changed screen, with the 5 in it.
+  const told = textOf(requests[2].body.messages.at(-1));
+  expect(told).toContain("<screen>");
+  const snapshot = JSON.parse(told.slice(told.indexOf("{"), told.lastIndexOf("}") + 1));
+  expect(snapshot.fields.find((f) => f.path === "/S_SCREEN/QUANTITY").value).toBe("5");
+});
+
 test("What Claude sees shows the agent snapshot of the screen", async ({ page }) => {
   await openPilot(page);
   await page.locator("#pilot-sees").click();

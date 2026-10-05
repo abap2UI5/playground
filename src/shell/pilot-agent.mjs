@@ -63,6 +63,11 @@ export function createMirror({ onChange = () => {} } = {}) {
       }
       const front = request?.value?.S_FRONT;
       if (front && !front.ID) mirror.state = emptyState();
+      // What the request carried is in the client's model before the answer
+      // comes - typed by the reader, or by the Pilot. An answer without a
+      // MODEL ("nothing bound changed") keeps it, as the frontend keeps what
+      // was typed; folded only from the answer, those values were lost.
+      if (request?.value?.MODEL && mirror.state.id) mirror.state = withDelta(mirror.state, request.value.MODEL);
       if (!(response.status >= 200 && response.status < 300)) {
         mirror.error = `HTTP ${response.status}: ${String(response.body ?? "").split("\n").slice(0, 6).join("\n")}`;
         mirror.version += 1;
@@ -89,6 +94,33 @@ export function createMirror({ onChange = () => {} } = {}) {
     },
   };
   return mirror;
+}
+
+/*
+ * A request's model delta (core/Lib.js buildDeltaFromPaths: a top-level
+ * attribute whole, a table's cells as { T_TAB: { __delta: { <row>: {…} } } },
+ * nested tables the same way) applied to the model it was sent from - the
+ * popup's while one is open, else the page's.
+ */
+function withDelta(state, delta) {
+  const key = state.slots.POPUP && state.models.POPUP ? "POPUP" : "MAIN";
+  const model = state.models[key];
+  if (!model) return state;
+  const data = JSON.parse(JSON.stringify(model.data ?? {}));
+  const merge = (target, patch) => {
+    for (const [name, value] of Object.entries(patch)) {
+      if (value && typeof value === "object" && !Array.isArray(value) && value.__delta) {
+        if (!Array.isArray(target[name])) continue;
+        for (const [row, cells] of Object.entries(value.__delta)) {
+          if (target[name][row] && typeof target[name][row] === "object") merge(target[name][row], cells);
+        }
+      } else {
+        target[name] = JSON.parse(JSON.stringify(value));
+      }
+    }
+  };
+  merge(data, delta);
+  return { ...state, models: { ...state.models, [key]: { ...model, data } } };
 }
 
 /** The agent snapshot of the mirror: what the "What Claude sees" panel shows. */

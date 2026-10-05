@@ -834,12 +834,20 @@ started from it (`replayOf( )` - the mirror as ONE answer, given to the
 client's start by the transport instead of being sent). So the model always
 acts on the screen the reader is looking at, and the reader can take the
 controls at any moment - the next message carries the new screen in a
-`<screen>` block, as the first message does. Three details are easy to undo:
+`<screen>` block, as the first message does. Four details are easy to undo:
 
 - **Read the screen after the frame has settled** (`settled( )`, the bridge's
   `busy( )`): the answer is in the mirror the moment the framework gives it,
   the popup it opens a moment later, and a frame asked too early reads as one
-  whose popup was closed.
+  whose popup was closed. An app's FIRST answer is rendered without the
+  frontend ever saying busy, so `busy( )` also counts a frame with no main
+  view yet - under load the Pilot otherwise acted on a frame that had not
+  drawn the app, and the values it typed went nowhere on screen.
+- **The mirror folds the request's model delta too** (`withDelta( )`). An
+  answer without a `MODEL` means "nothing bound changed", and the client keeps
+  what it sent - the reader's typing or the Pilot's. Folded from the answers
+  alone, the mirror kept the values from BEFORE, and the model was told a
+  field it had just filled was empty.
 - **A popup closed in the browser costs no roundtrip**, so the mirror would
   never hear of it: `catchUpWithFrame( )` asks the frame which slots hold a
   view and closes the others. The model's own `@CLOSE_POPUP` is performed in

@@ -143,7 +143,10 @@
   //                         marks it, so the next event carries it
   //   slots()               the slots that hold a view now
   //   busy()                whether a roundtrip is still being answered or
-  //                         rendered - the Pilot reads the screen only after
+  //                         rendered - the Pilot reads the screen only after.
+  //                         An app's first answer is rendered without the
+  //                         frontend ever saying busy, so a frame whose main
+  //                         view is not there yet counts as busy too
   function frontend() {
     var require_ = window.sap && sap.ui && sap.ui.require;
     if (!require_) return null;
@@ -193,7 +196,7 @@
     },
     busy: function () {
       var f = frontend();
-      return Boolean(f && f.ctx.state.isBusy);
+      return Boolean(f && (f.ctx.state.isBusy || !f.ViewSlots.getView(f.ctx, "MAIN")));
     },
     slots: function () {
       var f = frontend();

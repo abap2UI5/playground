@@ -207,7 +207,8 @@ function loadFrame(tab) {
   tab.frame.src = src;
 }
 
-// Until the tab's app has started: its first answer folded, and rendered.
+// Until the tab's app has started: its first answer folded, and rendered -
+// the frame says busy until its main view is there (frontend-bridge.js).
 async function started(tab, versionBefore) {
   const until = performance.now() + 30000;
   while (performance.now() < until) {
