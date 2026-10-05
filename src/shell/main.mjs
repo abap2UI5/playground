@@ -53,6 +53,7 @@ import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mj
 import { openShare, setUpShareDialog } from "./share-dialog.mjs";
 import { clearRoundtrips, recordRoundtrip, roundtripList } from "./roundtrips.mjs";
 import { setUpChat } from "./chat.mjs";
+import { AI_FILE, AI_STARTER, isUntouchedStarter } from "./ai-starter.mjs";
 import { state } from "./state.mjs";
 import { STALLED, startRuntime } from "./runtime-client.mjs";
 import { readStored, readStoredJson, removeStored, writeStored, writeStoredJson } from "./storage.mjs";
@@ -84,12 +85,11 @@ const params = new URLSearchParams(window.location.search);
 const embedded = params.get("embed") === "1";
 
 // The AI Studio's page (ai/index.html, written by tools/build-site.mjs from
-// this document): the studio opens on its own, on an empty class, and what is
-// built there is neither restored from nor stored over the playground's own
-// draft. The playground itself has no way into the studio while it is being
+// this document): the studio opens on its own, on the minimal class of
+// ai-starter.mjs, and what is built there is neither restored from nor stored
+// over the playground's own draft. The playground itself has no way into the studio while it is being
 // built - its address is the door.
 const aiPage = document.documentElement.dataset.page === "ai";
-const AI_FILE = "zcl_app.clas.abap";
 
 /* Opened from the sample catalogue - see showSourceLink( ). `back` is that
  * page's own query string, passed through so the reader lands on the search
@@ -133,7 +133,7 @@ let linkFailure;
 // the sample is the fallback. An embedded playground never restores a draft -
 // it shows what the page that embedded it asked for.
 async function startingFiles() {
-  if (aiPage) return { files: [{ name: AI_FILE, source: "" }], from: "an empty class" };
+  if (aiPage) return { files: [{ name: AI_FILE, source: AI_STARTER }], from: "a minimal class" };
   try {
     const shared = await filesFromLocation(MAIN_FILE);
     if (shared) return { files: checkFileSet(shared), from: "a shared link" };
@@ -515,10 +515,10 @@ async function boot() {
     }
   });
 
-  if (aiPage && getFiles().every((f) => f.source.trim() === "")) {
-    // The studio starts on an empty class: nothing to run yet, and the
-    // placeholder says where the app will appear. run( ) takes it away the
-    // first time an app starts.
+  if (aiPage && getFiles().every(isUntouchedStarter)) {
+    // The studio starts on a class with an empty main( ): nothing to run
+    // yet, and the placeholder says where the app will appear. run( ) takes
+    // it away the first time an app starts.
     const what = document.querySelector(".app-placeholder-what");
     if (what) what.textContent = "Your app appears here as soon as Claude has built it.";
     document.querySelector(".app-placeholder-help")?.setAttribute("hidden", "");
@@ -692,7 +692,7 @@ function remember(files) {
   // analysis of text that has not changed since the first.
   updateInsight(refresh());
   // Neither an embedding nor the AI Studio keeps a draft: the one shows what
-  // its page asked for, the other starts on an empty class every time and
+  // its page asked for, the other starts on the same minimal class every time and
   // must not write over the playground's own work.
   if (embedded || aiPage) return;
   // A sample that was picked and read is not a draft, and is forgotten rather

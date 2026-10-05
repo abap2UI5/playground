@@ -18,6 +18,7 @@
 // browser that refuses storage) and sent to api.anthropic.com and nowhere
 // else. An embedded playground never shows the chat at all: a demo in
 // somebody's documentation page is not where a reader types a key.
+import { isUntouchedStarter } from "./ai-starter.mjs";
 import { abapGitZip, download } from "./export.mjs";
 import { readStored, removeStored, writeStored } from "./storage.mjs";
 import { setStatus } from "./ui.mjs";
@@ -260,8 +261,8 @@ function setStage(stage, chosen = false) {
 // The app's name in the window bar of the stage: the class Run starts.
 function showAppName() {
   const first = host.files()[0];
-  // An empty class is nothing running yet.
-  if (!first || first.source.trim() === "") {
+  // The starting class, untouched, is nothing running yet.
+  if (!first || isUntouchedStarter(first)) {
     el.url.textContent = "your app";
     return;
   }

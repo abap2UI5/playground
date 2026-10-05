@@ -66,7 +66,7 @@ function sse({ text = "", tools = [], stop, note }) {
   return events.join("");
 }
 
-// The studio's page: it opens on its own, on an empty class, without a run.
+// The studio's page: it opens on its own, on a minimal class, without a run.
 async function openStudio(page) {
   await page.goto("/ai/");
   await expect(page.locator("#status")).toHaveText("ready - describe the app you want", { timeout: 120000 });
@@ -147,8 +147,8 @@ test("the chat builds an app in the editor, runs it and tells the model what hap
   expect(results[1].content).toContain("status: running");
   expect(results[1].content).toContain(MARK);
 
-  // The model's class is the app, and the empty class the studio started on
-  // went with its first write.
+  // The model's class is the app, and the untouched class the studio started
+  // on went with its first write.
   const files = await page.evaluate(() =>
     window.monaco.editor.getModels().filter((m) => m.uri.scheme === "file").map((m) => m.uri.path.slice(1)));
   expect(files).toEqual([APP_FILE]);
@@ -322,11 +322,15 @@ test("the playground carries no way into the studio, embedded or not", async ({ 
   }
 });
 
-test("the studio's page starts on an empty class: no run, no sample, and no way out to a playground under it", async ({ page }) => {
+test("the studio's page starts on a minimal class: no run, no sample, and no way out to a playground under it", async ({ page }) => {
   await openStudio(page);
   const files = await page.evaluate(() =>
     window.monaco.editor.getModels().filter((m) => m.uri.scheme === "file").map((m) => ({ name: m.uri.path.slice(1), source: m.getValue() })));
-  expect(files).toEqual([{ name: "zcl_app.clas.abap", source: "" }]);
+  expect(files).toHaveLength(1);
+  expect(files[0].name).toBe("zcl_app.clas.abap");
+  // The interface implemented, main( ) there and empty.
+  expect(files[0].source).toContain("INTERFACES z2ui5_if_app.");
+  expect(files[0].source).toMatch(/METHOD z2ui5_if_app~main\.\s*ENDMETHOD\./);
   await expect(page.locator(".app-placeholder-what")).toHaveText("Your app appears here as soon as Claude has built it.");
   await expect(page.locator("#studio-url")).toHaveText("your app");
   await expect(page.locator("#studio-exit")).toBeHidden();
