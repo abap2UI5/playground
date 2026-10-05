@@ -289,7 +289,12 @@ const result = await esbuild.build({
   // files, copied out of the pinned abap2UI5/samples by writeSamples( ) above
   // into build/samples/, and reached through the import module it writes there
   // - see src/editor/samples.mjs, which is the only importer.
-  loader: { ".ttf": "file", ".abap": "text" },
+  //
+  // `.md` is text for one importer: src/shell/ai-agent.mjs, the chat's chunk,
+  // which carries abap2UI5's own guide to building an app
+  // (deps/abap2ui5/docs/agents/building-apps.md, at the pinned commit) as the
+  // model's instructions.
+  loader: { ".ttf": "file", ".abap": "text", ".md": "text" },
   // ...and Inter is NOT one of the things this bundle carries. The two urls in
   // shell.css point at `../fonts/`, which from the stylesheet's place in the
   // build (`assets/shell.css`) is `dist/fonts/` - the one copy the catalogue's
@@ -365,11 +370,20 @@ if (!catalogueSource.includes("__SAMPLE_COUNT__")) throw new Error("src/catalogu
    declare the upstream catalogue as the canonical copy of its own. */
 if (!catalogueSource.includes("__SITE__")) throw new Error("src/catalogue/index.html lost its __SITE__ marker");
 const catalogueIndex = JSON.parse(fs.readFileSync(path.join(DIST, "samples", "apps.json"), "utf8"));
-const sampleCount = (catalogueIndex.entries ?? catalogueIndex.samples ?? []).length;
-if (!sampleCount) throw new Error("dist/samples/apps.json holds no entries to count - build-catalogue did not run, or its shape changed");
+/* A missing index or one in a shape this does not know fails the build. An
+   EMPTY one does not: it is what build-catalogue writes, by design, when none
+   of the three catalogues arrived (raw.githubusercontent.com down during a
+   deploy), and that step's failure is the survivable one - the page then
+   says the catalogue could not be loaded. Throwing here made it fatal after
+   all. */
+if (!Array.isArray(catalogueIndex.entries ?? catalogueIndex.samples) || !Array.isArray(catalogueIndex.sources)) {
+  throw new Error("dist/samples/apps.json is not an index - build-catalogue did not run, or its shape changed");
+}
+const sampleCount = (catalogueIndex.entries ?? catalogueIndex.samples).length;
+if (!sampleCount) log("WARNING: the catalogue index is empty - the page will say it could not be loaded");
 fs.writeFileSync(
   path.join(DIST, "samples", "index.html"),
-  withPolicy(stripHtmlComments(catalogueSource.replaceAll("__SITE__", SITE).replace("__SAMPLE_COUNT__", String(sampleCount)))),
+  withPolicy(stripHtmlComments(catalogueSource.replaceAll("__SITE__", SITE).replace("__SAMPLE_COUNT__", sampleCount ? String(sampleCount) : "no"))),
 );
 
 /* THE HIGHLIGHTER, PUBLISHED - the file that decides which words in a class
@@ -491,6 +505,17 @@ function writeServiceWorker() {
     if (unhashed.includes(rel)) hashes[rel] = crypto.createHash("sha256").update(bytes).digest("hex");
   }
   for (const entry of listing(path.join(DIST, "app")).sort()) id.update(entry);
+  /* And the BYTES of everything outside app/resources/: the frontend's own
+     files and the playground's frontend-bridge.js, which the worker serves
+     cache-first with no hash of its own. By path and size alone, an edit
+     that kept a file's length (a `!==` turned `===`, a constant changed)
+     left the build id - and so the worker, and so every returning visitor's
+     cached copy - exactly as it was. Seventy files and half a megabyte; the
+     OpenUI5 tree under resources/ is version-pinned and stays a listing. */
+  for (const entry of listing(path.join(DIST, "app")).sort()) {
+    const rel = entry.slice(0, entry.lastIndexOf(":"));
+    if (!rel.startsWith("resources/")) id.update(fs.readFileSync(path.join(DIST, "app", rel)));
+  }
 
   const source = fs.readFileSync(path.join(SHELL, "sw.js"), "utf8");
   for (const marker of ["__BUILD_ID__", "__CHUNKS__", "__APP_FIRST_LOAD__", "__CORE__"]) {
@@ -507,7 +532,7 @@ function writeServiceWorker() {
     path.join(DIST, "sw.js"),
     source
       .replaceAll("__BUILD_ID__", build)
-      .replace("__CHUNKS__", JSON.stringify(chunks()))
+      .replace("__CHUNKS__", JSON.stringify(chunks().filter((c) => !onUseOnly(c))))
       .replace("__APP_FIRST_LOAD__", JSON.stringify(firstLoad))
       .replace("__CORE__", JSON.stringify(hashes)),
   );
@@ -537,8 +562,45 @@ function writeIndex() {
   }
   /* After the substitution, without the comments: 9.8 kB of the 37 kB document,
      a third of its compressed weight (tools/html.mjs). */
-  fs.writeFileSync(path.join(DIST, "index.html"), stripHtmlComments(source.replace(marker, tags.join("\n"))));
+  const html = stripHtmlComments(source.replace(marker, tags.join("\n")));
+  fs.writeFileSync(path.join(DIST, "index.html"), html);
   log(`index.html (${tags.length} chunk${tags.length === 1 ? "" : "s"} preloaded)`);
+  writeAiPage(html);
+}
+
+// The AI Studio's page, ai/index.html: the playground's own document, one
+// directory down, marked as the studio. Not linked from anywhere - the
+// studio is still being built, so it is reached by its address alone and
+// kept out of search engines. `<base href="../">` makes every relative URL
+// in it - the bundle, the workers the inline script starts, the app frame,
+// the service worker's scope - resolve where the playground's own do, so
+// there is one build of everything and two doors into it. main.mjs reads
+// `data-page="ai"` and opens the studio on an empty class.
+function writeAiPage(html) {
+  const page = html
+    .replace(/<html([^>]*)>/, '<html$1 data-page="ai">')
+    .replace("<head>", '<head>\n<base href="../">\n<meta name="robots" content="noindex">')
+    .replace(/<title>[^<]*<\/title>/, "<title>AI Studio · abap2UI5</title>")
+    .replace(/<link rel="canonical"[^>]*>\n?/, "");
+  for (const mark of ['data-page="ai"', '<base href="../">', "<title>AI Studio"]) {
+    if (!page.includes(mark)) {
+      console.error(`build-site: ERROR the AI page could not be written - ${mark} did not land in src/shell/index.html's copy`);
+      process.exit(1);
+    }
+  }
+  fs.mkdirSync(path.join(DIST, "ai"), { recursive: true });
+  fs.writeFileSync(path.join(DIST, "ai", "index.html"), page);
+  log("ai/index.html (the AI Studio)");
+}
+
+// The chunk the AI chat loads (src/shell/ai-agent.mjs: the Anthropic SDK and
+// the app-building guide) is left out of the worker's precache. Precached, it
+// would be downloaded by every visitor the worker installs for, and the point
+// of the chunk is that only somebody who opens the chat pays for it; the
+// worker still keeps it once it has been used (`assets/*.mjs` is on its allow
+// list), and the chat needs the network to do anything anyway.
+function onUseOnly(chunk) {
+  return /^assets\/ai-agent-[\w-]+\.mjs$/.test(chunk);
 }
 
 // The bundle's chunks, as paths relative to dist/: every module under assets/

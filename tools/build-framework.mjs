@@ -39,6 +39,27 @@ const log = (m) => console.log(`build-framework: ${m}`);
 const run = (cmd, args) =>
   execFileSync(cmd, args, { cwd: ROOT, stdio: ["ignore", "inherit", "inherit"] });
 
+/* THE TWO TOOLS ARE THE INSTALLED ONES, BY PATH, NOT WHATEVER `npx` FINDS.
+ *
+ * `npx abaplint` in a checkout without node_modules does not run abaplint: it
+ * asks the registry for a package of that name, fails (`No versions available
+ * for abaplint` - the package is @abaplint/cli), and exits non-zero. The
+ * downport below swallows a non-zero exit on purpose, because `--fix` exits
+ * that way while issues remain - so a tool that never ran was recorded as a
+ * finished downport, the stamp was written over an un-downported tree, and
+ * the next build "reused" it and died in the transpiler on the first `REF #`,
+ * three minutes and one misleading stack later. The binary this project
+ * installed is the only one that may run here, and a missing one is a missing
+ * install, said in one line. */
+const bin = (name) => {
+  const at = path.join(ROOT, "node_modules", ".bin", name);
+  if (!fs.existsSync(at)) {
+    console.error(`build-framework: ERROR ${name} is not installed under node_modules/.bin - run \`npm ci\` first`);
+    process.exit(1);
+  }
+  return at;
+};
+
 // ---------------------------------------------------------------- input hash
 
 // Everything that can change what build/downport should contain. The abaplint
@@ -158,11 +179,13 @@ function downport() {
 
   log("downporting to v702 (this takes a few minutes)");
   // abaplint --fix exits non-zero while issues remain, which is the normal
-  // state during a downport - the syntax check below is what decides.
+  // state during a downport - the transpile below is what decides.
   try {
-    run("npx", ["abaplint", "--fix", configPath]);
-  } catch {
-    /* expected: --fix reports the issues it fixed */
+    run(bin("abaplint"), ["--fix", configPath]);
+  } catch (e) {
+    /* expected: --fix reports the issues it fixed. A process that could not
+       be started at all is not that case, and is said rather than cached. */
+    if (typeof e?.status !== "number") throw e;
   }
 
   // The two textual fixups abap2UI5 applies after the downport. The first
@@ -220,7 +243,7 @@ function transpile() {
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 
   log("transpiling to JavaScript");
-  run("npx", ["abap_transpile", configPath]);
+  run(bin("abap_transpile"), [configPath]);
 }
 
 // ---------------------------------------------------------------------- main
@@ -228,12 +251,19 @@ function transpile() {
 const stampPath = path.join(BUILD, "downport.stamp");
 const hash = inputHash();
 const force = process.argv.includes("--force");
+let downportDone;
 
 if (!force && fs.existsSync(stampPath) && fs.readFileSync(stampPath, "utf8").trim() === hash && fs.existsSync(DOWNPORT)) {
   log("downport up to date, reusing build/downport");
 } else {
+  // The stamp goes first and comes back last - only once the transpile has
+  // taken the tree. abaplint exiting with a number is also what a crash
+  // looks like, and a stamp written straight after it recorded a half-done
+  // downport as finished: every rebuild then reused it and died in the
+  // transpiler until somebody passed --force.
+  fs.rmSync(stampPath, { force: true });
   downport();
-  fs.writeFileSync(stampPath, hash);
+  downportDone = hash;
 }
 
 // The transpile and the bundle, skipped together when nothing that feeds them
@@ -268,6 +298,7 @@ if (outputIsCurrent) {
   await bundle();
   fs.writeFileSync(outStampPath, outHash);
 }
+if (downportDone) fs.writeFileSync(stampPath, downportDone);
 
 // -------------------------------------------------------------------- bundle
 

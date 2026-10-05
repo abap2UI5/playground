@@ -118,12 +118,19 @@ export async function runUnitTests(tests) {
 // a chunk defined that way has no line to be traced to.
 const lineTables = new Map();
 
-export function defineClasses(chunks) {
+// An ASYNC function, not a plain one: a class with a class_constructor is
+// emitted with a top-level `await abap.Classes[...].class_constructor()` at
+// the end of its chunk, and inside `new Function` that was a SyntaxError -
+// such a class could never run. The header is two lines either way, so the
+// arithmetic in locate( ) still holds.
+const AsyncFunction = (async () => {}).constructor;
+
+export async function defineClasses(chunks) {
   for (const chunk of chunks) {
     const { js, name, lines } = typeof chunk === "string" ? { js: chunk } : chunk;
     if (name) lineTables.set(name, lines ?? []);
-    const define = new Function("abap", `${js}\nreturn true;${name ? `\n//# sourceURL=${name}` : ""}`);
-    define(globalThis.abap);
+    const define = new AsyncFunction("abap", `${js}\nreturn true;${name ? `\n//# sourceURL=${name}` : ""}`);
+    await define(globalThis.abap);
   }
   forgetCachedTypeInformation();
 }

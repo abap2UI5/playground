@@ -122,7 +122,15 @@ function build() {
   );
 
   log(`building the frontend against OpenUI5 ${UI5_VERSION} (first run also downloads it)`);
-  execFileSync("npx", ["--prefix", ROOT, "ui5", "build", "--all", "--dest", UI5_DIST], {
+  // By path, never through npx - the trap build-framework.mjs describes: with
+  // @ui5/cli missing, a non-interactive npx resolves `ui5` from the registry
+  // and runs whatever package carries that name.
+  const ui5 = path.join(ROOT, "node_modules", ".bin", "ui5");
+  if (!fs.existsSync(ui5)) {
+    console.error("build-ui5: ERROR ui5 is not installed under node_modules/.bin - run `npm ci` first");
+    process.exit(1);
+  }
+  execFileSync(ui5, ["build", "--all", "--dest", UI5_DIST], {
     cwd: WORK,
     stdio: ["ignore", "inherit", "inherit"],
   });

@@ -273,6 +273,19 @@ test("every line of the class has an address, and the numbers are not in the tex
   expect(css).toContain("user-select: none");
 });
 
+test("a line range past the end of the class is walked only as far as the class goes", async ({ page }) => {
+  const { entry } = printed(12);
+  // #L1-L99999999 is a link anybody can send; it used to be a hundred million
+  // lookups on the reader's main thread before the page answered.
+  const started = Date.now();
+  await page.goto(`/samples/${entry.page}#L1-L99999999`);
+  await expect(page.locator(".ln.is-marked").first()).toBeVisible();
+  expect(Date.now() - started).toBeLessThan(15000);
+  // And line 0 is no line.
+  await page.goto(`/samples/${entry.page}#L0`);
+  await expect(page.locator(".ln.is-marked")).toHaveCount(0);
+});
+
 test("a line link marks the line, a shift-click makes a passage, and the button hands it over", async ({ page, context }) => {
   const { entry } = printed(12);
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);

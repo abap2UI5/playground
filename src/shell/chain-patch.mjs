@@ -46,6 +46,7 @@
 // left in the order the chain has them. Order is not a property of the view
 // worth a diff across a control's whole block.
 import { STEP, attributeLines } from "./chain-write.mjs";
+import { commentIn } from "./chain-read.mjs";
 
 /**
  * `source` with `built` written back over the chain it came from, or
@@ -70,12 +71,12 @@ function collect(built, node, source, edits) {
 
   if (sameAttributes(built, node)) {
     for (const attr of built.attrs) {
-      if (attr.raw === attr.from.raw && attr.boolean === attr.from.boolean) continue;
+      if (attr.raw === attr.from.raw && attr.boolean === attr.from.boolean && attr.key === attr.from.key) continue;
       if (attr.from.keyAt === undefined || attr.from.valueEnd === undefined) return false;
       edits.push({
         start: attr.from.keyAt,
         end: attr.from.valueEnd,
-        text: `${attr.boolean ? "b" : "v"} = ${attr.raw}`,
+        text: `${attr.key ?? (attr.boolean ? "b" : "v")} = ${attr.raw}`,
       });
     }
   } else {
@@ -140,15 +141,24 @@ function replacingBlock(built, node, source) {
   // the block - the ` ).` that ends the statement, the `\n    )->end(` that
   // ascends - and every one of those has to be left exactly as it is.
   const end = beforeTrailingSpace(source, node.attrs[node.attrs.length - 1].span.end);
+  // A `" note` on an attribute line sits inside that range, and the block is
+  // written from the tree, which has no comments: declined, so the comment is
+  // not dropped (the full rewrite refuses it as well, and says so).
+  if (commentIn(source, first - column, end)) return undefined;
+  // Lines joined with the file's own ending - a CRLF file got LF lines in the
+  // middle of it.
+  const eol = source.includes("\r\n") ? "\r\n" : "\n";
   const lines = attributeLines(built, column);
   // Nothing left to write: the block's own line goes as well, or the closing
   // parenthesis would be left standing in column zero. A chain that opens the
   // file has no such line to take, and is left to the writer.
   if (lines.length === 0) {
     if (first - column === 0) return undefined;
-    return { start: first - column - 1, end, text: "" };
+    // The line break in front of it, both characters of it in a CRLF file.
+    const lineBreak = source[first - column - 2] === "\r" ? 2 : 1;
+    return { start: first - column - lineBreak, end, text: "" };
   }
-  return { start: first - column, end, text: lines.join("\n") };
+  return { start: first - column, end, text: lines.join(eol) };
 }
 
 // A control that had none and has some now: the block opens directly behind
@@ -162,7 +172,8 @@ function openingBlock(built, node, source) {
   const lines = attributeLines(built, column + STEP);
   if (lines.length === 0) return undefined;
   const at = beforeTrailingSpace(source, node.span.end);
-  return { start: at, end: at, text: "\n" + lines.join("\n") };
+  const eol = source.includes("\r\n") ? "\r\n" : "\n";
+  return { start: at, end: at, text: eol + lines.join(eol) };
 }
 
 // Where a call's content ends: the closing parenthesis walked back over the

@@ -346,6 +346,9 @@ select:disabled { opacity: .5; }
   cursor: col-resize;
   background: transparent;
   position: relative;
+  /* A finger on a handle is a drag, not a pan: without this the browser takes
+     the touch for scrolling a few pixels in and cancels the pointer. */
+  touch-action: none;
 }
 .splitter::after {
   content: "";
@@ -562,6 +565,7 @@ iframe {
   position: relative;
   z-index: 1;
   background: transparent;
+  touch-action: none; /* see .splitter */
 }
 /* 5px of grip is a hairline: fine under a mouse, invisible to a finger, and
    the one control on this page a touch screen could not hit at all. The line
@@ -863,7 +867,10 @@ iframe {
    starts eliding what it is there to say. */
 .examples-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(23rem, 1fr));
+  /* ...and never wider than the list itself: 23rem is 368px, and on a 390px
+     phone the body's padding leaves 364 - so the one column was four pixels
+     wider than its box and every card's last button was cut at the edge. */
+  grid-template-columns: repeat(auto-fill, minmax(min(23rem, 100%), 1fr));
   gap: .3rem;
 }
 
@@ -878,15 +885,31 @@ iframe {
 .example-item .example-row { flex: 1; min-width: 0; }
 /* The row is a button and a two-line one: what it is called, with what the
    index knows about it, then what it does and the class it is. */
-.example-row {
+/* BOTH CLASSES, BECAUSE `.insight-row` BELOW OUTRANKED THIS. The row carries
+   `insight-row` for the button reset and `example-row` for its own two-line
+   shape, and the two rules are one class each - so the later one won on
+   every property they share: the row was laid out with the panel's `gap`,
+   its `padding` and, the one that showed, `align-items: baseline`. In a
+   column that means no stretch, so each line was as wide as its own words:
+   a summary of 1,100px ran out of its card and under the next one, and the
+   class name after it was never on screen. */
+.insight-row.example-row {
   display: flex; flex-direction: column; align-items: stretch; gap: .1rem;
   padding: .3rem .5rem; border-radius: 6px; border-left: none;
 }
 button.example-row { border-left: none; }
 .example-line { display: flex; align-items: baseline; gap: .4rem; min-width: 0; }
 .example-line.is-second { color: var(--fg-dim); }
-.example-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.example-note { color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* THE TITLE AND THE NOTE ARE WHAT GIVES WAY. Both are set nowrap with an
+   ellipsis, and neither could shrink: a flex item's minimum is its content,
+   so a one-line summary of 1,100px stayed 1,100px wide, ran out of the
+   button, out of the card and under the card beside it - the last column
+   showed the tail of its sentence past its own border, and the class name
+   after the note was never seen at all. `min-width: 0` is what lets the
+   ellipsis happen; the badges and the class name beside them keep their
+   width (`flex: none`), which is the point of the ellipsis being here. */
+.example-title { flex: 0 1 auto; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.example-note { flex: 1 1 auto; min-width: 0; color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .example-row .insight-who { flex: none; font-family: var(--font-mono); }
 
 /* What the index knows, in one or two words each: the group the repository
@@ -1364,8 +1387,18 @@ button.insight-row {
   .examples-intro { display: none; }
   .examples-filters { flex-direction: row; flex-wrap: wrap; align-items: center; gap: .3rem .8rem; }
   .examples-filter-group.is-sources { flex-direction: row; gap: .7rem; margin: 0; padding: .15rem .6rem; border-radius: 999px; }
-  .examples-facets { flex-direction: row; flex-wrap: wrap; gap: .5rem; }
-  .examples-facet { flex-direction: row; align-items: center; gap: .3rem; }
+  /* `max-width: 100%` is what the clamp hangs on: a wrapping row's item is
+     otherwise as wide as its widest child's content, however wide the row. */
+  .examples-facets { flex-direction: row; flex-wrap: wrap; gap: .5rem; max-width: 100%; }
+  /* A select is as wide as its widest option, and the control list's is
+     "sap.ui.layout.form.SimpleForm" and longer - 363px of select on a 390px
+     screen. In the column it was capped by the side's width; in a row that
+     wraps nothing capped it, so the facet ran off the right edge, the row it
+     sat in grew to its width and the two lists after it wrapped past the
+     screen as well. The facet may shrink and grow with the row, and the list
+     inside it gives way rather than the label. */
+  .examples-facet { flex: 1 1 auto; flex-direction: row; align-items: center; gap: .3rem; min-width: 0; max-width: 100%; }
+  .examples-facet select { flex: 1 1 auto; min-width: 0; }
   .examples-all { margin: 0 0 0 auto; padding: 0; border-top: none; }
   /* The head is title, search, count and close, and on a phone the count is
      the one of the four that fits nowhere - the list under it is the count. */
@@ -1769,3 +1802,636 @@ button.insight-row {
   .extra { margin-right: -3px; }
 }
 
+
+/* ------------------------------------------------------------------- chat */
+
+/* The AI chat lives in the AI Studio - see "The AI Studio" at the end of
+   this file for the layout it is drawn in. */
+
+.chat {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.chat[hidden] { display: none; }
+
+.chat-head {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+  padding: .45rem .75rem;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.chat-title { font-size: 14px; font-weight: 600; margin: 0; }
+.chat-usage { color: var(--fg-dim); font-size: 12px; font-family: var(--font-mono); white-space: nowrap; }
+.chat-head .spacer { flex: 1; }
+
+.chat-key {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+  padding: .75rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-sunken);
+  font-size: 13px;
+}
+.chat-key[hidden] { display: none; }
+.chat-key label { font-weight: 600; }
+.chat-key-optional { font-weight: 400; color: var(--fg-dim); }
+.chat-key-row { display: flex; gap: .5rem; }
+.chat-key-row input {
+  flex: 1;
+  min-width: 0;
+  font: 13px var(--font-mono);
+  padding: .35rem .5rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+}
+.chat-key-note { margin: 0; color: var(--fg-dim); line-height: 1.45; }
+.chat-key-note a { color: var(--accent); }
+
+.chat-log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: .75rem;
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.chat-welcome { color: var(--fg-dim); max-width: 46rem; }
+.chat-welcome p { margin: 0 0 .75rem; }
+.chat-suggestions { display: flex; flex-direction: column; align-items: flex-start; gap: .4rem; }
+button.chat-suggestion {
+  text-align: left;
+  white-space: normal;
+  border-radius: var(--radius-surface);
+  color: var(--fg);
+  background: var(--bg-sunken);
+}
+
+/* A message is text, never markup: what the model writes is set with
+   textContent, and its line breaks are kept by pre-wrap. */
+.chat-msg { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 46rem; }
+.chat-user {
+  align-self: flex-end;
+  background: var(--accent);
+  color: var(--accent-fg);
+  padding: .45rem .7rem;
+  border-radius: var(--radius-surface);
+}
+/* The model's answer is rendered from its markdown (renderMarkdown( ) in
+   chat.mjs - built as nodes, never as HTML), so it is laid out as blocks
+   rather than kept as typed. */
+.chat-assistant { align-self: flex-start; white-space: normal; }
+.chat-assistant > :first-child { margin-top: 0; }
+.chat-assistant > :last-child { margin-bottom: 0; }
+.chat-assistant p,
+.chat-assistant ul,
+.chat-assistant ol { margin: .45rem 0; }
+.chat-assistant ul,
+.chat-assistant ol { padding-left: 1.3rem; }
+.chat-assistant li { margin: .15rem 0; }
+.chat-assistant code {
+  font: 12.5px var(--font-mono);
+  background: var(--bg-sunken);
+  border-radius: 4px;
+  padding: .05rem .3rem;
+}
+.chat-assistant pre {
+  margin: .45rem 0;
+  padding: .5rem .6rem;
+  background: var(--bg-sunken);
+  border-radius: 6px;
+  overflow-x: auto;
+  white-space: pre;
+}
+.chat-assistant pre code { background: none; padding: 0; }
+.chat-tool,
+.chat-notice {
+  align-self: flex-start;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--fg-dim);
+  padding: .1rem .5rem;
+  border-left: 2px solid var(--line);
+}
+.chat-tool::before { content: "› "; }
+/* A tool call still under way: its row counts what has arrived, and is
+   finished in place when the call is done. */
+.chat-tool.is-pending { color: var(--fg); border-left-color: var(--accent); }
+.chat-tool.is-pending::before { content: "… "; }
+/* The model's progress notes between tool calls - its own words, quieter
+   than an answer. */
+.chat-progress {
+  align-self: flex-start;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--fg-dim);
+}
+.chat-speed {
+  font: inherit;
+  font-size: 12px;
+  padding: .2rem .35rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  color: var(--fg);
+}
+.chat-tool.is-error,
+.chat-notice.is-error { color: var(--danger); border-left-color: var(--danger); }
+
+/* While a reply is under way, the last line says so. */
+.chat.is-busy .chat-log::after {
+  content: "working…";
+  align-self: flex-start;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+.chat-compose {
+  flex: none;
+  display: flex;
+  gap: .5rem;
+  align-items: flex-end;
+  padding: .6rem .75rem;
+  border-top: 1px solid var(--line);
+}
+.chat-compose textarea {
+  flex: 1;
+  min-width: 0;
+  resize: vertical;
+  min-height: 3.2rem;
+  max-height: 40vh;
+  font: inherit;
+  font-size: 14px;
+  padding: .45rem .6rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+}
+.chat-compose textarea:focus,
+.chat-key-row input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+@media (max-width: 820px) {
+  .chat-head { flex-wrap: wrap; }
+  .chat-head .spacer { display: none; }
+}
+
+
+/* -------------------------------------------------------------- AI Studio */
+
+/* Pressing AI turns the page into the AI Studio (src/shell/chat.mjs): the
+   site's bar and the workbench toolbar step aside, and the page is a chat
+   beside a stage that shows the app, the code, or both. It is deliberately
+   not the documentation's sober palette - a room of its own, with its own
+   tokens in both themes - but it is built from the SAME elements: nothing is
+   moved in the DOM. The app frame in particular must stay where it is, since
+   an iframe that is moved reloads; the studio is a grid laid over the
+   existing panes (`.pane-left` dissolves into it with display: contents) and
+   body[data-stage] says which of them the stage shows. */
+body.is-studio {
+  --st-fg: #1b1a2e;
+  --st-dim: #6b6a85;
+  --st-surface: rgba(255, 255, 255, .72);
+  --st-surface-strong: #ffffff;
+  --st-border: rgba(91, 76, 196, .16);
+  --st-glow: rgba(124, 92, 255, .28);
+  --st-grad: linear-gradient(135deg, #7c5cff 0%, #3b82f6 55%, #06b6d4 100%);
+  --st-bg:
+    radial-gradient(1100px 620px at -10% -20%, rgba(124, 92, 255, .20), transparent 60%),
+    radial-gradient(900px 560px at 115% 0%, rgba(6, 182, 212, .16), transparent 60%),
+    radial-gradient(800px 500px at 50% 120%, rgba(59, 130, 246, .12), transparent 60%),
+    #f6f5ff;
+  background: var(--st-bg);
+  color: var(--st-fg);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) body.is-studio {
+    --st-fg: #ecebff;
+    --st-dim: #9d9bc0;
+    --st-surface: rgba(22, 22, 40, .66);
+    --st-surface-strong: #15152a;
+    --st-border: rgba(160, 150, 255, .14);
+    --st-glow: rgba(124, 92, 255, .42);
+    --st-bg:
+      radial-gradient(1100px 620px at -10% -20%, rgba(124, 92, 255, .32), transparent 60%),
+      radial-gradient(900px 560px at 115% 0%, rgba(6, 182, 212, .20), transparent 60%),
+      radial-gradient(800px 500px at 50% 120%, rgba(59, 130, 246, .16), transparent 60%),
+      #090a16;
+  }
+}
+:root[data-theme="dark"] body.is-studio {
+  --st-fg: #ecebff;
+  --st-dim: #9d9bc0;
+  --st-surface: rgba(22, 22, 40, .66);
+  --st-surface-strong: #15152a;
+  --st-border: rgba(160, 150, 255, .14);
+  --st-glow: rgba(124, 92, 255, .42);
+  --st-bg:
+    radial-gradient(1100px 620px at -10% -20%, rgba(124, 92, 255, .32), transparent 60%),
+    radial-gradient(900px 560px at 115% 0%, rgba(6, 182, 212, .20), transparent 60%),
+    radial-gradient(800px 500px at 50% 120%, rgba(59, 130, 246, .16), transparent 60%),
+    #090a16;
+}
+
+/* What steps aside. */
+body.is-studio > header.bar,
+body.is-studio > .toolbar,
+body.is-studio .tabs,
+body.is-studio .splitter { display: none; }
+.studio-bar[hidden],
+.studio-window { display: none; }
+
+/* The grid: the bar across the top, the chat down the left, the stage on
+   the right - which is the app, the code (file strip, editor, panel), or
+   the code and the app side by side. */
+body.is-studio .panes {
+  display: grid;
+  grid-template-columns: minmax(20rem, 34%) minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  column-gap: 14px;
+  padding: 0 14px 14px;
+  animation: studio-in .35s ease-out;
+}
+body.is-studio .pane-left { display: contents; }
+/* The page's one heading is visually hidden but still a box, and a box in a
+   grid takes a cell: out of the flow it takes none. */
+body.is-studio .panes > h1 { position: absolute; }
+body.is-studio .studio-bar { grid-column: 1 / -1; grid-row: 1; }
+body.is-studio .chat { grid-column: 1; grid-row: 2 / -1; }
+body.is-studio .pane-right { grid-column: 2; grid-row: 2 / -1; display: flex; border-left: 0; }
+body.is-studio .pane-left > .files { grid-column: 2; grid-row: 2; }
+body.is-studio .pane-left > .editor { grid-column: 2; grid-row: 3; min-height: 0; }
+body.is-studio .pane-left > .insight { grid-column: 2; grid-row: 4; }
+
+body.is-studio[data-stage="preview"] .pane-left > :is(.files, .editor, .insight) { display: none; }
+body.is-studio[data-stage="code"] .pane-right { display: none; }
+body.is-studio[data-stage="split"] .panes {
+  grid-template-columns: minmax(20rem, 30%) minmax(0, 1fr) minmax(0, 1fr);
+}
+body.is-studio[data-stage="split"] .pane-right { grid-column: 3; }
+body.is-studio[data-stage="chat"] .pane-right,
+body.is-studio[data-stage="chat"] .pane-left > :is(.files, .editor, .insight) { display: none; }
+body.is-studio[data-stage="chat"] .chat { grid-column: 1 / -1; }
+@media (max-width: 820px) {
+  body.is-studio .panes { grid-template-columns: minmax(0, 1fr); padding: 0 8px 8px; }
+  body.is-studio:not([data-stage="chat"]) .chat { display: none; }
+  body.is-studio .pane-right,
+  body.is-studio .pane-left > :is(.files, .editor, .insight) { grid-column: 1; }
+  .studio-stage.only-wide { display: none; }
+}
+@media (min-width: 821px) {
+  .studio-stage.only-narrow { display: none; }
+}
+/* On a phone the bar is two rows: the mark and the two ways out above, the
+   stages across the whole width below - one row ran its last tab and the
+   way out of the studio off the edge of the screen. */
+@media (max-width: 820px) {
+  .studio-bar { flex-wrap: wrap; gap: 8px; padding: 8px 2px; }
+  .studio-brand { margin-right: auto; }
+  .studio-brand-name,
+  .studio-status { display: none; }
+  .studio-stages { order: 3; flex: 1 1 100%; margin-left: 0; }
+  button.studio-stage { flex: 1; }
+}
+
+/* The bar. */
+.studio-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 2px;
+  min-width: 0;
+}
+.studio-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  font-size: 15px;
+  letter-spacing: -.01em;
+  white-space: nowrap;
+}
+.studio-brand b {
+  font-weight: 700;
+  background: var(--st-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.studio-spark {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--st-grad);
+  color: #fff;
+  font-size: 14px;
+  box-shadow: 0 4px 18px var(--st-glow);
+}
+.studio-stages {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  margin-left: 8px;
+  border-radius: 999px;
+  background: var(--st-surface);
+  border: 1px solid var(--st-border);
+  backdrop-filter: blur(12px);
+}
+button.studio-stage {
+  border: 0;
+  border-radius: 999px;
+  padding: .25rem .9rem;
+  background: transparent;
+  color: var(--st-dim);
+  font-weight: 600;
+  font-size: 13px;
+}
+button.studio-stage[aria-selected="true"] {
+  background: var(--st-grad);
+  color: #fff;
+  box-shadow: 0 2px 12px var(--st-glow);
+}
+.studio-status {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  font-size: 12px;
+  color: var(--st-dim);
+}
+button.studio-icon {
+  border: 1px solid var(--st-border);
+  background: var(--st-surface);
+  color: var(--st-fg);
+  border-radius: 10px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 15px;
+  backdrop-filter: blur(12px);
+}
+
+/* Glass cards: the chat, the stage, the code. */
+body.is-studio .chat,
+body.is-studio .pane-right,
+body.is-studio .pane-left > :is(.files, .editor, .insight) {
+  background: var(--st-surface);
+  border: 1px solid var(--st-border);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 10px 40px rgba(20, 10, 60, .10);
+}
+body.is-studio .chat,
+body.is-studio .pane-right { border-radius: 18px; overflow: hidden; }
+body.is-studio .pane-left > .files { border-radius: 18px 18px 0 0; border-bottom: 0; }
+body.is-studio .pane-left > .editor { border-top: 0; border-bottom: 0; }
+body.is-studio .pane-left > .insight { border-radius: 0 0 18px 18px; border-top: 1px solid var(--st-border); }
+body.is-studio .pane-left > .insight.is-collapsed { border-radius: 0 0 18px 18px; }
+/* Relative, and with the phone layout's inset (room for the ABAP/App tabs,
+   which the studio does not have) taken back - relative and inset together
+   pushed the stage 34px down and past the bottom of the screen. */
+body.is-studio .pane-right { position: relative; inset: auto; }
+
+/* The window the app wears on the stage. */
+body.is-studio .studio-window {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--st-border);
+}
+.studio-dots { display: inline-flex; gap: 6px; }
+.studio-dots i { width: 10px; height: 10px; border-radius: 50%; background: #ff5f57; }
+.studio-dots i:nth-child(2) { background: #febc2e; }
+.studio-dots i:nth-child(3) { background: #28c840; }
+.studio-url {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  font: 12px var(--font-mono);
+  color: var(--st-dim);
+  padding: .2rem .8rem;
+  border-radius: 999px;
+  background: rgba(127, 127, 160, .08);
+  margin-right: 46px;
+}
+body.is-studio .app-frame { background: var(--st-surface-strong); }
+
+/* While the model works, the stage glows along its edge; when the app has
+   just been updated, it flashes once. */
+@property --studio-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+body.is-studio.is-ai-working .pane-right::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(from var(--studio-angle), #7c5cff, #3b82f6, #06b6d4, #7c5cff);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: studio-spin 2.4s linear infinite;
+}
+body.is-studio .pane-right.is-flash { animation: studio-flash .9s ease-out; }
+
+/* The chat, dressed for the studio. */
+body.is-studio .chat-head { border-bottom: 1px solid var(--st-border); padding: .6rem .9rem; }
+body.is-studio .chat-title { display: none; }
+body.is-studio .chat-head button,
+body.is-studio .chat-speed {
+  background: transparent;
+  color: var(--st-fg);
+  border: 1px solid var(--st-border);
+  border-radius: 999px;
+}
+body.is-studio .chat-usage { color: var(--st-dim); }
+body.is-studio .chat-key { background: transparent; border-bottom: 1px solid var(--st-border); }
+body.is-studio .chat-key-row input,
+body.is-studio .chat-compose textarea {
+  background: var(--st-surface-strong);
+  color: var(--st-fg);
+  border: 1px solid var(--st-border);
+}
+body.is-studio .chat-log { padding: 1rem 1rem .5rem; gap: .65rem; }
+body.is-studio .chat-msg { max-width: 100%; }
+body.is-studio .chat-user {
+  background: var(--st-grad);
+  color: #fff;
+  border-radius: 18px 18px 4px 18px;
+  padding: .55rem .85rem;
+  box-shadow: 0 6px 22px var(--st-glow);
+}
+body.is-studio .chat-assistant {
+  position: relative;
+  padding-left: 2.1rem;
+  line-height: 1.6;
+}
+body.is-studio .chat-assistant::before {
+  content: "✦";
+  position: absolute;
+  left: 0;
+  top: .05rem;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--st-grad);
+  color: #fff;
+  font-size: 11px;
+  box-shadow: 0 3px 12px var(--st-glow);
+}
+body.is-studio .chat-assistant code,
+body.is-studio .chat-assistant pre { background: rgba(127, 127, 160, .12); }
+body.is-studio .chat-tool,
+body.is-studio .chat-notice {
+  margin-left: 2.1rem;
+  border: 1px solid var(--st-border);
+  border-radius: 999px;
+  padding: .15rem .7rem;
+  background: var(--st-surface-strong);
+  color: var(--st-dim);
+}
+body.is-studio .chat-tool::before { content: "✓ "; color: #10b981; }
+body.is-studio .chat-tool.is-error::before { content: "✕ "; color: var(--danger); }
+/* The rule above outranks the plain .is-error one, and a refused key or a
+   failed request read in the same dim grey as "Stopped.". */
+body.is-studio .chat-tool.is-error,
+body.is-studio .chat-notice.is-error { color: var(--danger); border-color: var(--danger); }
+body.is-studio .chat-tool.is-pending {
+  color: var(--st-fg);
+  border-color: transparent;
+  background:
+    linear-gradient(90deg, rgba(124, 92, 255, .10), rgba(6, 182, 212, .22), rgba(124, 92, 255, .10)) 0 0 / 200% 100%,
+    var(--st-surface-strong);
+  animation: studio-shimmer 1.4s linear infinite;
+}
+body.is-studio .chat-tool.is-pending::before { content: "◌ "; color: #7c5cff; }
+body.is-studio .chat-progress { margin-left: 2.1rem; color: var(--st-dim); }
+body.is-studio .chat-progress::before { content: "✧ "; font-style: normal; }
+body.is-studio.is-ai-working .chat-log::after {
+  content: "";
+  width: 3.2rem;
+  height: .5rem;
+  margin-left: 2.1rem;
+  border-radius: 999px;
+  background: radial-gradient(circle, #7c5cff 40%, transparent 42%) 0 50% / 33.3% 100% repeat-x;
+  animation: studio-dots 1s steps(3) infinite;
+}
+
+/* "The app was updated" - the run, as a card in the conversation. */
+.chat-card { display: none; }
+body.is-studio .chat-card {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: .5rem;
+  margin-left: 2.1rem;
+  padding: .45rem .9rem;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--st-surface-strong), var(--st-surface-strong)) padding-box,
+    var(--st-grad) border-box;
+  color: var(--st-fg);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+body.is-studio .chat-card span { color: var(--st-dim); font-weight: 400; }
+
+/* The empty conversation: a question and three ways to answer it. */
+body.is-studio .chat-welcome { max-width: none; padding: 1.5rem .5rem; color: var(--st-dim); }
+body.is-studio .chat-welcome h2 {
+  margin: 0 0 .5rem;
+  font-size: 28px;
+  line-height: 1.15;
+  letter-spacing: -.02em;
+  background: var(--st-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+body.is-studio .chat-suggestions { align-items: stretch; gap: .55rem; }
+body.is-studio button.chat-suggestion {
+  border: 1px solid var(--st-border);
+  background: var(--st-surface-strong);
+  color: var(--st-fg);
+  border-radius: 14px;
+  padding: .65rem .85rem;
+  transition: transform .15s, box-shadow .15s, border-color .15s;
+}
+body.is-studio button.chat-suggestion:hover {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--st-surface-strong), var(--st-surface-strong)) padding-box,
+    var(--st-grad) border-box;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 26px var(--st-glow);
+}
+.chat-welcome h2 { font-size: 18px; margin: 0 0 .5rem; color: var(--fg); }
+
+/* The composer: one rounded field with the send button inside its edge. */
+body.is-studio .chat-compose { border-top: 0; padding: .6rem .8rem .9rem; }
+body.is-studio .chat-compose textarea {
+  border-radius: 16px;
+  padding: .7rem .9rem;
+  min-height: 3.4rem;
+  box-shadow: 0 6px 24px rgba(20, 10, 60, .08);
+}
+body.is-studio .chat-compose textarea:focus { outline: 2px solid #7c5cff; outline-offset: 0; }
+body.is-studio #chat-send {
+  border: 0;
+  border-radius: 14px;
+  padding: .55rem 1rem;
+  background: var(--st-grad);
+  color: #fff;
+  box-shadow: 0 6px 20px var(--st-glow);
+}
+body.is-studio.is-ai-working #chat-send { background: var(--st-surface-strong); color: var(--st-fg); box-shadow: none; border: 1px solid var(--st-border); }
+
+@keyframes studio-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes studio-spin { to { --studio-angle: 360deg; } }
+@keyframes studio-shimmer { to { background-position: -200% 0, 0 0; } }
+@keyframes studio-dots { from { background-size: 0 100%; } to { background-size: 100% 100%; } }
+@keyframes studio-flash {
+  0% { box-shadow: 0 0 0 0 var(--st-glow); }
+  40% { box-shadow: 0 0 0 6px var(--st-glow); }
+  100% { box-shadow: 0 10px 40px rgba(20, 10, 60, .10); }
+}
+/* The studio's animations are its own, so it answers for them: less motion
+   means none of them, and the edge glow is a still line. */
+@media (prefers-reduced-motion: reduce) {
+  body.is-studio .panes,
+  body.is-studio .pane-right,
+  body.is-studio .pane-right::after,
+  body.is-studio .chat-tool.is-pending,
+  body.is-studio .chat-log::after { animation: none !important; }
+}
+.studio-status.error { color: var(--danger); }
+body.is-studio .chat-key button.primary { border: 0; background: var(--st-grad); color: #fff; border-radius: 999px; }

@@ -18,7 +18,7 @@ them before touching `tools/` or `src/runtime`.
 
 | Path | Purpose |
 | --- | --- |
-| `src/shell/` | The page: boot and Run (`main.mjs`, which also owns the **Auto** switch beside Run - the debounce, the stored setting and the three reasons Run may be inactive), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the samples browser over the sample catalogue (`examples.mjs`, reading the built index — a near-full-screen modal with the filters and the catalogue's three facets down its side), which UI5 library a control ships in (`ui5-libs.mjs`) beside the closed list of the ones this site carries (`ui5-libraries.mjs`), the bottom panel (`insight.mjs`), the syntax colour it prints XML and JSON in (`highlight.mjs`) and the View tab's edit mode - the builder chain read back out of the ABAP (`chain-read.mjs`), the edited document matched against the one that was shown (`view-edit.mjs`), the change put back as an edit to the ABAP that is there (`chain-patch.mjs`) and, when it cannot be, the chain written again in the house layout (`chain-write.mjs`), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch in the menu behind the bar's last button, applied as `data-theme` on `<html>` and handed to the editor and the app frame; `extra.mjs` is the six lines that close that menu), where the reader was on each of the neighbouring sites (`site-memory.mjs` — see "One site in three places" below), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the search box in the bar and the matcher under it (`search-box.mjs`, `search-engine.mjs` — one box over the documentation AND every sample, see "One site in three places" below), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
+| `src/shell/` | The page: boot and Run (`main.mjs`, which also owns the **Auto** switch beside Run - the debounce, the stored setting and the three reasons Run may be inactive), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the samples browser over the sample catalogue (`examples.mjs`, reading the built index — a near-full-screen modal with the filters and the catalogue's three facets down its side), which UI5 library a control ships in (`ui5-libs.mjs`) beside the closed list of the ones this site carries (`ui5-libraries.mjs`), the bottom panel (`insight.mjs`), the syntax colour it prints XML and JSON in (`highlight.mjs`) and the View tab's edit mode - the builder chain read back out of the ABAP (`chain-read.mjs`), the edited document matched against the one that was shown (`view-edit.mjs`), the change put back as an edit to the ABAP that is there (`chain-patch.mjs`) and, when it cannot be, the chain written again in the house layout (`chain-write.mjs`), the AI chat (`chat.mjs` on screen, `ai-agent.mjs` the conversation and its tools, a chunk loaded on first use - see "The AI chat" below), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch in the menu behind the bar's last button, applied as `data-theme` on `<html>` and handed to the editor and the app frame; `extra.mjs` is the six lines that close that menu), where the reader was on each of the neighbouring sites (`site-memory.mjs` — see "One site in three places" below), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the search box in the bar and the matcher under it (`search-box.mjs`, `search-engine.mjs` — one box over the documentation AND every sample, see "One site in three places" below), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
 | `src/editor/` | Monaco plus the abaplint registry — in a worker: `registry-core.mjs` and `transpile-core.mjs` are abaplint and the single-object transpile as they run there, `registry-worker.mjs` the worker's entry, `registry.mjs` the page's client with a promise in front of everything, `providers.mjs` Monaco's language providers answered over it — the abap2UI5 linter wrapper (`abap2ui5-lint.mjs`), the file set, and the samples the page carries - `sample-list.mjs`, which is nothing but the class names of a handful of apps in **abap2UI5/samples**, and `samples.mjs`, which pairs what the build resolved them into (`build/samples/`) with the ABAP itself |
 | `src/runtime/` | The ABAP side of the page: the framework entry (`index.mjs`, `roundtrip()` and `defineClasses()`), `worker.mjs` around it, which is the bundle's entry and answers those over `postMessage` when it runs as the worker the page starts, the sql.js database (`db-setup.mjs`), and the browser shims for Node modules |
 | `src/abap/` | The playground's own ABAP - `zcl_pg_bridge` and nothing else; it travels through the same downport and transpile as the framework. There was a `zcl_pg_hello` beside it, a copy of the hello world in **abap2UI5/samples**; the runtime tests drive the framework's own `z2ui5_cl_ui5_app_hi_world` instead, so this repository holds no app of its own to keep in step with one somebody else maintains |
@@ -76,7 +76,13 @@ of each line. Each step is still its own script and still runnable by name
    the transpile and the bundle (about a minute together) are skipped as well
    when nothing that feeds them moved. Both stamps also check that what they
    would have produced is still on disk, so a deleted `dist/` rebuilds rather
-   than being cached into a missing site.
+   than being cached into a missing site. abaplint and the transpiler are run
+   from `node_modules/.bin` by path, never through `npx`: `npx abaplint` in a
+   checkout without an install asks the registry for a package of that name,
+   fails, and exits non-zero - which `--fix` also does while issues remain, so
+   a tool that never ran was once stamped as a finished downport and the next
+   build died in the transpiler on the first `REF #`. A missing binary now
+   stops the step with its name.
 3. **`tools/build-ui5.mjs`** builds the abap2UI5 UI5 frontend against a pinned
    OpenUI5 (`UI5_VERSION` in `src/shell/ui5-libraries.mjs` — the page reads it
    too, for the warm-up's stylesheet URLs; from npm — no CDN) into `dist/app/`. The copy into
@@ -635,6 +641,112 @@ written back through `pushEditOperations` as **one edit per file**, so a single
 Ctrl+Z takes the whole thing back. Nothing without a correct answer is guessed
 at — an icon that does not exist stays reported. Keep all of that true when
 changing anything near it.
+
+## The AI chat — `src/shell/chat.mjs`, `src/shell/ai-agent.mjs`
+
+**The studio has a page of its own and no door from the playground** while it
+is being built: `ai/index.html`, written by `writeAiPage( )` in
+`tools/build-site.mjs` from the playground's finished `index.html` - the same
+document one directory down, with `<base href="../">` (so the bundle, the
+workers the inline script starts, the app frame and the service worker's scope
+all resolve where the playground's do: one build, two doors), `data-page="ai"`
+on `<html>`, its own title, no canonical link and `noindex`. `main.mjs` reads
+`data-page`: only there is `setUpChat( )` called (with `startOpen`), the editor
+starts on one empty class (`AI_FILE`) without a run - the placeholder says
+where the app will appear and `run( )` takes it away when an app first starts
+- and no draft is restored or stored, so the studio never writes over the
+playground's own work. The model's first `write_file` drops the empty class
+(`writeFile( )` in `ai-agent.mjs`). The studio is the **AI Studio**
+(`body.is-studio`, "AI Studio" at the end of `shell.css`): the site's bar, the
+toolbar, the ABAP/App tabs and the splitter step aside, the studio's own bar
+(`#studio-bar`: the stages, the status line mirrored by `setStatus( )`, browser
+full screen; ✕ exists for a studio opened over the playground and is hidden on
+its own page) runs across the top, the chat down the left, and a stage beside it shows
+what `body[data-stage]` says - `preview` (the app frame, in a window of its
+own), `code` (file strip, editor, panel), `split` (both), or on a phone `chat`,
+where the stages take turns and the chat comes first. **Nothing is moved in
+the DOM**: `.pane-left` dissolves into the grid with `display: contents` and
+every pane keeps its element, because an iframe that is moved reloads - which
+for the app frame would be a lost run and a lost model. Whatever is not on the
+stage is hidden, never removed, so the models and their undo stacks survive
+and Monaco's `automaticLayout` takes the size it is given. Two traps, both
+held by `tests/ai.spec.js` on a phone: the page's visually hidden `<h1>` is a
+box and took a grid cell until it was taken out of the flow, and the phone
+layout's `inset` on `.pane` (room for the tabs) pushed the stage down and off
+the screen until the studio took it back. The studio has its own palette in
+both themes on purpose - it is the one room of the site that is not the
+documentation - and answers `prefers-reduced-motion` for its own animations
+(the stage's edge glow while the model works, the shimmer of a pending tool
+row). A run that started the app is a card in the conversation
+(`appUpdated( )`) that brings the app onto the stage. The editor follows the
+file the model just wrote or edited (`host.show`). The model's answers are
+markdown, rendered by `renderMarkdown( )` in `chat.mjs` into nodes and never
+through `innerHTML`. The app runs on the right. `tests/ai.spec.js` holds it with `api.anthropic.com`
+answered by the test (the streamed events of the Messages API), so no test
+talks to a model or needs a key.
+
+- **The model has no back door.** Its tools (`TOOLS` in `ai-agent.mjs`) are the
+  editor and Run: `write_file`, `edit_file` and `delete_file` go through
+  `replaceWith( )` in `main.mjs`, which is the path a sample takes (undoable,
+  strip redrawn, draft stored by the change handler, `checkFileSet( )` refusing
+  a name the editor cannot hold); `run_app` is `runForAgent( )`, which presses
+  the real `run( )` — waiting out a run autorun started — then waits up to ten
+  seconds for the app's first roundtrip and hands back the status line, the
+  problems, the tests, the roundtrips and the Log. `describeRun( )` turns that
+  into what the model reads. So what the model is told is what the reader
+  sees; keep it that way when adding a tool.
+- **The key is the reader's, the request is the browser's.** Stored under
+  `abap2ui5-playground:anthropic-key` through `storage.mjs`, sent by the
+  Anthropic SDK straight from the page (`dangerouslyAllowBrowser`, which sends
+  the `anthropic-dangerous-direct-browser-access` header CORS needs). A key
+  that is not tied to a workspace needs `anthropic-workspace-id` on every
+  request: the optional second field of the key form, stored under
+  `abap2ui5-playground:anthropic-workspace` and sent as `defaultHeaders`;
+  `explainError( )` recognises the API's refusal and points at that field. No proxy,
+  no server: the page stays a static file. Never in an embedded playground —
+  the switch is hidden there (`shell.css`) and `setUpChat( )` is not called.
+- **Its instructions come from the pin.** `ai-agent.mjs` imports
+  `deps/abap2ui5/docs/agents/building-apps.md` as text (the `.md` loader in
+  `build-site.mjs`) under `PLAYGROUND_RULES`, which says what is different
+  here (no database, the libraries in `UI5_LIBRARIES`, Run as the validation).
+  A pin bump moves the guide with the framework it describes; a guide moved or
+  renamed upstream fails the build on the import.
+- **One chunk, downloaded on use.** The SDK and the guide are
+  `assets/ai-agent-<hash>.mjs`, imported the first time a message is sent. It
+  counts towards the `assets/*.mjs` budget like every chunk, but it is left
+  out of the service worker's precache (`onUseOnly( )` in `build-site.mjs`):
+  precached, every visitor the worker installs for would download it. Once
+  used, the worker keeps it like any chunk.
+- **The conversation is append-only.** `messages` in `createAgent( )` is only
+  ever pushed to — the model's thinking blocks are bound to the history they
+  were written in. Hand edits between two messages are told to the model as an
+  `<editor_files>` block on the next user message rather than by rewriting
+  anything earlier. Tool inputs stream (`eager_input_streaming`), so each is
+  validated before it touches the editor, a turn cut off at `max_tokens` never
+  runs its tools, and all results of a turn go back in one message.
+- **Model and request shape.** `SPEEDS` in `ai-agent.mjs`, picked in the chat
+  header and asked before every request (`abap2ui5-playground:ai-speed`, kept
+  only while it is not the default): Balanced is `claude-opus-5-5` at effort
+  `medium` (that model's own default), Thorough the same at `high`, Fast
+  `claude-sonnet-5-5` at `medium`. The model is the reader's choice; the page
+  does not pick a cheaper one for them. The system prompt is cached
+  (`cache_control`), and `fallbacks: "default"` behind the
+  `server-side-fallback-2026-07-01` beta answers a request a safety classifier
+  declines with the fallback model rather than stopping.
+- **Where a turn's time goes, and what was done about it.** A model turn - the
+  request, the thinking, the answer - is the unit of waiting, so the loop
+  spends as few as it can: after a turn's file changes the page runs the app
+  itself and appends the report to the result of the last change (`loop( )`,
+  `FILE_TOOLS`), where the model used to spend a whole turn calling
+  `run_app`; the rules ask for every change of a step in one message, and for
+  the guide before the sample catalogue. Perceived time is the other half:
+  `thinking.display: "updates"` (beta `thinking-display-updates-2026-08-18`)
+  returns the model's notes between tool calls as text, shown as progress
+  lines, and a tool call's row is written while its input streams
+  (`pendingText( )` - a class counts its lines as it arrives) and finished in
+  place when it has run. Errors are
+  said in the chat by `explainError( )` from the SDK's typed errors; a refused
+  key brings the key form back.
 
 ## The public surfaces — the docs site consumes these
 

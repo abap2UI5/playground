@@ -19,17 +19,25 @@
 // abap2UI5 is - including here.
 import { UI5_LIBRARIES } from "./ui5-libraries.mjs";
 
+// SAPUI5-only. None of these can be in an OpenUI5 build. One list, read twice
+// below - it used to be written out twice, and the second copy still carried
+// sap.ui.mdc, which is OpenUI5 (Apache-2.0) since 1.80, so its samples were
+// told they need SAPUI5 when all they need is a library this build lacks.
+const SAPUI5_ONLY_LIBS = [
+  "sap.ui.comp", "sap.suite.ui.commons", "sap.suite.ui.microchart",
+  "sap.suite.ui.generic", "sap.ui.vk", "sap.ui.vbm", "sap.viz", "sap.gantt",
+  "sap.ndc", "sap.ushell", "sap.collaboration", "sap.ui.generic",
+  "sap.ui.richtexteditor", "sap.ui.export", "sap.fe",
+  "sap.chart", "sap.ca.ui", "sap.me", "sap.ui.vtm", "sap.ovp",
+];
+
 // Every library a control in the three corpora can come from. The ones this
 // site carries come from UI5_LIBRARIES so the two cannot disagree; the rest
 // are here to be NAMED - a reader filtering for sap.ui.comp deserves to see
 // the ports that use it, told that they need SAPUI5, rather than to see
 // nothing.
 const OTHER_LIBS = [
-  // SAPUI5-only. None of these can be in an OpenUI5 build.
-  "sap.ui.comp", "sap.suite.ui.commons", "sap.suite.ui.microchart",
-  "sap.suite.ui.generic", "sap.ui.vk", "sap.ui.vbm", "sap.viz", "sap.gantt",
-  "sap.ndc", "sap.ushell", "sap.collaboration", "sap.ui.generic",
-  "sap.ui.richtexteditor", "sap.ui.export", "sap.fe",
+  ...SAPUI5_ONLY_LIBS,
   // OpenUI5 libraries this build does not carry.
   "sap.ui.commons", "sap.ui.suite", "sap.ui.ux3", "sap.ui.webc.main",
   "sap.ui.webc.fiori", "sap.ui.mdc", "sap.ui.fl",
@@ -47,12 +55,7 @@ export const libraryOf = (control) =>
 
 /** Libraries only SAPUI5 carries - the reason a port cannot run here that is
  *  not "this build happens not to include it". */
-const SAPUI5_ONLY = new Set([
-  "sap.ui.comp", "sap.suite.ui.commons", "sap.suite.ui.microchart",
-  "sap.suite.ui.generic", "sap.ui.vk", "sap.ui.vbm", "sap.viz", "sap.gantt",
-  "sap.ndc", "sap.ushell", "sap.collaboration", "sap.ui.generic",
-  "sap.ui.richtexteditor", "sap.ui.export", "sap.fe", "sap.ui.mdc",
-]);
+const SAPUI5_ONLY = new Set(SAPUI5_ONLY_LIBS);
 
 export const isSapui5Only = (library) => SAPUI5_ONLY.has(library);
 

@@ -727,7 +727,12 @@ function forPrinting(code) {
   const kept = [];
   let chars = 0;
   for (const line of lines) {
-    if (kept.length >= MAX_LINES || chars + line.length > MAX_CHARS) break;
+    if (kept.length >= MAX_LINES || chars + line.length > MAX_CHARS) {
+      // A first line longer than the whole budget is cut rather than left
+      // out, or the page printed "the first 0 lines" and an empty block.
+      if (kept.length === 0) kept.push(line.slice(0, MAX_CHARS));
+      break;
+    }
     kept.push(line);
     chars += line.length + 1;
   }
@@ -1284,7 +1289,7 @@ function notFoundPage(rows) {
 <link rel="stylesheet" href="${BASE}samples/sample.css">
 ${THEME_SCRIPT}
 </head>
-<body>
+<body data-not-found>
 
 <!-- The keyboard's way in. A sample page puts a link on every line of the
      printed class and the catalogue puts one on every sample, so the bar and
@@ -1336,7 +1341,10 @@ ${foot(BASE)}
     ["", "abap2UI5 Playground", "write ABAP and run it in this browser"]
   ];
   var base = ${JSON.stringify(BASE)};
-  var here = decodeURIComponent(location.pathname);
+  /* A stray % in the address (50%off, a cut escape) is a URIError out of the
+     decoder, and the page that is about wrong addresses offered nothing. */
+  var here;
+  try { here = decodeURIComponent(location.pathname); } catch (e) { here = location.pathname; }
   var parts = here.slice(here.indexOf(base) === 0 ? base.length : 0)
     .toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length > 2; });
   if (!parts.length) return;
@@ -1356,9 +1364,18 @@ ${foot(BASE)}
      matched a dozen titles that way; the reader is then given a list instead of
      an honest "no idea". A title word that BEGINS with the word is the match,
      which still catches the plural and the possessive. */
+  /* ...AND A SHORT WORD IS THE WHOLE WORD OR NOTHING. "not" begins
+     "Notification" and "for" begins "Form", so /nope-not-here/ was answered
+     with five Notification List samples - a list of guesses about an address
+     that named nothing. Three letters are a prefix of too many words to mean
+     one; from four up the prefix still catches the plural and the possessive,
+     which is what it is for. */
   function starts(text, word) {
     var w = text.toLowerCase().split(/[^a-z0-9]+/);
-    for (var i = 0; i < w.length; i++) if (w[i].indexOf(word) === 0) return true;
+    for (var i = 0; i < w.length; i++) {
+      if (w[i] === word) return true;
+      if (word.length >= 4 && w[i].indexOf(word) === 0) return true;
+    }
     return false;
   }
 
@@ -1381,7 +1398,7 @@ ${foot(BASE)}
       byWord = true;
       for (var w2 = 0; w2 < words.length; w2++) {
         if (starts(rows[m][1], words[w2])) hit += 3;
-        else if (rows[m][0].indexOf(words[w2]) >= 0) hit += 1;
+        else if (words[w2].length >= 4 && rows[m][0].indexOf(words[w2]) >= 0) hit += 1;
       }
       if (hit) scored.push([hit, "samples/" + rows[m][0] + "/", rows[m][1], rows[m][0].toUpperCase()]);
     }

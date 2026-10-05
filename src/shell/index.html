@@ -525,6 +525,24 @@
 
 <main class="panes" id="panes" aria-label="Editor and app">
   <h1 class="visually-hidden">abap2UI5 Playground</h1>
+  <!-- The AI Studio's own bar (src/shell/chat.mjs, "AI Studio" in
+       shell.css). The studio is its own page, ai/index.html, which the build
+       writes from this one: there the site's bar and the workbench toolbar
+       step aside and this bar says what the stage beside the chat shows.
+       Hidden on the playground itself, which carries no way into the studio. -->
+  <header class="studio-bar" id="studio-bar" hidden>
+    <span class="studio-brand"><span class="studio-spark" aria-hidden="true">✦</span><span class="studio-brand-name">abap2UI5</span> <b>AI Studio</b></span>
+    <div class="studio-stages" role="tablist" aria-label="What the stage shows">
+      <button type="button" role="tab" data-stage="chat" class="studio-stage only-narrow" aria-selected="false">Chat</button>
+      <button type="button" role="tab" data-stage="preview" class="studio-stage" aria-selected="false">Preview</button>
+      <button type="button" role="tab" data-stage="code" class="studio-stage" aria-selected="false">Code</button>
+      <button type="button" role="tab" data-stage="split" class="studio-stage only-wide" aria-selected="false">Split</button>
+    </div>
+    <span class="studio-status" id="studio-status" role="status" aria-live="polite"></span>
+    <button type="button" id="studio-fullscreen" class="studio-icon" title="Full screen" aria-label="Full screen">⛶</button>
+    <button type="button" id="studio-exit" class="studio-icon" title="Leave the AI Studio - back to the playground"
+            aria-label="Leave the AI Studio">✕</button>
+  </header>
   <nav class="tabs" role="tablist" aria-label="Panes">
     <button class="tab is-active" data-pane="left" id="tab-left" role="tab" aria-selected="true"
             aria-controls="pane-left">ABAP</button>
@@ -580,12 +598,58 @@
       </div>
       <div class="insight-body" id="insight-body" role="tabpanel"></div>
     </div>
+    <!-- The chat, beside the code while the AI switch is on (src/shell/chat.mjs;
+         the layout per width is in shell.css). The key form shows until a key
+         is stored. -->
+    <div class="chat" id="chat" hidden>
+      <div class="chat-head">
+        <h2 class="chat-title">Build with AI</h2>
+        <span class="chat-usage" id="chat-usage"></span>
+        <span class="spacer"></span>
+        <select id="chat-speed" class="chat-speed" aria-label="Model and how long it thinks"
+                title="Fast answers soonest; Thorough thinks longest. Applies from the next message.">
+          <option value="fast">Fast · Sonnet 5.5</option>
+          <option value="balanced" selected>Balanced · Opus 5.5</option>
+          <option value="thorough">Thorough · Opus 5.5</option>
+        </select>
+        <button type="button" id="chat-download" title="The files in the editor as an abapGit repository">Download for abapGit</button>
+        <button type="button" id="chat-new" class="ghost" title="Start a new conversation - the files stay in the editor">New chat</button>
+        <button type="button" id="chat-key-button" class="ghost" title="Your Anthropic API key">Key</button>
+      </div>
+      <form class="chat-key" id="chat-key" hidden>
+        <label for="chat-key-input">Your Anthropic API key</label>
+        <div class="chat-key-row">
+          <input id="chat-key-input" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
+          <button type="submit" class="primary">Save</button>
+          <button type="button" id="chat-key-remove" class="ghost" hidden>Remove</button>
+        </div>
+        <label for="chat-workspace-input">Workspace ID <span class="chat-key-optional">- only for a key that is not tied to a workspace</span></label>
+        <div class="chat-key-row">
+          <input id="chat-workspace-input" type="text" autocomplete="off" spellcheck="false" placeholder="wrkspc_… (optional)">
+        </div>
+        <p class="chat-key-note">Kept in this browser only and sent to api.anthropic.com and nowhere else - there is
+          no server behind this page. Usage is billed to your key. Get one at
+          <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.</p>
+      </form>
+      <div class="chat-log" id="chat-log" role="log" aria-live="polite" aria-label="Conversation"></div>
+      <form class="chat-compose" id="chat-compose">
+        <textarea id="chat-input" rows="3" aria-label="Your message"
+                  placeholder="Describe the app you want, or what to change… (Enter sends, Shift+Enter is a new line)"></textarea>
+        <button type="submit" id="chat-send" class="primary">Send</button>
+      </form>
+    </div>
   </section>
 
   <div class="splitter" id="splitter" role="separator" aria-orientation="vertical" tabindex="0"
        aria-label="Resize the editor"></div>
 
   <section class="pane pane-right" id="pane-right" role="tabpanel" aria-labelledby="tab-right">
+    <!-- The window chrome the app wears on the AI Studio's stage; nothing
+         outside the studio shows it (shell.css). -->
+    <div class="studio-window" aria-hidden="true">
+      <span class="studio-dots"><i></i><i></i><i></i></span>
+      <span class="studio-url" id="studio-url">your app</span>
+    </div>
     <div class="app-frame">
       <!-- What the right half says while the runtime boots. It used to say
            nothing: for the 3.4 seconds a desk waits and the 14 a throttled

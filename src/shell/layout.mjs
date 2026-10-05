@@ -44,7 +44,12 @@ export function setUpSplitter() {
     splitter.releasePointerCapture(e.pointerId);
     splitter.classList.remove("is-dragging");
     panes.classList.remove("is-dragging");
-    writeStored(STORAGE_KEY, String(apply(percentFromEvent(e))));
+    // A cancelled pointer carries no position worth trusting (often 0, 0):
+    // what the last move applied is what is kept.
+    const percent = e.type === "pointercancel"
+      ? parseFloat(getComputedStyle(panes).getPropertyValue("--left"))
+      : apply(percentFromEvent(e));
+    if (Number.isFinite(percent)) writeStored(STORAGE_KEY, String(percent));
   };
   splitter.addEventListener("pointerup", stop);
   splitter.addEventListener("pointercancel", stop);
