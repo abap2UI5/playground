@@ -127,7 +127,7 @@ export function openShare(files, url, copied = false) {
         // some cut a URL past ~2,000 characters and the fragment arrives
         // torn. The zip below is the hand-over that survives that.
         (url.length > LONG_LINK
-          ? ` This link is ${url.length.toLocaleString()} characters, and some chat clients truncate a URL past 2,000 - for a set this size, Download for abapGit below is the safer hand-over.`
+          ? ` This link is ${url.length.toLocaleString("en-US")} characters, and some chat clients truncate a URL past 2,000 - for a set this size, Download for abapGit below is the safer hand-over.`
           : ""),
       text: url,
       rows: 2,

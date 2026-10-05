@@ -47,6 +47,8 @@ export function startRuntime() {
   // that throws while booting - with whatever the browser could say about it,
   // which for a worker is an ErrorEvent rather than the exception itself.
   let fail;
+  // Whether the worker's script has arrived and started (src/runtime/loaded.mjs).
+  let arrived = false;
   const ready = new Promise((resolve, reject) => {
     fail = (error) => {
       settled = true;
@@ -54,6 +56,10 @@ export function startRuntime() {
       failAll(error);
     };
     const onMessage = (message) => {
+      if (message?.type === "loaded") {
+        arrived = true;
+        return;
+      }
       if (message?.type === "ready") {
         version = message.version;
         settled = true;
@@ -122,16 +128,35 @@ export function startRuntime() {
       }
     }
     if (!settled) {
-      const timer = setTimeout(() => {
+      // Over the network (no service worker serving the page), a script that
+      // has not said it arrived (src/runtime/loaded.mjs) is still downloading,
+      // not stale: on a slow link it was judged "loaded but never reported
+      // ready" while the bytes were still coming. It gets a second turn of
+      // patience and then a plain failure. Served by the worker, the script
+      // is local and arrives at once - and a copy from another build says
+      // nothing at all, "loaded" included - so there STALLED stands as it was.
+      const local = Boolean(globalThis.navigator?.serviceWorker?.controller);
+      let turns = 0;
+      let timer;
+      const verdict = () => {
         if (settled) return;
+        if (!arrived && !local && turns++ === 0) {
+          timer = setTimeout(verdict, patience());
+          return;
+        }
         if (unanswered) {
           fail(new Error(`${SCRIPT} did not start, and the network did not answer to say why`));
+          return;
+        }
+        if (!arrived && !local) {
+          fail(new Error(`${SCRIPT} has not finished downloading - the connection may be too slow; reload to try again`));
           return;
         }
         const error = new Error(`${SCRIPT} loaded but never reported ready`);
         error.name = STALLED;
         fail(error);
-      }, patience());
+      };
+      timer = setTimeout(verdict, patience());
       ready.finally(() => clearTimeout(timer)).catch(() => {});
     }
     return ready;

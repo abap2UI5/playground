@@ -68,7 +68,7 @@ const bin = (name) => {
 function inputHash() {
   const h = crypto.createHash("sha256");
   const addTree = (dir) => {
-    for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
       const p = path.join(dir, e.name);
       if (e.isDirectory()) addTree(p);
       else h.update(p.slice(ROOT.length)).update(fs.readFileSync(p));

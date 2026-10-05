@@ -91,7 +91,10 @@ const CORE = [...Object.keys(CORE_HASHES), ...CHUNKS];
 // reaches for - precached as well, so one online visit is enough for the
 // installed playground to open offline, rather than the second one it would
 // take for a controlled page to pass through serveDocument( ).
-const DOCUMENTS = ["index.html", "app/index.html"];
+// The AI Studio's page too (ai/index.html): it runs on the same bundle, and
+// left out it went to the network after a deploy and paired the new document
+// with this build's cached assets - the mix DOC_HASHES exists to prevent.
+const DOCUMENTS = ["index.html", "app/index.html", "ai/index.html"];
 
 // And what this build's two documents hash to, written in by the build like
 // CORE_HASHES. A document is network-first, the assets beside it cache-first,
@@ -233,6 +236,7 @@ function documentOf(url, request) {
   if (!url.pathname.startsWith(BASE.pathname)) return undefined;
   if (rel === "" || rel === "index.html") return new URL("index.html", BASE);
   if (rel === "app/index.html") return new URL("app/index.html", BASE);
+  if (rel === "ai/" || rel === "ai/index.html") return new URL("ai/index.html", BASE);
   // The catalogue, asked for as the directory or as the file. It registers no
   // worker of its own - a reader who only wanted to look a sample up must not
   // be handed the playground's three megabytes of precache - so this only ever
@@ -295,27 +299,38 @@ self.addEventListener("fetch", (event) => {
 // cached as the document would be an error page forever.
 async function serveDocument(event, doc) {
   const cache = await caches.open(CACHE);
-  try {
-    // Past the HTTP cache (revalidated - a 304 when nothing moved): Pages
-    // keeps a document fresh for ten minutes, and in the minutes after a
-    // deploy the old index.html answered beside the new build's cached
-    // bundle, and was then written over the clean precached copy.
+  const rel = new URL(doc.url ?? doc).pathname.slice(BASE.pathname.length);
+  const kept = await cache.match(doc);
+  // Past the HTTP cache (revalidated - a 304 when nothing moved): Pages
+  // keeps a document fresh for ten minutes, and in the minutes after a
+  // deploy the old index.html answered beside the new build's cached
+  // bundle, and was then written over the clean precached copy.
+  const network = (async () => {
     const response = await fetch(event.request, { cache: "no-cache" });
-    if (response.status === 200) {
-      const rel = new URL(doc.url ?? doc).pathname.slice(BASE.pathname.length);
-      if (rel in DOC_HASHES && !(await matchesBuild(rel, response.clone()))) {
-        // Another build's document - see DOC_HASHES. The kept copy if there
-        // is one; without one, the network's is all there is, and it is not
-        // kept.
-        return (await cache.match(doc)) ?? response;
-      }
-      event.waitUntil(cache.put(doc, response.clone()).catch(() => {}));
+    if (response.status !== 200) return response;
+    if (rel in DOC_HASHES && !(await matchesBuild(rel, response.clone()))) {
+      // Another build's document - see DOC_HASHES. The kept copy if there
+      // is one; without one, the network's is all there is, and it is not
+      // kept.
+      return kept ?? response;
     }
+    await cache.put(doc, response.clone()).catch(() => {});
     return response;
-  } catch (e) {
-    const kept = await cache.match(doc);
-    if (kept) return kept;
-    throw e;
+  })();
+  // The refresh finishes, and is kept, whichever answer the page gets.
+  event.waitUntil(network.catch(() => {}));
+  if (!kept) return network;
+  // NOT FOREVER, when there is a copy to fall back to. A connection that is
+  // up but answers nothing (a captive portal, a train between two cells) held
+  // the navigation until the socket gave up minutes later, and a Run waited on
+  // a stalled app/index.html until its own thirty seconds ran out - with the
+  // worker holding a good copy of both. Four seconds, then the copy; the
+  // network's answer still lands in the cache for the next time.
+  const late = new Promise((resolve) => setTimeout(() => resolve(null), 4000));
+  try {
+    return (await Promise.race([network, late])) ?? kept;
+  } catch {
+    return kept;
   }
 }
 
