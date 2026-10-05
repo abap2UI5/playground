@@ -115,6 +115,21 @@ export function mountSearch(host) {
   field.append(input, close);
 
   const results = el("div", "search-results");
+  /* A COMBOBOX, SAID AS ONE. The arrows moved a mark that was a CSS class
+     and nothing else: focus stays in the field, as it should, but a screen
+     reader heard neither the hit that was marked nor how many there were, and
+     Enter opened a page the reader had never been told about. The field owns
+     the list (aria-controls) and names the marked row (aria-activedescendant);
+     the list is a listbox while it holds hits, and what it says otherwise -
+     "Loading", "Nothing matches" - goes to a status line beside it. */
+  results.id = "search-results";
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-controls", results.id);
+  input.setAttribute("aria-expanded", "false");
+  const status = el("p", "search-status");
+  status.setAttribute("role", "status");
+  status.style.cssText = "position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;padding:0";
 
   /* THE KEYS, ALWAYS ON SCREEN. They used to be part of the line the empty
      state showed, which is the one moment a reader is not using them: the
@@ -147,7 +162,7 @@ export function mountSearch(host) {
     hint(" from anywhere", ["/", apple ? "\u2318K" : "Ctrl K"], true),
   );
 
-  panel.append(field, results, keys);
+  panel.append(field, results, status, keys);
   scrim.append(panel);
   document.body.append(scrim);
 
@@ -159,8 +174,17 @@ export function mountSearch(host) {
   let rows = [];
   let active = 0;
 
+  /* Not a list: the role comes off, and the field says nothing is marked. */
+  const unlisted = () => {
+    results.removeAttribute("role");
+    results.removeAttribute("aria-label");
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
+  };
   const note = (text) => {
+    unlisted();
     results.replaceChildren(el("p", "search-note", text));
+    status.textContent = text;
   };
 
   /* SOMETHING TO PRESS WHEN YOU DO NOT KNOW WHAT TO ASK. A box that opens on
@@ -199,6 +223,8 @@ export function mountSearch(host) {
       try_.append(chip);
     }
     box.append(line, try_);
+    unlisted();
+    status.textContent = "";
     results.replaceChildren(box);
   }
 
@@ -222,6 +248,9 @@ export function mountSearch(host) {
     const shown = hits.relaxedTo || query;
     if (hits.relaxedTo) {
       const line = el("p", "search-note");
+      // Inside the listbox, where only options belong; the status line says
+      // the same thing to a screen reader ("N results for …").
+      line.setAttribute("aria-hidden", "true");
       line.append(
         document.createTextNode("Nothing matches "), el("strong", null, query),
         document.createTextNode(" \u2014 showing "), el("strong", null, hits.relaxedTo),
@@ -229,9 +258,13 @@ export function mountSearch(host) {
       );
       frag.append(line);
     }
-    for (const group of groups) {
+    let count = 0;
+    for (const [g, group] of groups.entries()) {
       const box = el("div", "search-group");
+      box.setAttribute("role", "group");
       const head = el("div", "search-group-head", group.label);
+      head.id = `search-group-${g}`;
+      box.setAttribute("aria-labelledby", head.id);
       /* Eight of two hundred and thirty-one is a different answer from eight,
          and the difference is whether there is more to look at. */
       head.append(el("span", "search-count",
@@ -249,6 +282,9 @@ export function mountSearch(host) {
         if (hit.entry.code) row.append(marked(hit.entry.code, shown, "search-hit-code"));
         if (hit.entry.text) row.append(marked(hit.entry.text, shown, "search-hit-text"));
         const at = rows.length;
+        row.id = `search-hit-${at}`;
+        row.setAttribute("role", "option");
+        count += 1;
         row.addEventListener("mouseenter", () => { active = at; mark(); });
         rows.push(row);
         box.append(row);
@@ -256,11 +292,22 @@ export function mountSearch(host) {
       frag.append(box);
     }
     results.replaceChildren(frag);
+    results.setAttribute("role", "listbox");
+    results.setAttribute("aria-label", "Results");
+    input.setAttribute("aria-expanded", "true");
+    status.textContent = `${count} result${count === 1 ? "" : "s"}${hits.relaxedTo ? ` for ${hits.relaxedTo}` : ""}`;
     active = 0;
     mark();
   }
 
-  const mark = () => rows.forEach((row, i) => row.classList.toggle("active", i === active));
+  const mark = () => {
+    rows.forEach((row, i) => {
+      row.classList.toggle("active", i === active);
+      row.setAttribute("aria-selected", String(i === active));
+    });
+    if (rows[active]) input.setAttribute("aria-activedescendant", rows[active].id);
+    else input.removeAttribute("aria-activedescendant");
+  };
 
   /**
    * The arrow keys move the mark AND bring the row into view.

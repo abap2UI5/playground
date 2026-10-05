@@ -72,9 +72,10 @@ export function render() {
   }
 
   strip.hidden = false;
-  /* The role comes with the first tab: a tablist with nothing in it is a role
-     a screen reader cannot make sense of, so the markup carries none. */
-  strip.setAttribute("role", "tablist");
+  /* A group, not a tablist: the strip holds the remove buttons and the "+"
+     beside the file names, and a tablist may hold nothing but tabs - a screen
+     reader made no sense of it. The file that is open says so itself. */
+  strip.setAttribute("role", "group");
   strip.replaceChildren(...files.map((file, index) => fileTab(file, index, open)), addButton());
 }
 
@@ -92,8 +93,7 @@ function fileTab(file, index, open) {
   name.className = "file-name";
   name.type = "button";
   name.dataset.file = file.name;
-  name.setAttribute("role", "tab");
-  name.setAttribute("aria-selected", String(file.name === open));
+  if (file.name === open) name.setAttribute("aria-current", "true");
   name.append(file.name);
   tab.append(name);
 

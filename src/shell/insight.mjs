@@ -696,6 +696,9 @@ function startEditing(file, xml, pretty) {
   // is the truth on every keystroke, and neither answer is a good one.
   setEditorReadOnly(true);
   render();
+  // The render took the Edit button away with the focus on it; the focus goes
+  // to what replaced it rather than to <body>.
+  document.getElementById("view-editor")?.focus();
 }
 
 function stopEditing() {
@@ -730,6 +733,7 @@ function buildViewEditor() {
   const area = document.createElement("textarea");
   area.className = "config-text view-editor";
   area.id = "view-editor";
+  area.setAttribute("aria-label", "Editing the view: XML");
   area.spellcheck = false;
   area.value = editing.draft;
   area.addEventListener("input", () => {
@@ -739,6 +743,9 @@ function buildViewEditor() {
   const said = document.createElement("p");
   said.className = "config-said view-said";
   said.id = "view-said";
+  // Said aloud when it changes - a refused Save is the one thing here a
+  // screen reader user must not miss.
+  said.setAttribute("role", "status");
   const explain = () => {
     said.classList.remove("is-error");
     said.textContent =
@@ -759,11 +766,14 @@ function buildViewEditor() {
     setSourceOf(file, written.source);
     setStatus("the builder chain was written again from the view");
     render();
+    document.getElementById("view-edit")?.focus();
   });
 
   cancel.addEventListener("click", () => {
     stopEditing();
     render();
+    // Back to Edit, which the render put where Cancel was - not to <body>.
+    document.getElementById("view-edit")?.focus();
   });
 
   wrap.append(head, area, said);
@@ -789,6 +799,7 @@ function configEditor({ title, blurb, value, onApply, onKeep, onReset, extra }) 
   const area = document.createElement("textarea");
   area.className = "config-text";
   area.spellcheck = false;
+  area.setAttribute("aria-label", `${title} settings, as JSON`);
   area.value = JSON.stringify(value, null, 2);
   wrap.append(area);
 
@@ -806,6 +817,8 @@ function configEditor({ title, blurb, value, onApply, onKeep, onReset, extra }) 
 
   const said = document.createElement("span");
   said.className = "config-said";
+  // "applying… / applied / no rule called" were never announced.
+  said.setAttribute("role", "status");
 
   row.append(apply, reset, said);
   wrap.append(row);
@@ -896,6 +909,7 @@ function abaplintConfig() {
   );
 
   return configEditor({
+    title: "abaplint",
     blurb:
       "What the editor checks. The playground runs the rules that answer " +
       "“would this work”, not the ones that answer “is this the house style” - " +
@@ -911,6 +925,7 @@ function abaplintConfig() {
 
 function linterConfig() {
   return configEditor({
+    title: "abap2UI5 linter",
     blurb:
       "What the abap2UI5 linter checks the view against. ui5 is the oldest release " +
       "your app has to work on - lowering it finds controls and properties that a " +

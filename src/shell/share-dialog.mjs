@@ -67,6 +67,10 @@ function section({ title, blurb, text, rows = 4, copy = "Copy" }) {
 
   const head = document.createElement("h3");
   head.textContent = title;
+  // The box is named by its heading, and each Copy says which box it copies:
+  // three unnamed text boxes and three buttons all called "Copy" were what a
+  // screen reader got.
+  head.id = `share-${title.replace(/\W+/g, "-").toLowerCase()}`;
 
   const said = document.createElement("p");
   said.className = "config-blurb";
@@ -79,14 +83,17 @@ function section({ title, blurb, text, rows = 4, copy = "Copy" }) {
   area.rows = rows;
   area.value = text;
   area.addEventListener("focus", () => area.select());
+  area.setAttribute("aria-labelledby", head.id);
 
   const row = document.createElement("div");
   row.className = "config-row";
   const button = document.createElement("button");
   button.type = "button";
   button.textContent = copy;
+  button.setAttribute("aria-label", `${copy}: ${title}`);
   const status = document.createElement("span");
   status.className = "config-said";
+  status.setAttribute("role", "status");
   button.addEventListener("click", async () => {
     const copied = await copyToClipboard(area.value);
     status.textContent = copied ? "copied" : "select the text and copy it";
