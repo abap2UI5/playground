@@ -510,9 +510,21 @@ let transpilerKey;
 export function reportTranspilerProblems(found, source = "transpiler") {
   transpilerKey = analysisKey();
   transpilerProblems = [];
+  // The underlines of the last report go with it, in every file - a dump in
+  // one class and then in another left the first one underlined with no row
+  // in the Problems list to say why.
+  for (const model of monaco.editor.getModels()) {
+    if (model.uri.scheme === "file") monaco.editor.setModelMarkers(model, TRANSPILER_OWNER, []);
+  }
   const byFile = new Map();
-  for (const { file, line, message } of found) {
-    if (!modelFor(file)) continue;
+  for (const { file, line: reported, message } of found) {
+    const target = modelFor(file);
+    if (!target) continue;
+    // The line is the compiled text's, and the text may have lost lines since
+    // (typed during the compile, or deleted before a button in the app dumped):
+    // Monaco throws on a line past the end, and that throw took the app's
+    // roundtrip down with it. The nearest line that exists is pointed at.
+    const line = Math.min(Math.max(1, Number(reported) || 1), target.getLineCount());
     transpilerProblems.push({
       file,
       source,
@@ -590,11 +602,26 @@ export function focusProblem(file, line, column = 1) {
 // thing back the way it takes an autofix back.
 export async function format() {
   if (!connected) return { formatted: 0, files: [] };
+  const unchanged = versionGuard();
   const result = await formatFiles(getFiles());
-  for (const file of result.files) writeSource(file.name, file.source);
-  if (result.formatted > 0) refresh();
+  const files = result.files.filter((file) => unchanged(file.name));
+  for (const file of files) writeSource(file.name, file.source);
+  if (files.length > 0) refresh();
   editor.focus();
-  return result;
+  return { ...result, formatted: files.length, files };
+}
+
+// Which files are still as they were when the worker was asked. Format and
+// Fix them answer with a whole file each, a round trip later, and written over
+// a model somebody typed into meanwhile they took the typing with them - the
+// longer the worker was busy (a reparse after a Config change, on a phone),
+// the more. A file that moved is left alone; the next press catches it up.
+function versionGuard() {
+  const before = new Map(orderedModels().map((m) => [m.uri.path.replace(/^\//, ""), m.getVersionId()]));
+  return (name) => {
+    const model = modelFor(name);
+    return model != null && model.getVersionId() === before.get(name);
+  };
 }
 
 // One step back in the open file, through Monaco's own undo - the same one
@@ -712,9 +739,10 @@ export async function applyFixes() {
   if (!connected) return 0;
   let fixed = 0;
 
+  const unchanged = versionGuard();
   const afterAbaplint = await applyAbaplintFixes(getFiles());
   fixed += afterAbaplint.fixed;
-  for (const file of afterAbaplint.files) writeSource(file.name, file.source);
+  for (const file of afterAbaplint.files) if (unchanged(file.name)) writeSource(file.name, file.source);
 
   // Repeated, because one fix can uncover the next - the same reason abaplint
   // loops - and bounded for the same reason.

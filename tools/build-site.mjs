@@ -370,11 +370,20 @@ if (!catalogueSource.includes("__SAMPLE_COUNT__")) throw new Error("src/catalogu
    declare the upstream catalogue as the canonical copy of its own. */
 if (!catalogueSource.includes("__SITE__")) throw new Error("src/catalogue/index.html lost its __SITE__ marker");
 const catalogueIndex = JSON.parse(fs.readFileSync(path.join(DIST, "samples", "apps.json"), "utf8"));
-const sampleCount = (catalogueIndex.entries ?? catalogueIndex.samples ?? []).length;
-if (!sampleCount) throw new Error("dist/samples/apps.json holds no entries to count - build-catalogue did not run, or its shape changed");
+/* A missing index or one in a shape this does not know fails the build. An
+   EMPTY one does not: it is what build-catalogue writes, by design, when none
+   of the three catalogues arrived (raw.githubusercontent.com down during a
+   deploy), and that step's failure is the survivable one - the page then
+   says the catalogue could not be loaded. Throwing here made it fatal after
+   all. */
+if (!Array.isArray(catalogueIndex.entries ?? catalogueIndex.samples) || !Array.isArray(catalogueIndex.sources)) {
+  throw new Error("dist/samples/apps.json is not an index - build-catalogue did not run, or its shape changed");
+}
+const sampleCount = (catalogueIndex.entries ?? catalogueIndex.samples).length;
+if (!sampleCount) log("WARNING: the catalogue index is empty - the page will say it could not be loaded");
 fs.writeFileSync(
   path.join(DIST, "samples", "index.html"),
-  withPolicy(stripHtmlComments(catalogueSource.replaceAll("__SITE__", SITE).replace("__SAMPLE_COUNT__", String(sampleCount)))),
+  withPolicy(stripHtmlComments(catalogueSource.replaceAll("__SITE__", SITE).replace("__SAMPLE_COUNT__", sampleCount ? String(sampleCount) : "no"))),
 );
 
 /* THE HIGHLIGHTER, PUBLISHED - the file that decides which words in a class
@@ -496,6 +505,17 @@ function writeServiceWorker() {
     if (unhashed.includes(rel)) hashes[rel] = crypto.createHash("sha256").update(bytes).digest("hex");
   }
   for (const entry of listing(path.join(DIST, "app")).sort()) id.update(entry);
+  /* And the BYTES of everything outside app/resources/: the frontend's own
+     files and the playground's frontend-bridge.js, which the worker serves
+     cache-first with no hash of its own. By path and size alone, an edit
+     that kept a file's length (a `!==` turned `===`, a constant changed)
+     left the build id - and so the worker, and so every returning visitor's
+     cached copy - exactly as it was. Seventy files and half a megabyte; the
+     OpenUI5 tree under resources/ is version-pinned and stays a listing. */
+  for (const entry of listing(path.join(DIST, "app")).sort()) {
+    const rel = entry.slice(0, entry.lastIndexOf(":"));
+    if (!rel.startsWith("resources/")) id.update(fs.readFileSync(path.join(DIST, "app", rel)));
+  }
 
   const source = fs.readFileSync(path.join(SHELL, "sw.js"), "utf8");
   for (const marker of ["__BUILD_ID__", "__CHUNKS__", "__APP_FIRST_LOAD__", "__CORE__"]) {

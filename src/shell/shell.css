@@ -346,6 +346,9 @@ select:disabled { opacity: .5; }
   cursor: col-resize;
   background: transparent;
   position: relative;
+  /* A finger on a handle is a drag, not a pan: without this the browser takes
+     the touch for scrolling a few pixels in and cancels the pointer. */
+  touch-action: none;
 }
 .splitter::after {
   content: "";
@@ -562,6 +565,7 @@ iframe {
   position: relative;
   z-index: 1;
   background: transparent;
+  touch-action: none; /* see .splitter */
 }
 /* 5px of grip is a hairline: fine under a mouse, invisible to a finger, and
    the one control on this page a touch screen could not hit at all. The line
@@ -2316,6 +2320,10 @@ body.is-studio .chat-notice {
 }
 body.is-studio .chat-tool::before { content: "✓ "; color: #10b981; }
 body.is-studio .chat-tool.is-error::before { content: "✕ "; color: var(--danger); }
+/* The rule above outranks the plain .is-error one, and a refused key or a
+   failed request read in the same dim grey as "Stopped.". */
+body.is-studio .chat-tool.is-error,
+body.is-studio .chat-notice.is-error { color: var(--danger); border-color: var(--danger); }
 body.is-studio .chat-tool.is-pending {
   color: var(--st-fg);
   border-color: transparent;

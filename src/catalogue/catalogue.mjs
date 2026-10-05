@@ -44,7 +44,9 @@ const state = { q: "", source: "", control: "", library: "", release: "", runs: 
 
 function readUrl() {
   const p = new URLSearchParams(location.search);
-  state.q = p.get(PARAMS.q) || "";
+  /* Trimmed like the field's own input: `?q=%20` is no search, and read
+     untrimmed it showed Clear and drew the learning path flat. */
+  state.q = (p.get(PARAMS.q) || "").trim();
   state.source = p.get(PARAMS.source) || "";
   state.control = p.get(PARAMS.control) || "";
   state.library = p.get(PARAMS.library) || "";
@@ -281,6 +283,11 @@ function grouped(hits) {
     if (entries.length) groups.push({ title: stage.title, blurb: stage.blurb, entries });
   }
   const rest = hits.filter((h) => !seen.has(h));
+  /* A learn row whose stage is not on the path (yet) is still a row: counted
+     and never drawn, it was a sample the count promised and the page hid.
+     The samples dialog puts the same rows under "More". */
+  const orphans = rest.filter((h) => h.source === "learn");
+  if (orphans.length) groups.push({ title: "More", entries: orphans });
   if (rest.length) {
     for (const source of index.sources) {
       if (source.id === "learn") continue;
@@ -344,6 +351,10 @@ function bind() {
     render();
     writeUrlSoon();
   });
+  /* Enter in the search field submits its form - as a GET to this page with
+     no named fields, which reloaded it with every filter gone. The list is
+     already filtered as it is typed; there is nothing to submit. */
+  el.q.form?.addEventListener("submit", (e) => e.preventDefault());
   for (const [key, node] of [["source", el.source], ["control", el.control], ["library", el.library], ["release", el.release]]) {
     node.addEventListener("change", () => {
       state[key] = node.value;
@@ -388,6 +399,14 @@ function reflect() {
      select on its default, and used to go on filtering from the state behind
      it: "Nothing matches that" under controls that all read as unset. What
      the reader cannot see, they cannot undo, so the state follows the select. */
+  /* A release is a threshold ("this or older"), so one between two listed
+     ones means the listed one below it - `?rel=1.96` filters as 1.84 does
+     rather than not at all. Only one below the lowest is a release nothing
+     runs on, and that one is dropped like a typo. */
+  if (/^\d+(\.\d+)*$/.test(state.release) && index?.releases?.length) {
+    const below = [...index.releases].filter((r) => cmpVersion(r, state.release) <= 0).sort(cmpVersion);
+    if (below.length) state.release = below[below.length - 1];
+  }
   for (const key of ["source", "control", "library", "release"]) {
     el[key].value = state[key];
     if (el[key].value !== state[key]) state[key] = "";

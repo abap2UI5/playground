@@ -127,7 +127,7 @@ export function attributeLines(node, column) {
   const width = Math.max(0, ...names.map((n) => n.length));
   return node.attrs.map(
     (attr, i) =>
-      `${pad})->a( ${names[i].padEnd(width)} ${attr.boolean ? "b" : "v"} = ${wrapped(attr.raw, column + STEP)}`,
+      `${pad})->a( ${names[i].padEnd(width)} ${attr.key ?? (attr.boolean ? "b" : "v")} = ${wrapped(attr.raw, column + STEP)}`,
   );
 }
 

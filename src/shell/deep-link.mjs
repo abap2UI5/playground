@@ -16,6 +16,11 @@ const ALLOWED_HOSTS = ["raw.githubusercontent.com", "gist.githubusercontent.com"
 export const linkedSources = (params) => params.getAll("src").filter(Boolean);
 
 function checkAllowed(url) {
+  // fetch( ) refuses a URL with credentials in it, which used to surface as
+  // "the host has to allow being read from a browser" - the wrong reason.
+  if (url.username || url.password) {
+    throw new Error("A link to ABAP carries no user name or password - this one does, so it is not followed.");
+  }
   if (url.origin === window.location.origin) return;
   if (url.protocol === "https:" && ALLOWED_HOSTS.includes(url.hostname)) return;
   throw new Error(
@@ -45,7 +50,9 @@ function nameFrom(url) {
   // A class, an interface, or a class's test include - the third is the file
   // src/editor/files.mjs is written to take beside its class, and a link that
   // names both is a link to an app with its tests.
-  if (!/\.(clas|intf)\.abap$|\.clas\.testclasses\.abap$/.test(last)) {
+  // Case-insensitive like the name it returns: Z2UI5_X.CLAS.ABAP is the same
+  // object as z2ui5_x.clas.abap.
+  if (!/\.(clas|intf)\.abap$|\.clas\.testclasses\.abap$/i.test(last)) {
     throw new Error(
       `${last || url.href} is not an ABAP object file. A link points at a .clas.abap, a .intf.abap or a .clas.testclasses.abap.`,
     );
@@ -101,18 +108,46 @@ export function humanUrl(raw) {
 // asking a sample repository for cl_abap_typedescr.clas.abap would be one
 // pointless 404 per name.
 const FRAMEWORK = /^(z2ui5_|cl_|cx_|if_|cf_)/i;
+// Local classes and interfaces live in the file that declares them; there is
+// no sibling file of that name to ask for.
+const LOCAL = /^(lcl_|lif_|ltc_|lth_)/i;
 // What `TYPE REF TO` names that is not a class: the generic and the built-in
 // types. Each would otherwise be one request for data.clas.abap.
 const NOT_A_CLASS = /^(data|object|any|simple|clike|csequence|numeric|xsequence|decfloat|decfloat16|decfloat34|string|xstring|utclong|int8|i|c|n|p|x|f|d|t)$/i;
 
+// The source with its comments taken out - a `*` line, and a `"` to the end
+// of the line wherever it is not inside a literal. A plain /\s".*$/ also cut
+// at the `"` in 'He said "go"', hiding a NEW zcl_helper( ) later on that line.
+function withoutComments(source) {
+  return source
+    .split("\n")
+    .map((line) => {
+      if (line.startsWith("*")) return "";
+      let quote;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (quote) {
+          if (ch === "\\" && quote === "|") i += 1;
+          else if (ch === quote) quote = undefined;
+        } else if (ch === "'" || ch === "`" || ch === "|") {
+          quote = ch;
+        } else if (ch === '"') {
+          return line.slice(0, i);
+        }
+      }
+      return line;
+    })
+    .join("\n");
+}
+
 export function instantiatedClasses(source) {
   const names = new Set();
   const add = (name) => {
-    if (name && !FRAMEWORK.test(name) && !NOT_A_CLASS.test(name)) names.add(name.toLowerCase());
+    if (name && !FRAMEWORK.test(name) && !LOCAL.test(name) && !NOT_A_CLASS.test(name)) names.add(name.toLowerCase());
   };
   // Comments are stripped first, or the sentence "this app calls zcl_helper"
   // in a header comment would be followed as if it were code.
-  const code = source.replace(/^\s*".*$/gm, "").replace(/\s".*$/gm, "");
+  const code = withoutComments(source);
   for (const [, name] of code.matchAll(/\bNEW\s+([a-z_]\w*)\s*\(/gi)) add(name);
   for (const [, name] of code.matchAll(/\bCREATE\s+OBJECT\s+\w+\s+TYPE\s+([a-z_]\w*)/gi)) add(name);
   for (const [, name] of code.matchAll(/\b([a-z_]\w*)\s*=>/gi)) add(name);

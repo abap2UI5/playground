@@ -319,7 +319,19 @@ async function boot() {
 
   const { files } = await startingReady;
   createEditor(document.getElementById("editor"), files, { onChange: remember, dark: isDark() });
-  setUpFiles({ onChanged: remember, onOpened: fileOpened });
+  // A theme change - the switch in the bar, or the sun going down on a page
+  // that follows the system - must not restart the app: somebody has a
+  // half-filled form open. UI5 can swap its theme at runtime, so the running
+  // frame is told rather than reloaded; a frame that cannot be told keeps the
+  // theme it started with until the next Run. The editor is told as well -
+  // from the moment it exists, not from the end of boot: a switch flipped
+  // during the seconds of corpus parse used to leave Monaco in the old theme,
+  // and a boot that failed never listened at all.
+  onThemeChange(() => {
+    setEditorTheme(isDark());
+    applyFrameTheme();
+  });
+  setUpFiles({ onOpened: fileOpened });
   setUpInsight();
   // The registry answers from a worker, so what remember( ) and fileOpened( )
   // show is what was last known; this is how the fresh answer reaches the
@@ -381,9 +393,10 @@ async function boot() {
     // answer is thrown away and asked for again; if it has landed already,
     // this runs at once and costs one incremental analysis.
     linterReady
-      .then(() => {
+      .then(async () => {
         invalidateAnalysis();
-        updateInsight(refresh());
+        // The fresh answer, not the emptied one invalidateAnalysis( ) left.
+        updateInsight(await refreshNow());
       })
       .catch((e) => showOutput("abap2UI5 lint", `The abap2UI5 linter could not be loaded: ${String(e?.message ?? e)}`));
   } catch (e) {
@@ -464,27 +477,20 @@ async function boot() {
     reflectHistory();
   });
   formatButton.addEventListener("click", async () => {
-    const { formatted } = await format();
-    reflectHistory();
-    setStatus(
-      formatted === 0
-        ? "already formatted"
-        : `formatted ${formatted} file${formatted === 1 ? "" : "s"} - Ctrl+Z takes it back`,
-    );
+    try {
+      const { formatted } = await format();
+      reflectHistory();
+      sayFormatted(formatted);
+    } catch (e) {
+      // A throw inside abaplint's printer, in the worker: said, rather than an
+      // unhandled rejection behind a button that apparently did nothing.
+      setStatus("the code could not be formatted", true);
+      showOutput("Format", String(e?.message ?? e));
+    }
   });
   shareButton.addEventListener("click", () => share());
   fullscreenButton.addEventListener("click", () => openFullScreen());
   examplesButton.addEventListener("click", () => openExamples());
-
-  // A theme change - the switch in the bar, or the sun going down on a page
-  // that follows the system - must not restart the app: somebody has a
-  // half-filled form open. UI5 can swap its theme at runtime, so the running
-  // frame is told rather than reloaded; a frame that cannot be told keeps the
-  // theme it started with until the next Run. The editor is told as well.
-  onThemeChange(() => {
-    setEditorTheme(isDark());
-    applyFrameTheme();
-  });
 
   // Ctrl+S as well as Ctrl+Enter: the hand that has typed in an editor for
   // twenty years presses it, and a browser answers with a dialog for saving
@@ -684,8 +690,17 @@ function remember(files) {
   // it just stopped being true. Left there, it would also win over this draft
   // on the next reload (a link outranks stored code in startingFiles), quietly
   // rolling the editor back to whatever was shared before the edits.
-  if (window.location.hash) {
-    history.replaceState(null, "", window.location.pathname + window.location.search);
+  // A ?src= link is the same claim made by the query, and it outranks the
+  // draft the same way: kept, a reload - or the bar's Playground item, which
+  // reopens the URL written down here - fetched the linked class again and
+  // hid the edits made since, until the next keystroke overwrote them in
+  // storage too. The rest of the query (from, back, view) still holds.
+  const query = new URLSearchParams(window.location.search);
+  const linked = query.has("src");
+  query.delete("src");
+  if (window.location.hash || linked) {
+    const rest = query.toString();
+    history.replaceState(null, "", window.location.pathname + (rest ? `?${rest}` : ""));
   }
 }
 
@@ -697,7 +712,8 @@ function loadSample(id, tabs) {
   const keptHow = replaceWith(sample.files);
   // Picking a sample is a request to see it, so it runs without a second click.
   run().then((started) => {
-    if (started) tabs.show("right");
+    if (!started) return;
+    tabs.show("right");
     if (keptHow) sayDraftIsKept(keptHow);
   });
 }
@@ -716,7 +732,8 @@ function loadDraft(files, tabs) {
   forgetOrigins();
   const keptHow = replaceWith(checked);
   run().then((started) => {
-    if (started) tabs.show("right");
+    if (!started) return;
+    tabs.show("right");
     if (keptHow) sayDraftIsKept(keptHow);
   });
 }
@@ -744,7 +761,10 @@ function replaceWith(files) {
 
 // Said after the run, because run( ) ends by writing "running" over the
 // status line - and said at all because a click that replaced an hour's work
-// is the one moment the reader has to be told the work is not gone.
+// is the one moment the reader has to be told the work is not gone. Only
+// after a run that started: one that stopped on an abaplint error or a
+// transpiler refusal has said so in red, and "running - ..." over it was
+// both untrue and the end of the only sentence that mattered.
 function sayDraftIsKept(how) {
   setStatus(
     how === "undo" ? "running - your draft is one Undo away" : "running - your draft comes back if you reload",
@@ -762,8 +782,10 @@ async function loadLinked(url, tabs) {
     const linked = checkFileSet(await fetchLinkedFiles(new URLSearchParams([["src", url]])));
     const alongside = await followNavigation(linked);
     const keptHow = replaceWith(checkFileSet([...linked, ...alongside]));
-    if (await run()) tabs.show("right");
-    if (keptHow) sayDraftIsKept(keptHow);
+    if (await run()) {
+      tabs.show("right");
+      if (keptHow) sayDraftIsKept(keptHow);
+    }
   } catch (e) {
     // The catalogue said the class is there and it was not, or the fetch
     // failed under way. Somebody clicked expecting particular code, so this
@@ -945,15 +967,22 @@ function reflectRunButton() {
 // Every debounced change to the ABAP comes through remember( ), which calls
 // this: a keystroke, a file added or closed, a set of files opened over the
 // old one.
+//
+// Not before boot( ) has finished: there is no runtime to run against yet,
+// and boot's own first run takes whatever was typed meanwhile. And not for
+// text that has just been run - opening a sample or a draft writes the
+// models, the editor's change debounce fires during the run that opening
+// started, and without the comparison that one change was a second compile,
+// database reset and frame reload of the same text 700ms later.
 function autorunAfterChange() {
-  if (!autorun) return;
+  if (!autorun || !booted) return;
   clearTimeout(autorunTimer);
   autorunTimer = setTimeout(() => {
     // A run already under way owns the frame and the database, and run( )
     // would answer a second one by returning. So the change that arrived
     // during it is run after it rather than dropped.
     if (running) autorunAfterChange();
-    else run();
+    else if (JSON.stringify(getFiles()) !== lastRunText) run();
   }, AUTORUN_DELAY);
 }
 
@@ -966,6 +995,8 @@ function autorunAfterChange() {
 // each run a different document, so the browser cannot serve a cached one and
 // the load event is unambiguous.
 let running = false;
+// The files the last run started from, as text - see autorunAfterChange( ).
+let lastRunText;
 // What the last run's unit tests said, for runForAgent( ).
 let lastTestResults = [];
 
@@ -985,6 +1016,7 @@ export async function run() {
   hideOutput();
   try {
     const files = getFiles();
+    lastRunText = JSON.stringify(files);
 
     const structural = structuralProblem(files);
     if (structural) {
@@ -1059,15 +1091,17 @@ export async function run() {
     // until a full reload. Thirty seconds is an eternity for a same-origin
     // document - reaching it means the load is not coming.
     await new Promise((resolve, reject) => {
-      const gaveUp = setTimeout(() => reject(new Error("The app frame did not load.")), 30000);
-      frame.addEventListener(
-        "load",
-        () => {
-          clearTimeout(gaveUp);
-          resolve();
-        },
-        { once: true },
-      );
+      const loaded = () => {
+        clearTimeout(gaveUp);
+        resolve();
+      };
+      // Taken off again when it gives up, or the next run's load would fire
+      // this one as well - one more stale listener per timed-out run.
+      const gaveUp = setTimeout(() => {
+        frame.removeEventListener("load", loaded);
+        reject(new Error("The app frame did not load."));
+      }, 30000);
+      frame.addEventListener("load", loaded, { once: true });
       frame.src = src.href;
     });
     if (testsFailed > 0) {
@@ -1128,7 +1162,10 @@ async function runForAgent() {
   return {
     started: Boolean(started),
     status: status.textContent,
-    problems: refresh(),
+    // Waited for: a run that stopped before its own refreshNow( ) (a
+    // structural problem) left refresh( ) answering for the text from before
+    // the model's change, and the model chased problems that were gone.
+    problems: await refreshNow(),
     tests: lastTestResults,
     roundtrips: roundtripList(),
     log: currentLog(),

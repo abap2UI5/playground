@@ -28,7 +28,7 @@
 // the diff is the change. Writing the whole chain is what an added or removed
 // control falls back to.
 import { abapLiteral, unwritable, writeViewChain } from "./chain-write.mjs";
-import { alignWithXml, readViewChain } from "./chain-read.mjs";
+import { alignWithXml, commentIn, readViewChain } from "./chain-read.mjs";
 import { patchChain } from "./chain-patch.mjs";
 
 const no = (why) => ({ ok: false, why });
@@ -91,6 +91,14 @@ export function sourceWithView(source, xml, edited) {
   // A view whose shape changed: a control added, removed or renamed. There is
   // no edit to make here - the chain is written again, in the house layout,
   // out of a tree that still carries the ABAP of every value nobody touched.
+  // Except over a comment: the writer has no idea where one belonged, and
+  // dropping somebody's notes is rewriting what they did not edit.
+  if (commentIn(source, chain.start, chain.end)) {
+    return no(
+      "This change rewrites the whole chain, and the chain has comments in it that the rewrite would drop. " +
+        "Take the comments out of the chain, or make the change in the ABAP.",
+    );
+  }
   const text = writeViewChain({ indent: chain.indent, assignment: chain.assignment, element: built.element });
   return { ok: true, source: source.slice(0, chain.start) + text + source.slice(chain.end) };
 }
@@ -137,8 +145,8 @@ function merge(wanted, was, node) {
     const untouched = before !== undefined && was?.getAttribute(attr.name) === attr.value;
     built.attrs.push(
       untouched
-        ? { name: attr.name, raw: before.raw, boolean: before.boolean, literal: before.literal, from: before }
-        : { name: attr.name, raw: abapLiteral(attr.value), boolean: false, literal: attr.value, from: before },
+        ? { name: attr.name, raw: before.raw, boolean: before.boolean, key: before.key, literal: before.literal, from: before }
+        : { name: attr.name, raw: abapLiteral(attr.value), boolean: false, key: "v", literal: attr.value, from: before },
     );
   }
 
@@ -149,7 +157,7 @@ function merge(wanted, was, node) {
   // them - the document being merged from has no opinion about where they sat.
   for (const attr of node?.attrs ?? []) {
     if (!attr.hidden || built.attrs.some((a) => a.name === attr.name)) continue;
-    built.attrs.push({ name: attr.name, raw: attr.raw, boolean: attr.boolean, literal: attr.literal, from: attr });
+    built.attrs.push({ name: attr.name, raw: attr.raw, boolean: attr.boolean, key: attr.key, literal: attr.literal, from: attr });
   }
 
   const wantedKids = [...wanted.children];
@@ -174,26 +182,37 @@ const splitName = (tagName) => {
 // deleted control shifts nothing around it. Returns, per edited child, the
 // index of its original or undefined.
 //
-// By name only. Two `<Column>`s in a row are interchangeable to this, and
-// pairing the first with the first is both the obvious answer and the one that
-// keeps their attributes where the reader left them.
+// By name first, and among same-named candidates by how many attribute values
+// still agree. By name alone, deleting the first of two `<Button>`s paired the
+// survivor with the deleted one's original - its bind frozen into the text it
+// happened to show, the deleted button's event on it - and inserting a
+// `<Button>` in front of two shifted every original one place along. The
+// agreement is a fraction below 1, so it only ever breaks ties between
+// pairings of the same length; two identical `<Column>`s still pair first
+// with first.
 function pairChildren(wanted, was) {
   const rows = wanted.length;
   const cols = was.length;
+  const score = (i, j) => {
+    if (wanted[i].tagName !== was[j].tagName) return -1;
+    const attrs = [...wanted[i].attributes];
+    const agree = attrs.filter((a) => was[j].getAttribute(a.name) === a.value).length;
+    return 1 + agree / (1 + Math.max(attrs.length, was[j].attributes.length));
+  };
   const table = Array.from({ length: rows + 1 }, () => new Array(cols + 1).fill(0));
+  const scores = Array.from({ length: rows }, () => new Array(cols));
   for (let i = rows - 1; i >= 0; i--) {
     for (let j = cols - 1; j >= 0; j--) {
-      table[i][j] =
-        wanted[i].tagName === was[j].tagName
-          ? table[i + 1][j + 1] + 1
-          : Math.max(table[i + 1][j], table[i][j + 1]);
+      const s = (scores[i][j] = score(i, j));
+      table[i][j] = Math.max(table[i + 1][j], table[i][j + 1], s >= 0 ? table[i + 1][j + 1] + s : -Infinity);
     }
   }
   const paired = new Array(rows).fill(undefined);
   let i = 0;
   let j = 0;
   while (i < rows && j < cols) {
-    if (wanted[i].tagName === was[j].tagName) {
+    const s = scores[i][j];
+    if (s >= 0 && table[i][j] === table[i + 1][j + 1] + s) {
       paired[i] = j;
       i += 1;
       j += 1;
