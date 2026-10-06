@@ -62,15 +62,32 @@ function* files(tar) {
   }
 }
 
-/* One ref's tree, cached on disk for a day. The cache is for the rebuilds
- * somebody does while working on these pages, not for CI - a fresh runner has
- * no build/ at all, so a deploy always fetches. `--fresh` forces it here too,
- * the same flag the catalogue fetch reads. */
+/* One ref's tree, cached on disk for a day - as the uncompressed tar, or
+ * undefined. The cache is for the rebuilds somebody does while working on
+ * these pages, not for CI - a fresh runner has no build/ at all, so a deploy
+ * always fetches. `--fresh` forces it here too, the same flag the catalogue
+ * fetch reads.
+ *
+ * A copy on disk that does not decompress is not a copy: a write cut short
+ * (a full disk, a build stopped while it wrote) left a truncated .tar.gz with
+ * a fresh date, and every build that day trusted it and printed those pages
+ * without their ABAP while the network had the whole tree. It is fetched
+ * again, as a half-written catalogue already is; and what is fetched is
+ * checked before it is kept, and lands under its name in one rename. */
+function unpacked(gz) {
+  try {
+    return zlib.gunzipSync(gz);
+  } catch {
+    return undefined;
+  }
+}
+
 async function tarball(repo, ref) {
   const cached = path.join(CACHE, `${repo.replace("/", "-")}-${ref}.tar.gz`);
   const fresh = process.argv.includes("--fresh");
   if (!fresh && fs.existsSync(cached) && Date.now() - fs.statSync(cached).mtimeMs < DAY) {
-    return fs.readFileSync(cached);
+    const tar = unpacked(fs.readFileSync(cached));
+    if (tar !== undefined) return tar;
   }
   try {
     const response = await fetch(`https://codeload.github.com/${repo}/tar.gz/${ref}`, {
@@ -78,16 +95,20 @@ async function tarball(repo, ref) {
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const body = Buffer.from(await response.arrayBuffer());
+    const tar = unpacked(body);
+    if (tar === undefined) throw new Error("the tarball did not decompress");
     fs.mkdirSync(CACHE, { recursive: true });
-    fs.writeFileSync(cached, body);
-    return body;
+    fs.writeFileSync(`${cached}.part`, body);
+    fs.renameSync(`${cached}.part`, cached);
+    return tar;
   } catch (err) {
     /* A stale copy beats no code at all - the same trade the catalogue fetch
      * makes, and for the same reason: the page would rather be a day old than
      * be missing the thing it is about. */
-    if (fs.existsSync(cached)) {
+    const stale = fs.existsSync(cached) ? unpacked(fs.readFileSync(cached)) : undefined;
+    if (stale !== undefined) {
       log(`${repo}@${ref}: ${err.message} - using the tarball already on disk`);
-      return fs.readFileSync(cached);
+      return stale;
     }
     log(`${repo}@${ref}: ${err.message} - its samples are listed without their ABAP`);
     return undefined;
@@ -118,15 +139,8 @@ export async function fetchSampleSources(rows) {
    * and codeload is somebody else's server. The largest of them is one
    * response of a few megabytes. */
   for (const { repo, ref, wanted } of refs.values()) {
-    const gz = await tarball(repo, ref);
-    if (gz === undefined) continue;
-    let tar;
-    try {
-      tar = zlib.gunzipSync(gz);
-    } catch (err) {
-      log(`${repo}@${ref}: the tarball did not decompress (${err.message}) - listed without their ABAP`);
-      continue;
-    }
+    const tar = await tarball(repo, ref);
+    if (tar === undefined) continue;
     let found = 0;
     for (const file of files(tar)) {
       // codeload wraps the tree in one directory named for the repo and the ref.
