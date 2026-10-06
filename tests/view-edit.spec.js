@@ -213,6 +213,22 @@ test("the ABAP editor is read-only while the view is open, and writable again af
   expect(await getSource(page, APP)).not.toBe(before);
 });
 
+// The editor is the one thing in the panel a redraw puts back rather than
+// builds again - and a node taken out of the page and put back has lost the
+// focus. A Run from inside it (Ctrl+Enter) redraws the panel.
+test("a run from inside the view's editor leaves the caret in it", async ({ page }) => {
+  await open(page);
+  const area = await openEditor(page);
+  await area.click();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.type("<!-- a");
+  await page.keyboard.press("Control+Enter");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+  await expect(area).toBeFocused();
+  await page.keyboard.type("b -->");
+  expect(await area.inputValue()).toMatch(/<!-- ab -->$/);
+});
+
 test("XML that does not parse is refused where it was typed, and nothing is written", async ({ page }) => {
   await open(page);
   const area = await openEditor(page);

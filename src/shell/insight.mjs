@@ -353,8 +353,24 @@ function render() {
   // their own instead: Enter on a roundtrip, or the next one landing every
   // second from a timer app, dropped the focus to <body>.
   const keyed = body.contains(document.activeElement) ? document.activeElement.closest?.("[data-focus]")?.dataset.focus : undefined;
+  // And the one element that is not rebuilt but put back: the View tab's
+  // editor (viewPreview( ) hands the same node over). Taken out of the
+  // document and put back, it had lost the focus - a Run from inside it
+  // (Ctrl+Enter, Ctrl+S) redraws the panel, and what was typed next went
+  // nowhere. Its caret and scroll go with it.
+  const kept = body.contains(document.activeElement) ? document.activeElement : null;
+  const caret = kept instanceof HTMLTextAreaElement
+    ? { start: kept.selectionStart, end: kept.selectionEnd, direction: kept.selectionDirection, top: kept.scrollTop }
+    : undefined;
   body.replaceChildren((VIEWS[view] ?? problemList)());
   rendered = view;
+  if (kept && kept !== document.activeElement && body.contains(kept)) {
+    kept.focus({ preventScroll: true });
+    if (caret) {
+      kept.setSelectionRange(caret.start, caret.end, caret.direction);
+      kept.scrollTop = caret.top;
+    }
+  }
   if (!same) return;
   body.scrollTop = top;
   if (at) {
