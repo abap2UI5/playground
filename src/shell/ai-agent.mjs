@@ -31,9 +31,12 @@ import { catalogueEntries, DEFAULT_SPEED, SPEEDS } from "./ai-common.mjs";
 import GUIDE from "../../deps/abap2ui5/docs/agents/building-apps.md";
 import { parseName } from "../editor/files.mjs";
 import { isUntouchedStarter } from "./ai-starter.mjs";
+import { attachmentBlocks } from "./attachments.mjs";
 
 // The speeds and the errors are the AI Pilot's as well (src/shell/ai-common.mjs).
 export { SPEEDS, DEFAULT_SPEED, explainError } from "./ai-common.mjs";
+// What the chat checks a file against as it is added (attach-ui.mjs).
+export { kindOf, MAX_FILES } from "./attachments.mjs";
 
 // The tools that change the editor, after which the page runs the app by
 // itself (see loop( )).
@@ -89,6 +92,14 @@ How the playground works, and what that means for you:
   If the person asks for something new, write a new app class, make it the
   app and delete the files it does not need. If they ask for a change,
   change what is there.
+
+Files the person attaches:
+- A message may carry files: a specification (PDF, Word), a screenshot or
+  mockup of a screen to rebuild, a spreadsheet (each sheet comes as CSV), a
+  text file. Build from them - the fields, the columns, the labels, the
+  steps - and use a spreadsheet's rows as the data of the internal tables
+  (VALUE #( ... )), not invented ones. Say what you took from which file and
+  what a file asked for that the app does not do yet.
 
 Talking to the person:
 - Answer in the language the person writes in.
@@ -248,7 +259,9 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
 
   const snapshot = () => JSON.stringify(host.files());
 
-  async function send(text) {
+  // `files` are the File objects the reader added to this message; they go in
+  // front of its text, as the content blocks attachments.mjs makes of them.
+  async function send(text, files = []) {
     stopped = false;
     const now = snapshot();
     const content = [];
@@ -258,6 +271,11 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         text: `<editor_files>\nThe editor holds these files right now:\n\n${filesAsText(host.files())}\n</editor_files>`,
       });
       seen = now;
+    }
+    if (files.length > 0) {
+      const { blocks, errors } = await attachmentBlocks(files);
+      for (const error of errors) ui.notice(error);
+      content.push(...blocks);
     }
     content.push({ type: "text", text });
     messages.push({ role: "user", content });

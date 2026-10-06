@@ -53,7 +53,7 @@ import { announceAppHeight, announceReady, announceStatus, startEmbedMessages } 
 import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
 import { openShare, setUpShareDialog } from "./share-dialog.mjs";
 import { clearRoundtrips, recordRoundtrip, roundtripList } from "./roundtrips.mjs";
-import { setUpChat } from "./chat.mjs";
+import { chatDropped, setUpChat } from "./chat.mjs";
 import { pilotDropped, pilotPicked, pilotRan, sawRoundtrip, setUpPilot, takePilotRequest } from "./pilot.mjs";
 import { AI_FILE, AI_STARTER, isUntouchedStarter } from "./ai-starter.mjs";
 import { state } from "./state.mjs";
@@ -430,10 +430,10 @@ async function boot() {
         }
       },
       dialogOpen: () => document.querySelector("dialog[open]") !== null,
-      // Files dropped on the app in a frame, on the AI Pilot's page: they go
-      // to its chat (src/shell/pilot.mjs). Elsewhere a frame keeps the
-      // browser's own answer to a drop.
-      dropFiles: pilotPage ? (files) => pilotDropped(files) : undefined,
+      // Files dropped on the app in a frame, on the AI Pilot's page or the AI
+      // Studio's: they go to that page's chat (pilot.mjs, chat.mjs).
+      // Elsewhere a frame keeps the browser's own answer to a drop.
+      dropFiles: pilotPage ? (files) => pilotDropped(files) : aiPage ? (files) => chatDropped(files) : undefined,
     };
     const version = `abap2UI5 ${state.runtime.abapVersion()}`;
     document.getElementById("versions").textContent = version;

@@ -654,6 +654,12 @@
       </form>
       <div class="chat-log" id="chat-log" role="log" aria-live="polite" aria-label="Conversation"></div>
       <form class="chat-compose" id="chat-compose">
+        <!-- The files going with the next message (src/shell/attach-ui.mjs). -->
+        <div class="chat-files" id="chat-files" aria-label="Files for the next message" hidden></div>
+        <button type="button" id="chat-attach" class="chat-attach"
+                title="Add files - a specification (PDF, Word), a screenshot, an Excel sheet with data" aria-label="Add files">📎</button>
+        <input type="file" id="chat-file-input" multiple hidden
+               accept=".pdf,.xlsx,.xlsm,.docx,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv,.tsv,.json,.md,.xml,.html,.yaml,.yml,.abap,text/*">
         <textarea id="chat-input" rows="3" aria-label="Your message"
                   placeholder="Describe the app you want, or what to change… (Enter sends, Shift+Enter is a new line)"></textarea>
         <button type="submit" id="chat-send" class="primary">Send</button>

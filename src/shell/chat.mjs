@@ -23,6 +23,7 @@
 // price; one that was stored by an earlier version is removed on load. An embedded playground never shows the chat at all: a demo in
 // somebody's documentation page is not where a reader types a key.
 import { isUntouchedStarter } from "./ai-starter.mjs";
+import { listenForFileDrops, listSentFiles, setUpAttaching } from "./attach-ui.mjs";
 import { abapGitZip, download } from "./export.mjs";
 import { readStored, removeStored, writeStored } from "./storage.mjs";
 import { setStatus } from "./ui.mjs";
@@ -72,6 +73,8 @@ const rows = new Map();
 let busy = false;
 let open = false;
 let el;
+// The files going with the next message (attach-ui.mjs, shared with the Pilot).
+let attaching;
 
 /**
  * `chatHost` is the page (main.mjs): files(), setFiles(files), run(),
@@ -106,6 +109,9 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
     exit: document.getElementById("studio-exit"),
     url: document.getElementById("studio-url"),
     stage: document.getElementById("pane-right"),
+    files: document.getElementById("chat-files"),
+    attach: document.getElementById("chat-attach"),
+    fileInput: document.getElementById("chat-file-input"),
   };
 
   // The switch is optional: the studio's own page opens it with startOpen and
@@ -170,6 +176,20 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
     }
   });
 
+  // Files for the next message: the paperclip, a paste, and - on the studio's
+  // own page - a drop anywhere on it. The kinds and the limit are the agent
+  // chunk's, imported the first time a file is added.
+  attaching = setUpAttaching({
+    prefix: "chat",
+    button: el.attach,
+    input: el.fileInput,
+    list: el.files,
+    textarea: el.input,
+    rules: () => import("./ai-agent.mjs"),
+    refused: (text) => addLine("notice is-error", text),
+  });
+  if (startOpen) listenForFileDrops({ highlight: el.chat, onFiles: (files) => chatDropped(files) });
+
   el.reset.addEventListener("click", () => {
     startOver();
     el.usage.textContent = "";
@@ -201,6 +221,14 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
 }
 
 export const chatOpen = () => open;
+
+/** A file drop on the studio's page, or on the app in its frame (main.mjs,
+ *  the bridge's dropFiles): to the chat, which a phone brings forward. */
+export function chatDropped(files) {
+  if (!attaching || !open || files.length === 0) return;
+  if (narrow()) setStage("chat", true);
+  attaching.add(files);
+}
 
 function stopTurn() {
   stopAsked = true;
@@ -322,7 +350,8 @@ function showWelcome() {
   const lead = document.createElement("p");
   lead.textContent =
     "Describe the app you want. Claude writes it as an abap2UI5 class into the editor, runs it here and fixes " +
-    "what the checks find - the app appears on the right. Ask for changes until it fits, then download it for abapGit.";
+    "what the checks find - the app appears on the right. Ask for changes until it fits, then download it for abapGit. " +
+    "Add a specification, a screenshot or an Excel sheet with data with 📎 and Claude builds from it.";
   const list = document.createElement("div");
   list.className = "chat-suggestions";
   for (const text of SUGGESTIONS) {
@@ -366,8 +395,10 @@ function setBusy(value) {
 }
 
 async function submit() {
-  const text = el.input.value.trim();
-  if (text === "") return;
+  const typed = el.input.value.trim();
+  if (typed === "" && attaching.count === 0) return;
+  // Files alone are a message too: the model is told they are what it is about.
+  const text = typed || "Here are the files.";
   const key = storedKey();
   if (key === null) {
     showKeyForm(true);
@@ -376,7 +407,8 @@ async function submit() {
   }
   el.log.querySelector(".chat-welcome")?.remove();
   el.input.value = "";
-  addLine("user", text);
+  const files = attaching.take();
+  listSentFiles(addLine("user", typed), files, "chat-user-files");
   setBusy(true);
   stopAsked = false;
   current = undefined;
@@ -470,7 +502,7 @@ async function submit() {
     turn = agent;
     active = turn;
     setStatus("the AI is working…");
-    const { stopped } = await turn.send(text);
+    const { stopped } = await turn.send(text, files);
     if (!live()) return;
     if (stopped) addLine("notice", "Stopped.");
     setStatus(stopped ? "stopped" : "the AI is done");
