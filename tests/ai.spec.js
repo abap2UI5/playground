@@ -156,6 +156,34 @@ test("the chat builds an app in the editor, runs it and tells the model what hap
   expect(await page.evaluate(() => localStorage.getItem("abap2ui5-playground:files"))).toBeNull();
 });
 
+test("an interface written before the app's class leaves the starting class until the class takes its place", async ({ page }) => {
+  // The natural order for a model: what the class implements, then the class.
+  const intf = "INTERFACE zif_ai_thing PUBLIC.\n  CONSTANTS greeting TYPE string VALUE `hi`.\nENDINTERFACE.\n";
+  const requests = [];
+  await page.route("https://api.anthropic.com/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    requests.push({ body: request.postDataJSON() });
+    const answer = requests.length === 1
+      ? sse({ tools: [
+          { name: "write_file", input: { name: "zif_ai_thing.intf.abap", source: intf } },
+          { name: "write_file", input: { name: APP_FILE, source: APP } },
+        ] })
+      : sse({ text: "Both written." });
+    await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: answer });
+  });
+  await openStudio(page);
+  await saveKey(page);
+  await page.locator("#chat-input").fill("An app with an interface beside it");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toContainText("Both written.", { timeout: 90000 });
+  // Neither write was refused, and the class is the app, the interface beside it.
+  const results = requests[1].body.messages.at(-1).content;
+  expect(results.map((r) => r.is_error ?? false)).toEqual([false, false]);
+  await expect(page.locator("#files .file-name")).toHaveText([APP_FILE, "zif_ai_thing.intf.abap"]);
+  await expect(page.frameLocator("#app").getByText(MARK)).toBeVisible();
+});
+
 test("a change is run by the page itself, its report rides on the change, and the turn shows what it is doing", async ({ page }) => {
   const requests = [];
   await page.route("https://api.anthropic.com/**", async (route) => {

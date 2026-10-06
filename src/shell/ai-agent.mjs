@@ -539,7 +539,16 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
     // A file with nothing in it, or the AI Studio's starting class as it was
     // handed out, goes as soon as another class is written: left first it
     // would stay the app the page tries to start, and it starts to nothing.
-    next = next.filter((f) => f.name === name || !isUntouchedStarter(f));
+    // Only for a class, and the class takes the app's place: an interface
+    // written first used to drop the starter and leave itself first - "the
+    // first file is the app, so it has to be a class" - and a class written
+    // after it was refused the same way.
+    const parsed = parseName(name);
+    if (parsed.kind === "clas" && !parsed.include) {
+      const appGoes = next[0].name !== name && isUntouchedStarter(next[0]);
+      next = next.filter((f) => f.name === name || !isUntouchedStarter(f));
+      if (appGoes) next = [next.find((f) => f.name === name), ...next.filter((f) => f.name !== name)];
+    }
     host.setFiles(next);
     // The file it just wrote is the one on screen, so the reader watches
     // the code arrive rather than the app file it may not have touched.
