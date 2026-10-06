@@ -885,7 +885,7 @@ this page: a change to the files is an app opened beside, and a run would
 restart them all.
 
 **Files in the chat** (`src/shell/attachments.mjs`, in the Pilot's chunk):
-📎, a drop on the chat or a paste adds up to five files of at most 10 MB to
+📎, a drop or a paste adds up to five files of at most 10 MB to
 the next message, checked as they are added (`kindOf( )`) and read when it is
 sent (`attachmentBlocks( )`), in front of its text. A PDF is a `document`
 block and an image an `image` block, as they are; an `.xlsx` is each sheet as
@@ -899,7 +899,13 @@ the sheet's first line. The old binary formats are refused with what to save
 them as. The conversation is append-only, so the files are sent again with
 every request of the chat - the conversation's `cache_control` is what keeps
 that cheap. `tests/pilot.spec.js` holds the three formats against fixtures
-(`tests/fixtures/orders.xlsx`, `brief.docx`, `note.pdf`).
+(`tests/fixtures/orders.xlsx`, `brief.docx`, `note.pdf`). **A drop is taken
+anywhere on the page**, not only on the chat: a file dropped where nobody
+takes it is opened by the browser in a tab of its own, which is what a drop
+on the bar or the app did. The page listens on the window; the app's frame
+hands a drop to the page (`dropFiles` on the bridge, `pilotDropped( )`)
+unless one of the app's own controls took it first (`defaultPrevented` - an
+upload control).
 
 The tools are `look`, `act`, `restart_app`, `find_apps`, `open_app` (with
 `beside`), `show_app`, `close_app` and `read_source` - the apps, Run and the

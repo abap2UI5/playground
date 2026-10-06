@@ -134,6 +134,15 @@ export function pilotRan() {
   }
 }
 
+/** A file drop: on the page (setUpPilot) or on an app, handed over by its
+ *  frame (main.mjs, the bridge's dropFiles). It goes to the chat, which a
+ *  phone brings forward. */
+export function pilotDropped(files) {
+  if (!host || files.length === 0) return;
+  setView("chat");
+  addFiles(files);
+}
+
 /** main.mjs: a pick in the samples browser - files, or a promise of them. */
 export async function pilotPicked(files) {
   const beside = pickBeside;
@@ -430,26 +439,33 @@ export function setUpPilot(pilotHost) {
     if (busy) stopTurn();
     else submit();
   });
-  // Files for the next message: the paperclip, a drop anywhere on the chat,
-  // or a paste into the message.
+  // Files for the next message: the paperclip, a drop, or a paste into the
+  // message. A file dropped ANYWHERE on the page goes to the chat - on the
+  // bar or beside the chat as well, where the browser's own answer to a drop
+  // nobody takes is to open the file in a tab of its own. A drop on the app
+  // reaches the chat through the frame (frontend-bridge.js, dropFiles), unless
+  // the app took it itself - an upload control.
   el.attach.addEventListener("click", () => el.fileInput.click());
   el.fileInput.addEventListener("change", () => {
     addFiles([...el.fileInput.files]);
     el.fileInput.value = "";
   });
-  el.chat.addEventListener("dragover", (e) => {
-    if (![...(e.dataTransfer?.types ?? [])].includes("Files")) return;
+  const isFileDrag = (e) => [...(e.dataTransfer?.types ?? [])].includes("Files");
+  window.addEventListener("dragover", (e) => {
+    if (!isFileDrag(e)) return;
     e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
     el.chat.classList.add("is-dropping");
   });
-  el.chat.addEventListener("dragleave", (e) => {
-    if (!el.chat.contains(e.relatedTarget)) el.chat.classList.remove("is-dropping");
+  window.addEventListener("dragleave", (e) => {
+    // Leaving the window, not crossing from one element to the next.
+    if (e.relatedTarget === null) el.chat.classList.remove("is-dropping");
   });
-  el.chat.addEventListener("drop", (e) => {
+  window.addEventListener("drop", (e) => {
     el.chat.classList.remove("is-dropping");
-    if (!e.dataTransfer?.files?.length) return;
+    if (!isFileDrag(e)) return;
     e.preventDefault();
-    addFiles([...e.dataTransfer.files]);
+    pilotDropped([...(e.dataTransfer?.files ?? [])]);
   });
   el.input.addEventListener("paste", (e) => {
     const files = [...(e.clipboardData?.files ?? [])];
