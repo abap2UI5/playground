@@ -714,9 +714,22 @@ async function readSample(input) {
   if (url.protocol !== "https:" || url.hostname !== "raw.githubusercontent.com") {
     return { error: `The source of ${name} is not on a host the playground reads from.` };
   }
-  const response = await fetch(url);
-  if (!response.ok) return { error: `The source of ${name} could not be fetched (${response.status}).` };
+  // Bounded, body and all, like every other fetch of a linked class
+  // (deep-link.mjs): a host that never answered held the turn for good, and
+  // Stop could not end it - the loop waits on the tool, not on the stream.
+  let source;
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(20000) });
+    if (!response.ok) return { error: `The source of ${name} could not be fetched (${response.status}).` };
+    source = await response.text();
+  } catch (e) {
+    return {
+      error: e?.name === "TimeoutError"
+        ? `The source of ${name} did not arrive within 20 seconds.`
+        : `The source of ${name} could not be fetched: ${String(e?.message ?? e)}`,
+    };
+  }
   // Long enough for any app the learning path has; the tail of a control
   // port is table data the model does not need to read to learn the pattern.
-  return { text: clip(await response.text(), 12000), summary: `read sample ${name}` };
+  return { text: clip(source, 12000), summary: `read sample ${name}` };
 }
