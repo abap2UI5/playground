@@ -1,5 +1,17 @@
 import { test, expect } from "@playwright/test";
-import { addNamedFile, control, MAIN_CLASS, MAIN_FILE, MAIN_MARK, markers, open, outputText, setSource } from "./helpers.mjs";
+import {
+  addNamedFile,
+  control,
+  MAIN_CLASS,
+  MAIN_FILE,
+  MAIN_MARK,
+  markers,
+  open,
+  outputText,
+  pickSample,
+  SAMPLES,
+  setSource,
+} from "./helpers.mjs";
 
 // The playground's whole point: what is in the editor is what runs. These tests
 // change the ABAP and check that the app on the right changed with it, and that
@@ -347,4 +359,31 @@ test("a loop that never ends is stopped, and the next Run works again", async ({
   await page.locator("#run").click();
   await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
   await expect(control(page, "txtOut")).toContainText("after the loop");
+});
+
+// Two samples picked while a run is still starting both wait for it, and the
+// editor holds the second by the time it ends. Each used to run then, so the
+// second sample was started twice - the second time under a reader who had
+// begun to use it. One run for both picks now.
+test("two samples picked during a run start the second one once", async ({ page }) => {
+  await open(page);
+  // A frame that is slow to arrive keeps the pressed run under way while the
+  // two picks are made.
+  const started = [];
+  await page.route(
+    (url) => url.searchParams.has("run"),
+    async (route) => {
+      started.push(new URL(route.request().url()).searchParams.get("app_start"));
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await route.continue();
+    },
+  );
+  await page.locator("#run").click();
+  await pickSample(page, SAMPLES[1].id);
+  await pickSample(page, SAMPLES[2].id);
+  await expect.poll(() => started.length, { timeout: 30000 }).toBe(2);
+  await expect(page.locator("#status")).toHaveText(/^running/, { timeout: 60000 });
+  // A second run of the same text would ask for its frame right after this.
+  await page.waitForTimeout(1500);
+  expect(started).toHaveLength(2);
 });

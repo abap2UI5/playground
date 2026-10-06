@@ -930,9 +930,21 @@ let startedFrom;
 // another one was still starting went into the editor, and its run returned
 // at once because one was under way: the editor held one sample and the
 // frame ran the other, with "running" in the status line.
-async function runWhenFree() {
-  while (running) await new Promise((resolve) => setTimeout(resolve, 100));
-  return run();
+//
+// Calls that wait share one run: two picks while a run is under way both
+// find the editor holding the second, and each waiting to run it on its own
+// ran the same text twice - the app the reader had started using reset under
+// them by a run nobody asked for. Both still hear how that one run went, so
+// the first pick's word about the draft it replaced is still said.
+let waitingRun;
+function runWhenFree() {
+  if (!running) return run();
+  waitingRun ??= (async () => {
+    while (running) await new Promise((resolve) => setTimeout(resolve, 100));
+    waitingRun = undefined;
+    return run();
+  })();
+  return waitingRun;
 }
 
 // Said after the run, because run( ) ends by writing "running" over the
