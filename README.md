@@ -199,6 +199,10 @@ with abapGit.
   [guide to building apps](https://github.com/abap2UI5/abap2UI5/blob/main/docs/agents/building-apps.md),
   at the same commit as the framework this page runs, and it can search the
   sample catalogue and read a sample's code before it writes its own.
+- **Files in the chat.** 📎, a drop anywhere on the page or a paste adds a
+  specification (PDF, Word), a screenshot or mockup of the screen you want, an
+  Excel sheet whose rows become the app's data, or a text file — the same
+  formats and limits as in the AI Pilot below, read in your browser.
 - **The limits are the playground's.** No tables of your own, no RFC, only the
   UI5 libraries built in (see *What it can and cannot do*) — the model is told
   so, and fills internal tables where a real app would `SELECT`.

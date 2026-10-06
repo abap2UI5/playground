@@ -350,3 +350,52 @@ function cors() {
     "access-control-allow-methods": "POST, OPTIONS",
   };
 }
+
+test("files go with a studio message: the paperclip, a drop anywhere on the page, a sheet as CSV", async ({ page }) => {
+  const requests = [];
+  await page.route("https://api.anthropic.com/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    requests.push(request.postDataJSON());
+    await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: sse({ text: "Read them." }) });
+  });
+  await openStudio(page);
+  await saveKey(page);
+
+  // The paperclip opens the browser's file picker.
+  const chooser = page.waitForEvent("filechooser");
+  await page.locator("#chat-attach").click();
+  await (await chooser).setFiles(["tests/fixtures/orders.xlsx", "tests/fixtures/note.pdf"]);
+  await expect(page.locator(".chat-file")).toHaveCount(2);
+
+  // A file dropped on the studio's bar goes to the chat, not to a new tab.
+  const prevented = await page.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.items.add(new File(["# Spec\nA list of orders"], "spec.md", { type: "text/markdown" }));
+    const bar = document.getElementById("studio-bar");
+    bar.dispatchEvent(new DragEvent("dragover", { dataTransfer: dt, bubbles: true, cancelable: true }));
+    const drop = new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true });
+    bar.dispatchEvent(drop);
+    return drop.defaultPrevented;
+  });
+  expect(prevented).toBe(true);
+  await expect(page.locator(".chat-file")).toHaveCount(3);
+  // An old binary Office file is refused with what to save it as.
+  await page.locator("#chat-file-input").setInputFiles([{ name: "old.doc", mimeType: "application/msword", buffer: Buffer.from("x") }]);
+  await expect(page.locator(".chat-notice.is-error")).toContainText("old.doc is the old binary Office format");
+
+  await page.locator("#chat-input").fill("Build an app for these orders");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toContainText("Read them.", { timeout: 60000 });
+  await expect(page.locator(".chat-file")).toHaveCount(0);
+  await expect(page.locator(".chat-user .chat-user-files")).toContainText("📎 orders.xlsx");
+
+  const content = requests[0].messages[0].content;
+  const documents = content.filter((b) => b.type === "document");
+  expect(documents.find((b) => b.source.media_type === "application/pdf").title).toBe("note.pdf");
+  expect(documents.find((b) => b.title === "orders.xlsx - sheet Orders").source.data).toContain("Carol,7");
+  expect(documents.find((b) => b.title === "spec.md").source.data).toContain("A list of orders");
+  expect(content.at(-1)).toEqual({ type: "text", text: "Build an app for these orders" });
+  // The studio's rules say what to do with them.
+  expect(JSON.stringify(requests[0].system)).toContain("Files the person attaches");
+});

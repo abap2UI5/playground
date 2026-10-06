@@ -31,6 +31,7 @@
 // The key is the reader's, held in memory for the visit - the same rule, and
 // the same reason, as the AI Studio's (src/shell/chat.mjs).
 import { renderMarkdown } from "./chat.mjs";
+import { listenForFileDrops, listSentFiles, setUpAttaching } from "./attach-ui.mjs";
 import { highlightJson } from "./highlight.mjs";
 import { readStored, removeStored, writeStored } from "./storage.mjs";
 import { setStatus } from "./ui.mjs";
@@ -73,6 +74,8 @@ let nextTab = 2;
 // Whether the next pick in the samples browser opens beside the others (the
 // tab strip's +) or in place of the app on screen (Change app).
 let pickBeside = false;
+// The files going with the next message (attach-ui.mjs).
+let attaching;
 
 let agent;
 let active;
@@ -138,9 +141,9 @@ export function pilotRan() {
  *  frame (main.mjs, the bridge's dropFiles). It goes to the chat, which a
  *  phone brings forward. */
 export function pilotDropped(files) {
-  if (!host || files.length === 0) return;
+  if (!attaching || files.length === 0) return;
   setView("chat");
-  addFiles(files);
+  attaching.add(files);
 }
 
 /** main.mjs: a pick in the samples browser - files, or a promise of them. */
@@ -439,40 +442,18 @@ export function setUpPilot(pilotHost) {
     if (busy) stopTurn();
     else submit();
   });
-  // Files for the next message: the paperclip, a drop, or a paste into the
-  // message. A file dropped ANYWHERE on the page goes to the chat - on the
-  // bar or beside the chat as well, where the browser's own answer to a drop
-  // nobody takes is to open the file in a tab of its own. A drop on the app
-  // reaches the chat through the frame (frontend-bridge.js, dropFiles), unless
-  // the app took it itself - an upload control.
-  el.attach.addEventListener("click", () => el.fileInput.click());
-  el.fileInput.addEventListener("change", () => {
-    addFiles([...el.fileInput.files]);
-    el.fileInput.value = "";
+  // Files for the next message: the paperclip, a drop anywhere on the page,
+  // or a paste into the message (attach-ui.mjs, shared with the AI Studio).
+  attaching = setUpAttaching({
+    prefix: "pilot",
+    button: el.attach,
+    input: el.fileInput,
+    list: el.files,
+    textarea: el.input,
+    rules: () => chunk,
+    refused: (text) => addLine("notice is-error", text),
   });
-  const isFileDrag = (e) => [...(e.dataTransfer?.types ?? [])].includes("Files");
-  window.addEventListener("dragover", (e) => {
-    if (!isFileDrag(e)) return;
-    e.preventDefault();
-    if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
-    el.chat.classList.add("is-dropping");
-  });
-  window.addEventListener("dragleave", (e) => {
-    // Leaving the window, not crossing from one element to the next.
-    if (e.relatedTarget === null) el.chat.classList.remove("is-dropping");
-  });
-  window.addEventListener("drop", (e) => {
-    el.chat.classList.remove("is-dropping");
-    if (!isFileDrag(e)) return;
-    e.preventDefault();
-    pilotDropped([...(e.dataTransfer?.files ?? [])]);
-  });
-  el.input.addEventListener("paste", (e) => {
-    const files = [...(e.clipboardData?.files ?? [])];
-    if (files.length === 0) return;
-    e.preventDefault();
-    addFiles(files);
-  });
+  listenForFileDrops({ highlight: el.chat, onFiles: (files) => pilotDropped(files) });
 
   el.input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
@@ -619,56 +600,6 @@ function showWelcome() {
   el.log.append(intro);
 }
 
-// ---------------------------------------------------------------- files
-
-// The files waiting for the next message. Checked as they are added - a
-// format the chat cannot read is said at once, not after Send - and read only
-// when the message goes (attachments.mjs, in the chunk).
-let attached = [];
-
-async function addFiles(files) {
-  const loaded = await chunk;
-  for (const file of files) {
-    const kind = loaded.kindOf(file);
-    if (kind.error) {
-      addLine("notice is-error", kind.error);
-      continue;
-    }
-    if (attached.length >= loaded.MAX_FILES) {
-      addLine("notice is-error", `${file.name} was left out - ${loaded.MAX_FILES} files go with one message`);
-      continue;
-    }
-    if (!attached.some((f) => f.name === file.name && f.size === file.size)) attached.push(file);
-  }
-  renderFiles();
-  el.input.focus();
-}
-
-function renderFiles() {
-  el.files.hidden = attached.length === 0;
-  el.files.replaceChildren(
-    ...attached.map((file) => {
-      const chip = document.createElement("span");
-      chip.className = "pilot-file";
-      chip.append(`${file.name} · ${sizeOf(file.size)}`);
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "pilot-file-remove";
-      remove.textContent = "×";
-      remove.title = `Remove ${file.name}`;
-      remove.setAttribute("aria-label", `Remove ${file.name}`);
-      remove.addEventListener("click", () => {
-        attached = attached.filter((f) => f !== file);
-        renderFiles();
-      });
-      chip.append(remove);
-      return chip;
-    }),
-  );
-}
-
-const sizeOf = (bytes) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
-
 function addLine(kind, text) {
   const div = document.createElement("div");
   div.className = `pilot-msg pilot-${kind}`;
@@ -710,7 +641,7 @@ function setBusy(value) {
 
 async function submit() {
   const typed = el.input.value.trim();
-  if (typed === "" && attached.length === 0) return;
+  if (typed === "" && attaching.count === 0) return;
   // Files alone are a message too: the model is told they are what it is about.
   const text = typed || "Here are the files.";
   if (sessionKey === null) {
@@ -720,16 +651,8 @@ async function submit() {
   }
   el.log.querySelector(".pilot-welcome")?.remove();
   el.input.value = "";
-  const files = attached;
-  attached = [];
-  renderFiles();
-  const said = addLine("user", typed);
-  if (files.length > 0) {
-    const list = document.createElement("span");
-    list.className = "pilot-user-files";
-    list.textContent = files.map((f) => `📎 ${f.name}`).join("\n");
-    said.append(list);
-  }
+  const files = attaching.take();
+  listSentFiles(addLine("user", typed), files, "pilot-user-files");
   setBusy(true);
   stopAsked = false;
   current = undefined;
