@@ -736,7 +736,9 @@ talks to a model or needs a key.
   frame and a `WRITE '@KERNEL …'` in the runtime worker can read this origin's
   localStorage - a stored key was one shared link away from somebody else's
   account. A key an earlier version stored under
-  `abap2ui5-playground:anthropic-key` is removed on load. Sent by the
+  `abap2ui5-playground:anthropic-key` is removed on load - by every page
+(`boot( )` in `main.mjs`), since the playground, embedded or not, is where a
+link's ABAP runs. Sent by the
   Anthropic SDK straight from the page (`dangerouslyAllowBrowser`, which sends
   the `anthropic-dangerous-direct-browser-access` header CORS needs). A key
   that is not tied to a workspace needs `anthropic-workspace-id` on every

@@ -199,7 +199,15 @@ const heard = (promise) => {
   return promise;
 };
 
+// The Anthropic key an earlier version of the AI chat kept in localStorage.
+// chat.mjs takes it out - but only on the studio's own page, and the pages
+// where a link's ABAP runs and can read this origin's storage (a view's
+// core:HTML, a WRITE '@KERNEL …') are this one, embedded or not, and the
+// Pilot's. So it goes on every page, before any linked code has run.
+const LEGACY_KEY = "abap2ui5-playground:anthropic-key";
+
 async function boot() {
+  removeStored(LEGACY_KEY);
   if (embedded) document.body.classList.add("is-embedded");
   if (appOnly) document.body.classList.add("is-app-only");
   // Where the playground is furniture in somebody else's page, the panel stays

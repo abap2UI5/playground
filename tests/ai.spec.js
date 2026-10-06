@@ -280,6 +280,21 @@ test("Fast in the header sends the next message to Sonnet 5.5, and is remembered
   await expect(page.locator("#chat-speed")).toHaveValue("fast");
 });
 
+test("a key an earlier version stored is removed by the playground itself, not only by the studio", async ({ page }) => {
+  // Stored once, before the first load - the page's own removal is what is
+  // being watched, not this script putting it back on the reload.
+  await page.addInitScript((key) => {
+    if (sessionStorage.getItem("seeded")) return;
+    sessionStorage.setItem("seeded", "1");
+    localStorage.setItem("abap2ui5-playground:anthropic-key", key);
+  }, KEY);
+  // The playground is where a shared link's ABAP runs, and that code can
+  // read this origin's storage - the studio's page is not where it was at risk.
+  await page.goto("/");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  expect(await page.evaluate(() => localStorage.getItem("abap2ui5-playground:anthropic-key"))).toBeNull();
+});
+
 test("a key the API refuses brings the key form back and says why", async ({ page }) => {
   await page.route("https://api.anthropic.com/**", (route) =>
     route.request().method() === "OPTIONS"
