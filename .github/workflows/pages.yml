@@ -89,9 +89,12 @@ jobs:
         run: |
           node -e '
             const a = require("./dist/samples/apps.json");
-            const bad = a.sources.filter((s) => !s.ok);
+            // A catalogue that arrived in a shape the readers do not know
+            // (samples[] renamed, say) is ok:true with nothing in it - the
+            // same few hundred missing pages as one that never arrived.
+            const bad = a.sources.filter((s) => !s.ok || !s.count);
             if (bad.length) {
-              console.error("catalogue unavailable for " + bad.map((s) => s.repo).join(", ") + " - not publishing");
+              console.error("catalogue unavailable or empty for " + bad.map((s) => s.repo).join(", ") + " - not publishing");
               process.exit(1);
             }'
 
