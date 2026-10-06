@@ -60,6 +60,11 @@ const notFound = (res) => {
 
 const server = http.createServer((req, res) => {
   let url;
+  /* The query, carried through every redirect below: a redirect that only
+     adds the slash is not a reason to drop it, and `samples?q=table` landed
+     on the catalogue with its filters gone. */
+  const asked = req.url || "/";
+  const query = asked.includes("?") ? asked.slice(asked.indexOf("?")) : "";
   try {
     url = decodeURIComponent((req.url || "/").split("?")[0]);
   } catch {
@@ -70,11 +75,11 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (url === SUBPATH) {
-    res.writeHead(301, { location: `${SUBPATH}/` }).end();
+    res.writeHead(301, { location: `${SUBPATH}/${query}` }).end();
     return;
   }
   if (url === SITE_PATH.replace(/\/$/, "") && SITE_PATH !== "/") {
-    res.writeHead(301, { location: SITE_PATH }).end();
+    res.writeHead(301, { location: `${SITE_PATH}${query}` }).end();
     return;
   }
   if (url.startsWith(`${SUBPATH}/`)) url = url.slice(SUBPATH.length);
@@ -93,7 +98,7 @@ const server = http.createServer((req, res) => {
       if (!url.endsWith("/")) {
         // One leading slash: `//samples` answered `//samples/`, which a
         // browser reads as a host name and goes to http://samples/.
-        res.writeHead(301, { location: `${req.url.split("?")[0].replace(/^\/+/, "/")}/` });
+        res.writeHead(301, { location: `${req.url.split("?")[0].replace(/^\/+/, "/")}/${query}` });
         res.end();
         return;
       }
