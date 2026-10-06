@@ -615,7 +615,12 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
       } catch (err) {
         stream.abort();
         if (stopped) return;
-        if (err instanceof Anthropic.APIError || err instanceof Anthropic.APIUserAbortError || jsonRetries++ >= 2) throw err;
+        // Only a tool input that could not be parsed is asked for again, as
+        // in the studio (ai-agent.mjs): a stream whose connection dropped half
+        // way is a plain AnthropicError too, and was sent again twice - three
+        // billed requests, attachments and all, and three half answers.
+        const unparsable = /Unable to parse tool parameter JSON/.test(String(err?.message ?? ""));
+        if (!unparsable || err instanceof Anthropic.APIError || jsonRetries++ >= 2) throw err;
         continue;
       }
 

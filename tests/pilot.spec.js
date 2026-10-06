@@ -147,6 +147,22 @@ test("an act the screen does not offer is refused with what it does offer, and n
   expect(await page.locator("#roundtrip-count").textContent()).toBe(roundtrips);
 });
 
+test("an answer whose connection dropped half way is said, not sent again", async ({ page }) => {
+  // Started, a few words, then nothing: no message_stop.
+  const torn = sse({ text: "Half an ans" }).split("event: content_block_stop")[0];
+  let sent = 0;
+  await page.route("https://api.anthropic.com/**", async (route) => {
+    if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    sent += 1;
+    await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: torn });
+  });
+  await openPilot(page);
+  await useKey(page);
+  await say(page, "Greet Carol");
+  await expect(page.locator(".pilot-notice.is-error")).toContainText("dropped mid-answer", { timeout: 60000 });
+  expect(sent).toBe(1);
+});
+
 test("what the reader does in the app is told to the model with the next message", async ({ page }) => {
   const requests = await answerWith(page, [{ text: "I see." }]);
   await openPilot(page);
