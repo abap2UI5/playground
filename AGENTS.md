@@ -440,7 +440,11 @@ checker settings follow — kept only while it differs from the default, and
 never restored in an embedded playground. Autorun does not bring the app
 forward on a phone the way pressing Run does: it fires while somebody is
 typing, and taking the editor off the screen mid-word is not what they asked
-for.
+for. For the same reason its run never moves the caret (`run({ quiet })`): a
+pressed Run takes it to the first error, or to the line a dump was raised at,
+and an autorun did the same - so a pause in the middle of a statement, which
+is an abaplint error, sent the rest of the statement to wherever that error
+was.
 
 ## Format
 

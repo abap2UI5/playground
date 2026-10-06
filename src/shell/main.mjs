@@ -420,14 +420,14 @@ async function boot() {
           recordRoundtrip({ request: body, response, ms: performance.now() - started });
           sawRoundtrip(body, response, from);
           pilot?.resolve(response);
-          if (response.location) pointAtDump(response.location, firstLine(response.body));
+          if (response.location) pointAtDump(response.location, firstLine(response.body), caretMayMove());
           return response;
         } catch (e) {
           // A JavaScript error out of the transpiled code, rather than an
           // ABAP exception the framework turned into a dump: the frame's
           // fetch rejects, and the line is still worth pointing at.
           pilot?.reject(e);
-          if (e?.location) pointAtDump(e.location, String(e.message ?? e));
+          if (e?.location) pointAtDump(e.location, String(e.message ?? e), caretMayMove());
           // ABAP that did not finish, stopped by the runtime's watchdog: the
           // frame only sees a failed request, so the page says what happened.
           if (e?.name === RUNAWAY) {
@@ -1072,14 +1072,21 @@ async function share() {
 // Problems as a runtime error, and put the cursor there - the way a
 // transpiler error is pointed at. It goes away with the next edit, like
 // that one.
-function pointAtDump(location, message) {
+function pointAtDump(location, message, moveCaret = true) {
   const said = `${location.exception ? `${location.exception}: ` : ""}${message || "the app dumped here"}`;
   reportTranspilerProblems([{ file: location.file, line: location.line, message: said }], "runtime");
   updateInsight(refresh());
   showInsight("problems");
-  focusProblem(location.file, location.line, 1);
+  if (moveCaret) focusProblem(location.file, location.line, 1);
   setStatus(`the app dumped - ${location.file} line ${location.line}`, true);
 }
+
+// Whether a dump may take the caret to its line. Not when it is the answer to
+// the first roundtrip of an app autorun started: that roundtrip is the app
+// starting, while the reader is still typing in the editor (see run( )). A
+// dump from a click in the app later on is the reader's own doing, and is
+// pointed at as always.
+const caretMayMove = () => !(quietRun !== undefined && quietRun === state.runCounter && roundtripList().length <= 1);
 
 // The first line of a dump that says something - the framework's dump
 // starts with a heading and the request it failed in, and the sentence a
@@ -1210,7 +1217,7 @@ function autorunAfterChange() {
     // would answer a second one by returning. So the change that arrived
     // during it is run after it rather than dropped.
     if (running) autorunAfterChange();
-    else if (JSON.stringify(getFiles()) !== lastRunText) run();
+    else if (JSON.stringify(getFiles()) !== lastRunText) run({ quiet: true });
   }, AUTORUN_DELAY);
 }
 
@@ -1225,10 +1232,20 @@ function autorunAfterChange() {
 let running = false;
 // The files the last run started from, as text - see autorunAfterChange( ).
 let lastRunText;
+// The Run autorun started on its own, by its number, while it is the current
+// one - see run( ) and caretMayMove( ).
+let quietRun;
 // What the last run's unit tests said, for runForAgent( ).
 let lastTestResults = [];
 
-export async function run() {
+// `quiet` is a run nobody asked for: autorun's, 700ms after the typing
+// stopped. It says what it found like any other - the status line, the
+// underlines, the Problems list - but it leaves the caret where the reader is
+// typing. Moving it to the first error, as a pressed Run does, sent the next
+// keystrokes there: an unfinished statement is an abaplint error, so every
+// pause in the middle of one pulled the caret out of the line being written
+// (to the top of the file, or into another file) and typed the rest into it.
+export async function run({ quiet = false } = {}) {
   // Ctrl+Enter and the sample menu call this too, so the guard cannot be the
   // Run button being disabled: two runs would race on the frame's src and on
   // the one-shot load listener, and the second reset would land under a frame
@@ -1274,7 +1291,7 @@ export async function run() {
       // same list twice into one panel and show the poorer copy - so this
       // brings the reader to the list instead of retyping it.
       showInsight("problems");
-      focusProblem(errors[0].file, errors[0].range.start.line + 1, errors[0].range.start.character + 1);
+      if (!quiet) focusProblem(errors[0].file, errors[0].range.start.line + 1, errors[0].range.start.character + 1);
       return;
     }
 
@@ -1293,6 +1310,7 @@ export async function run() {
     // that was not the new app's, left on screen after it started. Counted
     // after compile, so code that does not compile leaves the old app working.
     state.runCounter += 1;
+    quietRun = quiet ? state.runCounter : undefined;
     await state.runtime.defineClasses(chunks.map(({ name, js, lines }) => ({ name, js, lines })));
 
     // The unit tests in the test includes, before the app: a run is compile,
@@ -1453,7 +1471,7 @@ export async function run() {
       const first = problems.find((p) => p.source === "transpiler");
       if (first) {
         showInsight("problems");
-        focusProblem(first.file, first.range.start.line + 1, 1);
+        if (!quiet) focusProblem(first.file, first.range.start.line + 1, 1);
       }
     }
   } finally {
