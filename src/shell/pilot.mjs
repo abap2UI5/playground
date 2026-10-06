@@ -221,6 +221,9 @@ function loadFrame(tab) {
 
 // Until the tab's app has started: its first answer folded, and rendered -
 // the frame says busy until its main view is there (frontend-bridge.js).
+// A start answered with a dump is over at once: the frame shows the dump and
+// never a main view, and the wait ran out its thirty seconds and then said
+// the app "did not start within 30 seconds", the dump itself lost.
 async function started(tab, versionBefore) {
   const until = performance.now() + 30000;
   while (performance.now() < until) {
@@ -230,6 +233,7 @@ async function started(tab, versionBefore) {
     } catch {
       rendering = true;
     }
+    if (tab.mirror.version !== versionBefore && !tab.mirror.state.id && tab.mirror.error) return false;
     if (tab.mirror.version !== versionBefore && tab.mirror.state.id && !rendering) return true;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
@@ -265,7 +269,10 @@ async function openApp(files, { beside = false, tab: target } = {}) {
   const before = tab.mirror.version;
   loadFrame(tab);
   showTab(tab.id);
-  if (!(await started(tab, before))) return { started: false, status: `${cls.toUpperCase()} did not start within 30 seconds` };
+  if (!(await started(tab, before))) {
+    const error = tab.mirror.error;
+    return { started: false, status: error ? `${cls.toUpperCase()} did not start - ${error}` : `${cls.toUpperCase()} did not start within 30 seconds` };
+  }
   return { started: true, status: "running", tab: tab.id };
 }
 

@@ -235,6 +235,8 @@ const MENU_SCRIPT = `<script>
     };
     addEventListener("pageshow", function (e) { if (e.persisted) resync(); });
     addEventListener("storage", function (e) { if (e.key === "abap2ui5-playground:theme" || e.key === null) resync(); });
+    /* And when the system flips the theme under a page that follows it. */
+    if (media.addEventListener) media.addEventListener("change", tell);
   })();
 </script>`;
 

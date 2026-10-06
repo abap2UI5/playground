@@ -164,6 +164,11 @@ happen off the thread the editor paints on. It also makes the frame decline the 
 shell has a dialog open: UI5 focuses a control as a render settles, and
 `showModal()` cannot make another document inert, so a frame that takes the
 focus swallows what is typed into the dialog and the Escape that would close it.
+The bar's search panel counts as a dialog here: it is modal as well, and the
+`inert` it puts on the page does not keep a frame's own `focus()` out. So does
+a field somebody is typing in on the page - the editor, the AI chat: an app's
+first render focuses a field of its own, and the app Auto started, or the AI
+ran, took the next keystrokes. Once the reader is in the app, the app has it.
 The drafts abap2UI5 keeps in a database live in an in-memory SQLite — sql.js,
 compiled to WebAssembly. Run means: a fresh database, then reload the iframe
 with `?app_start=<CLASS>&run=<n>`. "Fresh" is SQLite reopened on an image of
@@ -440,7 +445,11 @@ checker settings follow — kept only while it differs from the default, and
 never restored in an embedded playground. Autorun does not bring the app
 forward on a phone the way pressing Run does: it fires while somebody is
 typing, and taking the editor off the screen mid-word is not what they asked
-for.
+for. For the same reason its run never moves the caret (`run({ quiet })`): a
+pressed Run takes it to the first error, or to the line a dump was raised at,
+and an autorun did the same - so a pause in the middle of a statement, which
+is an abaplint error, sent the rest of the statement to wherever that error
+was.
 
 ## Format
 
@@ -736,7 +745,9 @@ talks to a model or needs a key.
   frame and a `WRITE '@KERNEL …'` in the runtime worker can read this origin's
   localStorage - a stored key was one shared link away from somebody else's
   account. A key an earlier version stored under
-  `abap2ui5-playground:anthropic-key` is removed on load. Sent by the
+  `abap2ui5-playground:anthropic-key` is removed on load - by every page
+(`boot( )` in `main.mjs`), since the playground, embedded or not, is where a
+link's ABAP runs. Sent by the
   Anthropic SDK straight from the page (`dangerouslyAllowBrowser`, which sends
   the `anthropic-dangerous-direct-browser-access` header CORS needs). A key
   that is not tied to a workspace needs `anthropic-workspace-id` on every
@@ -896,8 +907,9 @@ restart them all.
 
 **Files in the chat** (`src/shell/attachments.mjs`, in the Pilot's chunk and
 the studio's; on screen `src/shell/attach-ui.mjs`, shared with the studio):
-📎, a drop or a paste adds up to five files of at most 10 MB to
-the next message, checked as they are added (`kindOf( )`) and read when it is
+📎, a drop or a paste adds up to five files of at most 10 MB (an image
+7.5 MB - the API's 10 MB is of the base64) to the next message, checked as
+they are added (`kindOf( )`) and read when it is
 sent (`attachmentBlocks( )`), in front of its text. A PDF is a `document`
 block and an image an `image` block, as they are; an `.xlsx` is each sheet as
 CSV, a `.docx` its paragraphs, a text file its text - each a text
@@ -909,7 +921,10 @@ carry (a date is Excel's serial number, a formula its last result) is said in
 the sheet's first line. The old binary formats are refused with what to save
 them as. The conversation is append-only, so the files are sent again with
 every request of the chat - the conversation's `cache_control` is what keeps
-that cheap. `tests/pilot.spec.js` holds the three formats against fixtures
+that cheap. One exception to append-only: a message the API refuses as it
+stands (a 400 or a 413) with nothing answered after it is taken back out
+(`send( )` in `pilot-agent.mjs`) - resent with every later request, it was
+refused with every one of them. `tests/pilot.spec.js` holds the three formats against fixtures
 (`tests/fixtures/orders.xlsx`, `brief.docx`, `note.pdf`). **A drop is taken
 anywhere on the page**, not only on the chat: a file dropped where nobody
 takes it is opened by the browser in a tab of its own, which is what a drop

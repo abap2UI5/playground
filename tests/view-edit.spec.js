@@ -213,6 +213,22 @@ test("the ABAP editor is read-only while the view is open, and writable again af
   expect(await getSource(page, APP)).not.toBe(before);
 });
 
+// The editor is the one thing in the panel a redraw puts back rather than
+// builds again - and a node taken out of the page and put back has lost the
+// focus. A Run from inside it (Ctrl+Enter) redraws the panel.
+test("a run from inside the view's editor leaves the caret in it", async ({ page }) => {
+  await open(page);
+  const area = await openEditor(page);
+  await area.click();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.type("<!-- a");
+  await page.keyboard.press("Control+Enter");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+  await expect(area).toBeFocused();
+  await page.keyboard.type("b -->");
+  expect(await area.inputValue()).toMatch(/<!-- ab -->$/);
+});
+
 test("XML that does not parse is refused where it was typed, and nothing is written", async ({ page }) => {
   await open(page);
   const area = await openEditor(page);
@@ -489,4 +505,27 @@ test("a control taken out is taken out where it stands, comments and all", async
       "",
     ),
   );
+});
+
+// A literal inside a template's embedded expression is one token: the `|` in
+// `|{ '|' }x|` does not end the template and the `{` in `|{ '{' }x|` opens no
+// brace. Read as either, the rest of the method was swallowed into the
+// template and a plain chain was refused as building no view at all.
+test("a template with a quoted bar or brace inside its braces is read as one value", async () => {
+  const { readViewChain } = await import("../src/shell/chain-read.mjs");
+  for (const value of ["|{ '|' }x|", "|{ '{' }x|", "|{ `|` }{ '}' }x|"]) {
+    const read = readViewChain(`CLASS x IMPLEMENTATION.
+  METHOD z2ui5_if_app~main.
+    DATA(view) = z2ui5_cl_ui5_view_builder=>factory( ).
+    view->ele( \`Page\`
+        )->a( n = \`title\` v = ${value}
+        )->tag( \`Button\`
+        )->a( n = \`text\` v = \`Go\` ).
+    client->view_display( view->stringify( ) ).
+  ENDMETHOD.
+ENDCLASS.`);
+    expect(read.ok, `${value}: ${read.why}`).toBe(true);
+    expect(read.root.children[0].attrs[0].raw).toBe(value);
+    expect(read.root.children[0].children.map((c) => c.name)).toEqual(["Button"]);
+  }
 });

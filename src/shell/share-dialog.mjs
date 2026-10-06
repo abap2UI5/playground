@@ -9,7 +9,7 @@
 //
 // Everything shown is derived from the open files at the moment of the
 // click. Nothing is stored, and the dialog is rebuilt on every open.
-import { abapGitZip, download } from "./export.mjs";
+import { abapGitZip, download, endingInOneNewline } from "./export.mjs";
 import { copyToClipboard } from "./share.mjs";
 import { closeOnBackdrop, setStatus } from "./ui.mjs";
 
@@ -54,7 +54,7 @@ function embedSnippet(files, url) {
 // The fence the documentation writes an example in. One per file, the app
 // first: docs/.vitepress/playground.mjs over in the documentation decides on
 // its own whether a fence gets a Run button, from the class inside it.
-const markdownSnippet = (files) => files.map((f) => "```abap\n" + f.source.replace(/\n*$/, "\n") + "```").join("\n\n");
+const markdownSnippet = (files) => files.map((f) => "```abap\n" + endingInOneNewline(f.source) + "```").join("\n\n");
 
 function escapeAttribute(text) {
   return text.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");

@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { control, open, openFiles, SAMPLES } from "./helpers.mjs";
+import { clickEditor, control, getSource, MAIN_MARK, open, openFiles, SAMPLES, setSource } from "./helpers.mjs";
 
 // The examples browser: the sample catalogue, read when the Examples button is
 // clicked, listed next to the samples the page carries, and opened through the same
@@ -267,6 +267,24 @@ test("the index is listed by learning-path stage, and an entry runs through the 
 
 });
 
+test("a catalogued entry opened over a draft leaves the stored draft for the reload it promises", async ({ page }) => {
+  await serveCatalogues(page);
+  await open(page);
+  await setSource(page, (await getSource(page)).replace(MAIN_MARK, "work of my own"));
+  const stored = () => page.evaluate(() => localStorage.getItem("abap2ui5-playground:files"));
+  expect(await stored()).toContain("work of my own");
+
+  await openBrowser(page);
+  const before = await page.locator("#app").getAttribute("data-src");
+  await page.locator(".example-row", { hasText: "z2ui5_cl_smp_app_493" }).click();
+  await expect(page.locator("#app")).not.toHaveAttribute("data-src", before ?? "", { timeout: 60000 });
+  await expect(page.locator("#status")).toHaveText("running - your draft comes back if you reload", { timeout: 60000 });
+  // The editor reported the new files before the page had marked them as
+  // opened, and that one report stored the catalogued class over the draft.
+  expect(await stored()).toContain("work of my own");
+  expect(await stored()).not.toContain("z2ui5_cl_smp_app_493");
+});
+
 test("the search narrows the list across every group", async ({ page }) => {
   await serveCatalogues(page);
   await open(page);
@@ -333,6 +351,62 @@ test("the running app cannot take the focus off the examples browser", async ({ 
   // With the dialog gone the app has its focus back, which is the half of this
   // that must not be traded away: the frame declines the focus while a dialog
   // is open over it, not for good.
+  expect(await appTakesFocus()).toBe(true);
+});
+
+// The bar's search panel is the other modal on the page, and it is not a
+// <dialog>: it makes the page under it inert, which does not keep the frame's
+// own focus() out - an app rendering while it was open (the first render of a
+// Run) took the focus, and the rest of the search was typed into the app.
+test("the running app cannot take the focus off the search panel either", async ({ page }) => {
+  await open(page);
+  await page.locator(".search-button").click();
+  const field = page.locator(".search-panel input");
+  await expect(field).toBeFocused();
+
+  const app = page.frames().find((f) => f !== page.mainFrame());
+  const appTakesFocus = () =>
+    app.evaluate(() => {
+      const probe = document.createElement("input");
+      document.body.append(probe);
+      probe.focus();
+      const took = document.activeElement === probe;
+      probe.remove();
+      return took;
+    });
+
+  expect(await appTakesFocus()).toBe(false);
+  await page.keyboard.type("table");
+  await expect(field).toHaveValue("table");
+
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".search-scrim")).toBeHidden();
+  expect(await appTakesFocus()).toBe(true);
+});
+
+// And not while somebody is typing on the page around it: an app's first
+// render focuses a field of its own, so the app Auto started - or the one the
+// AI Studio ran - took the editor's or the chat's next keystrokes. Once the
+// reader is in the app, the app has the focus as before.
+test("the running app cannot take the focus off the editor somebody is typing in", async ({ page }) => {
+  await open(page);
+  const app = page.frames().find((f) => f !== page.mainFrame());
+  const appTakesFocus = () =>
+    app.evaluate(() => {
+      const probe = document.createElement("input");
+      document.body.append(probe);
+      probe.focus();
+      const took = document.activeElement === probe;
+      probe.remove();
+      return took;
+    });
+
+  await clickEditor(page);
+  expect(await appTakesFocus()).toBe(false);
+  await page.keyboard.type("zq9");
+  await expect.poll(async () => (await getSource(page)).includes("zq9")).toBe(true);
+
+  await page.frameLocator("#app").locator("body").click();
   expect(await appTakesFocus()).toBe(true);
 });
 

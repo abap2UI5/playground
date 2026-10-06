@@ -147,6 +147,22 @@ test("an act the screen does not offer is refused with what it does offer, and n
   expect(await page.locator("#roundtrip-count").textContent()).toBe(roundtrips);
 });
 
+test("an answer whose connection dropped half way is said, not sent again", async ({ page }) => {
+  // Started, a few words, then nothing: no message_stop.
+  const torn = sse({ text: "Half an ans" }).split("event: content_block_stop")[0];
+  let sent = 0;
+  await page.route("https://api.anthropic.com/**", async (route) => {
+    if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    sent += 1;
+    await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: torn });
+  });
+  await openPilot(page);
+  await useKey(page);
+  await say(page, "Greet Carol");
+  await expect(page.locator(".pilot-notice.is-error")).toContainText("dropped mid-answer", { timeout: 60000 });
+  expect(sent).toBe(1);
+});
+
 test("what the reader does in the app is told to the model with the next message", async ({ page }) => {
   const requests = await answerWith(page, [{ text: "I see." }]);
   await openPilot(page);
@@ -194,6 +210,32 @@ test("the Pilot opens another app, works through its popup and picks a row", asy
   const after = JSON.parse(textOf(requests[3].body.messages.at(-1)));
   expect(after.layer).toBe("main");
   expect(after.fields.find((f) => f.path === "/S_SCREEN/COLOR_02").value).toBe("BLACK");
+});
+
+test("an app that dumps as it starts is said at once, with the dump", async ({ page }) => {
+  // A catalogued class, answered here with one whose first roundtrip divides
+  // by zero: the frame shows the dump and never a main view.
+  const cls = "z2ui5_cl_smpc_app_001";
+  await page.route(`https://raw.githubusercontent.com/**/${cls}.clas.abap`, (route) => route.fulfill({
+    status: 200,
+    body: `CLASS ${cls} DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    INTERFACES z2ui5_if_app.\nENDCLASS.\n\n`
+      + `CLASS ${cls} IMPLEMENTATION.\n  METHOD z2ui5_if_app~main.\n    DATA(zero) = 0.\n    DATA(out) = |{ 1 / zero }|.\n`
+      + "  ENDMETHOD.\nENDCLASS.\n",
+  }));
+  const requests = await answerWith(page, [
+    { tools: [{ name: "open_app", input: { class: cls } }] },
+    { text: "It dumped." },
+  ]);
+  await openPilot(page);
+  await useKey(page);
+  const asked = Date.now();
+  await say(page, "Open it");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("It dumped.", { timeout: 60000 });
+  // Not the thirty seconds a start is given, and not "did not start within".
+  expect(Date.now() - asked).toBeLessThan(20000);
+  const result = requests[1].body.messages.at(-1).content[0];
+  expect(result.is_error).toBe(true);
+  expect(result.content).toContain("Division by zero");
 });
 
 test("a value typed without an event shows in the field and stays pending", async ({ page }) => {
@@ -330,6 +372,45 @@ test("files go with a message: a PDF as it is, a spreadsheet as CSV, a Word docu
   expect(word).toBe("Greet Frida\nthen\tstop");
   // ...and the text comes last.
   expect(content.at(-1)).toEqual({ type: "text", text: "Enter these orders" });
+});
+
+test("a message the API refuses does not stay in the conversation, and an image too large is refused first", async ({ page }) => {
+  const bodies = [];
+  await page.route("https://api.anthropic.com/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    const body = request.postDataJSON();
+    bodies.push(body);
+    // An image the API will not take - past its pixel limit, say.
+    if (body.messages.some((m) => Array.isArray(m.content) && m.content.some((b) => b.type === "image"))) {
+      return route.fulfill({
+        status: 400,
+        headers: { ...cors(), "content-type": "application/json" },
+        body: JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "image dimensions exceed max allowed size" } }),
+      });
+    }
+    await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: sse({ text: "Hello back." }) });
+  });
+  await openPilot(page);
+  await useKey(page);
+  const input = page.locator("#pilot-file-input");
+  // Past the 10 MB of base64 the API takes for an image: refused here.
+  await input.setInputFiles([{ name: "huge.png", mimeType: "image/png", buffer: Buffer.alloc(8 * 1000 * 1000, 7) }]);
+  await expect(page.locator(".pilot-notice.is-error")).toContainText("huge.png is larger than the 7.5 MB");
+  await expect(page.locator(".pilot-file")).toHaveCount(0);
+
+  await input.setInputFiles([{ name: "wide.png", mimeType: "image/png", buffer: Buffer.alloc(1000, 7) }]);
+  await say(page, "What is in the picture?");
+  await expect(page.locator(".pilot-notice.is-error").last()).toContainText("image dimensions", { timeout: 60000 });
+  // Every later message used to resend the refused image, and was refused
+  // with it.
+  await say(page, "hello");
+  await expect(page.locator(".pilot-assistant").last()).toHaveText("Hello back.", { timeout: 60000 });
+  const last = bodies.at(-1);
+  expect(last.messages).toHaveLength(1);
+  expect(last.messages[0].content.some((b) => b.type === "image")).toBe(false);
+  // ...and the screen the refused message carried goes with this one.
+  expect(last.messages[0].content[0].text).toContain("<screen>");
 });
 
 test("the paperclip opens the file picker, and a file dropped anywhere - the bar, the app - goes to the chat", async ({ page }) => {

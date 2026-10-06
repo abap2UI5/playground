@@ -18,6 +18,9 @@
 
 export const MAX_FILES = 5;
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
+// The API takes an image of at most 10 MB as base64, which a file of 7.5 MB
+// already is: a larger one passed here and was refused by the API instead.
+const MAX_IMAGE_BYTES = 7.5 * 1000 * 1000;
 const MAX_TEXT = 200000;
 const MAX_ROWS = 2000;
 
@@ -35,7 +38,10 @@ export function kindOf(file) {
   const ext = extensionOf(file.name);
   if (file.size > MAX_FILE_BYTES) return { error: `${file.name} is larger than ${MAX_FILE_BYTES / 1024 / 1024} MB` };
   if (ext === "pdf" || file.type === "application/pdf") return { kind: "pdf" };
-  if (IMAGE_TYPES[ext]) return { kind: "image", mediaType: IMAGE_TYPES[ext] };
+  if (IMAGE_TYPES[ext]) {
+    if (file.size > MAX_IMAGE_BYTES) return { error: `${file.name} is larger than the 7.5 MB an image may be - make it smaller and add it again` };
+    return { kind: "image", mediaType: IMAGE_TYPES[ext] };
+  }
   if (ext === "xlsx" || ext === "xlsm") return { kind: "xlsx" };
   if (ext === "docx") return { kind: "docx" };
   if (ext === "xls" || ext === "doc") {
@@ -166,7 +172,7 @@ export async function spreadsheet(buffer) {
   const rels = xml((await zip.text("xl/_rels/workbook.xml.rels")) ?? "<Relationships/>");
   const targets = new Map(all(rels, "Relationship").map((r) => [r.getAttribute("Id"), r.getAttribute("Target")]));
   const sharedXml = await zip.text("xl/sharedStrings.xml");
-  const shared = sharedXml ? all(xml(sharedXml), "si").map((si) => all(si, "t").map((t) => t.textContent).join("")) : [];
+  const shared = sharedXml ? all(xml(sharedXml), "si").map(stringOf) : [];
   const sheets = [];
   for (const sheet of all(xml(workbook), "sheet")) {
     const id = sheet.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id")
@@ -180,9 +186,20 @@ export async function spreadsheet(buffer) {
   return sheets;
 }
 
+// The text of a string item - its <t> runs, but not the ones under <rPh>,
+// which are the phonetic reading Excel keeps beside Japanese text and would
+// otherwise be glued onto every such cell.
+const stringOf = (node) =>
+  all(node, "t").filter((t) => t.parentNode?.localName !== "rPh").map((t) => t.textContent).join("");
+
+// The column a cell reference names ("C7" is 2), or undefined for a cell
+// without one - `r` is optional in the format, and a writer that leaves it out
+// means "the column after the last".
 const columnIndex = (ref) => {
+  const letters = /^[A-Z]+/.exec(ref ?? "")?.[0];
+  if (!letters) return undefined;
   let n = 0;
-  for (const ch of /^[A-Z]+/.exec(ref ?? "")?.[0] ?? "A") n = n * 26 + (ch.charCodeAt(0) - 64);
+  for (const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 64);
   return n - 1;
 };
 
@@ -191,15 +208,17 @@ function sheetCsv(doc, shared) {
   const rowNodes = all(doc, "row");
   for (const row of rowNodes.slice(0, MAX_ROWS)) {
     const cells = [];
+    let column = -1;
     for (const c of all(row, "c")) {
       const type = c.getAttribute("t");
       const v = all(c, "v")[0]?.textContent ?? "";
       let value;
       if (type === "s") value = shared[Number(v)] ?? "";
-      else if (type === "inlineStr") value = all(c, "t").map((t) => t.textContent).join("");
+      else if (type === "inlineStr") value = stringOf(c);
       else if (type === "b") value = v === "1" ? "TRUE" : "FALSE";
       else value = v;
-      cells[columnIndex(c.getAttribute("r"))] = value;
+      column = columnIndex(c.getAttribute("r")) ?? column + 1;
+      cells[column] = value;
     }
     rows.push(Array.from(cells, (value) => csvField(value ?? "")).join(","));
   }
@@ -226,7 +245,10 @@ export async function wordText(buffer) {
       let line = "";
       for (const node of p.getElementsByTagNameNS("*", "*")) {
         if (node.localName === "t") line += node.textContent;
-        else if (node.localName === "tab") line += "\t";
+        // A <w:tab/> in a run is a tab; one inside <w:pPr><w:tabs> is a tab
+        // STOP the paragraph defines, and counted as text it put a tab in
+        // front of every paragraph with custom stops.
+        else if (node.localName === "tab" && node.parentNode?.localName !== "tabs") line += "\t";
         else if (node.localName === "br") line += "\n";
       }
       return line;

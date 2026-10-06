@@ -134,6 +134,12 @@ function setUpTheme() {
   };
   addEventListener("pageshow", (e) => { if (e.persisted) resync(); });
   addEventListener("storage", (e) => { if (e.key === THEME_KEY || e.key === null) resync(); });
+  /* With no choice stored the page follows the system, and the stylesheet
+     follows it live - so the switch has to as well, or it went on telling a
+     screen reader "off" over a page the system had just turned dark. */
+  media.addEventListener?.("change", () => {
+    el.theme.setAttribute("aria-checked", String((document.documentElement.dataset.theme || system()) === "dark"));
+  });
 }
 
 /* The menu behind the bar's last button is a <details>, so it opens and closes

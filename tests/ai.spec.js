@@ -156,6 +156,34 @@ test("the chat builds an app in the editor, runs it and tells the model what hap
   expect(await page.evaluate(() => localStorage.getItem("abap2ui5-playground:files"))).toBeNull();
 });
 
+test("an interface written before the app's class leaves the starting class until the class takes its place", async ({ page }) => {
+  // The natural order for a model: what the class implements, then the class.
+  const intf = "INTERFACE zif_ai_thing PUBLIC.\n  CONSTANTS greeting TYPE string VALUE `hi`.\nENDINTERFACE.\n";
+  const requests = [];
+  await page.route("https://api.anthropic.com/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    requests.push({ body: request.postDataJSON() });
+    const answer = requests.length === 1
+      ? sse({ tools: [
+          { name: "write_file", input: { name: "zif_ai_thing.intf.abap", source: intf } },
+          { name: "write_file", input: { name: APP_FILE, source: APP } },
+        ] })
+      : sse({ text: "Both written." });
+    await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: answer });
+  });
+  await openStudio(page);
+  await saveKey(page);
+  await page.locator("#chat-input").fill("An app with an interface beside it");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toContainText("Both written.", { timeout: 90000 });
+  // Neither write was refused, and the class is the app, the interface beside it.
+  const results = requests[1].body.messages.at(-1).content;
+  expect(results.map((r) => r.is_error ?? false)).toEqual([false, false]);
+  await expect(page.locator("#files .file-name")).toHaveText([APP_FILE, "zif_ai_thing.intf.abap"]);
+  await expect(page.frameLocator("#app").getByText(MARK)).toBeVisible();
+});
+
 test("a change is run by the page itself, its report rides on the change, and the turn shows what it is doing", async ({ page }) => {
   const requests = [];
   await page.route("https://api.anthropic.com/**", async (route) => {
@@ -197,6 +225,36 @@ test("a change is run by the page itself, its report rides on the change, and th
   expect(requests[0].headers["anthropic-beta"]).toContain("thinking-display-updates-2026-08-18");
 });
 
+test("a run an abaplint error stopped reports no roundtrip of the run before it", async ({ page }) => {
+  const requests = [];
+  await page.route("https://api.anthropic.com/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    requests.push(request.postDataJSON());
+    const answer = requests.length === 1
+      ? sse({ tools: [{ name: "write_file", input: { name: APP_FILE, source: APP, as_app: true } }] })
+      : requests.length === 2
+        // The full stop goes: the app's last statement no longer parses.
+        ? sse({ tools: [{ name: "edit_file", input: { name: APP_FILE, old_text: "view->stringify( ) ).", new_text: "view->stringify( ) )" } }] })
+        : sse({ text: "Done." });
+    await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: answer });
+  });
+
+  await openStudio(page);
+  await saveKey(page);
+  await page.locator("#chat-input").fill("A page");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toHaveText("Done.", { timeout: 90000 });
+
+  expect(requests[1].messages.at(-1).content[0].content).toContain("first roundtrip: HTTP 200");
+  // The second run stopped before the fresh database: the first app's view
+  // is still in the Roundtrips tab, and was told to the model as this run's.
+  const report = requests[2].messages.at(-1).content[0].content;
+  expect(report).toContain("(the app did not start)");
+  expect(report).not.toContain("first roundtrip");
+  expect(report).not.toContain(MARK);
+});
+
 test("Fast in the header sends the next message to Sonnet 5.5, and is remembered", async ({ page }) => {
   const models = [];
   await page.route("https://api.anthropic.com/**", (route) => {
@@ -220,6 +278,21 @@ test("Fast in the header sends the next message to Sonnet 5.5, and is remembered
   await page.reload();
   await expect(page.locator("#status")).toHaveText("ready - describe the app you want", { timeout: 120000 });
   await expect(page.locator("#chat-speed")).toHaveValue("fast");
+});
+
+test("a key an earlier version stored is removed by the playground itself, not only by the studio", async ({ page }) => {
+  // Stored once, before the first load - the page's own removal is what is
+  // being watched, not this script putting it back on the reload.
+  await page.addInitScript((key) => {
+    if (sessionStorage.getItem("seeded")) return;
+    sessionStorage.setItem("seeded", "1");
+    localStorage.setItem("abap2ui5-playground:anthropic-key", key);
+  }, KEY);
+  // The playground is where a shared link's ABAP runs, and that code can
+  // read this origin's storage - the studio's page is not where it was at risk.
+  await page.goto("/");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  expect(await page.evaluate(() => localStorage.getItem("abap2ui5-playground:anthropic-key"))).toBeNull();
 });
 
 test("a key the API refuses brings the key form back and says why", async ({ page }) => {

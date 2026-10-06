@@ -541,6 +541,7 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
   async function send(text, files = []) {
     stopped = false;
     const content = [];
+    const toldBefore = new Map(told);
     const first = told.size === 0;
     const changed = host.apps().filter((a) => told.get(a.id) !== a.mirror?.version);
     if (changed.length > 0) {
@@ -570,7 +571,23 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
     }
     content.push({ type: "text", text });
     messages.push({ role: "user", content });
-    await loop();
+    const at = messages.length;
+    try {
+      await loop();
+    } catch (err) {
+      // A message the API refused as it stands - an attachment past its
+      // limits, a request too large - is refused again on every request
+      // that resends it, and the conversation only ever grows: every later
+      // message, "hello" included, was the same 400 until New chat. Nothing
+      // was answered after it, so it is taken back out, and the screens it
+      // carried are told again with the next one.
+      if (messages.length === at && err instanceof Anthropic.APIError && (err.status === 400 || err.status === 413)) {
+        messages.pop();
+        told.clear();
+        for (const [id, version] of toldBefore) told.set(id, version);
+      }
+      throw err;
+    }
     return { stopped };
   }
 
@@ -615,7 +632,12 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
       } catch (err) {
         stream.abort();
         if (stopped) return;
-        if (err instanceof Anthropic.APIError || err instanceof Anthropic.APIUserAbortError || jsonRetries++ >= 2) throw err;
+        // Only a tool input that could not be parsed is asked for again, as
+        // in the studio (ai-agent.mjs): a stream whose connection dropped half
+        // way is a plain AnthropicError too, and was sent again twice - three
+        // billed requests, attachments and all, and three half answers.
+        const unparsable = /Unable to parse tool parameter JSON/.test(String(err?.message ?? ""));
+        if (!unparsable || err instanceof Anthropic.APIError || jsonRetries++ >= 2) throw err;
         continue;
       }
 

@@ -330,6 +330,10 @@ const copyIsCurrent =
 if (copyIsCurrent) {
   log("dist/app up to date, leaving it in place");
 } else {
+  // The stamp goes first here too: a copy interrupted half way - after
+  // index.html, before the rest - left a stamp that still matched beside it,
+  // and the next build believed the half-copied tree.
+  fs.rmSync(copyStampPath, { force: true });
   fs.rmSync(OUT, { recursive: true, force: true });
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
   fs.cpSync(UI5_DIST, OUT, { recursive: true });

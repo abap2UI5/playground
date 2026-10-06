@@ -199,7 +199,15 @@ const heard = (promise) => {
   return promise;
 };
 
+// The Anthropic key an earlier version of the AI chat kept in localStorage.
+// chat.mjs takes it out - but only on the studio's own page, and the pages
+// where a link's ABAP runs and can read this origin's storage (a view's
+// core:HTML, a WRITE '@KERNEL …') are this one, embedded or not, and the
+// Pilot's. So it goes on every page, before any linked code has run.
+const LEGACY_KEY = "abap2ui5-playground:anthropic-key";
+
 async function boot() {
+  removeStored(LEGACY_KEY);
   if (embedded) document.body.classList.add("is-embedded");
   if (appOnly) document.body.classList.add("is-app-only");
   // Where the playground is furniture in somebody else's page, the panel stays
@@ -412,14 +420,14 @@ async function boot() {
           recordRoundtrip({ request: body, response, ms: performance.now() - started });
           sawRoundtrip(body, response, from);
           pilot?.resolve(response);
-          if (response.location) pointAtDump(response.location, firstLine(response.body));
+          if (response.location) pointAtDump(response.location, firstLine(response.body), caretMayMove());
           return response;
         } catch (e) {
           // A JavaScript error out of the transpiled code, rather than an
           // ABAP exception the framework turned into a dump: the frame's
           // fetch rejects, and the line is still worth pointing at.
           pilot?.reject(e);
-          if (e?.location) pointAtDump(e.location, String(e.message ?? e));
+          if (e?.location) pointAtDump(e.location, String(e.message ?? e), caretMayMove());
           // ABAP that did not finish, stopped by the runtime's watchdog: the
           // frame only sees a failed request, so the page says what happened.
           if (e?.name === RUNAWAY) {
@@ -429,7 +437,17 @@ async function boot() {
           throw e;
         }
       },
-      dialogOpen: () => document.querySelector("dialog[open]") !== null,
+      // Whether the frame should leave the focus alone right now: the
+      // frontend asks before every focus( ) (frontend-bridge.js). While a
+      // dialog is open - the bar's search panel counts: it is modal too
+      // (search-box.mjs makes the page under it inert), and an app rendering
+      // while it was open took the focus and the rest of the search with it.
+      // And while somebody is typing on this page: an app's first render
+      // focuses a field of its own, so the app autorun started, or the one
+      // the AI ran, took the editor's or the chat's next keystrokes. Once the
+      // reader is in the app the frame holds the focus, and nothing here
+      // stops it.
+      dialogOpen: () => document.querySelector("dialog[open], .search-scrim:not([hidden])") !== null || typingHere(),
       // Files dropped on the app in a frame, on the AI Pilot's page or the AI
       // Studio's: they go to that page's chat (pilot.mjs, chat.mjs).
       // Elsewhere a frame keeps the browser's own answer to a drop.
@@ -803,7 +821,10 @@ function remember(files) {
   // catalogued sample is not one isSample( ) knows, and opening one from the
   // browser used to write it straight over the stored draft - while the
   // status line promised that draft "comes back if you reload".
-  const pristine = opened !== undefined && JSON.stringify(current) === opened;
+  // While replaceWith( ) is putting them in: setFiles( ) reports the change
+  // before `opened` can be set to what it put there, and a catalogued sample
+  // or a named draft was stored over the draft in that one call.
+  const pristine = openingAsOpened || (opened !== undefined && JSON.stringify(current) === opened);
   if (!isSample(current) && !pristine) writeStoredJson(STORAGE_KEY, current);
   // A fragment in the address bar is a claim about what the editor holds, and
   // it just stopped being true. Left there, it would also win over this draft
@@ -884,7 +905,12 @@ function replaceWith(files, { asOpened = true } = {}) {
   // were opened.
   const hadDraft = !isSample(before) && JSON.stringify(before) !== opened;
   const undoable = before.every((f) => files.some((n) => n.name === f.name));
-  setFiles(files.map((f) => ({ ...f })));
+  openingAsOpened = asOpened;
+  try {
+    setFiles(files.map((f) => ({ ...f })));
+  } finally {
+    openingAsOpened = false;
+  }
   opened = asOpened ? JSON.stringify(getFiles()) : undefined;
   renderFiles();
   return hadDraft && (undoable ? "undo" : "reload");
@@ -894,6 +920,9 @@ function replaceWith(files, { asOpened = true } = {}) {
 // class, a named draft, a link. Until they are changed they are not a draft
 // of the reader's, and remember( ) does not store them over the one there is.
 let opened;
+// Set while replaceWith( ) writes files that are "as opened" into the
+// editor - see remember( ).
+let openingAsOpened = false;
 // Where the editor's starting files came from (startingFiles( )).
 let startedFrom;
 
@@ -901,9 +930,21 @@ let startedFrom;
 // another one was still starting went into the editor, and its run returned
 // at once because one was under way: the editor held one sample and the
 // frame ran the other, with "running" in the status line.
-async function runWhenFree() {
-  while (running) await new Promise((resolve) => setTimeout(resolve, 100));
-  return run();
+//
+// Calls that wait share one run: two picks while a run is under way both
+// find the editor holding the second, and each waiting to run it on its own
+// ran the same text twice - the app the reader had started using reset under
+// them by a run nobody asked for. Both still hear how that one run went, so
+// the first pick's word about the draft it replaced is still said.
+let waitingRun;
+function runWhenFree() {
+  if (!running) return run();
+  waitingRun ??= (async () => {
+    while (running) await new Promise((resolve) => setTimeout(resolve, 100));
+    waitingRun = undefined;
+    return run();
+  })();
+  return waitingRun;
 }
 
 // Said after the run, because run( ) ends by writing "running" over the
@@ -1053,14 +1094,31 @@ async function share() {
 // Problems as a runtime error, and put the cursor there - the way a
 // transpiler error is pointed at. It goes away with the next edit, like
 // that one.
-function pointAtDump(location, message) {
+function pointAtDump(location, message, moveCaret = true) {
   const said = `${location.exception ? `${location.exception}: ` : ""}${message || "the app dumped here"}`;
   reportTranspilerProblems([{ file: location.file, line: location.line, message: said }], "runtime");
   updateInsight(refresh());
   showInsight("problems");
-  focusProblem(location.file, location.line, 1);
+  if (moveCaret) focusProblem(location.file, location.line, 1);
   setStatus(`the app dumped - ${location.file} line ${location.line}`, true);
 }
+
+// Whether the focus is somewhere text is typed into on this page - a field,
+// a textarea, the editor (Monaco's own input is inside .monaco-editor).
+const NOT_TYPED_INTO = new Set(["button", "checkbox", "radio", "submit", "reset", "range", "color", "file", "image"]);
+function typingHere() {
+  const at = document.activeElement;
+  if (!(at instanceof HTMLElement)) return false;
+  if (at instanceof HTMLTextAreaElement || at.isContentEditable || at.closest(".monaco-editor")) return true;
+  return at instanceof HTMLInputElement && !NOT_TYPED_INTO.has(at.type);
+}
+
+// Whether a dump may take the caret to its line. Not when it is the answer to
+// the first roundtrip of an app autorun started: that roundtrip is the app
+// starting, while the reader is still typing in the editor (see run( )). A
+// dump from a click in the app later on is the reader's own doing, and is
+// pointed at as always.
+const caretMayMove = () => !(quietRun !== undefined && quietRun === state.runCounter && roundtripList().length <= 1);
 
 // The first line of a dump that says something - the framework's dump
 // starts with a heading and the request it failed in, and the sentence a
@@ -1112,9 +1170,9 @@ function structuralProblem(files) {
 // does not want that on a keystroke; somebody watching a view take shape
 // wants nothing else. So it is a choice, and it is one click.
 //
-// Stored only while it differs from the default, and never restored in an
-// embedded playground - the rule the theme and the checker settings follow
-// (src/shell/theme.mjs), for the same reason: a demo in somebody's
+// Stored only while it differs from the default, and neither restored in nor
+// stored from an embedded playground - the rule the theme and the checker
+// settings follow (src/shell/theme.mjs), for the same reason: a demo in somebody's
 // documentation page has to read the same to every reader.
 const AUTORUN_KEY = "abap2ui5-playground:autorun";
 
@@ -1135,8 +1193,13 @@ function setUpAutorun({ restore }) {
   autorun = restore && readStored(AUTORUN_KEY) === "on";
   autorunButton.addEventListener("click", () => {
     autorun = !autorun;
-    if (autorun) writeStored(AUTORUN_KEY, "on");
-    else removeStored(AUTORUN_KEY);
+    // Nor kept from one: the documentation embeds this page on the same
+    // origin, and a demo's Auto switched on there was the full playground's
+    // Auto on the reader's next visit - the rule checker-settings.mjs keeps.
+    if (!embedded) {
+      if (autorun) writeStored(AUTORUN_KEY, "on");
+      else removeStored(AUTORUN_KEY);
+    }
     reflectAutorun();
     // Switching it on is a request to see the code as it stands - whatever was
     // typed while it was off has not been run, and a switch that shows nothing
@@ -1189,9 +1252,12 @@ function autorunAfterChange() {
   autorunTimer = setTimeout(() => {
     // A run already under way owns the frame and the database, and run( )
     // would answer a second one by returning. So the change that arrived
-    // during it is run after it rather than dropped.
-    if (running) autorunAfterChange();
-    else if (JSON.stringify(getFiles()) !== lastRunText) run();
+    // during it is run after it rather than dropped - and so is one a run
+    // already waits for (a sample picked during it, runWhenFree( )): this
+    // timer firing in the moment between the two used to start the same
+    // text first, and the waiting run then started it again.
+    if (running || waitingRun) autorunAfterChange();
+    else if (JSON.stringify(getFiles()) !== lastRunText) run({ quiet: true });
   }, AUTORUN_DELAY);
 }
 
@@ -1206,16 +1272,30 @@ function autorunAfterChange() {
 let running = false;
 // The files the last run started from, as text - see autorunAfterChange( ).
 let lastRunText;
+// The Run autorun started on its own, by its number, while it is the current
+// one - see run( ) and caretMayMove( ).
+let quietRun;
 // What the last run's unit tests said, for runForAgent( ).
 let lastTestResults = [];
 
-export async function run() {
+// `quiet` is a run nobody asked for: autorun's, 700ms after the typing
+// stopped. It says what it found like any other - the status line, the
+// underlines, the Problems list - but it leaves the caret where the reader is
+// typing. Moving it to the first error, as a pressed Run does, sent the next
+// keystrokes there: an unfinished statement is an abaplint error, so every
+// pause in the middle of one pulled the caret out of the line being written
+// (to the top of the file, or into another file) and typed the rest into it.
+export async function run({ quiet = false } = {}) {
   // Ctrl+Enter and the sample menu call this too, so the guard cannot be the
   // Run button being disabled: two runs would race on the frame's src and on
   // the one-shot load listener, and the second reset would land under a frame
   // that is still booting the first.
   if (running) return;
   running = true;
+  // Whatever the last run's tests said is not about this one: a run that
+  // stops before its tests (an abaplint error, a transpiler refusal) used to
+  // hand runForAgent( ) the results of the run before it.
+  lastTestResults = [];
   // A run supersedes the one autorun was about to start - pressing Run (or
   // opening a sample, which runs on its own) while the timer is counting down
   // must not be followed by a second run of the same text.
@@ -1251,7 +1331,7 @@ export async function run() {
       // same list twice into one panel and show the poorer copy - so this
       // brings the reader to the list instead of retyping it.
       showInsight("problems");
-      focusProblem(errors[0].file, errors[0].range.start.line + 1, errors[0].range.start.character + 1);
+      if (!quiet) focusProblem(errors[0].file, errors[0].range.start.line + 1, errors[0].range.start.character + 1);
       return;
     }
 
@@ -1270,6 +1350,7 @@ export async function run() {
     // that was not the new app's, left on screen after it started. Counted
     // after compile, so code that does not compile leaves the old app working.
     state.runCounter += 1;
+    quietRun = quiet ? state.runCounter : undefined;
     await state.runtime.defineClasses(chunks.map(({ name, js, lines }) => ({ name, js, lines })));
 
     // The unit tests in the test includes, before the app: a run is compile,
@@ -1430,7 +1511,7 @@ export async function run() {
       const first = problems.find((p) => p.source === "transpiler");
       if (first) {
         showInsight("problems");
-        focusProblem(first.file, first.range.start.line + 1, 1);
+        if (!quiet) focusProblem(first.file, first.range.start.line + 1, 1);
       }
     }
   } finally {
@@ -1466,7 +1547,11 @@ async function runForAgent() {
     // the model's change, and the model chased problems that were gone.
     problems: await refreshNow(),
     tests: lastTestResults,
-    roundtrips: roundtripList(),
+    // Only a run that started has roundtrips of its own: one that stopped
+    // before the fresh database left the LAST run's list in place, and the
+    // model read "first roundtrip: HTTP 200" and the old app's view under a
+    // status saying this one did not start.
+    roundtrips: started ? roundtripList() : [],
     log: currentLog(),
   };
 }

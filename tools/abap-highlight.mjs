@@ -91,24 +91,33 @@ const TOKENS = new RegExp(
 // opening `|`, or at the start of a line the template continues on) with the
 // brace depth the template had there; a template still open at the end of
 // the line says so, with its depth, so the next line goes on from there.
+//
+// The templates nested inside one another's braces are a stack of depths
+// rather than a recursion - the depth said for an open template is the
+// outermost one's, as it was when each nested call returned to its caller -
+// so a committed line of a few thousand `|{` is coloured rather than running
+// the build out of stack.
 function scanTemplate(text, i, depth) {
+  const depths = [depth];
   for (; i < text.length; i++) {
     const ch = text[i];
-    if (depth === 0) {
+    const top = depths.length - 1;
+    if (depths[top] === 0) {
       if (ch === "\\") i += 1;
-      else if (ch === "{") depth += 1;
-      else if (ch === "|") return { end: i + 1, open: false, depth: 0 };
-    } else if (ch === "}") depth -= 1;
-    else if (ch === "{") depth += 1;
+      else if (ch === "{") depths[top] += 1;
+      else if (ch === "|") {
+        if (top === 0) return { end: i + 1, open: false, depth: 0 };
+        depths.pop();
+      }
+    } else if (ch === "}") depths[top] -= 1;
+    else if (ch === "{") depths[top] += 1;
     else if (ch === "'" || ch === "`") {
       const close = text.indexOf(ch, i + 1);
-      if (close === -1) return { end: text.length, open: true, depth };
+      if (close === -1) return { end: text.length, open: true, depth: depths[0] };
       i = close;
-    } else if (ch === "|") {
-      i = scanTemplate(text, i + 1, 0).end - 1;
-    }
+    } else if (ch === "|") depths.push(0);
   }
-  return { end: text.length, open: true, depth };
+  return { end: text.length, open: true, depth: depths[0] };
 }
 
 // One line, and the template it leaves open for the next (undefined if none).

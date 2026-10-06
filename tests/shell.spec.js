@@ -230,6 +230,31 @@ test("Auto runs the edit by itself, and hands Run back when it is switched off",
   await expect(page.locator("#app")).toHaveAttribute("data-src", last ?? "");
 });
 
+// A pause in the middle of a statement is an abaplint error, and Auto runs it.
+// A pressed Run takes the caret to the first error; Auto's run did the same,
+// so the rest of the statement was typed wherever that error was.
+test("Auto leaves the caret where the reader is typing when the code does not compile yet", async ({ page }) => {
+  await open(page);
+  await page.locator("#autorun").click();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+
+  const line = (await getSource(page)).split("\n").findIndex((l) => /^\s*ENDMETHOD\./.test(l));
+  await clickEditor(page);
+  await page.evaluate((ln) => {
+    const editor = window.monaco.editor.getEditors()[0];
+    editor.setPosition({ lineNumber: ln, column: editor.getModel().getLineMaxColumn(ln) });
+    editor.focus();
+  }, line);
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("    DATA(answer) = ");
+  const typing = await page.evaluate(() => window.monaco.editor.getEditors()[0].getPosition());
+
+  await expect(page.locator("#status")).toContainText("error", { timeout: 60000 });
+  expect(await page.evaluate(() => window.monaco.editor.getEditors()[0].getPosition())).toEqual(typing);
+  await page.keyboard.type("42.");
+  expect((await getSource(page)).split("\n")[line]).toBe("    DATA(answer) = 42.");
+});
+
 test("Auto is remembered between visits, and never in an embedded playground", async ({ page }) => {
   // Several playground boots in one test: three times the time budget.
   test.slow();
