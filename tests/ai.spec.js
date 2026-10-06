@@ -225,6 +225,36 @@ test("a change is run by the page itself, its report rides on the change, and th
   expect(requests[0].headers["anthropic-beta"]).toContain("thinking-display-updates-2026-08-18");
 });
 
+test("a run an abaplint error stopped reports no roundtrip of the run before it", async ({ page }) => {
+  const requests = [];
+  await page.route("https://api.anthropic.com/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    requests.push(request.postDataJSON());
+    const answer = requests.length === 1
+      ? sse({ tools: [{ name: "write_file", input: { name: APP_FILE, source: APP, as_app: true } }] })
+      : requests.length === 2
+        // The full stop goes: the app's last statement no longer parses.
+        ? sse({ tools: [{ name: "edit_file", input: { name: APP_FILE, old_text: "view->stringify( ) ).", new_text: "view->stringify( ) )" } }] })
+        : sse({ text: "Done." });
+    await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: answer });
+  });
+
+  await openStudio(page);
+  await saveKey(page);
+  await page.locator("#chat-input").fill("A page");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toHaveText("Done.", { timeout: 90000 });
+
+  expect(requests[1].messages.at(-1).content[0].content).toContain("first roundtrip: HTTP 200");
+  // The second run stopped before the fresh database: the first app's view
+  // is still in the Roundtrips tab, and was told to the model as this run's.
+  const report = requests[2].messages.at(-1).content[0].content;
+  expect(report).toContain("(the app did not start)");
+  expect(report).not.toContain("first roundtrip");
+  expect(report).not.toContain(MARK);
+});
+
 test("Fast in the header sends the next message to Sonnet 5.5, and is remembered", async ({ page }) => {
   const models = [];
   await page.route("https://api.anthropic.com/**", (route) => {

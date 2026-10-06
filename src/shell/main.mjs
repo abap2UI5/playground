@@ -1216,6 +1216,10 @@ export async function run() {
   // that is still booting the first.
   if (running) return;
   running = true;
+  // Whatever the last run's tests said is not about this one: a run that
+  // stops before its tests (an abaplint error, a transpiler refusal) used to
+  // hand runForAgent( ) the results of the run before it.
+  lastTestResults = [];
   // A run supersedes the one autorun was about to start - pressing Run (or
   // opening a sample, which runs on its own) while the timer is counting down
   // must not be followed by a second run of the same text.
@@ -1466,7 +1470,11 @@ async function runForAgent() {
     // the model's change, and the model chased problems that were gone.
     problems: await refreshNow(),
     tests: lastTestResults,
-    roundtrips: roundtripList(),
+    // Only a run that started has roundtrips of its own: one that stopped
+    // before the fresh database left the LAST run's list in place, and the
+    // model read "first roundtrip: HTTP 200" and the old app's view under a
+    // status saying this one did not start.
+    roundtrips: started ? roundtripList() : [],
     log: currentLog(),
   };
 }
