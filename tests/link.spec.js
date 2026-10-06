@@ -185,3 +185,16 @@ test("a linked app brings the classes it needs with it", async ({ page }) => {
   // The first file is still the app - what was linked is what starts.
   await expect(page.frameLocator("#app").getByText("Two files, one link")).toBeVisible();
 });
+
+// The names a linked file is followed by are read with its comments taken out,
+// and a literal inside a template's braces is a literal there too: the `|` in
+// `|{ '|' }x|` was read as the template's end, the rest of the line as a
+// template, and a class named in the comment after it was asked for.
+test("a class named in a comment after a template with a quoted bar is not followed", async () => {
+  const { instantiatedClasses } = await import("../src/shell/deep-link.mjs");
+  for (const value of ["|{ '|' }x|", "|{ `|` }x|", "|{ '{' }x|"]) {
+    expect(instantiatedClasses(`out = ${value}. " see zcl_other=>run\nNEW zcl_used( ).`), value).toEqual(["zcl_used"]);
+  }
+  expect(instantiatedClasses(`out = 'He said "go"'. x = NEW zcl_helper( ).`)).toEqual(["zcl_helper"]);
+  expect(instantiatedClasses(`* zcl_header=>x\nx = zcl_util=>do( ). " zcl_note=>x`)).toEqual(["zcl_util"]);
+});

@@ -51,6 +51,17 @@ export function commentIn(source, start, end) {
   return false;
 }
 
+// The source with its comments blanked to spaces and everything else - the
+// literals included - as it was: for a reader that looks for names in the code
+// (deep-link.mjs) and must neither read a comment as code nor take a `"` inside
+// a literal, a template's embedded one included, for a comment's start.
+export function withoutComments(source) {
+  const { mask } = maskSource(source);
+  let out = "";
+  for (let i = 0; i < mask.length; i++) out += mask[i] === "\x01" ? source[i] : mask[i];
+  return out;
+}
+
 function maskSource(source) {
   const mask = source.split("");
   const strings = [];
@@ -88,10 +99,13 @@ function maskSource(source) {
 }
 
 // The index just past the closing quote. A doubled quote is one character of
-// the value, not the end - `it''s` and ``a `` b`` are both one literal.
+// the value, not the end - `it''s` and ``a `` b`` are both one literal. No
+// literal spans a line, so one left open ends with its line rather than
+// taking every comment after it for a literal's text.
 function closingQuote(source, from, quote) {
   let at = from + 1;
   while (at < source.length) {
+    if (source[at] === "\n") return at;
     if (source[at] === quote) {
       if (source[at + 1] === quote) {
         at += 2;
@@ -109,11 +123,24 @@ function closingQuote(source, from, quote) {
 // embedded expression ends the inner one rather than the outer, and a literal
 // inside one is skipped whole: the `|` in `|{ '|' }x|` or the `{` in
 // `|{ '{' }x|` is a character of that literal, not a template's edge or brace.
+//
+// The templates nested in one another are a stack rather than a recursion, so
+// a source of a few thousand `|{` - a linked file is anybody's text - is read
+// to its end instead of running out of stack.
 function closingTemplate(source, from) {
+  const depths = [0];
   let at = from + 1;
-  let depth = 0;
   while (at < source.length) {
     const ch = source[at];
+    const top = depths.length - 1;
+    const depth = depths[top];
+    if (ch === "\n" && depth === 0) {
+      // A template's text ends with its line; the one around it, if any, is
+      // inside its braces, which may go on below.
+      depths.pop();
+      if (depths.length === 0) return at;
+      continue;
+    }
     if (ch === "\\" && depth === 0) {
       at += 2;
       continue;
@@ -122,13 +149,12 @@ function closingTemplate(source, from) {
       at = closingQuote(source, at, ch);
       continue;
     }
-    if (ch === "{") depth += 1;
-    else if (ch === "}") depth = Math.max(0, depth - 1);
-    else if (ch === "|" && depth === 0) return at + 1;
-    else if (ch === "|" && depth > 0) {
-      at = closingTemplate(source, at);
-      continue;
-    }
+    if (ch === "{") depths[top] += 1;
+    else if (ch === "}") depths[top] = Math.max(0, depth - 1);
+    else if (ch === "|" && depth === 0) {
+      depths.pop();
+      if (depths.length === 0) return at + 1;
+    } else if (ch === "|") depths.push(0);
     at += 1;
   }
   return source.length;

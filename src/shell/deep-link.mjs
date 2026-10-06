@@ -11,6 +11,8 @@
 // behalf of whoever opened the link, so an unrestricted parameter would make it
 // a small proxy for reading arbitrary URLs into a page under this origin.
 // Same-origin plus GitHub's raw hosts covers the reason the feature exists.
+import { withoutComments } from "./chain-read.mjs";
+
 const ALLOWED_HOSTS = ["raw.githubusercontent.com", "gist.githubusercontent.com"];
 
 export const linkedSources = (params) => params.getAll("src").filter(Boolean);
@@ -115,30 +117,12 @@ const LOCAL = /^(lcl_|lif_|ltc_|lth_)/i;
 // types. Each would otherwise be one request for data.clas.abap.
 const NOT_A_CLASS = /^(data|object|any|simple|clike|csequence|numeric|xsequence|decfloat|decfloat16|decfloat34|string|xstring|utclong|int8|i|c|n|p|x|f|d|t)$/i;
 
-// The source with its comments taken out - a `*` line, and a `"` to the end
-// of the line wherever it is not inside a literal. A plain /\s".*$/ also cut
-// at the `"` in 'He said "go"', hiding a NEW zcl_helper( ) later on that line.
-function withoutComments(source) {
-  return source
-    .split("\n")
-    .map((line) => {
-      if (line.startsWith("*")) return "";
-      let quote;
-      for (let i = 0; i < line.length; i++) {
-        const ch = line[i];
-        if (quote) {
-          if (ch === "\\" && quote === "|") i += 1;
-          else if (ch === quote) quote = undefined;
-        } else if (ch === "'" || ch === "`" || ch === "|") {
-          quote = ch;
-        } else if (ch === '"') {
-          return line.slice(0, i);
-        }
-      }
-      return line;
-    })
-    .join("\n");
-}
+// The comments come out with the scanner the View tab reads chains with
+// (chain-read.mjs), which knows a literal inside a template's braces: a
+// line-by-line one here took the `|` in `|{ '|' }x|` for a template's end, the
+// rest of the line for a template, and a `" see zcl_other` after it for code.
+// A plain /\s".*$/ also cut at the `"` in 'He said "go"', hiding a
+// NEW zcl_helper( ) later on that line.
 
 export function instantiatedClasses(source) {
   const names = new Set();
