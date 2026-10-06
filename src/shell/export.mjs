@@ -48,12 +48,30 @@ const abapgitXml = (name) => `\uFEFF<?xml version="1.0" encoding="utf-8"?>
 `;
 
 export const normalisedSource = (source) =>
-  source
-    .replace(/\r\n?/g, "\n")
-    .split("\n")
-    .map((line) => line.replace(/[ \t]+$/, ""))
-    .join("\n")
-    .replace(/\n*$/, "\n");
+  endingInOneNewline(
+    source
+      .replace(/\r\n?/g, "\n")
+      .split("\n")
+      .map(withoutTrailingBlanks)
+      .join("\n"),
+  );
+
+// The two ends above, counted from the end rather than matched with
+// /[ \t]+$/ and /\n*$/: a regex anchored at the end is tried from every
+// start, so a line of blanks with a character after them, or a run of
+// newlines that does not end the text, cost the square of its length - the
+// text is whatever a reader pasted or a link brought.
+const withoutTrailingBlanks = (line) => {
+  let end = line.length;
+  while (end > 0 && (line[end - 1] === " " || line[end - 1] === "\t")) end--;
+  return line.slice(0, end);
+};
+
+export const endingInOneNewline = (text) => {
+  let end = text.length;
+  while (end > 0 && text[end - 1] === "\n") end--;
+  return text.slice(0, end) + "\n";
+};
 
 // The name of the thing being exported: the app, which is the class in the
 // first file - the same rule the playground uses everywhere else for "which of
