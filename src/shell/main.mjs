@@ -437,7 +437,11 @@ async function boot() {
           throw e;
         }
       },
-      dialogOpen: () => document.querySelector("dialog[open]") !== null,
+      // The bar's search panel counts: it is modal too (search-box.mjs makes
+      // the page under it inert), and an app rendering while it was open -
+      // the first render of a Run - took the focus, and the rest of the
+      // search was typed into the app.
+      dialogOpen: () => document.querySelector("dialog[open], .search-scrim:not([hidden])") !== null,
       // Files dropped on the app in a frame, on the AI Pilot's page or the AI
       // Studio's: they go to that page's chat (pilot.mjs, chat.mjs).
       // Elsewhere a frame keeps the browser's own answer to a drop.

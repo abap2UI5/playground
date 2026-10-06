@@ -164,6 +164,8 @@ happen off the thread the editor paints on. It also makes the frame decline the 
 shell has a dialog open: UI5 focuses a control as a render settles, and
 `showModal()` cannot make another document inert, so a frame that takes the
 focus swallows what is typed into the dialog and the Escape that would close it.
+The bar's search panel counts as a dialog here: it is modal as well, and the
+`inert` it puts on the page does not keep a frame's own `focus()` out.
 The drafts abap2UI5 keeps in a database live in an in-memory SQLite — sql.js,
 compiled to WebAssembly. Run means: a fresh database, then reload the iframe
 with `?app_start=<CLASS>&run=<n>`. "Fresh" is SQLite reopened on an image of
