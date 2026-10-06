@@ -156,6 +156,18 @@ if (process.argv.includes("--update-pins")) {
 
 const useLatest = process.argv.includes("--latest");
 
+// The commit a checkout is at, or nothing. A fetch interrupted before its
+// checkout (Ctrl+C during the minutes the framework takes) leaves a .git whose
+// HEAD is unborn, and `rev-parse` refusing that is a checkout to redo - not a
+// failed pin, which is what it was reported as on the next build.
+function headOf(dir) {
+  try {
+    return git(["rev-parse", "--verify", "--quiet", "HEAD"], dir);
+  } catch {
+    return undefined;
+  }
+}
+
 let failures = 0;
 for (const p of PINS) {
   const dir = path.join(DEPS_DIR, p.name);
@@ -164,7 +176,7 @@ for (const p of PINS) {
     if (useLatest && wanted !== p.sha) {
       console.log(`fetch-deps: ${p.name} @ ${wanted.slice(0, 12)} (upstream HEAD, pin is ${p.sha.slice(0, 12)})`);
     }
-    if (fs.existsSync(path.join(dir, ".git")) && git(["rev-parse", "HEAD"], dir) === wanted) {
+    if (fs.existsSync(path.join(dir, ".git")) && headOf(dir) === wanted) {
       console.log(`fetch-deps: ${p.name} already at ${wanted.slice(0, 12)}`);
       continue;
     }
