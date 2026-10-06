@@ -172,6 +172,17 @@ test("an embedded playground does not write over the draft of a normal one", asy
   expect(await getSource(page)).toContain("my own work");
 });
 
+// The documentation embeds the playground on its own origin, so what an
+// embedded one stores is the full playground's. Auto is never restored there,
+// and switched on in a demo it was the reader's Auto on the next plain visit.
+test("Auto switched in an embedded playground is not kept for the full one", async ({ page }) => {
+  await page.goto("/?embed=1&src=examples/zcl_linked_example.clas.abap");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await page.locator("#autorun").click();
+  await expect(page.locator("#autorun")).toHaveAttribute("aria-checked", "true");
+  expect(await page.evaluate(() => localStorage.getItem("abap2ui5-playground:autorun"))).toBeNull();
+});
+
 test("a linked app brings the classes it needs with it", async ({ page }) => {
   // One ?src=, and zcl_linked_pair calls zcl_linked_helper. Linking an app that
   // does not compile on its own would be a link to an error message.

@@ -1170,9 +1170,9 @@ function structuralProblem(files) {
 // does not want that on a keystroke; somebody watching a view take shape
 // wants nothing else. So it is a choice, and it is one click.
 //
-// Stored only while it differs from the default, and never restored in an
-// embedded playground - the rule the theme and the checker settings follow
-// (src/shell/theme.mjs), for the same reason: a demo in somebody's
+// Stored only while it differs from the default, and neither restored in nor
+// stored from an embedded playground - the rule the theme and the checker
+// settings follow (src/shell/theme.mjs), for the same reason: a demo in somebody's
 // documentation page has to read the same to every reader.
 const AUTORUN_KEY = "abap2ui5-playground:autorun";
 
@@ -1193,8 +1193,13 @@ function setUpAutorun({ restore }) {
   autorun = restore && readStored(AUTORUN_KEY) === "on";
   autorunButton.addEventListener("click", () => {
     autorun = !autorun;
-    if (autorun) writeStored(AUTORUN_KEY, "on");
-    else removeStored(AUTORUN_KEY);
+    // Nor kept from one: the documentation embeds this page on the same
+    // origin, and a demo's Auto switched on there was the full playground's
+    // Auto on the reader's next visit - the rule checker-settings.mjs keeps.
+    if (!embedded) {
+      if (autorun) writeStored(AUTORUN_KEY, "on");
+      else removeStored(AUTORUN_KEY);
+    }
     reflectAutorun();
     // Switching it on is a request to see the code as it stands - whatever was
     // typed while it was off has not been run, and a switch that shows nothing
