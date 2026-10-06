@@ -59,7 +59,10 @@ export const semanticTokensLegend = () => legend;
 // which do, and by the worker before that - a stored setting that names a
 // retired rule is caught at build and dropped (see buildRegistry below).
 function validated(next) {
-  if (!/^v\d{3}$|^open-abap$|^cloud$/.test(next?.version ?? "")) {
+  // The shape only: abaplint is in the worker, which holds the version to
+  // its own list (registry-core.mjs) before anything is applied. "Cloud" is
+  // abaplint's spelling; "cloud" is not a release it knows.
+  if (!/^v\d{3}(?:sp\d{2})?$|^open-abap$|^Cloud$/.test(next?.version ?? "")) {
     throw new Error(`${next?.version} is not an ABAP release abaplint knows.`);
   }
   if (next?.rules === null || typeof next?.rules !== "object") {
@@ -191,8 +194,8 @@ function revive(described) {
 // hands the editor's files over when they arrive. `onProgress(done, total)`
 // is relayed from the worker as the parse goes.
 //
-// A stored setting that names a rule abaplint no longer has fails the build
-// once - then the page is told, the defaults go in, and the build runs
+// A stored setting that names a rule abaplint no longer has, or a release it
+// does not know, fails the build once - then the page is told, the defaults go in, and the build runs
 // again, which is the same "silently dropped" the Config tab promises.
 // What applyAbaplintSettings( ) waits for: the Config tab is on screen while
 // the corpus is still parsing, and an Apply sent then reached a worker with no
@@ -213,7 +216,7 @@ async function buildNow(filesReady, progress) {
   try {
     told = await call("build", { settings });
   } catch (e) {
-    if (!/no rule called/.test(String(e?.message))) throw e;
+    if (!/no rule called|is not an ABAP release/.test(String(e?.message))) throw e;
     settings = abaplintDefaults();
     settingsRejected();
     told = await call("build", { settings });

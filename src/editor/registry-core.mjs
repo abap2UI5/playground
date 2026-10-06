@@ -85,8 +85,13 @@ function validated(next) {
   if (unknown.length > 0) {
     throw new Error(`abaplint has no rule called ${unknown.join(", ")}.`);
   }
-  if (!/^v\d{3}$|^open-abap$|^cloud$/.test(next?.version ?? "")) {
-    throw new Error(`${next?.version} is not an ABAP release abaplint knows.`);
+  // abaplint's own list, spelt its own way. A pattern stood here, and it let
+  // through "cloud" and any three digits (v760, v999) - which abaplint does
+  // not refuse but quietly replaces with its newest on-premise release, so
+  // the tab said "applied" and the check was v816 - while it refused
+  // "Cloud", abaplint's actual name for ABAP Cloud, and v740sp08.
+  if (!Object.values(abaplint.Version).includes(next?.version)) {
+    throw new Error(`${next?.version} is not an ABAP release abaplint knows - ${Object.values(abaplint.Version).join(", ")}.`);
   }
   return { version: next.version, rules: { ...next.rules } };
 }

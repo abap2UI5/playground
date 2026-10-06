@@ -261,6 +261,32 @@ test("a config that names a rule abaplint does not have says so", async ({ page 
   await expect(page.locator(".config-text")).toBeVisible();
 });
 
+// The release is abaplint's own word for it or nothing. "cloud" and a made-up
+// "v760" used to be applied - abaplint quietly checks an unknown release as
+// its newest on-premise one, so nothing moved - while "Cloud", abaplint's
+// actual name for ABAP Cloud, was refused.
+test("the abaplint release is one abaplint knows, and ABAP Cloud is held to as Cloud", async ({ page }) => {
+  await open(page);
+  // WRITE is ABAP, and not ABAP Cloud.
+  await setSource(page, withIcon("accept").replace("  METHOD view_display.\n", "  METHOD view_display.\n    WRITE `x`.\n"));
+  const notInCloud = page.locator(".insight-row", { hasText: /configured ABAP version/i });
+
+  await page.locator('[data-insight="abaplint"]').click();
+  const box = page.locator(".config-text");
+  const config = JSON.parse(await box.inputValue());
+  for (const version of ["cloud", "v760"]) {
+    await box.fill(JSON.stringify({ ...config, version }));
+    await page.locator(".config-row .primary").click();
+    await expect(page.locator(".config-said.is-error")).toContainText("is not an ABAP release abaplint knows");
+  }
+
+  await box.fill(JSON.stringify({ ...config, version: "Cloud" }));
+  await page.locator(".config-row .primary").click();
+  await expect(page.locator(".config-said")).toContainText("applied", { timeout: 60000 });
+  await page.locator('[data-insight="problems"]').click();
+  await expect(notInCloud.first()).toBeVisible({ timeout: 30000 });
+});
+
 test("the abap2UI5 lint config decides which UI5 release the view is held to", async ({ page }) => {
   await open(page);
 
