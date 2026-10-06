@@ -106,14 +106,20 @@ function closingQuote(source, from, quote) {
 
 // A string template, taken whole - the embedded { } included, however much
 // ABAP is inside them. The braces are counted so that a template inside an
-// embedded expression ends the inner one rather than the outer.
+// embedded expression ends the inner one rather than the outer, and a literal
+// inside one is skipped whole: the `|` in `|{ '|' }x|` or the `{` in
+// `|{ '{' }x|` is a character of that literal, not a template's edge or brace.
 function closingTemplate(source, from) {
   let at = from + 1;
   let depth = 0;
   while (at < source.length) {
     const ch = source[at];
-    if (ch === "\\") {
+    if (ch === "\\" && depth === 0) {
       at += 2;
+      continue;
+    }
+    if (depth > 0 && (ch === "'" || ch === "`")) {
+      at = closingQuote(source, at, ch);
       continue;
     }
     if (ch === "{") depth += 1;

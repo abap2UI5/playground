@@ -506,3 +506,26 @@ test("a control taken out is taken out where it stands, comments and all", async
     ),
   );
 });
+
+// A literal inside a template's embedded expression is one token: the `|` in
+// `|{ '|' }x|` does not end the template and the `{` in `|{ '{' }x|` opens no
+// brace. Read as either, the rest of the method was swallowed into the
+// template and a plain chain was refused as building no view at all.
+test("a template with a quoted bar or brace inside its braces is read as one value", async () => {
+  const { readViewChain } = await import("../src/shell/chain-read.mjs");
+  for (const value of ["|{ '|' }x|", "|{ '{' }x|", "|{ `|` }{ '}' }x|"]) {
+    const read = readViewChain(`CLASS x IMPLEMENTATION.
+  METHOD z2ui5_if_app~main.
+    DATA(view) = z2ui5_cl_ui5_view_builder=>factory( ).
+    view->ele( \`Page\`
+        )->a( n = \`title\` v = ${value}
+        )->tag( \`Button\`
+        )->a( n = \`text\` v = \`Go\` ).
+    client->view_display( view->stringify( ) ).
+  ENDMETHOD.
+ENDCLASS.`);
+    expect(read.ok, `${value}: ${read.why}`).toBe(true);
+    expect(read.root.children[0].attrs[0].raw).toBe(value);
+    expect(read.root.children[0].children.map((c) => c.name)).toEqual(["Button"]);
+  }
+});
