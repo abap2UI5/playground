@@ -165,7 +165,10 @@ shell has a dialog open: UI5 focuses a control as a render settles, and
 `showModal()` cannot make another document inert, so a frame that takes the
 focus swallows what is typed into the dialog and the Escape that would close it.
 The bar's search panel counts as a dialog here: it is modal as well, and the
-`inert` it puts on the page does not keep a frame's own `focus()` out.
+`inert` it puts on the page does not keep a frame's own `focus()` out. So does
+a field somebody is typing in on the page - the editor, the AI chat: an app's
+first render focuses a field of its own, and the app Auto started, or the AI
+ran, took the next keystrokes. Once the reader is in the app, the app has it.
 The drafts abap2UI5 keeps in a database live in an in-memory SQLite — sql.js,
 compiled to WebAssembly. Run means: a fresh database, then reload the iframe
 with `?app_start=<CLASS>&run=<n>`. "Fresh" is SQLite reopened on an image of

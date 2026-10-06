@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { control, getSource, MAIN_MARK, open, openFiles, SAMPLES, setSource } from "./helpers.mjs";
+import { clickEditor, control, getSource, MAIN_MARK, open, openFiles, SAMPLES, setSource } from "./helpers.mjs";
 
 // The examples browser: the sample catalogue, read when the Examples button is
 // clicked, listed next to the samples the page carries, and opened through the same
@@ -381,6 +381,32 @@ test("the running app cannot take the focus off the search panel either", async 
 
   await page.keyboard.press("Escape");
   await expect(page.locator(".search-scrim")).toBeHidden();
+  expect(await appTakesFocus()).toBe(true);
+});
+
+// And not while somebody is typing on the page around it: an app's first
+// render focuses a field of its own, so the app Auto started - or the one the
+// AI Studio ran - took the editor's or the chat's next keystrokes. Once the
+// reader is in the app, the app has the focus as before.
+test("the running app cannot take the focus off the editor somebody is typing in", async ({ page }) => {
+  await open(page);
+  const app = page.frames().find((f) => f !== page.mainFrame());
+  const appTakesFocus = () =>
+    app.evaluate(() => {
+      const probe = document.createElement("input");
+      document.body.append(probe);
+      probe.focus();
+      const took = document.activeElement === probe;
+      probe.remove();
+      return took;
+    });
+
+  await clickEditor(page);
+  expect(await appTakesFocus()).toBe(false);
+  await page.keyboard.type("zq9");
+  await expect.poll(async () => (await getSource(page)).includes("zq9")).toBe(true);
+
+  await page.frameLocator("#app").locator("body").click();
   expect(await appTakesFocus()).toBe(true);
 });
 

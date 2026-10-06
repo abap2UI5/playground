@@ -437,11 +437,17 @@ async function boot() {
           throw e;
         }
       },
-      // The bar's search panel counts: it is modal too (search-box.mjs makes
-      // the page under it inert), and an app rendering while it was open -
-      // the first render of a Run - took the focus, and the rest of the
-      // search was typed into the app.
-      dialogOpen: () => document.querySelector("dialog[open], .search-scrim:not([hidden])") !== null,
+      // Whether the frame should leave the focus alone right now: the
+      // frontend asks before every focus( ) (frontend-bridge.js). While a
+      // dialog is open - the bar's search panel counts: it is modal too
+      // (search-box.mjs makes the page under it inert), and an app rendering
+      // while it was open took the focus and the rest of the search with it.
+      // And while somebody is typing on this page: an app's first render
+      // focuses a field of its own, so the app autorun started, or the one
+      // the AI ran, took the editor's or the chat's next keystrokes. Once the
+      // reader is in the app the frame holds the focus, and nothing here
+      // stops it.
+      dialogOpen: () => document.querySelector("dialog[open], .search-scrim:not([hidden])") !== null || typingHere(),
       // Files dropped on the app in a frame, on the AI Pilot's page or the AI
       // Studio's: they go to that page's chat (pilot.mjs, chat.mjs).
       // Elsewhere a frame keeps the browser's own answer to a drop.
@@ -1083,6 +1089,16 @@ function pointAtDump(location, message, moveCaret = true) {
   showInsight("problems");
   if (moveCaret) focusProblem(location.file, location.line, 1);
   setStatus(`the app dumped - ${location.file} line ${location.line}`, true);
+}
+
+// Whether the focus is somewhere text is typed into on this page - a field,
+// a textarea, the editor (Monaco's own input is inside .monaco-editor).
+const NOT_TYPED_INTO = new Set(["button", "checkbox", "radio", "submit", "reset", "range", "color", "file", "image"]);
+function typingHere() {
+  const at = document.activeElement;
+  if (!(at instanceof HTMLElement)) return false;
+  if (at instanceof HTMLTextAreaElement || at.isContentEditable || at.closest(".monaco-editor")) return true;
+  return at instanceof HTMLInputElement && !NOT_TYPED_INTO.has(at.type);
 }
 
 // Whether a dump may take the caret to its line. Not when it is the answer to
