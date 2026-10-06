@@ -700,6 +700,20 @@ export function redo() {
 export const canUndo = () => editor?.getModel()?.canUndo() ?? false;
 export const canRedo = () => editor?.getModel()?.canRedo() ?? false;
 
+// The name the caret is at the end of - letters, digits and underscores, not
+// starting with a digit - or undefined: what /([a-zA-Z_][\w_]*)$/ found, read
+// backwards from the caret instead. Anchored at the end, that regex was tried
+// from every start, so a long run of word characters with one more character
+// after it - a long name, then `(` - cost the square of its length.
+const isDigit = (c) => c >= 48 && c <= 57;
+const isWord = (c) => isDigit(c) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95;
+function typedName(line) {
+  let start = line.length;
+  while (start > 0 && isWord(line.charCodeAt(start - 1))) start--;
+  while (start < line.length && isDigit(line.charCodeAt(start))) start++;
+  return start < line.length ? line.slice(start) : undefined;
+}
+
 // Completion over the names of the classes and interfaces the registry knows -
 // the framework's and the user's own.
 //
@@ -718,7 +732,7 @@ function abapNameCompletion() {
         endLineNumber: position.lineNumber,
         endColumn: position.column,
       });
-      const prefix = /([a-zA-Z_][\w_]*)$/.exec(line)?.[1];
+      const prefix = typedName(line);
       if (!prefix || prefix.length < 3) return { suggestions: [] };
 
       const lower = prefix.toLowerCase();
