@@ -332,6 +332,36 @@ test("files go with a message: a PDF as it is, a spreadsheet as CSV, a Word docu
   expect(content.at(-1)).toEqual({ type: "text", text: "Enter these orders" });
 });
 
+test("the paperclip opens the file picker, and a file dropped anywhere - the bar, the app - goes to the chat", async ({ page }) => {
+  await openPilot(page);
+  // A real click on the paperclip: the browser's file picker comes up.
+  const chooser = page.waitForEvent("filechooser");
+  await page.locator("#pilot-attach").click();
+  await (await chooser).setFiles("tests/fixtures/note.pdf");
+  await expect(page.locator(".pilot-file")).toHaveCount(1);
+
+  // A drop the browser would otherwise answer by opening the file in a tab.
+  const drop = async (frame, selector, name) => {
+    const prevented = await frame.evaluate(({ selector, name }) => {
+      const dt = new DataTransfer();
+      dt.items.add(new File([`a,b\n${name},2`], `${name}.csv`, { type: "text/csv" }));
+      const target = document.querySelector(selector);
+      target.dispatchEvent(new DragEvent("dragover", { dataTransfer: dt, bubbles: true, cancelable: true }));
+      const event = new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true });
+      target.dispatchEvent(event);
+      return event.defaultPrevented;
+    }, { selector, name });
+    expect(prevented, `the drop on ${selector} was left to the browser`).toBe(true);
+  };
+  await drop(page, "#pilot-bar", "on-the-bar");
+  await expect(page.locator(".pilot-file")).toHaveCount(2);
+  // ...and on the app, through its frame.
+  const app = page.frames().find((f) => f.url().includes("app/index.html"));
+  await drop(app, "body", "on-the-app");
+  await expect(page.locator(".pilot-file")).toHaveCount(3);
+  await expect(page.locator(".pilot-file").last()).toContainText("on-the-app.csv");
+});
+
 test("What Claude sees shows the agent snapshot of the screen", async ({ page }) => {
   await openPilot(page);
   await page.locator("#pilot-sees").click();

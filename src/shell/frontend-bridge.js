@@ -165,6 +165,31 @@
     return { ctx: component.ctx, Server: Server, ViewSlots: ViewSlots };
   }
 
+  // A file dropped on the app, on a page that takes files (the AI Pilot's,
+  // see dropFiles in main.mjs): handed to that page rather than left to the
+  // browser, which opens a file dropped where nobody took it in a tab of its
+  // own. Listened for on the window, after the app's own controls had their
+  // turn - a drop an upload control took (preventDefault) stays the app's.
+  function isFileDrag(e) {
+    var types = e.dataTransfer && e.dataTransfer.types;
+    return Boolean(types && Array.prototype.indexOf.call(types, "Files") !== -1);
+  }
+  function takesFiles() {
+    var host_ = host();
+    return host_ && typeof host_.dropFiles === "function" ? host_ : null;
+  }
+  window.addEventListener("dragover", function (e) {
+    if (e.defaultPrevented || !isFileDrag(e) || !takesFiles()) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+  });
+  window.addEventListener("drop", function (e) {
+    var host_ = takesFiles();
+    if (e.defaultPrevented || !isFileDrag(e) || !host_) return;
+    e.preventDefault();
+    host_.dropFiles(Array.prototype.slice.call(e.dataTransfer.files));
+  });
+
   window.__z2ui5PlaygroundPilot = {
     roundtrip: function () {
       var f = frontend();
