@@ -187,8 +187,12 @@ function groupsFrom(data) {
     if (row.url === "") continue;
 
     if (row.source === "learn") {
+      /* A stage the learning path does not name goes under "More", the way
+       * the catalogue page files it - not under a group titled with the bare
+       * stage id. */
       const stage = str(entry.stage);
-      groupFor(`learn:${stage || "more"}`, stage || "More").entries.push(row);
+      const known = stages.some((s) => s.id === stage);
+      groupFor(`learn:${known ? stage : "more"}`, "More").entries.push(row);
     } else {
       const label = sources.get(row.source);
       const title = `${label ? label.title : row.source} — ${str(entry.group) || "Other"}`;
