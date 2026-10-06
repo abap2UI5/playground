@@ -212,6 +212,32 @@ test("the Pilot opens another app, works through its popup and picks a row", asy
   expect(after.fields.find((f) => f.path === "/S_SCREEN/COLOR_02").value).toBe("BLACK");
 });
 
+test("an app that dumps as it starts is said at once, with the dump", async ({ page }) => {
+  // A catalogued class, answered here with one whose first roundtrip divides
+  // by zero: the frame shows the dump and never a main view.
+  const cls = "z2ui5_cl_smpc_app_001";
+  await page.route(`https://raw.githubusercontent.com/**/${cls}.clas.abap`, (route) => route.fulfill({
+    status: 200,
+    body: `CLASS ${cls} DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    INTERFACES z2ui5_if_app.\nENDCLASS.\n\n`
+      + `CLASS ${cls} IMPLEMENTATION.\n  METHOD z2ui5_if_app~main.\n    DATA(zero) = 0.\n    DATA(out) = |{ 1 / zero }|.\n`
+      + "  ENDMETHOD.\nENDCLASS.\n",
+  }));
+  const requests = await answerWith(page, [
+    { tools: [{ name: "open_app", input: { class: cls } }] },
+    { text: "It dumped." },
+  ]);
+  await openPilot(page);
+  await useKey(page);
+  const asked = Date.now();
+  await say(page, "Open it");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("It dumped.", { timeout: 60000 });
+  // Not the thirty seconds a start is given, and not "did not start within".
+  expect(Date.now() - asked).toBeLessThan(20000);
+  const result = requests[1].body.messages.at(-1).content[0];
+  expect(result.is_error).toBe(true);
+  expect(result.content).toContain("Division by zero");
+});
+
 test("a value typed without an event shows in the field and stays pending", async ({ page }) => {
   const requests = await answerWith(page, [
     { tools: [{ name: "act", input: { values: { "/NAME": "Eve" } } }] },
