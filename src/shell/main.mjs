@@ -1247,8 +1247,11 @@ function autorunAfterChange() {
   autorunTimer = setTimeout(() => {
     // A run already under way owns the frame and the database, and run( )
     // would answer a second one by returning. So the change that arrived
-    // during it is run after it rather than dropped.
-    if (running) autorunAfterChange();
+    // during it is run after it rather than dropped - and so is one a run
+    // already waits for (a sample picked during it, runWhenFree( )): this
+    // timer firing in the moment between the two used to start the same
+    // text first, and the waiting run then started it again.
+    if (running || waitingRun) autorunAfterChange();
     else if (JSON.stringify(getFiles()) !== lastRunText) run({ quiet: true });
   }, AUTORUN_DELAY);
 }
