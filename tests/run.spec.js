@@ -365,25 +365,44 @@ test("a loop that never ends is stopped, and the next Run works again", async ({
 // editor holds the second by the time it ends. Each used to run then, so the
 // second sample was started twice - the second time under a reader who had
 // begun to use it. One run for both picks now.
+//
+// The pressed run's frame is held until both picks have been made, rather
+// than delayed by a fixed time: on a loaded machine the two picks took longer
+// than the three seconds the frame was once held for, the run had ended
+// before the second pick, and that pick's run of its own - a correct third
+// run - failed the test.
 test("two samples picked during a run start the second one once", async ({ page }) => {
   await open(page);
-  // A frame that is slow to arrive keeps the pressed run under way while the
-  // two picks are made.
   const started = [];
+  let release;
+  const held = new Promise((resolve) => {
+    release = resolve;
+  });
   await page.route(
     (url) => url.searchParams.has("run"),
     async (route) => {
       started.push(new URL(route.request().url()).searchParams.get("app_start"));
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      if (started.length === 1) await held;
       await route.continue();
     },
   );
   await page.locator("#run").click();
+  await expect.poll(() => started.length, { timeout: 60000 }).toBe(1);
   await pickSample(page, SAMPLES[1].id);
   await pickSample(page, SAMPLES[2].id);
-  await expect.poll(() => started.length, { timeout: 30000 }).toBe(2);
-  await expect(page.locator("#status")).toHaveText(/^running/, { timeout: 60000 });
-  // A second run of the same text would ask for its frame right after this.
-  await page.waitForTimeout(1500);
-  expect(started).toHaveLength(2);
+  release();
+  await expect.poll(() => started.length, { timeout: 60000 }).toBe(2);
+  // The second run has ended: Run is free again and its app is up.
+  await expect(page.locator("#run")).toBeEnabled({ timeout: 60000 });
+  await expect(page.locator("#status")).toHaveText(/^running/);
+  // A run that waited on its own would start the moment the one before it
+  // ended - on its next look, a 100ms timer that was already set. A longer
+  // timer set now, on the page's own clock, fires after that one however busy
+  // the machine is, and a run started meanwhile holds the Run button.
+  const startedAgain = await page.evaluate(
+    () => new Promise((resolve) => setTimeout(() => resolve(document.getElementById("run").disabled), 300)),
+  );
+  expect(startedAgain).toBe(false);
+  const second = SAMPLES[2].files[0].replace(/\.clas\.abap$/, "");
+  expect(started).toEqual([MAIN_CLASS.toUpperCase(), second.toUpperCase()]);
 });
