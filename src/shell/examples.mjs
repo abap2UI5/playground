@@ -279,6 +279,12 @@ function buildDraftsGroup() {
   };
 }
 
+// What is typed into the save row's name, kept outside it: the list is drawn
+// again whenever the index lands, a facet changes or a draft is deleted, and
+// the row with it - a name being typed while the index was still on its way
+// was emptied when it arrived, and the rest of it typed into nothing.
+let draftName = "";
+
 // The row that saves what is in the editor: a name, and Save. Enter in the
 // input saves too, and it is not inside the dialog's form on purpose -
 // there, Enter would close the dialog instead.
@@ -291,6 +297,10 @@ function saveRow() {
   input.placeholder = "name this draft";
   input.setAttribute("aria-label", "Name for the draft");
   input.maxLength = 60;
+  input.value = draftName;
+  input.addEventListener("input", () => {
+    draftName = input.value;
+  });
   const button = document.createElement("button");
   button.type = "button";
   button.className = "drafts-save-button";
@@ -313,6 +323,7 @@ function saveRow() {
       return;
     }
     draftsCache = undefined;
+    draftName = "";
     render();
     // The button that was pressed is gone with the redraw; the focus goes
     // back into the dialog rather than to <body> behind the modal.
@@ -424,6 +435,7 @@ function reflect() {
 
 export function openExamples() {
   if (!dialog) return;
+  draftName = "";
   // Read afresh on every open: another tab may have saved one meanwhile.
   draftsCache = undefined;
   if (!started || (indexMissing && !loading)) {
@@ -529,8 +541,17 @@ function render() {
     frag.append(note);
   }
 
+  // The name field is drawn again with the rest; somebody typing in it keeps
+  // the focus and the caret (its text is draftName).
+  const naming = document.activeElement?.matches?.(".drafts-save input") ? document.activeElement : null;
+  const caret = naming ? [naming.selectionStart, naming.selectionEnd, naming.selectionDirection] : undefined;
   body.replaceChildren(frag);
   body.scrollTop = 0;
+  if (naming) {
+    const again = body.querySelector(".drafts-save input");
+    again?.focus();
+    again?.setSelectionRange(...caret);
+  }
   // How much the search and the filters let through, so an empty-looking
   // list says whether it is the words or the boxes.
   const count = document.getElementById("examples-count");
