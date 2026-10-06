@@ -803,7 +803,10 @@ function remember(files) {
   // catalogued sample is not one isSample( ) knows, and opening one from the
   // browser used to write it straight over the stored draft - while the
   // status line promised that draft "comes back if you reload".
-  const pristine = opened !== undefined && JSON.stringify(current) === opened;
+  // While replaceWith( ) is putting them in: setFiles( ) reports the change
+  // before `opened` can be set to what it put there, and a catalogued sample
+  // or a named draft was stored over the draft in that one call.
+  const pristine = openingAsOpened || (opened !== undefined && JSON.stringify(current) === opened);
   if (!isSample(current) && !pristine) writeStoredJson(STORAGE_KEY, current);
   // A fragment in the address bar is a claim about what the editor holds, and
   // it just stopped being true. Left there, it would also win over this draft
@@ -884,7 +887,12 @@ function replaceWith(files, { asOpened = true } = {}) {
   // were opened.
   const hadDraft = !isSample(before) && JSON.stringify(before) !== opened;
   const undoable = before.every((f) => files.some((n) => n.name === f.name));
-  setFiles(files.map((f) => ({ ...f })));
+  openingAsOpened = asOpened;
+  try {
+    setFiles(files.map((f) => ({ ...f })));
+  } finally {
+    openingAsOpened = false;
+  }
   opened = asOpened ? JSON.stringify(getFiles()) : undefined;
   renderFiles();
   return hadDraft && (undoable ? "undo" : "reload");
@@ -894,6 +902,9 @@ function replaceWith(files, { asOpened = true } = {}) {
 // class, a named draft, a link. Until they are changed they are not a draft
 // of the reader's, and remember( ) does not store them over the one there is.
 let opened;
+// Set while replaceWith( ) writes files that are "as opened" into the
+// editor - see remember( ).
+let openingAsOpened = false;
 // Where the editor's starting files came from (startingFiles( )).
 let startedFrom;
 

@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { control, open, openFiles, SAMPLES } from "./helpers.mjs";
+import { control, getSource, MAIN_MARK, open, openFiles, SAMPLES, setSource } from "./helpers.mjs";
 
 // The examples browser: the sample catalogue, read when the Examples button is
 // clicked, listed next to the samples the page carries, and opened through the same
@@ -265,6 +265,24 @@ test("the index is listed by learning-path stage, and an entry runs through the 
     "https://github.com/abap2UI5/samples/blob/main/src/01/z2ui5_cl_smp_app_493.clas.abap",
   );
 
+});
+
+test("a catalogued entry opened over a draft leaves the stored draft for the reload it promises", async ({ page }) => {
+  await serveCatalogues(page);
+  await open(page);
+  await setSource(page, (await getSource(page)).replace(MAIN_MARK, "work of my own"));
+  const stored = () => page.evaluate(() => localStorage.getItem("abap2ui5-playground:files"));
+  expect(await stored()).toContain("work of my own");
+
+  await openBrowser(page);
+  const before = await page.locator("#app").getAttribute("data-src");
+  await page.locator(".example-row", { hasText: "z2ui5_cl_smp_app_493" }).click();
+  await expect(page.locator("#app")).not.toHaveAttribute("data-src", before ?? "", { timeout: 60000 });
+  await expect(page.locator("#status")).toHaveText("running - your draft comes back if you reload", { timeout: 60000 });
+  // The editor reported the new files before the page had marked them as
+  // opened, and that one report stored the catalogued class over the draft.
+  expect(await stored()).toContain("work of my own");
+  expect(await stored()).not.toContain("z2ui5_cl_smp_app_493");
 });
 
 test("the search narrows the list across every group", async ({ page }) => {
