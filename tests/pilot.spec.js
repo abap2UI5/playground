@@ -374,6 +374,45 @@ test("files go with a message: a PDF as it is, a spreadsheet as CSV, a Word docu
   expect(content.at(-1)).toEqual({ type: "text", text: "Enter these orders" });
 });
 
+test("a message the API refuses does not stay in the conversation, and an image too large is refused first", async ({ page }) => {
+  const bodies = [];
+  await page.route("https://api.anthropic.com/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    const body = request.postDataJSON();
+    bodies.push(body);
+    // An image the API will not take - past its pixel limit, say.
+    if (body.messages.some((m) => Array.isArray(m.content) && m.content.some((b) => b.type === "image"))) {
+      return route.fulfill({
+        status: 400,
+        headers: { ...cors(), "content-type": "application/json" },
+        body: JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "image dimensions exceed max allowed size" } }),
+      });
+    }
+    await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: sse({ text: "Hello back." }) });
+  });
+  await openPilot(page);
+  await useKey(page);
+  const input = page.locator("#pilot-file-input");
+  // Past the 10 MB of base64 the API takes for an image: refused here.
+  await input.setInputFiles([{ name: "huge.png", mimeType: "image/png", buffer: Buffer.alloc(8 * 1000 * 1000, 7) }]);
+  await expect(page.locator(".pilot-notice.is-error")).toContainText("huge.png is larger than the 7.5 MB");
+  await expect(page.locator(".pilot-file")).toHaveCount(0);
+
+  await input.setInputFiles([{ name: "wide.png", mimeType: "image/png", buffer: Buffer.alloc(1000, 7) }]);
+  await say(page, "What is in the picture?");
+  await expect(page.locator(".pilot-notice.is-error").last()).toContainText("image dimensions", { timeout: 60000 });
+  // Every later message used to resend the refused image, and was refused
+  // with it.
+  await say(page, "hello");
+  await expect(page.locator(".pilot-assistant").last()).toHaveText("Hello back.", { timeout: 60000 });
+  const last = bodies.at(-1);
+  expect(last.messages).toHaveLength(1);
+  expect(last.messages[0].content.some((b) => b.type === "image")).toBe(false);
+  // ...and the screen the refused message carried goes with this one.
+  expect(last.messages[0].content[0].text).toContain("<screen>");
+});
+
 test("the paperclip opens the file picker, and a file dropped anywhere - the bar, the app - goes to the chat", async ({ page }) => {
   await openPilot(page);
   // A real click on the paperclip: the browser's file picker comes up.

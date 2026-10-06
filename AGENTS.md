@@ -896,8 +896,9 @@ restart them all.
 
 **Files in the chat** (`src/shell/attachments.mjs`, in the Pilot's chunk and
 the studio's; on screen `src/shell/attach-ui.mjs`, shared with the studio):
-📎, a drop or a paste adds up to five files of at most 10 MB to
-the next message, checked as they are added (`kindOf( )`) and read when it is
+📎, a drop or a paste adds up to five files of at most 10 MB (an image
+7.5 MB - the API's 10 MB is of the base64) to the next message, checked as
+they are added (`kindOf( )`) and read when it is
 sent (`attachmentBlocks( )`), in front of its text. A PDF is a `document`
 block and an image an `image` block, as they are; an `.xlsx` is each sheet as
 CSV, a `.docx` its paragraphs, a text file its text - each a text
@@ -909,7 +910,10 @@ carry (a date is Excel's serial number, a formula its last result) is said in
 the sheet's first line. The old binary formats are refused with what to save
 them as. The conversation is append-only, so the files are sent again with
 every request of the chat - the conversation's `cache_control` is what keeps
-that cheap. `tests/pilot.spec.js` holds the three formats against fixtures
+that cheap. One exception to append-only: a message the API refuses as it
+stands (a 400 or a 413) with nothing answered after it is taken back out
+(`send( )` in `pilot-agent.mjs`) - resent with every later request, it was
+refused with every one of them. `tests/pilot.spec.js` holds the three formats against fixtures
 (`tests/fixtures/orders.xlsx`, `brief.docx`, `note.pdf`). **A drop is taken
 anywhere on the page**, not only on the chat: a file dropped where nobody
 takes it is opened by the browser in a tab of its own, which is what a drop
