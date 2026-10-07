@@ -255,6 +255,13 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
   let seen;
   let stream;
   let stopped = false;
+  // Resolved by stop( ): a tool still running (a run waiting on its app, a
+  // sample being fetched) is no longer waited for - Stop changed nothing
+  // until it had ended on its own.
+  let stopping;
+  let stopNow = () => {};
+  const untilStopped = (work, what) =>
+    Promise.race([work, stopping.then(() => ({ error: `Stopped by the person while ${what}.` }))]);
   const total = { input: 0, output: 0, cached: 0 };
 
   const snapshot = () => JSON.stringify(host.files());
@@ -263,6 +270,9 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
   // front of its text, as the content blocks attachments.mjs makes of them.
   async function send(text, files = []) {
     stopped = false;
+    stopping = new Promise((resolve) => {
+      stopNow = resolve;
+    });
     const now = snapshot();
     const content = [];
     if (now !== seen) {
@@ -447,7 +457,7 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         if (use.name === "run_app") ui.toolPending({ id: use.id, text: pendingText("run_app", {}) });
         let result;
         try {
-          result = await execute(use.name, use.input ?? {});
+          result = await untilStopped(execute(use.name, use.input ?? {}), `${use.name} was running`);
         } catch (e) {
           result = { error: String(e?.message ?? e) };
         }
@@ -483,7 +493,8 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         ui.toolPending({ id, text: pendingText("run_app", {}) });
         let report;
         try {
-          report = describeRun(await host.run());
+          const ran = await untilStopped(host.run(), "the app was running");
+          report = ran.error ? { text: ran.error, summary: "run stopped" } : describeRun(ran);
         } catch (e) {
           report = { text: `The automatic run failed: ${String(e?.message ?? e)}`, summary: "run failed" };
         }
@@ -595,6 +606,7 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
     send,
     stop() {
       stopped = true;
+      stopNow();
       stream?.abort();
     },
     get usage() {

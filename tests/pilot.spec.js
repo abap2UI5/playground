@@ -258,6 +258,40 @@ test("a value typed without an event shows in the field and stays pending", asyn
   await expect(app.getByText("Hello Eve!")).toBeVisible();
 });
 
+test("what the reader typed and did not send goes with the Pilot's step, and nothing either typed stays pending after it", async ({ page }) => {
+  const requests = await answerWith(page, [
+    { tools: [{ name: "act", input: { event: "GREET" } }] },
+    { text: "Greeted." },
+    { tools: [{ name: "act", input: { values: { "/NAME": "Carol" }, event: "GREET" } }] },
+    { text: "Again." },
+  ]);
+  await openPilot(page);
+  await useKey(page);
+  const app = page.frameLocator("#app");
+  const frame = await (await page.locator("#app").elementHandle()).contentFrame();
+  const pending = () => frame.evaluate(() => window.__z2ui5PlaygroundPilot.pending());
+
+  // The reader types a name and presses nothing: no roundtrip, so only the
+  // frame knows it.
+  await app.locator("input").first().fill("Bob");
+  await app.locator("input").first().press("Tab");
+  await say(page, "Greet them");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("Greeted.", { timeout: 60000 });
+  // The model was told, and its GREET carried the name the reader typed.
+  expect(textOf(requests[0].body.messages[0])).toContain("Bob");
+  await expect(app.getByText("Hello Bob!")).toBeVisible();
+  // Sent, so no longer pending - it went out once and is done.
+  expect(await pending()).toEqual({});
+
+  // The Pilot's own typing likewise: sent with its event and then cleared,
+  // not put back over every later answer and sent again with the reader's
+  // next click.
+  await say(page, "Now greet Carol");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("Again.", { timeout: 60000 });
+  await expect(app.getByText("Hello Carol!")).toBeVisible();
+  expect(await pending()).toEqual({});
+});
+
 test("several apps side by side: the Pilot opens one beside, works in both, and each keeps its state", async ({ page }) => {
   const requests = await answerWith(page, [
     { tools: [{ name: "open_app", input: { class: "z2ui5_cl_smp_app_009", beside: true } }] },

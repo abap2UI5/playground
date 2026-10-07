@@ -888,7 +888,20 @@ controls at any moment - the next message carries the new screen in a
   written into the frame's model and marked changed (`fill( )`, the way
   typing marks them), so the reader sees them arrive, and a click of the
   reader's own would carry them on. The request that goes out is the one a
-  single act would send.
+  single act would send. An act whose event is not there to press (unknown,
+  disabled) is refused as ONE act, before anything is typed.
+- **What the Pilot's request carried is cleared in the frame.** Its
+  roundtrip goes around `View1.eB`, where the frontend notes what a request
+  carries (`_z2ui5SentValues`, `oSentModel`), so the bridge notes it instead
+  (`carry( )` in `frontend-bridge.js`): the paths it filled and the reader's
+  unsent edits it took over. Left marked, a typed path was put back over
+  every later answer and sent again with the reader's next click.
+- **The reader's unsent typing is part of the screen.** Typing costs no
+  roundtrip, so the mirror never hears of it: `current( )` takes the frame's
+  pending values (`pending(true)` on the bridge, the topmost view) into the
+  session it builds, and an app whose typing changed counts as changed for
+  the next message's `<screen>`. Each app is marked told when its screen is
+  read (`snapshotText( )`), not wholesale after every tool round.
 
 **Several apps, a tab each** (at most four, `.pilot-tabs` over the stage). Tab
 1 is Run's own frame and the class of the first file; the others are frames
@@ -904,7 +917,10 @@ counted, so the apps already open keep their drafts and their frames stay
 current. Replacing tab 1's app makes its file the first, so Restart starts it
 from then on. A Run (Restart, `restart_app`) is one fresh database for all of
 them, so `pilotRan( )` reloads every other tab on the new Run number, or
-closes one whose class left the files. A pick in the samples browser goes to
+closes one whose class left the files - and the Pilot's `run` waits until
+every tab has started again before it reads a screen. A step parked for a
+frame that a Run replaced is refused with it, and never handed to the new
+document's app start (`roundtrip` in `main.mjs`). A pick in the samples browser goes to
 the Pilot on this page (`pilotPicked( )`): in place of the app on screen, or
 beside after the strip's **+ App**, and a catalogue row of a sample the page
 carries opens that copy instead of fetching it. Autorun is never restored on

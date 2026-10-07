@@ -411,12 +411,24 @@ async function boot() {
         // roundtrip. Refused instead - that frame is on its way out. A frame
         // that says nothing (an older bridge script) is served as before.
         const run = from ? new URL(from, document.baseURI).searchParams.get("run") : null;
-        if (run !== null && run !== String(state.runCounter)) throw new Error("this app was replaced by a newer Run");
+        if (run !== null && run !== String(state.runCounter)) {
+          // A step of the AI Pilot parked for this frame goes with it: left
+          // parked, it was handed to the new document's app start and sent
+          // in its place - an event on a draft the fresh database never held.
+          takePilotRequest(from)?.reject(new Error("the app was restarted before this step reached it - look again"));
+          throw new Error("this app was replaced by a newer Run");
+        }
         // The AI Pilot's act (src/shell/pilot.mjs): the frame was made to send
         // a roundtrip so that it renders the answer, and what goes to the
         // framework is the Pilot's request in place of the frame's. Every
         // answer, the reader's clicks included, is shown to the Pilot after.
-        const pilot = takePilotRequest(from);
+        let pilot = takePilotRequest(from);
+        // Only ever in place of a request on a running app: an app start (no
+        // draft id - the frame reloaded, or a Run) is the frame's own.
+        if (pilot && !draftOf(body)) {
+          pilot.reject(new Error("the app started again before this step reached it - look again"));
+          pilot = null;
+        }
         if (pilot) body = pilot.body;
         const started = performance.now();
         try {
@@ -1533,6 +1545,15 @@ export async function run({ quiet = false } = {}) {
 // as it is now. After the frame has loaded, the first roundtrip is waited for
 // as well: that is the app's start, and the dump the model needs to see, if
 // there is one, arrives with it.
+// The draft id a frame's request is on - none for an app start.
+function draftOf(body) {
+  try {
+    return JSON.parse(body)?.value?.S_FRONT?.ID || null;
+  } catch {
+    return null;
+  }
+}
+
 async function runForAgent() {
   while (running) await new Promise((resolve) => setTimeout(resolve, 100));
   const started = await run();

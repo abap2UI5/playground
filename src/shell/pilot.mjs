@@ -297,7 +297,13 @@ function showTab(id) {
 }
 
 // The strip over the stage: a tab per app, and + to open another beside.
+let tabsDrawn = "";
 function renderTabs() {
+  // Called on every answer of every tab - a timer app's included. Rebuilt
+  // only when it changed, or a tick took the keyboard focus off a tab.
+  const key = JSON.stringify([visible, tabs.map((tab) => [tab.id, tab.mirror?.state.app || tab.cls])]);
+  if (key === tabsDrawn && el.tabs.childElementCount > 0) return;
+  tabsDrawn = key;
   const buttons = [];
   for (const tab of tabs) {
     const button = document.createElement("button");
@@ -462,15 +468,19 @@ export function setUpPilot(pilotHost) {
   });
   listenForFileDrops({ highlight: el.chat, onFiles: (files) => pilotDropped(files) });
 
+  el.log.addEventListener("scroll", () => {
+    following = el.log.scrollHeight - el.log.scrollTop - el.log.clientHeight < 48;
+  }, { passive: true });
   el.input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+    // keyCode 229: the Enter that commits an IME composition in Safari,
+    // which ends the composition before this keydown (as in the studio).
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
       e.preventDefault();
       if (!busy) submit();
     }
   });
   el.reset.addEventListener("click", () => {
     startOver();
-    el.usage.textContent = "";
     showWelcome();
   });
 
@@ -568,6 +578,11 @@ function startOver() {
   agent = undefined;
   generation += 1;
   finishRows();
+  // The old turn may still be inside a tool (an app opening, a restart) and
+  // only unwinds when that ends; the new conversation is not busy.
+  setBusy(false);
+  el.usage.textContent = "";
+  el.usage.title = "";
 }
 
 function finishRows() {
@@ -633,8 +648,12 @@ function addCard(text, tabId) {
   scrollDown();
 }
 
-function scrollDown() {
-  el.log.scrollTop = el.log.scrollHeight;
+// The log follows the answer while the reader is at its end, and leaves them
+// where they are when they scrolled up to read (as in the studio).
+let following = true;
+function scrollDown(force = false) {
+  if (force) following = true;
+  if (following) el.log.scrollTop = el.log.scrollHeight;
 }
 
 function setBusy(value) {
@@ -660,6 +679,7 @@ async function submit() {
   el.input.value = "";
   const files = attaching.take();
   listSentFiles(addLine("user", typed), files, "pilot-user-files");
+  scrollDown(true);
   setBusy(true);
   stopAsked = false;
   current = undefined;
@@ -745,7 +765,19 @@ async function submit() {
         workspace: readStored(WORKSPACE_STORAGE) ?? undefined,
         host: {
           files: host.files,
-          run: host.run,
+          // Run, and then every other tab started again on the new Run as
+          // well: runForAgent( ) is answered by the first app's start, while
+          // the others are only just reloading - restart_app on tab 2 read
+          // its old screen, and the model was told the rows it had entered
+          // were still there in a database that was new.
+          run: async () => {
+            const before = new Map(tabs.map((tab) => [tab, tab.mirror?.version]));
+            const report = await host.run();
+            if (report?.started) {
+              await Promise.all(tabs.filter((tab) => before.has(tab) && tab.mirror).map((tab) => started(tab, before.get(tab))));
+            }
+            return report;
+          },
           carried: host.carried,
           fetchLinked: host.fetchLinked,
           // The apps on the stage, as the conversation takes them.
@@ -779,12 +811,21 @@ async function submit() {
     addLine(said.stopped ? "notice" : "notice is-error", said.text);
     setStatus(said.stopped ? "stopped" : "the AI request failed", !said.stopped);
     if (said.key) {
+      // Never sent to a model, and a new key is a new conversation: the
+      // message and its files are put back to send again.
+      if (el.input.value === "") el.input.value = typed;
+      if (files.length > 0) attaching.add(files);
       showKeyForm(true);
       (said.workspace ? el.workspaceInput : el.keyInput).focus();
     }
   } finally {
     if (active === turn) active = undefined;
-    if (live()) finishRows();
-    setBusy(false);
+    if (live()) {
+      finishRows();
+      setBusy(false);
+      // On a phone the model's acts brought the app forward; what it says
+      // at the end - an answer, a question, the key form - is in the chat.
+      if (narrow()) setView("chat");
+    }
   }
 }

@@ -349,6 +349,8 @@ export function createOperator({ app, mirror, ui = {} }) {
   });
   let session = null;
   let synced = -1;
+  // The reader's unsent typing the session was built with (see current( )).
+  let typedKey = "{}";
 
   // Until the frame has rendered what it was answered: the answer is in the
   // mirror the moment the framework gave it, the popup it opens a moment
@@ -385,20 +387,50 @@ export function createOperator({ app, mirror, ui = {} }) {
     }
   }
 
-  // The session the model acts through, on the screen as it is now.
+  // The session the model acts through, on the screen as it is now - with
+  // what the reader typed and has not sent yet. Typing costs no roundtrip,
+  // so the mirror never hears of it: the model read the field as empty, and
+  // its event went out without the value while the frame went on showing it.
   async function current() {
     await catchUpWithFrame();
-    if (session && synced === mirror.version) return session;
+    let typed = {};
+    try {
+      typed = host.frame()?.pending?.(true) ?? {};
+    } catch {
+      typed = {};
+    }
+    const key = JSON.stringify(typed);
+    if (session && synced === mirror.version && key === typedKey) return session;
     if (!mirror.state.id) {
       throw new AgentError(`no app is running on screen${mirror.error ? ` - the last answer was ${mirror.error}` : ""} - restart_app starts it again`);
     }
-    replay = replayOf(mirror.state);
+    const app = mirror.state.app || host.appClass();
+    const start = async (values) => {
+      replay = replayOf(mirror.state);
+      try {
+        return (await client.start(app, { maxRows: MAX_ROWS, ...(values ? { values } : {}) })).session;
+      } finally {
+        replay = null;
+      }
+    };
     try {
-      session = (await client.start(mirror.state.app || host.appClass(), { maxRows: MAX_ROWS })).session;
-    } finally {
-      replay = null;
+      session = await start(Object.keys(typed).length > 0 ? typed : undefined);
+    } catch (e) {
+      // A value the snapshot does not take (a path no control shows as
+      // editable, text in a number field): the others one by one, rather
+      // than no screen at all.
+      if (!(e instanceof AgentError) || Object.keys(typed).length === 0) throw e;
+      session = await start();
+      for (const [path, value] of Object.entries(typed)) {
+        try {
+          await client.act(session, { values: { [path]: value } });
+        } catch {
+          // left to the frame, which still shows and holds it
+        }
+      }
     }
     synced = mirror.version;
+    typedKey = key;
     return session;
   }
 
@@ -446,10 +478,24 @@ export function createOperator({ app, mirror, ui = {} }) {
     // edits and into the frame's fields, and the event carries them - the
     // same request one act with both would send, in two steps the reader can
     // follow.
+    // Refused as a whole when the event is not there to press: typed first,
+    // the values were in the fields and pending before the refusal said
+    // "nothing was done". One act validates the event before any value.
+    const pressable = hasEvent ? actionOf(before, String(event)) : undefined;
+    if (hasValues && hasEvent && (!pressable || pressable.enabled === false)) {
+      return client.act(id, { values, event, row, args, maxRows });
+    }
     if (hasValues) {
       ui.acting?.(`typing ${Object.keys(values).map((k) => fieldLabel(before, k)).slice(0, 3).join(", ")}`);
       const typed = await client.act(id, { values, maxRows });
       typeIntoFrame(typed, values);
+      // What is pending now is what the frame holds: the next current( )
+      // is not to take the Pilot's own typing for the reader's.
+      try {
+        typedKey = JSON.stringify(host.frame()?.pending?.() ?? {});
+      } catch {
+        typedKey = "{}";
+      }
       if (!hasEvent) return typed;
       await pause(450);
     }
@@ -526,24 +572,50 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
   // Each app's mirror version the model was last told about - by a tool's
   // answer or by the screen sent with a message.
   const told = new Map();
+  // What the model is told about an app: its mirror, and the reader's typing
+  // the mirror never hears of (no roundtrip).
+  const stateOf = (a) => {
+    let typed = "";
+    try {
+      typed = JSON.stringify(a.frame?.()?.pending?.() ?? {});
+    } catch {
+      typed = "";
+    }
+    return `${a.mirror?.version}|${typed}`;
+  };
   const tellAll = () => {
-    for (const a of host.apps()) told.set(a.id, a.mirror?.version);
+    for (const a of host.apps()) told.set(a.id, stateOf(a));
   };
   let stream;
   let stopped = false;
+  // Resolved by stop( ): a tool still running (an app that will not render,
+  // a fetch) is no longer waited for - Stop used to change nothing until it
+  // ended on its own, up to half a minute later.
+  let stopping;
+  let stopNow = () => {};
   const total = { input: 0, output: 0, cached: 0 };
 
-  // A snapshot as the model reads it, with the tab it belongs to.
-  const snapshotText = (app, snapshot) => clip(JSON.stringify({ tab: app.id, ...snapshot }));
+  // A snapshot as the model reads it, with the tab it belongs to - and a
+  // failed last answer (a dump of the reader's click), which the snapshot
+  // of the screen before it does not show. Whatever is read here is what
+  // the model has been told of that app.
+  const snapshotText = (app, snapshot) => {
+    told.set(app.id, stateOf(app));
+    const error = app.mirror?.error;
+    return clip(JSON.stringify({ tab: app.id, ...(error ? { lastAnswer: error } : {}), ...snapshot }));
+  };
 
   // `files` are the File objects the reader added to this message; they go in
   // front of its text, as the content blocks attachments.mjs makes of them.
   async function send(text, files = []) {
     stopped = false;
+    stopping = new Promise((resolve) => {
+      stopNow = resolve;
+    });
     const content = [];
     const toldBefore = new Map(told);
     const first = told.size === 0;
-    const changed = host.apps().filter((a) => told.get(a.id) !== a.mirror?.version);
+    const changed = host.apps().filter((a) => told.get(a.id) !== stateOf(a));
     if (changed.length > 0) {
       const screens = [];
       for (const app of changed) {
@@ -685,7 +757,10 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
         ui.toolPending({ id: use.id, text: pendingText(use.name, use.input ?? {}) });
         let result;
         try {
-          result = await execute(use.name, use.input ?? {});
+          result = await Promise.race([
+            execute(use.name, use.input ?? {}),
+            stopping.then(() => ({ error: "Stopped by the person while this was running - it may still finish on screen." })),
+          ]);
         } catch (e) {
           result = { error: String(e?.message ?? e) };
         }
@@ -697,8 +772,10 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
           content: clip(result.error ?? result.text),
         });
       }
-      // Whatever the tools did to the screens, the model has just read.
-      tellAll();
+      // Not every screen is marked told here: a tool that read no screen
+      // (read_source, find_apps) let the reader's click meanwhile pass as
+      // told, and the next message carried no <screen>. snapshotText( )
+      // marks each app as its screen is read.
       messages.push({ role: "user", content: results });
     }
   }
@@ -837,6 +914,7 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
     send,
     stop() {
       stopped = true;
+      stopNow();
       stream?.abort();
     },
   };

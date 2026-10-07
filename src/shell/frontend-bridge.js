@@ -190,11 +190,43 @@
     host_.dropFiles(Array.prototype.slice.call(e.dataTransfer.files));
   });
 
+  // The topmost view that is open - the one whose model a request of the
+  // Pilot's carries, as the frontend's own event from it would.
+  function topSlot(f) {
+    var keys = ["POPOVER", "POPUP", "MAIN"];
+    for (var i = 0; i < keys.length; i++) {
+      var view = f.ViewSlots.getView(f.ctx, keys[i]);
+      if (view) return { key: keys[i], view: view, model: f.ViewSlots.trackedModel(view) || view.getModel() };
+    }
+    return null;
+  }
+
+  // The paths the Pilot's next request carries: the values it typed (fill)
+  // and the reader's own unsent edits it took over (pending), each on its
+  // model. The frontend marks what a request carried in View1.eB - which the
+  // Pilot's roundtrip goes around - and clears exactly those paths when the
+  // answer comes (Server._clearSentPaths). Without this, every path the
+  // Pilot ever typed stayed "changed": put back over the backend's answer
+  // after every roundtrip (a field the app cleared after ADD still showed
+  // the value), and sent again with the reader's next click.
+  var carried = null;
+  function carry(model, path) {
+    if (!carried || carried.model !== model) carried = { model: model, paths: {} };
+    carried.paths[path] = true;
+  }
+
   window.__z2ui5PlaygroundPilot = {
     roundtrip: function () {
       var f = frontend();
       if (!f) return false;
       var state = f.ctx.state;
+      if (carried && carried.model && typeof carried.model.getProperty === "function") {
+        var sent = new Map();
+        for (var path in carried.paths) sent.set(path, carried.model.getProperty(path));
+        carried.model._z2ui5SentValues = sent;
+        state.oSentModel = carried.model;
+      }
+      carried = null;
       var Lib = sap.ui.require("z2ui5/core/Lib");
       if (Lib && Lib.cancelPendingTimers) Lib.cancelPendingTimers(f.ctx);
       state.isBusy = true;
@@ -217,7 +249,25 @@
       if (!model || typeof model.setProperty !== "function") return false;
       model.setProperty(path, value);
       f.ViewSlots.markChanged(view, path);
+      carry(model, path);
       return true;
+    },
+    // What the reader typed in the topmost view and has not sent yet - the
+    // values a click of theirs would carry. Taken (`take`), they go out with
+    // the Pilot's next request, as they would with the reader's own event.
+    pending: function (take) {
+      var f = frontend();
+      var top = f && topSlot(f);
+      var changed = top && top.model && top.model._z2ui5ChangedPaths;
+      if (!changed || changed.size === 0) return {};
+      var values = {};
+      changed.forEach(function (path) {
+        var value = top.model.getProperty(path);
+        if (value === undefined || (value !== null && typeof value === "object")) return;
+        values[path] = value;
+        if (take) carry(top.model, path);
+      });
+      return values;
     },
     busy: function () {
       var f = frontend();
