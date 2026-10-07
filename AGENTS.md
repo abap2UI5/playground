@@ -698,7 +698,9 @@ starts on one minimal class (`AI_STARTER` in `ai-starter.mjs`: `z2ui5_if_app`
 implemented, `main( )` empty) without a run - the placeholder says
 where the app will appear and `run( )` takes it away when an app first starts
 - and no draft is restored or stored, so the studio never writes over the
-playground's own work. The model's first `write_file` of another class drops
+playground's own work. Nor is Auto restored: its switch is in the toolbar the
+studio hides, and a restored Auto ran the model's half-finished turn on every
+pause. The model's first `write_file` of another class drops
 the starter while it is untouched (`isUntouchedStarter( )`, `writeFile( )` in
 `ai-agent.mjs`); a model building on `zcl_app` keeps it. The studio is the **AI Studio**
 (`body.is-studio`, "AI Studio" at the end of `shell.css`): the site's bar, the
@@ -737,7 +739,10 @@ talks to a model or needs a key.
   the real `run( )` — waiting out a run autorun started — then waits up to ten
   seconds for the app's first roundtrip and hands back the status line, the
   problems, the tests, the roundtrips and the Log. `describeRun( )` turns that
-  into what the model reads. So what the model is told is what the reader
+  into what the model reads - errors and warnings as problems to fix, the
+  linter's hints apart as optional advice, and a JavaScript error out of the
+  app's start as a failed first roundtrip (the bridge's `roundtrip` lists it
+  like an answer) rather than ten seconds of "none arrived". So what the model is told is what the reader
   sees; keep it that way when adding a tool.
 - **The key is the reader's, the request is the browser's.** Held in the
   page's memory for the visit and **never stored**: the playground runs ABAP
@@ -799,6 +804,15 @@ link's ABAP runs. Sent by the
   (`cache_control`), and `fallbacks: "default"` behind the
   `server-side-fallback-2026-07-01` beta answers a request a safety classifier
   declines with the fallback model rather than stopping.
+- **A long conversation clears its old tool results, server-side**
+  (`CONTEXT_MANAGEMENT` in `ai-common.mjs`, beta
+  `context-management-2025-06-27`, in both chats): `clear_tool_uses` from
+  200,000 input tokens, the last ten tool uses kept, at least 60,000 tokens
+  per clear. A Pilot working through a list read a screen per act and ended
+  on "the conversation has filled the model's context". Server-side because
+  the history must stay append-only - the thinking blocks are bound to it -
+  and late and in large steps because every clear costs the cache from that
+  point on: it is a context-window guard, not a saving.
 - **Where a turn's time goes, and what was done about it.** A model turn - the
   request, the thinking, the answer - is the unit of waiting, so the loop
   spends as few as it can: after a turn's file changes the page runs the app
@@ -810,7 +824,11 @@ link's ABAP runs. Sent by the
   returns the model's notes between tool calls as text, shown as progress
   lines, and a tool call's row is written while its input streams
   (`pendingText( )` - a class counts its lines as it arrives) and finished in
-  place when it has run. Errors are
+  place when it has run. `followStream( )` in `ai-common.mjs` (both chats)
+  parses that input itself, at most every 150 ms - never through the SDK's
+  `inputJson` event, which parses the whole input on every delta and ended
+  the stream when one delta left it unparsable. The log follows the answer
+  only while the reader is at its end. Errors are
   said in the chat by `explainError( )` from the SDK's typed errors; a refused
   key brings the key form back.
 
@@ -882,7 +900,42 @@ controls at any moment - the next message carries the new screen in a
   written into the frame's model and marked changed (`fill( )`, the way
   typing marks them), so the reader sees them arrive, and a click of the
   reader's own would carry them on. The request that goes out is the one a
-  single act would send.
+  single act would send. An act whose event is not there to press (unknown,
+  disabled) is refused as ONE act, before anything is typed.
+- **What the Pilot's request carried is cleared in the frame.** Its
+  roundtrip goes around `View1.eB`, where the frontend notes what a request
+  carries (`_z2ui5SentValues`, `oSentModel`), so the bridge notes it instead
+  (`carry( )` in `frontend-bridge.js`): the paths it filled and the reader's
+  unsent edits it took over. Left marked, a typed path was put back over
+  every later answer and sent again with the reader's next click.
+- **The reader's unsent typing is part of the screen.** Typing costs no
+  roundtrip, so the mirror never hears of it: `current( )` takes the frame's
+  pending values (`pending( )` on the bridge, the topmost view) into the
+  session it builds and hands back what the session took (`carry( )`) - a
+  value it could not take stays pending for the reader's own click - and an
+  app whose typing changed counts as changed for
+  the next message's `<screen>`. Each app is marked told when its screen is
+  read (`snapshotText( )`), not wholesale after every tool round.
+- **An event is pressed only on the screen the model saw.** The tools of one
+  answer were all written for the screens told before it (`shownAt`, frozen
+  per batch from `told`): an act whose app's mirror moved on since - an
+  earlier act of the same answer, a click of the reader's while the model
+  thought, or one during the pause between typing and pressing - is
+  refused with the screen as it is now, nothing typed or pressed. Two
+  `act a1` in one answer pressed NEXT and then the next screen's a1.
+- **A screen is fitted, never cut mid-JSON** (`fitSnapshot( )`, as
+  mcp-server's): long values cut to 2,000 characters and read-only, then
+  rows from the end of the largest table, the JSON whole and `cut` saying
+  what is missing - a 120 KB TextArea pushed every action out of a 30,000
+  character `clip( )`. The `<screen>` of one message holds 60,000 for all
+  apps together; a dump (`lastAnswer`) is 2,000 at most and comes after the
+  screen.
+- **A tool argument the tool does not take is refused** (`execute( )`
+  against the tool's `input_schema`), `row`/`max_rows` are whole numbers
+  (a string of digits too), `beside` a boolean - dropped without a word,
+  `act { value, event }` pressed without the values. Errors and chat rows
+  repeat at most 80 characters of an argument; a closed tab's operator is
+  let go (`prune( )`).
 
 **Several apps, a tab each** (at most four, `.pilot-tabs` over the stage). Tab
 1 is Run's own frame and the class of the first file; the others are frames
@@ -895,25 +948,40 @@ app opened beside the others is not compiled alone: `addAppFiles( )` in
 `main.mjs` puts its files into the editor beside the rest and compiles and
 defines the WHOLE set - and stops there, with no fresh database and no Run
 counted, so the apps already open keep their drafts and their frames stay
-current. Replacing tab 1's app makes its file the first, so Restart starts it
+current. A set that does not compile is put back as it was - left in, every
+later open and every Restart failed on it, behind an editor this page hides.
+Replacing tab 1's app makes its file the first, so Restart starts it
 from then on. A Run (Restart, `restart_app`) is one fresh database for all of
 them, so `pilotRan( )` reloads every other tab on the new Run number, or
-closes one whose class left the files. A pick in the samples browser goes to
+closes one whose class left the files - and the Pilot's `run` waits until
+every tab has started again before it reads a screen. A step parked for a
+frame that a Run replaced is refused with it, and never handed to the new
+document's app start (`roundtrip` in `main.mjs`). A pick in the samples browser goes to
 the Pilot on this page (`pilotPicked( )`): in place of the app on screen, or
 beside after the strip's **+ App**, and a catalogue row of a sample the page
-carries opens that copy instead of fetching it. Autorun is never restored on
+carries opens that copy instead of fetching it; a saved draft is a pick like
+any other. The playground's Run shortcut (Ctrl+Enter, Ctrl+S) is off on this
+page and in the studio's chat, where Ctrl+Enter is "send". Autorun is never restored on
 this page: a change to the files is an app opened beside, and a run would
 restart them all.
 
 **Files in the chat** (`src/shell/attachments.mjs`, in the Pilot's chunk and
 the studio's; on screen `src/shell/attach-ui.mjs`, shared with the studio):
 📎, a drop or a paste adds up to five files of at most 10 MB (an image
-7.5 MB - the API's 10 MB is of the base64) to the next message, checked as
-they are added (`kindOf( )`) and read when it is
-sent (`attachmentBlocks( )`), in front of its text. A PDF is a `document`
+7.5 MB - the API's 10 MB is of the base64; an empty file none) to the next
+message, the PDFs and images of one message 20 MB together
+(`MAX_MESSAGE_BYTES` - they go as base64, and a request is at most 32 MB),
+checked as they are added (`kindOf( )`) and read when it is
+sent (`attachmentBlocks( )`), in front of its text; the text read out of all
+of them is capped at 400,000 characters together, not only per file. A paste
+that carries text as well as a picture of it (cells copied in Excel, a passage
+in Word) is the text, not an image chip. A PDF is a `document`
 block and an image an `image` block, as they are; an `.xlsx` is each sheet as
 CSV, a `.docx` its paragraphs, a text file its text - each a text
-`document` with the file's name as its title. The two Office formats are zip
+`document` with the file's name as its title - a text file decoded by its
+BOM, else as UTF-8, else as Windows-1252 (an Excel CSV, a SAP GUI download),
+a sheet's CSV line N its row N (empty rows kept), a text box in a `.docx`
+once (not again from `mc:Fallback`). The two Office formats are zip
 files of XML, read here rather than with a library: `readZip( )` walks the
 central directory and inflates an entry with the browser's own
 `DecompressionStream("deflate-raw")`, DOMParser reads the XML. What CSV cannot

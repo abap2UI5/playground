@@ -122,6 +122,10 @@ test("the Pilot types into the app on screen, presses its button and reads the a
   expect(first).toContain('"path":"/NAME"');
   expect(first).toContain('"event":"GREET"');
   expect(requests[0].headers["x-api-key"]).toBe(KEY);
+  // A long conversation clears its old tool results server-side, late and in
+  // large steps - the history the page sends stays append-only.
+  expect(requests[0].headers["anthropic-beta"]).toContain("context-management-2025-06-27");
+  expect(requests[0].body.context_management.edits[0]).toMatchObject({ type: "clear_tool_uses_20250919", clear_at_least: { type: "input_tokens" } });
   // ...and the act's result is the screen after it, with the app's answer.
   const result = textOf(requests[1].body.messages.at(-1));
   expect(result).toContain("Hello Carol!");
@@ -145,6 +149,68 @@ test("an act the screen does not offer is refused with what it does offer, and n
   await expect(page.locator(".pilot-tool.is-error")).toHaveCount(1);
   // Refused before anything went over the wire: no roundtrip was added.
   expect(await page.locator("#roundtrip-count").textContent()).toBe(roundtrips);
+});
+
+test("two presses in one answer: the second, on a screen the model has not seen, is refused", async ({ page }) => {
+  // The model wrote both for the screen it was shown: the second GREET is a
+  // button of the screen the first one answered - as a1 was NEXT, then
+  // DELETE_ALL.
+  const requests = await answerWith(page, [
+    { tools: [{ name: "act", input: { values: { "/NAME": "Ann" }, event: "GREET" } }, { name: "act", input: { event: "GREET" } }] },
+    { text: "Greeted once." },
+  ]);
+  await openPilot(page);
+  await useKey(page);
+  const roundtrips = Number(await page.locator("#roundtrip-count").textContent());
+  await say(page, "Greet Ann twice");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("Greeted once.", { timeout: 60000 });
+  const [first, second] = requests[1].body.messages.at(-1).content;
+  expect(first.is_error).toBeUndefined();
+  expect(second.is_error).toBe(true);
+  expect(second.content).toContain("the screen changed since you saw it");
+  expect(second.content).toContain("The screen now:");
+  expect(Number(await page.locator("#roundtrip-count").textContent())).toBe(roundtrips + 1);
+});
+
+test("an argument a tool does not take is refused, and nothing is typed or pressed", async ({ page }) => {
+  const requests = await answerWith(page, [
+    { tools: [{ name: "act", input: { value: { "/NAME": "Carol" }, event: "GREET" } }, { name: "look", input: { max_rows: "lots" } }] },
+    { text: "I will use values." },
+  ]);
+  await openPilot(page);
+  await useKey(page);
+  const roundtrips = await page.locator("#roundtrip-count").textContent();
+  await say(page, "Greet Carol");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("I will use values.", { timeout: 60000 });
+  const [act, look] = requests[1].body.messages.at(-1).content;
+  expect(act.is_error).toBe(true);
+  expect(act.content).toContain("act has no argument 'value' - its arguments:");
+  expect(act.content).toContain("values");
+  expect(look.is_error).toBe(true);
+  expect(look.content).toContain('max_rows is a whole number, not "lots"');
+  expect(await page.locator("#roundtrip-count").textContent()).toBe(roundtrips);
+  await expect(page.frameLocator("#app").locator("input").first()).not.toHaveValue("Carol");
+});
+
+test("a screen too large for one answer is fitted: whole JSON, its actions and messages kept", async () => {
+  const { fitSnapshot } = await import("../src/shell/pilot-agent.mjs");
+  const snapshot = {
+    snapshotVersion: 1,
+    fields: [{ id: "f1", value: "x".repeat(120000), editable: true }, { id: "f2", path: "/NAME", value: "", editable: true }],
+    actions: [{ id: "a1", event: "SAVE" }],
+    tables: [{ id: "t1", rowCount: 200, truncated: false, editableCells: ["A"], rows: Array.from({ length: 200 }, (_, i) => ({ A: `${i}`.padEnd(500, ".") })) }],
+    messages: [{ type: "success", text: "PONG" }],
+  };
+  const fitted = fitSnapshot(snapshot, 30000);
+  const text = JSON.stringify(fitted);
+  expect(text.length).toBeLessThanOrEqual(30000);
+  expect(fitted.actions).toEqual(snapshot.actions);
+  expect(fitted.messages).toEqual(snapshot.messages);
+  expect(fitted.fields[0].editable).toBe(false);
+  expect(fitted.fields[1].editable).toBe(true);
+  expect(fitted.tables[0].truncated).toBe(true);
+  expect(fitted.cut.join(" ")).toMatch(/f1 .*cut.*table t1 shows its first \d+ row/);
+  expect(fitSnapshot({ fields: [] }, 30000)).toEqual({ fields: [] });
 });
 
 test("an answer whose connection dropped half way is said, not sent again", async ({ page }) => {
@@ -256,6 +322,55 @@ test("a value typed without an event shows in the field and stays pending", asyn
   // typing would have.
   await app.getByRole("button", { name: "Greet" }).click();
   await expect(app.getByText("Hello Eve!")).toBeVisible();
+});
+
+test("what the reader typed and did not send goes with the Pilot's step, and nothing either typed stays pending after it", async ({ page }) => {
+  const requests = await answerWith(page, [
+    { tools: [{ name: "act", input: { event: "GREET" } }] },
+    { text: "Greeted." },
+    { tools: [{ name: "act", input: { values: { "/NAME": "Carol" }, event: "GREET" } }] },
+    { text: "Again." },
+  ]);
+  await openPilot(page);
+  await useKey(page);
+  const app = page.frameLocator("#app");
+  const frame = await (await page.locator("#app").elementHandle()).contentFrame();
+  const pending = () => frame.evaluate(() => window.__z2ui5PlaygroundPilot.pending());
+
+  // The reader types a name and presses nothing: no roundtrip, so only the
+  // frame knows it.
+  await app.locator("input").first().fill("Bob");
+  await app.locator("input").first().press("Tab");
+  await say(page, "Greet them");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("Greeted.", { timeout: 60000 });
+  // The model was told, and its GREET carried the name the reader typed.
+  expect(textOf(requests[0].body.messages[0])).toContain("Bob");
+  await expect(app.getByText("Hello Bob!")).toBeVisible();
+  // Sent, so no longer pending - it went out once and is done.
+  expect(await pending()).toEqual({});
+
+  // The Pilot's own typing likewise: sent with its event and then cleared,
+  // not put back over every later answer and sent again with the reader's
+  // next click.
+  await say(page, "Now greet Carol");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("Again.", { timeout: 60000 });
+  await expect(app.getByText("Hello Carol!")).toBeVisible();
+  expect(await pending()).toEqual({});
+});
+
+test("Ctrl+Enter in the Pilot's chat sends, and does not restart the apps under the reader", async ({ page }) => {
+  await answerWith(page, [{ text: "Here." }]);
+  await openPilot(page);
+  await useKey(page);
+  const app = page.frameLocator("#app");
+  await app.locator("input").first().fill("Bob");
+  await app.locator("input").first().press("Tab");
+  await page.locator("#pilot-input").fill("Are you there?");
+  await page.locator("#pilot-input").press("Control+Enter");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("Here.", { timeout: 60000 });
+  // The playground's Run shortcut started every app over on a fresh
+  // database: the name went back to "World".
+  await expect(app.locator("input").first()).toHaveValue("Bob");
 });
 
 test("several apps side by side: the Pilot opens one beside, works in both, and each keeps its state", async ({ page }) => {
@@ -372,6 +487,43 @@ test("files go with a message: a PDF as it is, a spreadsheet as CSV, a Word docu
   expect(word).toBe("Greet Frida\nthen\tstop");
   // ...and the text comes last.
   expect(content.at(-1)).toEqual({ type: "text", text: "Enter these orders" });
+});
+
+test("a file comes out as its author saw it: a Windows code page, a text box once, a sheet's rows where they are", async ({ page }) => {
+  const requests = await answerWith(page, [{ text: "Read." }]);
+  await openPilot(page);
+  await useKey(page);
+  const input = page.locator("#pilot-file-input");
+  await input.setInputFiles([
+    // An Excel "CSV (Comma delimited)" on Windows: Windows-1252, not UTF-8.
+    { name: "kunden.csv", mimeType: "text/csv", buffer: Buffer.from("Name;Ort\nMüller;Köln\n", "latin1") },
+  ]);
+  await input.setInputFiles([
+    // A paragraph holding a text box: Word writes the box twice.
+    "tests/fixtures/textbox.docx",
+    // Rows 1, 5 and 9 - the empty rows between are not in the file.
+    "tests/fixtures/gaps.xlsx",
+  ]);
+  // An empty file is refused at once - the API refused the whole message.
+  await input.setInputFiles([{ name: "empty.pdf", mimeType: "application/pdf", buffer: Buffer.alloc(0) }]);
+  await expect(page.locator(".pilot-notice.is-error")).toContainText("empty.pdf is empty");
+  await expect(page.locator(".pilot-file")).toHaveCount(3);
+  await say(page, "Read these");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("Read.", { timeout: 60000 });
+  const documents = requests[0].body.messages[0].content.filter((b) => b.type === "document");
+  expect(documents.find((b) => b.title === "kunden.csv").source.data).toBe("Name;Ort\nMüller;Köln\n");
+  expect(documents.find((b) => b.title === "textbox.docx").source.data).toBe("Body before\nBOXTEXT\nAfter");
+  const sheet = documents.find((b) => b.title.startsWith("gaps.xlsx")).source.data;
+  expect(sheet.split("\n").slice(1, 6)).toEqual(["1", "", "", "", "5"]);
+});
+
+test("the PDFs and images of one message are held to what one request can carry", async ({ page }) => {
+  await openPilot(page);
+  const input = page.locator("#pilot-file-input");
+  const pdf = (name) => ({ name, mimeType: "application/pdf", buffer: Buffer.alloc(9 * 1000 * 1000, 32) });
+  await input.setInputFiles([pdf("a.pdf"), pdf("b.pdf"), pdf("c.pdf")]);
+  await expect(page.locator(".pilot-notice.is-error")).toContainText("c.pdf was left out");
+  await expect(page.locator(".pilot-file")).toHaveCount(2);
 });
 
 test("a message the API refuses does not stay in the conversation, and an image too large is refused first", async ({ page }) => {

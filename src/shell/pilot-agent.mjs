@@ -28,11 +28,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AgentError, createAppClient } from "../vendor/agent/appclient.mjs";
 import { analyzeScreen, applyResponse, emptyState, FRONTEND_EVENTS, getAt, modelKeyOf } from "../vendor/agent/snapshot.mjs";
-import { catalogueEntries, DEFAULT_SPEED, SPEEDS } from "./ai-common.mjs";
+import { addUsage, catalogueEntries, CONTEXT_BETA, CONTEXT_MANAGEMENT, DEFAULT_SPEED, followStream, rankEntries, SPEEDS } from "./ai-common.mjs";
 import { attachmentBlocks } from "./attachments.mjs";
 
 export { explainError } from "./ai-common.mjs";
-export { kindOf, MAX_FILES } from "./attachments.mjs";
+export { kindOf, MAX_FILES, MAX_MESSAGE_BYTES } from "./attachments.mjs";
 
 const SLOTS = ["MAIN", "NEST", "NEST2", "POPUP", "POPOVER"];
 const MAX_ROWS = 20;
@@ -41,6 +41,69 @@ const clip = (text, max = MAX_TOOL_TEXT) =>
   text.length <= max ? text : `${text.slice(0, max)}\n… (${text.length - max} more characters cut)`;
 const str = (v) => (typeof v === "string" ? v : undefined);
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// An argument as an error or a chat row repeats it: at most 80 characters.
+const echo = (v) => {
+  const t = String(v);
+  return t.length > 80 ? `${t.slice(0, 80)}...` : t;
+};
+// A dump of the reader's click as the model is told it.
+const MAX_ERROR_TEXT = 2000;
+// What all the screens one message carries may take together.
+const MAX_SCREENS_TEXT = 60000;
+const VALUE_CAP = 2000;
+
+/*
+ * A snapshot that fits `budget` characters of JSON - clip( ) cut it mid-JSON
+ * at 30,000: a 120 KB TextArea pushed out every action after it, a table of
+ * wide rows the app's answer (the messages come last), and the model read
+ * neither. Long values are cut and made read-only (an edit of the shown part
+ * would replace the whole value), then rows go from the end of the largest
+ * table; the JSON stays whole and `cut` says what is missing. As
+ * mcp-server's fitSnapshot (lib/budget.mjs).
+ */
+export function fitSnapshot(snap, budget) {
+  if (!snap || typeof snap !== "object" || JSON.stringify(snap).length <= budget) return snap;
+  const out = JSON.parse(JSON.stringify(snap));
+  const notes = [];
+  const cut = (v) => (typeof v === "string" && v.length > VALUE_CAP ? `${v.slice(0, VALUE_CAP)}...` : v);
+  const fields = [];
+  for (const f of out.fields ?? []) {
+    const v = cut(f.value);
+    if (v !== f.value) {
+      f.value = v;
+      f.editable = false;
+      fields.push(f.id);
+    }
+  }
+  if (fields.length) notes.push(`the values of ${fields.join(", ")} are cut to ${VALUE_CAP} characters and read-only here`);
+  for (const t of out.tables ?? []) {
+    const cols = new Set();
+    for (const r of t.rows ?? []) {
+      for (const [k, v] of Object.entries(r)) {
+        const c = cut(v);
+        if (c !== v) {
+          r[k] = c;
+          cols.add(k);
+        }
+      }
+    }
+    if (cols.size) {
+      t.editableCells = (t.editableCells ?? []).filter((c) => !cols.has(c));
+      notes.push(`table ${t.id}: cells of ${[...cols].join(", ")} are cut to ${VALUE_CAP} characters and not editable here`);
+    }
+  }
+  const shortened = new Map();
+  while (JSON.stringify(out).length > budget) {
+    const big = (out.tables ?? []).filter((t) => t.rows && t.rows.length > 1)
+      .sort((a, b) => JSON.stringify(b.rows).length - JSON.stringify(a.rows).length)[0];
+    if (!big) break;
+    big.rows = big.rows.slice(0, Math.max(1, Math.floor(big.rows.length / 2)));
+    big.truncated = true;
+    shortened.set(big.id, big.rows.length);
+  }
+  for (const [id, n] of shortened) notes.push(`table ${id} shows its first ${n} row(s) - look with a smaller max_rows`);
+  return notes.length ? { ...out, cut: notes } : out;
+}
 
 // ------------------------------------------------------------- the mirror
 
@@ -71,7 +134,7 @@ export function createMirror({ onChange = () => {} } = {}) {
       // was typed; folded only from the answer, those values were lost.
       if (request?.value?.MODEL && mirror.state.id) mirror.state = withDelta(mirror.state, request.value.MODEL);
       if (!(response.status >= 200 && response.status < 300)) {
-        mirror.error = `HTTP ${response.status}: ${String(response.body ?? "").split("\n").slice(0, 6).join("\n")}`;
+        mirror.error = clip(`HTTP ${response.status}: ${String(response.body ?? "").split("\n").slice(0, 6).join("\n")}`, MAX_ERROR_TEXT);
         mirror.version += 1;
         onChange();
         return;
@@ -125,10 +188,19 @@ function withDelta(state, delta) {
   return { ...state, models: { ...state.models, [key]: { ...model, data } } };
 }
 
-/** The agent snapshot of the mirror: what the "What Claude sees" panel shows. */
-export function describeMirror(mirror, maxRows = MAX_ROWS) {
+/** The agent snapshot of the mirror: what the "What Claude sees" panel shows.
+ *  `typed` is the reader's unsent typing (the bridge's pending( )), which the
+ *  model's own snapshot carries too (current( ) in createOperator). */
+export function describeMirror(mirror, maxRows = MAX_ROWS, typed = {}) {
   if (!mirror.state.id) return { note: "no app is running" };
-  return analyzeScreen({ state: mirror.state, session: mirror.state.id, maxRows }).snapshot;
+  const snapshot = analyzeScreen({ state: mirror.state, session: mirror.state.id, maxRows }).snapshot;
+  const paths = Object.keys(typed);
+  if (paths.length === 0) return snapshot;
+  return {
+    ...snapshot,
+    fields: snapshot.fields.map((f) => (f.path in typed ? { ...f, value: typed[f.path] } : f)),
+    pending: paths,
+  };
 }
 
 /*
@@ -326,7 +398,7 @@ const TOOLS = [
  *   app.frame()       the frame's __z2ui5PlaygroundPilot
  *   app.cls           the class the tab was opened on
  */
-export function createOperator({ app, mirror, ui = {} }) {
+export function createOperator({ app, mirror, ui = {}, halted = () => false }) {
   const host = { drive: (body) => app.drive(body), frame: () => app.frame(), appClass: () => app.cls };
   // The answer the next start is given instead of being sent - see replayOf( ).
   let replay = null;
@@ -349,6 +421,8 @@ export function createOperator({ app, mirror, ui = {} }) {
   });
   let session = null;
   let synced = -1;
+  // The reader's unsent typing the session was built with (see current( )).
+  let typedKey = "{}";
 
   // Until the frame has rendered what it was answered: the answer is in the
   // mirror the moment the framework gave it, the popup it opens a moment
@@ -385,20 +459,63 @@ export function createOperator({ app, mirror, ui = {} }) {
     }
   }
 
-  // The session the model acts through, on the screen as it is now.
+  // The session the model acts through, on the screen as it is now - with
+  // what the reader typed and has not sent yet. Typing costs no roundtrip,
+  // so the mirror never hears of it: the model read the field as empty, and
+  // its event went out without the value while the frame went on showing it.
   async function current() {
     await catchUpWithFrame();
-    if (session && synced === mirror.version) return session;
+    let typed = {};
+    try {
+      typed = host.frame()?.pending?.() ?? {};
+    } catch {
+      typed = {};
+    }
+    const key = JSON.stringify(typed);
+    if (session && synced === mirror.version && key === typedKey) return session;
     if (!mirror.state.id) {
       throw new AgentError(`no app is running on screen${mirror.error ? ` - the last answer was ${mirror.error}` : ""} - restart_app starts it again`);
     }
-    replay = replayOf(mirror.state);
+    const app = mirror.state.app || host.appClass();
+    const start = async (values) => {
+      replay = replayOf(mirror.state);
+      try {
+        return (await client.start(app, { maxRows: MAX_ROWS, ...(values ? { values } : {}) })).session;
+      } finally {
+        replay = null;
+      }
+    };
+    // What the session took goes out with the Pilot's next request, so the
+    // frame clears exactly those once it is answered (carry on the bridge).
+    let taken = Object.keys(typed);
     try {
-      session = (await client.start(mirror.state.app || host.appClass(), { maxRows: MAX_ROWS })).session;
-    } finally {
-      replay = null;
+      session = await start(taken.length > 0 ? typed : undefined);
+    } catch (e) {
+      // A value the snapshot does not take (a path no control shows as
+      // editable, text in a number field): the others one by one, rather
+      // than no screen at all.
+      if (!(e instanceof AgentError) || taken.length === 0) throw e;
+      session = await start();
+      taken = [];
+      for (const [path, value] of Object.entries(typed)) {
+        try {
+          await client.act(session, { values: { [path]: value } });
+          taken.push(path);
+        } catch {
+          // left to the frame, which still shows and holds it - pending,
+          // for the reader's own next click
+        }
+      }
+    }
+    if (taken.length > 0) {
+      try {
+        host.frame()?.carry?.(taken);
+      } catch {
+        // an older frame: its own next roundtrip sends them
+      }
     }
     synced = mirror.version;
+    typedKey = key;
     return session;
   }
 
@@ -446,12 +563,32 @@ export function createOperator({ app, mirror, ui = {} }) {
     // edits and into the frame's fields, and the event carries them - the
     // same request one act with both would send, in two steps the reader can
     // follow.
+    // Refused as a whole when the event is not there to press: typed first,
+    // the values were in the fields and pending before the refusal said
+    // "nothing was done". One act validates the event before any value.
+    const pressable = hasEvent ? actionOf(before, String(event)) : undefined;
+    if (hasValues && hasEvent && (!pressable || pressable.enabled === false)) {
+      return client.act(id, { values, event, row, args, maxRows });
+    }
     if (hasValues) {
       ui.acting?.(`typing ${Object.keys(values).map((k) => fieldLabel(before, k)).slice(0, 3).join(", ")}`);
       const typed = await client.act(id, { values, maxRows });
       typeIntoFrame(typed, values);
+      // What is pending now is what the frame holds: the next current( )
+      // is not to take the Pilot's own typing for the reader's.
+      try {
+        typedKey = JSON.stringify(host.frame()?.pending?.() ?? {});
+      } catch {
+        typedKey = "{}";
+      }
       if (!hasEvent) return typed;
+      const typedAt = mirror.version;
       await pause(450);
+      // Stop pressed while the values went in: the press does not follow.
+      if (halted()) throw new AgentError("stopped by the person before the press - the values are typed, nothing was sent");
+      // A click of the reader's meanwhile: the press would go out on the
+      // screen before it.
+      if (mirror.version !== typedAt) throw new AgentError("the screen changed while the values went in (the person used the app) - nothing was pressed");
     }
     const action = actionOf(before, String(event));
     ui.acting?.(`pressing ${action ? `"${action.label}"` : event}`);
@@ -499,10 +636,18 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
   // One operator per app, made the first time the model reaches for it and
   // made again for a tab that was closed and whose number came back.
   const operators = new Map();
+  // A closed tab's operator held its mirror and the client's copies of the
+  // screen for the rest of the chat: tab numbers never come back.
+  function prune() {
+    const open = new Set(host.apps().map((a) => a.id));
+    for (const id of operators.keys()) if (!open.has(id)) operators.delete(id);
+    for (const id of told.keys()) if (!open.has(id)) told.delete(id);
+  }
   function operatorOf(app) {
+    prune();
     const known = operators.get(app.id);
     if (known && known.mirror === app.mirror) return known.operator;
-    const operator = createOperator({ app, mirror: app.mirror, ui });
+    const operator = createOperator({ app, mirror: app.mirror, ui, halted: () => stopped });
     operators.set(app.id, { mirror: app.mirror, operator });
     return operator;
   }
@@ -515,7 +660,7 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
     const key = String(ref).trim();
     const app = apps.find((a) => a.id === key)
       ?? apps.find((a) => (a.mirror?.state.app || a.cls || "").toUpperCase() === key.toUpperCase());
-    if (!app) throw new AgentError(`there is no app ${key} - open apps: ${appList()}`);
+    if (!app) throw new AgentError(`there is no app ${echo(key)} - open apps: ${appList()}`);
     return app;
   }
   const appList = () =>
@@ -526,29 +671,60 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
   // Each app's mirror version the model was last told about - by a tool's
   // answer or by the screen sent with a message.
   const told = new Map();
+  // What the model is told about an app: its mirror, and the reader's typing
+  // the mirror never hears of (no roundtrip).
+  const stateOf = (a) => {
+    let typed = "";
+    try {
+      typed = JSON.stringify(a.frame?.()?.pending?.() ?? {});
+    } catch {
+      typed = "";
+    }
+    return `${a.mirror?.version}|${typed}`;
+  };
   const tellAll = () => {
-    for (const a of host.apps()) told.set(a.id, a.mirror?.version);
+    for (const a of host.apps()) told.set(a.id, stateOf(a));
   };
   let stream;
   let stopped = false;
+  let shownAt = new Map();
+  // Resolved by stop( ): a tool still running (an app that will not render,
+  // a fetch) is no longer waited for - Stop used to change nothing until it
+  // ended on its own, up to half a minute later.
+  let stopping;
+  let stopNow = () => {};
   const total = { input: 0, output: 0, cached: 0 };
 
-  // A snapshot as the model reads it, with the tab it belongs to.
-  const snapshotText = (app, snapshot) => clip(JSON.stringify({ tab: app.id, ...snapshot }));
+  // A snapshot as the model reads it, with the tab it belongs to - and a
+  // failed last answer (a dump of the reader's click), which the snapshot
+  // of the screen before it does not show. Whatever is read here is what
+  // the model has been told of that app.
+  const snapshotText = (app, snapshot, budget = MAX_TOOL_TEXT) => {
+    told.set(app.id, stateOf(app));
+    const error = app.mirror?.error;
+    // the dump after the screen, and the screen fitted to what is left
+    const fitted = fitSnapshot(snapshot, budget - (error ? error.length : 0) - 200);
+    return clip(JSON.stringify({ tab: app.id, ...fitted, ...(error ? { lastAnswer: error } : {}) }), budget);
+  };
 
   // `files` are the File objects the reader added to this message; they go in
   // front of its text, as the content blocks attachments.mjs makes of them.
   async function send(text, files = []) {
     stopped = false;
+    stopping = new Promise((resolve) => {
+      stopNow = resolve;
+    });
     const content = [];
     const toldBefore = new Map(told);
     const first = told.size === 0;
-    const changed = host.apps().filter((a) => told.get(a.id) !== a.mirror?.version);
+    const changed = host.apps().filter((a) => told.get(a.id) !== stateOf(a));
     if (changed.length > 0) {
       const screens = [];
+      // four changed apps were four screens of 30,000 characters each
+      const each = Math.min(MAX_TOOL_TEXT, Math.floor(MAX_SCREENS_TEXT / changed.length));
       for (const app of changed) {
         try {
-          screens.push(snapshotText(app, await operatorOf(app).look()));
+          screens.push(snapshotText(app, await operatorOf(app).look(), each));
         } catch (e) {
           screens.push(`tab ${app.id}: ${String(e?.message ?? e)}`);
         }
@@ -575,13 +751,14 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
     try {
       await loop();
     } catch (err) {
-      // A message the API refused as it stands - an attachment past its
-      // limits, a request too large - is refused again on every request
-      // that resends it, and the conversation only ever grows: every later
-      // message, "hello" included, was the same 400 until New chat. Nothing
-      // was answered after it, so it is taken back out, and the screens it
-      // carried are told again with the next one.
-      if (messages.length === at && err instanceof Anthropic.APIError && (err.status === 400 || err.status === 413)) {
+      // A message nothing was answered to is taken back out, and the
+      // screens it carried are told again with the next one. Refused as it
+      // stands (an attachment past its limits, a request too large), it was
+      // refused again on every request that resent it - every later
+      // message, "hello" included, the same 400 until New chat; failed
+      // otherwise (a refused key, a dropped connection), "send again" sent
+      // it twice, attachments and all. A message the reader stopped stays.
+      if (messages.length === at && !(err instanceof Anthropic.APIUserAbortError)) {
         messages.pop();
         told.clear();
         for (const [id, version] of toldBefore) told.set(id, version);
@@ -605,25 +782,12 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
         messages,
         output_config: { effort: settings.effort },
         thinking: { type: "adaptive", display: "updates" },
-        betas: ["server-side-fallback-2026-07-01", "thinking-display-updates-2026-08-18"],
+        betas: ["server-side-fallback-2026-07-01", "thinking-display-updates-2026-08-18", CONTEXT_BETA],
+        context_management: CONTEXT_MANAGEMENT,
         fallbacks: "default",
         cache_control: { type: "ephemeral" },
       });
-      stream.on("text", (delta) => ui.text(delta));
-      let streaming;
-      stream.on("streamEvent", (event) => {
-        if (event.type === "content_block_start") {
-          const block = event.content_block;
-          streaming = block.type === "tool_use" ? { id: block.id, name: block.name } : undefined;
-          if (block.type === "thinking") ui.thinkingStart();
-          if (streaming) ui.toolPending({ id: block.id, text: pendingText(block.name, {}) });
-        } else if (event.type === "content_block_delta" && event.delta.type === "thinking_delta" && event.delta.thinking) {
-          ui.thinking(event.delta.thinking);
-        }
-      });
-      stream.on("inputJson", (_partial, input) => {
-        if (streaming) ui.toolPending({ id: streaming.id, text: pendingText(streaming.name, input ?? {}) });
-      });
+      const started = followStream(stream, ui, pendingText);
 
       let message;
       try {
@@ -631,6 +795,9 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
         jsonRetries = 0;
       } catch (err) {
         stream.abort();
+        // Billed all the same - the input from the moment it started.
+        addUsage(total, stream.currentMessage?.usage);
+        ui.usage({ ...total });
         if (stopped) return;
         // Only a tool input that could not be parsed is asked for again, as
         // in the studio (ai-agent.mjs): a stream whose connection dropped half
@@ -638,13 +805,13 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
         // billed requests, attachments and all, and three half answers.
         const unparsable = /Unable to parse tool parameter JSON/.test(String(err?.message ?? ""));
         if (!unparsable || err instanceof Anthropic.APIError || jsonRetries++ >= 2) throw err;
+        // The rows of the attempt thrown away - asked again, the calls come
+        // back under new ids (as in the studio).
+        for (const s of started) ui.tool({ id: s.id, summary: `${s.name}: the input was unreadable - asked again`, error: true });
         continue;
       }
 
-      const usage = message.usage ?? {};
-      total.input += (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
-      total.cached += usage.cache_read_input_tokens ?? 0;
-      total.output += usage.output_tokens ?? 0;
+      addUsage(total, message.usage);
       ui.usage({ ...total });
 
       if (message.stop_reason === "refusal") {
@@ -687,6 +854,11 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
       cuts = 0;
 
       const results = [];
+      // The screens the model wrote this batch for: an event is pressed only
+      // on the screen it saw. Two "act a1" in one answer pressed NEXT and
+      // then whatever a1 was on the next screen (DELETE_ALL); a click of
+      // the reader's while the model thought did the same.
+      shownAt = new Map([...told].map(([id, state]) => [id, state.split("|")[0]]));
       for (const use of uses) {
         if (stopped) {
           ui.tool({ id: use.id, summary: `not run: ${use.name} (stopped)`, error: true });
@@ -695,10 +867,20 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
         }
         ui.toolPending({ id: use.id, text: pendingText(use.name, use.input ?? {}) });
         let result;
+        const work = execute(use.name, use.input ?? {});
         try {
-          result = await execute(use.name, use.input ?? {});
+          result = await Promise.race([
+            work,
+            stopping.then(() => ({ stoppedWhileRunning: true, error: "Stopped by the person while this was running - it may still finish on screen." })),
+          ]);
         } catch (e) {
           result = { error: String(e?.message ?? e) };
+        }
+        if (result.stoppedWhileRunning) {
+          // What it still does lands on screen after the model was told
+          // "stopped" - and reading a screen marks it told: every screen
+          // goes with the next message instead.
+          work.catch(() => {}).finally(() => told.clear());
         }
         ui.tool({ id: use.id, summary: result.summary ?? result.error ?? "", error: Boolean(result.error) });
         results.push({
@@ -708,17 +890,35 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
           content: clip(result.error ?? result.text),
         });
       }
-      // Whatever the tools did to the screens, the model has just read.
-      tellAll();
+      // Not every screen is marked told here: a tool that read no screen
+      // (read_source, find_apps) let the reader's click meanwhile pass as
+      // told, and the next message carried no <screen>. snapshotText( )
+      // marks each app as its screen is read.
       messages.push({ role: "user", content: results });
     }
   }
 
   async function execute(name, input) {
+    const tool = TOOLS.find((t) => t.name === name);
+    if (!tool) return { error: `There is no tool called ${echo(name)}.` };
+    /* An argument the tool does not take is refused, not dropped: act
+     * { value: {...}, event } pressed without the values, and act
+     * { values, evnt } typed and pressed nothing - each reported as done. */
+    const known = Object.keys(tool.input_schema.properties ?? {});
+    const unknown = Object.keys(input ?? {}).filter((k) => !known.includes(k));
+    if (unknown.length) {
+      return { error: `${name} has no argument ${unknown.map((k) => `'${echo(k)}'`).join(", ")} - ${known.length ? `its arguments: ${known.join(", ")}` : "it takes none"}. Nothing was done.` };
+    }
+    try {
+      for (const k of ["row", "max_rows"]) if (k in input) input[k] = count(input[k], k);
+      if ("beside" in input && input.beside !== undefined && typeof input.beside !== "boolean") throw new AgentError(`beside is true or false, not ${echo(JSON.stringify(input.beside))}`);
+    } catch (e) {
+      return { error: `${String(e?.message ?? e)}. Nothing was done.` };
+    }
     switch (name) {
       case "look": {
         const app = appOf(input.app);
-        const snapshot = await operatorOf(app).look(num(input.max_rows));
+        const snapshot = await operatorOf(app).look(input.max_rows);
         return { text: snapshotText(app, snapshot), summary: `looked at ${snapshot.title || snapshot.app}` };
       }
       case "act": return act(input);
@@ -754,7 +954,7 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
           summary: `read ${files[0]?.name ?? "the source"}`,
         };
       }
-      default: return { error: `There is no tool called ${name}.` };
+      default: return { error: `There is no tool called ${echo(name)}.` };
     }
   }
 
@@ -771,16 +971,20 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
     if (!app.visible) host.show(app.id);
     const operator = operatorOf(app);
     try {
+      const saw = shownAt.get(app.id);
+      if (event && saw !== undefined && String(app.mirror?.version) !== saw) {
+        throw new AgentError(`the screen changed since you saw it (the person used the app, or an earlier step of yours changed it) - ${echo(event)} was not pressed${values ? " and nothing was typed" : ""}; act on the screen below`);
+      }
       const snapshot = await operator.act({
         values,
         event,
-        row: num(input.row),
+        row: input.row,
         args: Array.isArray(input.args) ? input.args : undefined,
-        maxRows: num(input.max_rows),
+        maxRows: input.max_rows,
       });
       const what = [
         values ? `typed ${Object.keys(values).length} value${Object.keys(values).length === 1 ? "" : "s"}` : "",
-        event ? `pressed ${event}` : "",
+        event ? `pressed ${echo(event)}` : "",
       ].filter(Boolean).join(", ");
       // What the app SAID in answer - a toast, a message box, a field's
       // error - not the strips that stand on the screen anyway.
@@ -795,23 +999,17 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
       } catch {
         screen = "";
       }
-      return { error: `${String(e?.message ?? e)}${screen}` };
+      return { error: `${clip(String(e?.message ?? e), MAX_ERROR_TEXT)}${screen}` };
     }
   }
 
   async function findApps(input) {
     const query = str(input.query)?.trim().toLowerCase();
     if (!query) return { error: "find_apps needs a query." };
-    const words = query.split(/\s+/).filter(Boolean);
-    const scored = (await catalogueEntries())
-      .filter((e) => e.runs)
-      .map((e) => ({ e, score: words.reduce((n, w) => n + (e.haystack.includes(w) ? 1 : 0), 0) }))
-      .filter((s) => s.score >= Math.max(1, words.length))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 8);
-    if (scored.length === 0) return { text: `No app that runs here matches "${query}". Try one word.`, summary: `found nothing for "${query}"` };
+    const { hits, all } = rankEntries((await catalogueEntries()).filter((e) => e.runs), query);
+    if (hits.length === 0) return { text: `No app that runs here matches any of "${echo(query)}". Try a control name or another word.`, summary: `found nothing for "${echo(query)}"` };
     return {
-      text: scored.map(({ e }) => `${e.class} - ${e.title}${e.summary ? `: ${e.summary}` : ""}`).join("\n"),
+      text: (all ? "" : `No app has all of "${query}" - these have some of it:\n`) + hits.map((e) => `${e.class} - ${e.title}${e.summary ? `: ${e.summary}` : ""}`).join("\n"),
       summary: `found apps for "${query}"`,
     };
   }
@@ -822,7 +1020,7 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
     let files = host.carried(cls);
     if (!files) {
       const entry = (await catalogueEntries()).find((e) => e.class === cls);
-      if (!entry) return { error: `${cls} is not in the sample catalogue - find_apps first.` };
+      if (!entry) return { error: `${echo(cls)} is not in the sample catalogue - find_apps first.` };
       if (!entry.runs) return { error: `${cls} does not run in the playground (it needs a system or a library this page has not got).` };
       files = await host.fetchLinked(entry.raw);
     }
@@ -848,12 +1046,20 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
     send,
     stop() {
       stopped = true;
+      stopNow();
       stream?.abort();
     },
   };
 }
 
-const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+/* row and max_rows: a whole number, or a string of digits - num( ) dropped
+ * "2" without a word, and the client then asked for the row that was sent. */
+function count(v, name) {
+  if (v === undefined || v === null) return undefined;
+  const n = typeof v === "number" ? v : typeof v === "string" && /^\s*\d+\s*$/.test(v) ? Number(v) : NaN;
+  if (!Number.isInteger(n) || n < 0) throw new AgentError(`${name} is a whole number, not ${echo(JSON.stringify(v))}`);
+  return n;
+}
 
 // What a tool call is doing while it is under way.
 export function pendingText(name, input) {
@@ -862,12 +1068,12 @@ export function pendingText(name, input) {
     case "act": {
       const event = str(input.event);
       const keys = input.values && typeof input.values === "object" ? Object.keys(input.values) : [];
-      if (event && keys.length) return `typing ${keys.length} value${keys.length === 1 ? "" : "s"}, then ${event}…`;
-      if (event) return `pressing ${event}…`;
-      return keys.length ? `typing ${keys.join(", ")}…` : "acting…";
+      if (event && keys.length) return `typing ${keys.length} value${keys.length === 1 ? "" : "s"}, then ${echo(event)}…`;
+      if (event) return `pressing ${echo(event)}…`;
+      return keys.length ? `typing ${echo(keys.join(", "))}…` : "acting…";
     }
     case "restart_app": return "restarting the app…";
-    case "find_apps": return `looking for apps${str(input.query) ? ` about "${input.query}"` : ""}…`;
+    case "find_apps": return `looking for apps${str(input.query) ? ` about "${echo(input.query)}"` : ""}…`;
     case "open_app": return `opening ${str(input.class) ?? "an app"}${input.beside === true ? " beside" : ""}…`;
     case "show_app": return `showing app ${str(input.app) ?? ""}…`;
     case "close_app": return `closing app ${str(input.app) ?? ""}…`;

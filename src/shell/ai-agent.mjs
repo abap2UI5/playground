@@ -24,7 +24,7 @@
 // static page can have a chat at all. `dangerouslyAllowBrowser` is the SDK's
 // name for exactly that choice.
 import Anthropic from "@anthropic-ai/sdk";
-import { catalogueEntries, DEFAULT_SPEED, SPEEDS } from "./ai-common.mjs";
+import { addUsage, catalogueEntries, CONTEXT_BETA, CONTEXT_MANAGEMENT, DEFAULT_SPEED, followStream, rankEntries, SPEEDS } from "./ai-common.mjs";
 // The framework's own guide to building an app, from the abap2UI5 commit
 // tools/fetch-deps.mjs pins - the same commit the runtime in this page is
 // transpiled from, so the API the guide describes is the API that runs here.
@@ -36,7 +36,7 @@ import { attachmentBlocks } from "./attachments.mjs";
 // The speeds and the errors are the AI Pilot's as well (src/shell/ai-common.mjs).
 export { SPEEDS, DEFAULT_SPEED, explainError } from "./ai-common.mjs";
 // What the chat checks a file against as it is added (attach-ui.mjs).
-export { kindOf, MAX_FILES } from "./attachments.mjs";
+export { kindOf, MAX_FILES, MAX_MESSAGE_BYTES } from "./attachments.mjs";
 
 // The tools that change the editor, after which the page runs the app by
 // itself (see loop( )).
@@ -71,9 +71,11 @@ How the playground works, and what that means for you:
   rather than one change per turn.
 - After the file changes of a message, the page runs the app by itself and
   attaches the report to the result of your last change: abaplint errors
-  block the run and must be fixed; abap2UI5 lint findings mean the view uses
-  something UI5 1.71 does not have - fix those too; a dump names the line.
-  Iterate until it runs clean, then stop calling tools. run_app is only for
+  block the run and must be fixed; abap2UI5 lint errors and warnings (a
+  control or property UI5 1.71 does not have, a binding or event that will
+  not work) must be fixed too; hints are advice - take them when they are
+  cheap, never spend a turn on them alone; a dump names the line. Iterate
+  until it runs without errors and warnings, then stop calling tools. run_app is only for
   running again without changing anything.
 - There is no database of the person's own here: no custom tables, no
   SELECT from business tables, no RFC, no files, no HTTP. When the app
@@ -255,6 +257,13 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
   let seen;
   let stream;
   let stopped = false;
+  // Resolved by stop( ): a tool still running (a run waiting on its app, a
+  // sample being fetched) is no longer waited for - Stop changed nothing
+  // until it had ended on its own.
+  let stopping;
+  let stopNow = () => {};
+  const untilStopped = (work, what) =>
+    Promise.race([work, stopping.then(() => ({ error: `Stopped by the person while ${what}.` }))]);
   const total = { input: 0, output: 0, cached: 0 };
 
   const snapshot = () => JSON.stringify(host.files());
@@ -262,7 +271,11 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
   // `files` are the File objects the reader added to this message; they go in
   // front of its text, as the content blocks attachments.mjs makes of them.
   async function send(text, files = []) {
+    const seenBefore = seen;
     stopped = false;
+    stopping = new Promise((resolve) => {
+      stopNow = resolve;
+    });
     const now = snapshot();
     const content = [];
     if (now !== seen) {
@@ -279,7 +292,21 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
     }
     content.push({ type: "text", text });
     messages.push({ role: "user", content });
-    await loop();
+    const at = messages.length;
+    try {
+      await loop();
+    } catch (err) {
+      // Nothing answered to it: taken back out, as in the Pilot. Refused as
+      // it stands (a 413 of the attachments), it was resent - and refused -
+      // with every later message until New chat; failed otherwise, "send
+      // again" sent it twice. The editor's files it carried go with the next
+      // message instead. A message the reader stopped stays.
+      if (messages.length === at && !(err instanceof Anthropic.APIUserAbortError)) {
+        messages.pop();
+        seen = seenBefore;
+      }
+      throw err;
+    }
     // Answered so the chat can say "stopped" rather than "done".
     return { stopped };
   }
@@ -305,7 +332,8 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         // tool calls ("the table is there, now the search") come back as text,
         // so a long turn is not minutes of silence.
         thinking: { type: "adaptive", display: "updates" },
-        betas: ["server-side-fallback-2026-07-01", "thinking-display-updates-2026-08-18"],
+        betas: ["server-side-fallback-2026-07-01", "thinking-display-updates-2026-08-18", CONTEXT_BETA],
+        context_management: CONTEXT_MANAGEMENT,
         // A request a safety classifier declines is answered by the model
         // the API picks for that category instead of stopping the turn.
         fallbacks: "default",
@@ -313,25 +341,11 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         // a tool loop resends all of it.
         cache_control: { type: "ephemeral" },
       });
-      stream.on("text", (delta) => ui.text(delta));
       // What arrives before the turn is complete, shown as it arrives: a
       // progress note, and a tool call whose input is still streaming - a
       // class being written is the longest wait of all, and it counts its
       // lines on screen rather than sitting still.
-      let streaming;
-      stream.on("streamEvent", (event) => {
-        if (event.type === "content_block_start") {
-          const block = event.content_block;
-          streaming = block.type === "tool_use" ? { id: block.id, name: block.name } : undefined;
-          if (block.type === "thinking") ui.thinkingStart();
-          if (streaming) ui.toolPending({ id: block.id, text: pendingText(block.name, {}) });
-        } else if (event.type === "content_block_delta" && event.delta.type === "thinking_delta" && event.delta.thinking) {
-          ui.thinking(event.delta.thinking);
-        }
-      });
-      stream.on("inputJson", (_partial, input) => {
-        if (streaming) ui.toolPending({ id: streaming.id, text: pendingText(streaming.name, input ?? {}) });
-      });
+      const started = followStream(stream, ui, pendingText);
 
       let message;
       try {
@@ -342,6 +356,9 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         // alone, a retry below would leave the first one generating (and
         // billed) in the background, out of reach of Stop.
         stream.abort();
+        // Billed all the same - the input from the moment it started.
+        addUsage(total, stream.currentMessage?.usage);
+        ui.usage({ ...total });
         if (stopped) return;
         // A tool input that could not be parsed at all - the one failure that
         // is worth re-asking for. Everything the API itself refused (a key,
@@ -355,13 +372,14 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         if (!unparsable || err instanceof Anthropic.APIError || jsonRetries++ >= 2) {
           throw err;
         }
+        // The calls of the attempt thrown away are not going to run: asked
+        // again, they come back under new ids, and the old rows went on
+        // shimmering until the turn ended and then said "not finished".
+        for (const s of started) ui.tool({ id: s.id, summary: `${s.name}: the input was unreadable - asked again`, error: true });
         continue;
       }
 
-      const usage = message.usage ?? {};
-      total.input += (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
-      total.cached += usage.cache_read_input_tokens ?? 0;
-      total.output += usage.output_tokens ?? 0;
+      addUsage(total, message.usage);
       ui.usage({ ...total });
 
       if (message.stop_reason === "refusal") {
@@ -457,11 +475,11 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         if (use.name === "run_app") ui.toolPending({ id: use.id, text: pendingText("run_app", {}) });
         let result;
         try {
-          result = await execute(use.name, use.input ?? {});
+          result = await untilStopped(execute(use.name, use.input ?? {}), `${use.name} was running`);
         } catch (e) {
           result = { error: String(e?.message ?? e) };
         }
-        ui.tool({ id: use.id, summary: result.summary ?? result.error ?? "", error: Boolean(result.error) });
+        ui.tool({ id: use.id, summary: result.summary ?? result.error ?? "", error: Boolean(result.error || result.failed) });
         const entry = {
           type: "tool_result",
           tool_use_id: use.id,
@@ -493,11 +511,12 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         ui.toolPending({ id, text: pendingText("run_app", {}) });
         let report;
         try {
-          report = describeRun(await host.run());
+          const ran = await untilStopped(host.run(), "the app was running");
+          report = ran.error ? { text: ran.error, summary: "run stopped" } : describeRun(ran);
         } catch (e) {
           report = { text: `The automatic run failed: ${String(e?.message ?? e)}`, summary: "run failed" };
         }
-        ui.tool({ id, summary: report.summary, error: false });
+        ui.tool({ id, summary: report.summary, error: Boolean(report.failed) });
         lastChange.content = clip(`${lastChange.content}\n\nThe page ran the app after these changes:\n${report.text}`);
       }
       // Whatever the tools changed, the model has just been told - unless a
@@ -605,6 +624,7 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
     send,
     stop() {
       stopped = true;
+      stopNow();
       stream?.abort();
     },
     get usage() {
@@ -639,16 +659,26 @@ export function describeRun(report) {
   const lines = [];
   lines.push(`status: ${report.status}${report.started ? "" : " (the app did not start)"}`);
 
-  const problems = report.problems ?? [];
-  const kind = (p) => (p.severity === 1 ? "error" : p.severity === 2 ? "warning" : "info");
+  // Errors and warnings must be fixed; hints are advice, and listed under
+  // the same "must be fixed" a model spent whole turns on an unused public
+  // attribute or a missing tooltip.
+  const all = report.problems ?? [];
+  const problems = all.filter((p) => p.severity === 1 || p.severity === 2);
+  const hints = all.filter((p) => p.severity !== 1 && p.severity !== 2);
+  const kind = (p) => (p.severity === 1 ? "error" : p.severity === 2 ? "warning" : "hint");
+  const row = (p) => {
+    const at = p.range?.start ? `${p.range.start.line + 1}:${p.range.start.character + 1}` : "?";
+    return `- ${p.file}:${at} [${p.source} ${kind(p)}${p.rule ? ` ${p.rule}` : ""}] ${p.message}`;
+  };
   if (problems.length === 0) {
     lines.push("problems: none");
   } else {
-    lines.push(`problems (${problems.length}) - abaplint errors stop the run, abap2UI5 lint findings do not but must be fixed:`);
-    for (const p of problems.slice(0, 60)) {
-      const at = p.range?.start ? `${p.range.start.line + 1}:${p.range.start.character + 1}` : "?";
-      lines.push(`- ${p.file}:${at} [${p.source} ${kind(p)}${p.rule ? ` ${p.rule}` : ""}] ${p.message}`);
-    }
+    lines.push(`problems (${problems.length}) - abaplint errors stop the run; abap2UI5 lint errors and warnings do not, but must be fixed:`);
+    for (const p of problems.slice(0, 60)) lines.push(row(p));
+  }
+  if (hints.length > 0) {
+    lines.push(`hints (${hints.length}) - advice, optional:`);
+    for (const p of hints.slice(0, 15)) lines.push(row(p));
   }
 
   const tests = report.tests ?? [];
@@ -677,7 +707,9 @@ export function describeRun(report) {
   const summary = report.started
     ? `ran: ${report.status}${problems.length ? `, ${problems.length} problem${problems.length === 1 ? "" : "s"}` : ""}`
     : `run stopped: ${report.status}`;
-  return { text: lines.join("\n"), summary };
+  // `failed` draws the row as one that went wrong - a run that did not start
+  // had the same ✓ as one that did.
+  return { text: lines.join("\n"), summary, failed: !report.started || (first?.status ?? 0) >= 400 };
 }
 
 // ------------------------------------------------------------------ samples
@@ -689,17 +721,11 @@ export function describeRun(report) {
 async function searchSamples(input) {
   const query = str(input.query)?.trim().toLowerCase();
   if (!query) return { error: "search_samples needs a query." };
-  const entries = await catalogueEntries();
-  const words = query.split(/\s+/).filter(Boolean);
-  const scored = entries
-    .map((e) => ({ e, score: words.reduce((n, w) => n + (e.haystack.includes(w) ? 1 : 0), 0) + (e.runs ? 0.5 : 0) }))
-    .filter((s) => s.score >= Math.max(1, words.length))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 8);
-  if (scored.length === 0) return { text: `No sample matches "${query}". Try one word.`, summary: `searched "${query}": nothing` };
+  const { hits, all } = rankEntries(await catalogueEntries(), query);
+  if (hits.length === 0) return { text: `No sample matches any of "${query}". Try a control name or another word.`, summary: `searched "${query}": nothing` };
   return {
-    text: scored
-      .map(({ e }) => `${e.class} - ${e.title}${e.summary ? `: ${e.summary}` : ""}${e.runs ? "" : " (does not run in the playground)"}${e.controls.length ? ` [${e.controls.slice(0, 8).join(", ")}]` : ""}`)
+    text: (all ? "" : `No sample has all of "${query}" - these have some of it:\n`) + hits
+      .map((e) => `${e.class} - ${e.title}${e.summary ? `: ${e.summary}` : ""}${e.runs ? "" : " (does not run in the playground)"}${e.controls.length ? ` [${e.controls.slice(0, 8).join(", ")}]` : ""}`)
       .join("\n"),
     summary: `searched samples for "${query}"`,
   };

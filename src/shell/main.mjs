@@ -319,7 +319,11 @@ async function boot() {
   if (!embedded) setUpSearch();
   // Never on the Pilot's page: a change to the files there is an app opened
   // beside the others, and a run would restart every one of them.
-  setUpAutorun({ restore: !embedded && !pilotPage });
+  // Not on the studio's page either: its toolbar, and with it the switch, is
+  // hidden there, and a restored Auto ran the model's half-finished turn on
+  // every pause (a slow read_sample after a write_file) - a second compile
+  // and frame reload for each change, with no way for the reader to see why.
+  setUpAutorun({ restore: !embedded && !pilotPage && !aiPage });
   setUpSplitter();
   setUpAbout();
   setUpShareDialog();
@@ -381,7 +385,9 @@ async function boot() {
     // The reader's own drafts (src/shell/drafts.mjs): what is open, to save,
     // and a saved one to open - which runs, the way a sample does.
     currentFiles: () => getFiles(),
-    openDraft: (files) => loadDraft(files, tabs),
+    // On the Pilot's page a draft is an app like any other pick, in place
+    // or beside: run as the playground runs it, it restarted every tab.
+    openDraft: (files) => (pilotPage ? pilotPicked(files) : loadDraft(files, tabs)),
   });
 
   try {
@@ -407,12 +413,24 @@ async function boot() {
         // roundtrip. Refused instead - that frame is on its way out. A frame
         // that says nothing (an older bridge script) is served as before.
         const run = from ? new URL(from, document.baseURI).searchParams.get("run") : null;
-        if (run !== null && run !== String(state.runCounter)) throw new Error("this app was replaced by a newer Run");
+        if (run !== null && run !== String(state.runCounter)) {
+          // A step of the AI Pilot parked for this frame goes with it: left
+          // parked, it was handed to the new document's app start and sent
+          // in its place - an event on a draft the fresh database never held.
+          takePilotRequest(from)?.reject(new Error("the app was restarted before this step reached it - look again"));
+          throw new Error("this app was replaced by a newer Run");
+        }
         // The AI Pilot's act (src/shell/pilot.mjs): the frame was made to send
         // a roundtrip so that it renders the answer, and what goes to the
         // framework is the Pilot's request in place of the frame's. Every
         // answer, the reader's clicks included, is shown to the Pilot after.
-        const pilot = takePilotRequest(from);
+        let pilot = takePilotRequest(from);
+        // Only ever in place of a request on a running app: an app start (no
+        // draft id - the frame reloaded, or a Run) is the frame's own.
+        if (pilot && !draftOf(body)) {
+          pilot.reject(new Error("the app started again before this step reached it - look again"));
+          pilot = null;
+        }
         if (pilot) body = pilot.body;
         const started = performance.now();
         try {
@@ -427,6 +445,14 @@ async function boot() {
           // ABAP exception the framework turned into a dump: the frame's
           // fetch rejects, and the line is still worth pointing at.
           pilot?.reject(e);
+          // Listed like an answer that failed: the AI's run waits for the
+          // first roundtrip and read "none arrived within ten seconds",
+          // with nothing in the status or the Log to say why.
+          const failed = { status: 500, body: `${e?.name === RUNAWAY ? "" : "JavaScript error in the app: "}${String(e?.message ?? e)}` };
+          recordRoundtrip({ request: body, response: failed, ms: performance.now() - started });
+          // And to the AI Pilot's mirror of that tab, which otherwise never
+          // heard of the start and waited half a minute for it.
+          sawRoundtrip(body, failed, from);
           if (e?.location) pointAtDump(e.location, String(e.message ?? e), caretMayMove());
           // ABAP that did not finish, stopped by the runtime's watchdog: the
           // frame only sees a failed request, so the page says what happened.
@@ -610,6 +636,14 @@ async function boot() {
   document.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && (e.key === "Enter" || e.key === "s" || e.key === "S")) {
       if (e.target instanceof Element && e.target.closest("dialog")) return;
+      // Not on the Pilot's page, whose Run is Restart: Ctrl+Enter sent the
+      // message AND ran - a fresh database under every app as the turn
+      // began. Nor from the studio's chat, where it is "send".
+      if (pilotPage || (aiPage && e.target instanceof Element && e.target.closest("#chat"))) {
+        // Ctrl+S is still not the browser's "save page as".
+        if (e.key !== "Enter") e.preventDefault();
+        return;
+      }
       e.preventDefault();
       runAndShow();
     }
@@ -1011,6 +1045,18 @@ async function addAppFiles(files, { first } = {}) {
   while (running) await new Promise((resolve) => setTimeout(resolve, 100));
   running = true;
   reflectRunButton();
+  // The set as it was, put back when the new one does not compile: left in,
+  // the broken files made every later open and every Restart fail the same
+  // way, on a page whose editor is hidden - only a reload got out of it.
+  const before = getFiles().map((f) => ({ ...f }));
+  const putBack = async () => {
+    try {
+      replaceWith(before, { asOpened: false });
+      updateInsight(await refreshNow());
+    } catch {
+      // the old set was accepted once and is accepted again
+    }
+  };
   try {
     let next = getFiles().map((f) => ({ ...f }));
     for (const file of files) {
@@ -1027,12 +1073,14 @@ async function addAppFiles(files, { first } = {}) {
     updateInsight(problems);
     const errors = problems.filter((i) => i.severity === 1 && i.source === "abaplint");
     if (errors.length > 0) {
+      await putBack();
       return { started: false, status: `${errors.length} error${errors.length > 1 ? "s" : ""} in the ABAP`, problems };
     }
     const { chunks } = await compile(getFiles());
     await state.runtime.defineClasses(chunks.map(({ name, js, lines }) => ({ name, js, lines })));
     return { started: true, status: "running", problems };
   } catch (e) {
+    await putBack();
     return { started: false, status: String(e?.message ?? e), problems: [] };
   } finally {
     running = false;
@@ -1529,6 +1577,15 @@ export async function run({ quiet = false } = {}) {
 // as it is now. After the frame has loaded, the first roundtrip is waited for
 // as well: that is the app's start, and the dump the model needs to see, if
 // there is one, arrives with it.
+// The draft id a frame's request is on - none for an app start.
+function draftOf(body) {
+  try {
+    return JSON.parse(body)?.value?.S_FRONT?.ID || null;
+  } catch {
+    return null;
+  }
+}
+
 async function runForAgent() {
   while (running) await new Promise((resolve) => setTimeout(resolve, 100));
   const started = await run();

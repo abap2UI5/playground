@@ -16,7 +16,7 @@ const sizeOf = (bytes) =>
  *   prefix     the room's class prefix: chips are `${prefix}-file`
  *   button     the paperclip;  input   its hidden <input type=file>
  *   list       where the chips go;  textarea  the message (pastes, focus)
- *   rules()    a promise of { kindOf, MAX_FILES } (attachments.mjs)
+ *   rules()    a promise of { kindOf, MAX_FILES, MAX_MESSAGE_BYTES } (attachments.mjs)
  *   refused(text)  says why a file was left out, in the chat
  *
  * Answers { add(files), take() } - take( ) empties the list and answers it.
@@ -57,6 +57,9 @@ export function setUpAttaching({ prefix, button, input, list, textarea, rules, r
       return;
     }
     for (const file of files) {
+      // A file added again is no file more: checked first, or with five
+      // attached it was "left out - 5 files go with one message".
+      if (attached.some((f) => f.name === file.name && f.size === file.size)) continue;
       const kind = loaded.kindOf(file);
       if (kind.error) {
         refused(kind.error);
@@ -66,11 +69,20 @@ export function setUpAttaching({ prefix, button, input, list, textarea, rules, r
         refused(`${file.name} was left out - ${loaded.MAX_FILES} files go with one message`);
         continue;
       }
-      if (!attached.some((f) => f.name === file.name && f.size === file.size)) attached.push(file);
+      const max = loaded.MAX_MESSAGE_BYTES;
+      if (kind.sent && max && sentBytes(loaded) + file.size > max) {
+        refused(`${file.name} was left out - the PDFs and images of one message may come to ${max / 1000 / 1000} MB together; send it with the next one`);
+        continue;
+      }
+      attached.push(file);
     }
     render();
     textarea.focus();
   }
+
+  // What of the attached files goes to the API as it is (a PDF, an image).
+  const sentBytes = (loaded) =>
+    attached.reduce((n, f) => n + (loaded.kindOf(f).sent ? f.size : 0), 0);
 
   button.addEventListener("click", () => input.click());
   input.addEventListener("change", () => {
@@ -80,6 +92,12 @@ export function setUpAttaching({ prefix, button, input, list, textarea, rules, r
   textarea.addEventListener("paste", (e) => {
     const files = [...(e.clipboardData?.files ?? [])];
     if (files.length === 0) return;
+    // Cells copied in Excel, a passage in Word: the clipboard holds the text
+    // AND a picture of it, and the picture came as a file - the reader pasted
+    // a table and got an image chip instead. Text wins over a picture of it;
+    // a screenshot alone carries no text and is still a file.
+    const types = [...(e.clipboardData?.types ?? [])];
+    if (types.includes("text/plain") && files.every((f) => f.type.startsWith("image/"))) return;
     e.preventDefault();
     add(files);
   });

@@ -168,9 +168,14 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
     if (busy) stopTurn();
     else submit();
   });
+  el.log.addEventListener("scroll", () => {
+    following = el.log.scrollHeight - el.log.scrollTop - el.log.clientHeight < 48;
+  }, { passive: true });
   // Enter sends, Shift+Enter is a new line - what every chat does.
   el.input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+    // Safari ends the composition BEFORE the Enter that commits it, so
+    // isComposing is already false there; keyCode 229 is that Enter.
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
       e.preventDefault();
       if (!busy) submit();
     }
@@ -192,7 +197,6 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
 
   el.reset.addEventListener("click", () => {
     startOver();
-    el.usage.textContent = "";
     showWelcome();
   });
 
@@ -242,6 +246,12 @@ function startOver() {
   agent = undefined;
   generation += 1;
   finishRows();
+  // The old turn may still be inside a tool (a run, a sample being fetched)
+  // and only unwinds when that ends; the new conversation is not busy.
+  setBusy(false);
+  // Its tokens went with it.
+  el.usage.textContent = "";
+  el.usage.title = "";
 }
 
 // Every tool row still drawn as pending is a call that will not finish now -
@@ -378,8 +388,14 @@ function addLine(kind, text) {
   return div;
 }
 
-function scrollDown() {
-  el.log.scrollTop = el.log.scrollHeight;
+// The log follows the answer while the reader is at its end. Scrolled up to
+// read something earlier, they stay there: every delta of a turn that runs
+// for minutes pulled them back down, several times a second. A scroll the
+// page makes itself lands at the end and keeps `following` true.
+let following = true;
+function scrollDown(force = false) {
+  if (force) following = true;
+  if (following) el.log.scrollTop = el.log.scrollHeight;
 }
 
 function setBusy(value) {
@@ -409,6 +425,7 @@ async function submit() {
   el.input.value = "";
   const files = attaching.take();
   listSentFiles(addLine("user", typed), files, "chat-user-files");
+  scrollDown(true);
   setBusy(true);
   stopAsked = false;
   current = undefined;
@@ -512,6 +529,10 @@ async function submit() {
     addLine(said.stopped ? "notice" : "notice is-error", said.text);
     setStatus(said.stopped ? "stopped" : "the AI request failed", !said.stopped);
     if (said.key) {
+      // The message never reached a model, and a new key is a new
+      // conversation: what was typed and attached is put back to send again.
+      if (el.input.value === "") el.input.value = typed;
+      if (files.length > 0) attaching.add(files);
       showKeyForm(true);
       // A key without a workspace is a valid key - what is missing is the
       // workspace, so that is where the caret goes.
@@ -519,8 +540,12 @@ async function submit() {
     }
   } finally {
     if (active === turn) active = undefined;
-    if (live()) finishRows();
-    setBusy(false);
+    // A turn of a conversation started over leaves the new one alone - it
+    // was set idle by startOver( ) and may be busy with a turn of its own.
+    if (live()) {
+      finishRows();
+      setBusy(false);
+    }
   }
 }
 
@@ -563,6 +588,9 @@ export function renderMarkdown(target, text) {
       if (!list || list.tagName.toLowerCase() !== kind) {
         endList();
         list = document.createElement(kind);
+        // A numbered list broken by a nested bullet or a code block goes
+        // on with its own number, not with 1 again.
+        if (kind === "ol") list.start = Number(item[2]);
       }
       list.append(element("li", inline(item[3])));
       continue;
