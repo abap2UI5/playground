@@ -247,7 +247,8 @@ test("a hint of the linter is told as advice, not as a problem that must be fixe
   await page.locator("#chat-input").press("Control+Enter");
   await expect(page.locator(".chat-assistant").last()).toHaveText("Done.", { timeout: 90000 });
   const report = requests[1].body.messages.at(-1).content[0].content;
-  expect(report).toContain("problems: none");
+  // Among the advice, and not among the problems (the class's warnings).
+  expect(report.slice(0, report.indexOf("hints ("))).not.toContain("unused-public-attribute");
   expect(report).toMatch(/hints \(\d+\) - advice, optional:\n- zcl_ai_app\.clas\.abap:\d+:\d+ \[abap2UI5 hint unused-public-attribute\]/);
 });
 
