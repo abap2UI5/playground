@@ -5,6 +5,9 @@
 // with it; tools/build-site.mjs keeps all of it out of the service worker's
 // precache, read off the module graph.
 import Anthropic from "@anthropic-ai/sdk";
+// The SDK's own parser for a tool input that is still arriving - the one it
+// runs itself on every delta while an `inputJson` listener is registered.
+import { partialParse } from "@anthropic-ai/sdk/_vendor/partial-json-parser/parser.mjs";
 
 // How much the reader trades speed for care - the chat header's select. The
 // model is the reader's choice, not this page's: Balanced is the default and
@@ -95,4 +98,74 @@ function entriesOf(data) {
  *  open_app. */
 export async function catalogueEntries() {
   return entriesOf(await loadIndex());
+}
+
+// ------------------------------------------------------------ the stream
+
+/*
+ * What a turn shows while it streams, for both chats: the answer's text, the
+ * model's progress notes, and a row per tool call that reads what of its
+ * input has arrived (`pendingText(name, input)`). Answers the tool calls
+ * started, so a turn that is asked again can finish their rows.
+ *
+ * The tool input is parsed here, at most every DRAW_MS, rather than through
+ * the SDK's `inputJson` event: with a listener registered the SDK parses the
+ * whole input so far on EVERY delta - quadratic in a 500-line class, on the
+ * page's main thread beside Monaco and the app - and a delta that left it
+ * momentarily unparsable ended the whole stream ("Unable to parse tool
+ * parameter JSON"), a billed request thrown away and asked again. Without a
+ * listener it parses the input once, when the block is complete. A partial
+ * input that does not parse here is simply not drawn yet.
+ */
+const DRAW_MS = 150;
+export function followStream(stream, ui, pendingText) {
+  const started = [];
+  let streaming;
+  let json = "";
+  let drawn = 0;
+  stream.on("text", (delta) => ui.text(delta));
+  const draw = () => {
+    let input;
+    try {
+      input = partialParse(json);
+    } catch {
+      return;
+    }
+    ui.toolPending({ id: streaming.id, text: pendingText(streaming.name, input ?? {}) });
+  };
+  stream.on("streamEvent", (event) => {
+    if (event.type === "content_block_stop") {
+      // The block complete: what it ends on is drawn whatever the clock says.
+      if (streaming && json) draw();
+      streaming = undefined;
+    } else if (event.type === "content_block_start") {
+      const block = event.content_block;
+      streaming = block.type === "tool_use" ? { id: block.id, name: block.name } : undefined;
+      json = "";
+      drawn = 0;
+      if (block.type === "thinking") ui.thinkingStart();
+      if (streaming) {
+        started.push(streaming);
+        ui.toolPending({ id: block.id, text: pendingText(block.name, {}) });
+      }
+    } else if (event.type === "content_block_delta") {
+      if (event.delta.type === "thinking_delta" && event.delta.thinking) {
+        ui.thinking(event.delta.thinking);
+      } else if (event.delta.type === "input_json_delta" && streaming) {
+        json += event.delta.partial_json ?? "";
+        const now = performance.now();
+        if (now - drawn < DRAW_MS) return;
+        drawn = now;
+        draw();
+      }
+    }
+  });
+  return started;
+}
+
+/** Adds one answer's usage to `total` ({ input, output, cached }). */
+export function addUsage(total, usage = {}) {
+  total.input += (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
+  total.cached += usage.cache_read_input_tokens ?? 0;
+  total.output += usage.output_tokens ?? 0;
 }

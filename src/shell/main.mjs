@@ -319,7 +319,11 @@ async function boot() {
   if (!embedded) setUpSearch();
   // Never on the Pilot's page: a change to the files there is an app opened
   // beside the others, and a run would restart every one of them.
-  setUpAutorun({ restore: !embedded && !pilotPage });
+  // Not on the studio's page either: its toolbar, and with it the switch, is
+  // hidden there, and a restored Auto ran the model's half-finished turn on
+  // every pause (a slow read_sample after a write_file) - a second compile
+  // and frame reload for each change, with no way for the reader to see why.
+  setUpAutorun({ restore: !embedded && !pilotPage && !aiPage });
   setUpSplitter();
   setUpAbout();
   setUpShareDialog();

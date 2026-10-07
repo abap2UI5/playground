@@ -21,7 +21,16 @@ export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 // The API takes an image of at most 10 MB as base64, which a file of 7.5 MB
 // already is: a larger one passed here and was refused by the API instead.
 const MAX_IMAGE_BYTES = 7.5 * 1000 * 1000;
+// What all of a message's files may add up to, as the API is sent them: a
+// request is at most 32 MB, a PDF or an image goes as base64 (a third more),
+// and the conversation's text goes with it. Three PDFs of 9 MB each passed
+// every per-file check and were a guaranteed 413.
+export const MAX_MESSAGE_BYTES = 20 * 1000 * 1000;
 const MAX_TEXT = 200000;
+// The text all the files of one message may bring, together: a workbook of
+// twenty filled sheets was twenty times MAX_TEXT - far past the model's
+// context, and resent with every later request of the conversation.
+const MAX_TEXT_TOTAL = 400000;
 const MAX_ROWS = 2000;
 
 const IMAGE_TYPES = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" };
@@ -30,17 +39,22 @@ const TEXT_EXTENSIONS = new Set([
 ]);
 
 const extensionOf = (name) => (/\.([^.]+)$/.exec(name)?.[1] ?? "").toLowerCase();
-const clipText = (text) =>
-  text.length <= MAX_TEXT ? text : `${text.slice(0, MAX_TEXT)}\n… (${text.length - MAX_TEXT} more characters cut)`;
+const clipText = (text, max = MAX_TEXT) =>
+  text.length <= max ? text : `${text.slice(0, max)}\n… (${text.length - max} more characters cut)`;
 
 /** What kind of file this is, or why it is not taken. */
 export function kindOf(file) {
   const ext = extensionOf(file.name);
   if (file.size > MAX_FILE_BYTES) return { error: `${file.name} is larger than ${MAX_FILE_BYTES / 1024 / 1024} MB` };
-  if (ext === "pdf" || file.type === "application/pdf") return { kind: "pdf" };
+  // An empty PDF or image went out as a block without data, and the API
+  // refused the whole message for it, text and all.
+  if (file.size === 0) return { error: `${file.name} is empty` };
+  // `sent` - the file goes to the API as it is (base64), so its size counts
+  // towards MAX_MESSAGE_BYTES; the others go as the text read out of them.
+  if (ext === "pdf" || file.type === "application/pdf") return { kind: "pdf", sent: true };
   if (IMAGE_TYPES[ext]) {
     if (file.size > MAX_IMAGE_BYTES) return { error: `${file.name} is larger than the 7.5 MB an image may be - make it smaller and add it again` };
-    return { kind: "image", mediaType: IMAGE_TYPES[ext] };
+    return { kind: "image", mediaType: IMAGE_TYPES[ext], sent: true };
   }
   if (ext === "xlsx" || ext === "xlsm") return { kind: "xlsx" };
   if (ext === "docx") return { kind: "docx" };
@@ -58,6 +72,8 @@ export function kindOf(file) {
 export async function attachmentBlocks(files) {
   const blocks = [];
   const errors = [];
+  // What is left of MAX_TEXT_TOTAL, drawn on by every text document.
+  const budget = { left: MAX_TEXT_TOTAL };
   for (const file of files.slice(0, MAX_FILES)) {
     const kind = kindOf(file);
     if (kind.error) {
@@ -65,7 +81,7 @@ export async function attachmentBlocks(files) {
       continue;
     }
     try {
-      blocks.push(...(await blocksOf(file, kind)));
+      blocks.push(...(await blocksOf(file, kind, budget)));
     } catch (e) {
       errors.push(`${file.name} could not be read: ${String(e?.message ?? e)}`);
     }
@@ -74,7 +90,13 @@ export async function attachmentBlocks(files) {
   return { blocks, errors };
 }
 
-async function blocksOf(file, { kind, mediaType }) {
+async function blocksOf(file, { kind, mediaType }, budget) {
+  const textDocument = (title, text) => {
+    const max = Math.min(MAX_TEXT, budget.left);
+    const clipped = max > 0 ? clipText(text, max) : `(left out: the files of this message already bring ${MAX_TEXT_TOTAL} characters of text)`;
+    budget.left -= Math.min(text.length, max);
+    return { type: "document", title, source: { type: "text", media_type: "text/plain", data: clipped || "(empty)" } };
+  };
   switch (kind) {
     case "pdf":
       return [{ type: "document", title: file.name, source: { type: "base64", media_type: "application/pdf", data: await base64(file) } }];
@@ -89,15 +111,24 @@ async function blocksOf(file, { kind, mediaType }) {
     case "docx":
       return [textDocument(file.name, await wordText(await file.arrayBuffer()))];
     default:
-      return [textDocument(file.name, await file.text())];
+      return [textDocument(file.name, decodeText(await file.arrayBuffer()))];
   }
 }
 
-const textDocument = (title, text) => ({
-  type: "document",
-  title,
-  source: { type: "text", media_type: "text/plain", data: clipText(text) || "(empty)" },
-});
+// A text file in whatever encoding it came: a BOM says which, UTF-8 is tried
+// next, and what is not UTF-8 is Windows-1252 - an Excel "CSV (Comma
+// delimited)" or a download from SAP GUI in the local code page, whose
+// umlauts were replacement characters for good when read as UTF-8.
+export function decodeText(buffer) {
+  const bytes = new Uint8Array(buffer);
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder("utf-16le").decode(bytes);
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder("utf-16be").decode(bytes);
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return new TextDecoder("windows-1252").decode(bytes);
+  }
+}
 
 function base64(file) {
   return new Promise((resolve, reject) => {
@@ -189,8 +220,14 @@ export async function spreadsheet(buffer) {
 // The text of a string item - its <t> runs, but not the ones under <rPh>,
 // which are the phonetic reading Excel keeps beside Japanese text and would
 // otherwise be glued onto every such cell.
+// Excel writes a character XML cannot hold as _xHHHH_ (a carriage return is
+// _x000D_), and a literal "_x" in front of one as _x005F_.
 const stringOf = (node) =>
-  all(node, "t").filter((t) => t.parentNode?.localName !== "rPh").map((t) => t.textContent).join("");
+  all(node, "t")
+    .filter((t) => t.parentNode?.localName !== "rPh")
+    .map((t) => t.textContent)
+    .join("")
+    .replace(/_x([0-9A-Fa-f]{4})_/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
 
 // The column a cell reference names ("C7" is 2), or undefined for a cell
 // without one - `r` is optional in the format, and a writer that leaves it out
@@ -206,14 +243,24 @@ const columnIndex = (ref) => {
 function sheetCsv(doc, shared) {
   const rows = [];
   const rowNodes = all(doc, "row");
-  for (const row of rowNodes.slice(0, MAX_ROWS)) {
+  let cut = false;
+  for (const row of rowNodes) {
+    // A row without cells is not written at all, so the row number is what
+    // places it: read off the node count, a sheet with a title row, a blank
+    // line and the table had the table in line 2 rather than line 3.
+    const number = Number(row.getAttribute("r")) || rows.length + 1;
+    if (number > MAX_ROWS) {
+      cut = true;
+      break;
+    }
+    while (rows.length < number - 1) rows.push("");
     const cells = [];
     let column = -1;
     for (const c of all(row, "c")) {
       const type = c.getAttribute("t");
       const v = all(c, "v")[0]?.textContent ?? "";
       let value;
-      if (type === "s") value = shared[Number(v)] ?? "";
+      if (type === "s") value = v === "" ? "" : (shared[Number(v)] ?? "");
       else if (type === "inlineStr") value = stringOf(c);
       else if (type === "b") value = v === "1" ? "TRUE" : "FALSE";
       else value = v;
@@ -223,10 +270,10 @@ function sheetCsv(doc, shared) {
     rows.push(Array.from(cells, (value) => csvField(value ?? "")).join(","));
   }
   while (rows.length > 0 && /^,*$/.test(rows[rows.length - 1])) rows.pop();
-  const cut = rowNodes.length > MAX_ROWS ? `, the first ${MAX_ROWS} of ${rowNodes.length} rows` : "";
+  const last = Number(rowNodes[rowNodes.length - 1]?.getAttribute("r")) || rowNodes.length;
   return {
     csv: rows.join("\n"),
-    note: `(a spreadsheet sheet as CSV${cut}; values as Excel stores them - a date is its serial number, a formula its last result)`,
+    note: `(a spreadsheet sheet as CSV${cut ? `, the first ${MAX_ROWS} of ${last} rows` : ""}; a CSV line is the sheet's row of that number; values as Excel stores them - a date is its serial number, a formula its last result)`,
   };
 }
 
@@ -235,23 +282,46 @@ const csvField = (value) => (/[",\n\r]/.test(value) ? `"${value.replace(/"/g, '"
 // ------------------------------------------------------------- document
 
 /* The paragraphs of a .docx: word/document.xml, each <w:p> one line, its
- * <w:t> runs joined, a tab a tab. Tables come out a cell per line. */
+ * <w:t> runs joined, a tab a tab. Tables come out a cell per line, a text
+ * box as the paragraphs it holds. */
 export async function wordText(buffer) {
   const zip = readZip(buffer);
   const body = await zip.text("word/document.xml");
   if (!body) throw new Error("it has no document - is it really a .docx?");
   return all(xml(body), "p")
+    .filter((p) => !skipped(p))
     .map((p) => {
       let line = "";
       for (const node of p.getElementsByTagNameNS("*", "*")) {
+        // Only the paragraph's own runs: a text box is paragraphs inside a
+        // paragraph, which are lines of their own - counted here as well, a
+        // text box came out four times, twice glued to the line around it.
+        if (paragraphOf(node) !== p || skipped(node)) continue;
         if (node.localName === "t") line += node.textContent;
         // A <w:tab/> in a run is a tab; one inside <w:pPr><w:tabs> is a tab
         // STOP the paragraph defines, and counted as text it put a tab in
         // front of every paragraph with custom stops.
         else if (node.localName === "tab" && node.parentNode?.localName !== "tabs") line += "\t";
-        else if (node.localName === "br") line += "\n";
+        else if (node.localName === "br" || node.localName === "cr") line += "\n";
+        else if (node.localName === "noBreakHyphen") line += "-";
       }
       return line;
     })
     .join("\n");
 }
+
+const paragraphOf = (node) => {
+  let at = node.parentNode;
+  while (at && at.localName !== "p") at = at.parentNode;
+  return at;
+};
+
+// What Word keeps twice: a text box as the drawing (mc:Choice) and again for
+// readers that do not know it (mc:Fallback), and text moved with track
+// changes on both its old place (w:moveFrom) and its new one.
+const skipped = (node) => {
+  for (let at = node.parentNode; at; at = at.parentNode) {
+    if (at.localName === "Fallback" || at.localName === "moveFrom") return true;
+  }
+  return false;
+};

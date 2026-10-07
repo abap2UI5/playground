@@ -698,7 +698,9 @@ starts on one minimal class (`AI_STARTER` in `ai-starter.mjs`: `z2ui5_if_app`
 implemented, `main( )` empty) without a run - the placeholder says
 where the app will appear and `run( )` takes it away when an app first starts
 - and no draft is restored or stored, so the studio never writes over the
-playground's own work. The model's first `write_file` of another class drops
+playground's own work. Nor is Auto restored: its switch is in the toolbar the
+studio hides, and a restored Auto ran the model's half-finished turn on every
+pause. The model's first `write_file` of another class drops
 the starter while it is untouched (`isUntouchedStarter( )`, `writeFile( )` in
 `ai-agent.mjs`); a model building on `zcl_app` keeps it. The studio is the **AI Studio**
 (`body.is-studio`, "AI Studio" at the end of `shell.css`): the site's bar, the
@@ -810,7 +812,11 @@ link's ABAP runs. Sent by the
   returns the model's notes between tool calls as text, shown as progress
   lines, and a tool call's row is written while its input streams
   (`pendingText( )` - a class counts its lines as it arrives) and finished in
-  place when it has run. Errors are
+  place when it has run. `followStream( )` in `ai-common.mjs` (both chats)
+  parses that input itself, at most every 150 ms - never through the SDK's
+  `inputJson` event, which parses the whole input on every delta and ended
+  the stream when one delta left it unparsable. The log follows the answer
+  only while the reader is at its end. Errors are
   said in the chat by `explainError( )` from the SDK's typed errors; a refused
   key brings the key form back.
 
@@ -908,12 +914,20 @@ restart them all.
 **Files in the chat** (`src/shell/attachments.mjs`, in the Pilot's chunk and
 the studio's; on screen `src/shell/attach-ui.mjs`, shared with the studio):
 📎, a drop or a paste adds up to five files of at most 10 MB (an image
-7.5 MB - the API's 10 MB is of the base64) to the next message, checked as
-they are added (`kindOf( )`) and read when it is
-sent (`attachmentBlocks( )`), in front of its text. A PDF is a `document`
+7.5 MB - the API's 10 MB is of the base64; an empty file none) to the next
+message, the PDFs and images of one message 20 MB together
+(`MAX_MESSAGE_BYTES` - they go as base64, and a request is at most 32 MB),
+checked as they are added (`kindOf( )`) and read when it is
+sent (`attachmentBlocks( )`), in front of its text; the text read out of all
+of them is capped at 400,000 characters together, not only per file. A paste
+that carries text as well as a picture of it (cells copied in Excel, a passage
+in Word) is the text, not an image chip. A PDF is a `document`
 block and an image an `image` block, as they are; an `.xlsx` is each sheet as
 CSV, a `.docx` its paragraphs, a text file its text - each a text
-`document` with the file's name as its title. The two Office formats are zip
+`document` with the file's name as its title - a text file decoded by its
+BOM, else as UTF-8, else as Windows-1252 (an Excel CSV, a SAP GUI download),
+a sheet's CSV line N its row N (empty rows kept), a text box in a `.docx`
+once (not again from `mc:Fallback`). The two Office formats are zip
 files of XML, read here rather than with a library: `readZip( )` walks the
 central directory and inflates an entry with the browser's own
 `DecompressionStream("deflate-raw")`, DOMParser reads the XML. What CSV cannot

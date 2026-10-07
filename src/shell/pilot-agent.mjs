@@ -28,11 +28,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AgentError, createAppClient } from "../vendor/agent/appclient.mjs";
 import { analyzeScreen, applyResponse, emptyState, FRONTEND_EVENTS, getAt, modelKeyOf } from "../vendor/agent/snapshot.mjs";
-import { catalogueEntries, DEFAULT_SPEED, SPEEDS } from "./ai-common.mjs";
+import { addUsage, catalogueEntries, DEFAULT_SPEED, followStream, SPEEDS } from "./ai-common.mjs";
 import { attachmentBlocks } from "./attachments.mjs";
 
 export { explainError } from "./ai-common.mjs";
-export { kindOf, MAX_FILES } from "./attachments.mjs";
+export { kindOf, MAX_FILES, MAX_MESSAGE_BYTES } from "./attachments.mjs";
 
 const SLOTS = ["MAIN", "NEST", "NEST2", "POPUP", "POPOVER"];
 const MAX_ROWS = 20;
@@ -609,21 +609,7 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
         fallbacks: "default",
         cache_control: { type: "ephemeral" },
       });
-      stream.on("text", (delta) => ui.text(delta));
-      let streaming;
-      stream.on("streamEvent", (event) => {
-        if (event.type === "content_block_start") {
-          const block = event.content_block;
-          streaming = block.type === "tool_use" ? { id: block.id, name: block.name } : undefined;
-          if (block.type === "thinking") ui.thinkingStart();
-          if (streaming) ui.toolPending({ id: block.id, text: pendingText(block.name, {}) });
-        } else if (event.type === "content_block_delta" && event.delta.type === "thinking_delta" && event.delta.thinking) {
-          ui.thinking(event.delta.thinking);
-        }
-      });
-      stream.on("inputJson", (_partial, input) => {
-        if (streaming) ui.toolPending({ id: streaming.id, text: pendingText(streaming.name, input ?? {}) });
-      });
+      const started = followStream(stream, ui, pendingText);
 
       let message;
       try {
@@ -631,6 +617,9 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
         jsonRetries = 0;
       } catch (err) {
         stream.abort();
+        // Billed all the same - the input from the moment it started.
+        addUsage(total, stream.currentMessage?.usage);
+        ui.usage({ ...total });
         if (stopped) return;
         // Only a tool input that could not be parsed is asked for again, as
         // in the studio (ai-agent.mjs): a stream whose connection dropped half
@@ -638,13 +627,13 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
         // billed requests, attachments and all, and three half answers.
         const unparsable = /Unable to parse tool parameter JSON/.test(String(err?.message ?? ""));
         if (!unparsable || err instanceof Anthropic.APIError || jsonRetries++ >= 2) throw err;
+        // The rows of the attempt thrown away - asked again, the calls come
+        // back under new ids (as in the studio).
+        for (const s of started) ui.tool({ id: s.id, summary: `${s.name}: the input was unreadable - asked again`, error: true });
         continue;
       }
 
-      const usage = message.usage ?? {};
-      total.input += (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
-      total.cached += usage.cache_read_input_tokens ?? 0;
-      total.output += usage.output_tokens ?? 0;
+      addUsage(total, message.usage);
       ui.usage({ ...total });
 
       if (message.stop_reason === "refusal") {

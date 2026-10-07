@@ -24,7 +24,7 @@
 // static page can have a chat at all. `dangerouslyAllowBrowser` is the SDK's
 // name for exactly that choice.
 import Anthropic from "@anthropic-ai/sdk";
-import { catalogueEntries, DEFAULT_SPEED, SPEEDS } from "./ai-common.mjs";
+import { addUsage, catalogueEntries, DEFAULT_SPEED, followStream, SPEEDS } from "./ai-common.mjs";
 // The framework's own guide to building an app, from the abap2UI5 commit
 // tools/fetch-deps.mjs pins - the same commit the runtime in this page is
 // transpiled from, so the API the guide describes is the API that runs here.
@@ -36,7 +36,7 @@ import { attachmentBlocks } from "./attachments.mjs";
 // The speeds and the errors are the AI Pilot's as well (src/shell/ai-common.mjs).
 export { SPEEDS, DEFAULT_SPEED, explainError } from "./ai-common.mjs";
 // What the chat checks a file against as it is added (attach-ui.mjs).
-export { kindOf, MAX_FILES } from "./attachments.mjs";
+export { kindOf, MAX_FILES, MAX_MESSAGE_BYTES } from "./attachments.mjs";
 
 // The tools that change the editor, after which the page runs the app by
 // itself (see loop( )).
@@ -313,25 +313,11 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         // a tool loop resends all of it.
         cache_control: { type: "ephemeral" },
       });
-      stream.on("text", (delta) => ui.text(delta));
       // What arrives before the turn is complete, shown as it arrives: a
       // progress note, and a tool call whose input is still streaming - a
       // class being written is the longest wait of all, and it counts its
       // lines on screen rather than sitting still.
-      let streaming;
-      stream.on("streamEvent", (event) => {
-        if (event.type === "content_block_start") {
-          const block = event.content_block;
-          streaming = block.type === "tool_use" ? { id: block.id, name: block.name } : undefined;
-          if (block.type === "thinking") ui.thinkingStart();
-          if (streaming) ui.toolPending({ id: block.id, text: pendingText(block.name, {}) });
-        } else if (event.type === "content_block_delta" && event.delta.type === "thinking_delta" && event.delta.thinking) {
-          ui.thinking(event.delta.thinking);
-        }
-      });
-      stream.on("inputJson", (_partial, input) => {
-        if (streaming) ui.toolPending({ id: streaming.id, text: pendingText(streaming.name, input ?? {}) });
-      });
+      const started = followStream(stream, ui, pendingText);
 
       let message;
       try {
@@ -342,6 +328,9 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         // alone, a retry below would leave the first one generating (and
         // billed) in the background, out of reach of Stop.
         stream.abort();
+        // Billed all the same - the input from the moment it started.
+        addUsage(total, stream.currentMessage?.usage);
+        ui.usage({ ...total });
         if (stopped) return;
         // A tool input that could not be parsed at all - the one failure that
         // is worth re-asking for. Everything the API itself refused (a key,
@@ -355,13 +344,14 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         if (!unparsable || err instanceof Anthropic.APIError || jsonRetries++ >= 2) {
           throw err;
         }
+        // The calls of the attempt thrown away are not going to run: asked
+        // again, they come back under new ids, and the old rows went on
+        // shimmering until the turn ended and then said "not finished".
+        for (const s of started) ui.tool({ id: s.id, summary: `${s.name}: the input was unreadable - asked again`, error: true });
         continue;
       }
 
-      const usage = message.usage ?? {};
-      total.input += (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
-      total.cached += usage.cache_read_input_tokens ?? 0;
-      total.output += usage.output_tokens ?? 0;
+      addUsage(total, message.usage);
       ui.usage({ ...total });
 
       if (message.stop_reason === "refusal") {

@@ -374,6 +374,43 @@ test("files go with a message: a PDF as it is, a spreadsheet as CSV, a Word docu
   expect(content.at(-1)).toEqual({ type: "text", text: "Enter these orders" });
 });
 
+test("a file comes out as its author saw it: a Windows code page, a text box once, a sheet's rows where they are", async ({ page }) => {
+  const requests = await answerWith(page, [{ text: "Read." }]);
+  await openPilot(page);
+  await useKey(page);
+  const input = page.locator("#pilot-file-input");
+  await input.setInputFiles([
+    // An Excel "CSV (Comma delimited)" on Windows: Windows-1252, not UTF-8.
+    { name: "kunden.csv", mimeType: "text/csv", buffer: Buffer.from("Name;Ort\nMüller;Köln\n", "latin1") },
+  ]);
+  await input.setInputFiles([
+    // A paragraph holding a text box: Word writes the box twice.
+    "tests/fixtures/textbox.docx",
+    // Rows 1, 5 and 9 - the empty rows between are not in the file.
+    "tests/fixtures/gaps.xlsx",
+  ]);
+  // An empty file is refused at once - the API refused the whole message.
+  await input.setInputFiles([{ name: "empty.pdf", mimeType: "application/pdf", buffer: Buffer.alloc(0) }]);
+  await expect(page.locator(".pilot-notice.is-error")).toContainText("empty.pdf is empty");
+  await expect(page.locator(".pilot-file")).toHaveCount(3);
+  await say(page, "Read these");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("Read.", { timeout: 60000 });
+  const documents = requests[0].body.messages[0].content.filter((b) => b.type === "document");
+  expect(documents.find((b) => b.title === "kunden.csv").source.data).toBe("Name;Ort\nMüller;Köln\n");
+  expect(documents.find((b) => b.title === "textbox.docx").source.data).toBe("Body before\nBOXTEXT\nAfter");
+  const sheet = documents.find((b) => b.title.startsWith("gaps.xlsx")).source.data;
+  expect(sheet.split("\n").slice(1, 6)).toEqual(["1", "", "", "", "5"]);
+});
+
+test("the PDFs and images of one message are held to what one request can carry", async ({ page }) => {
+  await openPilot(page);
+  const input = page.locator("#pilot-file-input");
+  const pdf = (name) => ({ name, mimeType: "application/pdf", buffer: Buffer.alloc(9 * 1000 * 1000, 32) });
+  await input.setInputFiles([pdf("a.pdf"), pdf("b.pdf"), pdf("c.pdf")]);
+  await expect(page.locator(".pilot-notice.is-error")).toContainText("c.pdf was left out");
+  await expect(page.locator(".pilot-file")).toHaveCount(2);
+});
+
 test("a message the API refuses does not stay in the conversation, and an image too large is refused first", async ({ page }) => {
   const bodies = [];
   await page.route("https://api.anthropic.com/**", async (route) => {
