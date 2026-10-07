@@ -739,7 +739,10 @@ talks to a model or needs a key.
   the real `run( )` — waiting out a run autorun started — then waits up to ten
   seconds for the app's first roundtrip and hands back the status line, the
   problems, the tests, the roundtrips and the Log. `describeRun( )` turns that
-  into what the model reads. So what the model is told is what the reader
+  into what the model reads - errors and warnings as problems to fix, the
+  linter's hints apart as optional advice, and a JavaScript error out of the
+  app's start as a failed first roundtrip (the bridge's `roundtrip` lists it
+  like an answer) rather than ten seconds of "none arrived". So what the model is told is what the reader
   sees; keep it that way when adding a tool.
 - **The key is the reader's, the request is the browser's.** Held in the
   page's memory for the visit and **never stored**: the playground runs ABAP
@@ -914,7 +917,9 @@ app opened beside the others is not compiled alone: `addAppFiles( )` in
 `main.mjs` puts its files into the editor beside the rest and compiles and
 defines the WHOLE set - and stops there, with no fresh database and no Run
 counted, so the apps already open keep their drafts and their frames stay
-current. Replacing tab 1's app makes its file the first, so Restart starts it
+current. A set that does not compile is put back as it was - left in, every
+later open and every Restart failed on it, behind an editor this page hides.
+Replacing tab 1's app makes its file the first, so Restart starts it
 from then on. A Run (Restart, `restart_app`) is one fresh database for all of
 them, so `pilotRan( )` reloads every other tab on the new Run number, or
 closes one whose class left the files - and the Pilot's `run` waits until
@@ -923,7 +928,9 @@ frame that a Run replaced is refused with it, and never handed to the new
 document's app start (`roundtrip` in `main.mjs`). A pick in the samples browser goes to
 the Pilot on this page (`pilotPicked( )`): in place of the app on screen, or
 beside after the strip's **+ App**, and a catalogue row of a sample the page
-carries opens that copy instead of fetching it. Autorun is never restored on
+carries opens that copy instead of fetching it; a saved draft is a pick like
+any other. The playground's Run shortcut (Ctrl+Enter, Ctrl+S) is off on this
+page and in the studio's chat, where Ctrl+Enter is "send". Autorun is never restored on
 this page: a change to the files is an app opened beside, and a run would
 restart them all.
 

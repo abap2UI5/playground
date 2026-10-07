@@ -385,7 +385,9 @@ async function boot() {
     // The reader's own drafts (src/shell/drafts.mjs): what is open, to save,
     // and a saved one to open - which runs, the way a sample does.
     currentFiles: () => getFiles(),
-    openDraft: (files) => loadDraft(files, tabs),
+    // On the Pilot's page a draft is an app like any other pick, in place
+    // or beside: run as the playground runs it, it restarted every tab.
+    openDraft: (files) => (pilotPage ? pilotPicked(files) : loadDraft(files, tabs)),
   });
 
   try {
@@ -443,6 +445,14 @@ async function boot() {
           // ABAP exception the framework turned into a dump: the frame's
           // fetch rejects, and the line is still worth pointing at.
           pilot?.reject(e);
+          // Listed like an answer that failed: the AI's run waits for the
+          // first roundtrip and read "none arrived within ten seconds",
+          // with nothing in the status or the Log to say why.
+          recordRoundtrip({
+            request: body,
+            response: { status: 500, body: `${e?.name === RUNAWAY ? "" : "JavaScript error in the app: "}${String(e?.message ?? e)}` },
+            ms: performance.now() - started,
+          });
           if (e?.location) pointAtDump(e.location, String(e.message ?? e), caretMayMove());
           // ABAP that did not finish, stopped by the runtime's watchdog: the
           // frame only sees a failed request, so the page says what happened.
@@ -626,6 +636,10 @@ async function boot() {
   document.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && (e.key === "Enter" || e.key === "s" || e.key === "S")) {
       if (e.target instanceof Element && e.target.closest("dialog")) return;
+      // Not on the Pilot's page, whose Run is Restart: Ctrl+Enter sent the
+      // message AND ran - a fresh database under every app as the turn
+      // began. Nor from the studio's chat, where it is "send".
+      if (pilotPage || (aiPage && e.target instanceof Element && e.target.closest("#chat"))) return;
       e.preventDefault();
       runAndShow();
     }
@@ -1027,6 +1041,18 @@ async function addAppFiles(files, { first } = {}) {
   while (running) await new Promise((resolve) => setTimeout(resolve, 100));
   running = true;
   reflectRunButton();
+  // The set as it was, put back when the new one does not compile: left in,
+  // the broken files made every later open and every Restart fail the same
+  // way, on a page whose editor is hidden - only a reload got out of it.
+  const before = getFiles().map((f) => ({ ...f }));
+  const putBack = async () => {
+    try {
+      replaceWith(before, { asOpened: false });
+      updateInsight(await refreshNow());
+    } catch {
+      // the old set was accepted once and is accepted again
+    }
+  };
   try {
     let next = getFiles().map((f) => ({ ...f }));
     for (const file of files) {
@@ -1043,12 +1069,14 @@ async function addAppFiles(files, { first } = {}) {
     updateInsight(problems);
     const errors = problems.filter((i) => i.severity === 1 && i.source === "abaplint");
     if (errors.length > 0) {
+      await putBack();
       return { started: false, status: `${errors.length} error${errors.length > 1 ? "s" : ""} in the ABAP`, problems };
     }
     const { chunks } = await compile(getFiles());
     await state.runtime.defineClasses(chunks.map(({ name, js, lines }) => ({ name, js, lines })));
     return { started: true, status: "running", problems };
   } catch (e) {
+    await putBack();
     return { started: false, status: String(e?.message ?? e), problems: [] };
   } finally {
     running = false;

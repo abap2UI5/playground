@@ -225,6 +225,32 @@ test("a change is run by the page itself, its report rides on the change, and th
   expect(requests[0].headers["anthropic-beta"]).toContain("thinking-display-updates-2026-08-18");
 });
 
+test("a hint of the linter is told as advice, not as a problem that must be fixed", async ({ page }) => {
+  const requests = [];
+  // A public attribute nothing binds: the linter's unused-public-attribute,
+  // a hint by default.
+  const withHint = APP.replace("INTERFACES z2ui5_if_app.", "INTERFACES z2ui5_if_app.\n    DATA spare TYPE string.");
+  await page.route("https://api.anthropic.com/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    requests.push({ body: request.postDataJSON() });
+    const answer = requests.length === 1
+      ? sse({ tools: [{ name: "write_file", input: { name: APP_FILE, source: withHint, as_app: true } }] })
+      : sse({ text: "Done." });
+    await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: answer });
+  });
+  await openStudio(page);
+  await saveKey(page);
+  // Ctrl+Enter in the chat is "send" - not also the playground's Run, which
+  // ran the empty starting class behind the placeholder.
+  await page.locator("#chat-input").fill("A page");
+  await page.locator("#chat-input").press("Control+Enter");
+  await expect(page.locator(".chat-assistant").last()).toHaveText("Done.", { timeout: 90000 });
+  const report = requests[1].body.messages.at(-1).content[0].content;
+  expect(report).toContain("problems: none");
+  expect(report).toMatch(/hints \(\d+\) - advice, optional:\n- zcl_ai_app\.clas\.abap:\d+:\d+ \[abap2UI5 hint unused-public-attribute\]/);
+});
+
 test("a run an abaplint error stopped reports no roundtrip of the run before it", async ({ page }) => {
   const requests = [];
   await page.route("https://api.anthropic.com/**", async (route) => {

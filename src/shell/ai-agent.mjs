@@ -71,9 +71,11 @@ How the playground works, and what that means for you:
   rather than one change per turn.
 - After the file changes of a message, the page runs the app by itself and
   attaches the report to the result of your last change: abaplint errors
-  block the run and must be fixed; abap2UI5 lint findings mean the view uses
-  something UI5 1.71 does not have - fix those too; a dump names the line.
-  Iterate until it runs clean, then stop calling tools. run_app is only for
+  block the run and must be fixed; abap2UI5 lint errors and warnings (a
+  control or property UI5 1.71 does not have, a binding or event that will
+  not work) must be fixed too; hints are advice - take them when they are
+  cheap, never spend a turn on them alone; a dump names the line. Iterate
+  until it runs without errors and warnings, then stop calling tools. run_app is only for
   running again without changing anything.
 - There is no database of the person's own here: no custom tables, no
   SELECT from business tables, no RFC, no files, no HTTP. When the app
@@ -461,7 +463,7 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         } catch (e) {
           result = { error: String(e?.message ?? e) };
         }
-        ui.tool({ id: use.id, summary: result.summary ?? result.error ?? "", error: Boolean(result.error) });
+        ui.tool({ id: use.id, summary: result.summary ?? result.error ?? "", error: Boolean(result.error || result.failed) });
         const entry = {
           type: "tool_result",
           tool_use_id: use.id,
@@ -498,7 +500,7 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         } catch (e) {
           report = { text: `The automatic run failed: ${String(e?.message ?? e)}`, summary: "run failed" };
         }
-        ui.tool({ id, summary: report.summary, error: false });
+        ui.tool({ id, summary: report.summary, error: Boolean(report.failed) });
         lastChange.content = clip(`${lastChange.content}\n\nThe page ran the app after these changes:\n${report.text}`);
       }
       // Whatever the tools changed, the model has just been told - unless a
@@ -641,16 +643,26 @@ export function describeRun(report) {
   const lines = [];
   lines.push(`status: ${report.status}${report.started ? "" : " (the app did not start)"}`);
 
-  const problems = report.problems ?? [];
-  const kind = (p) => (p.severity === 1 ? "error" : p.severity === 2 ? "warning" : "info");
+  // Errors and warnings must be fixed; hints are advice, and listed under
+  // the same "must be fixed" a model spent whole turns on an unused public
+  // attribute or a missing tooltip.
+  const all = report.problems ?? [];
+  const problems = all.filter((p) => p.severity === 1 || p.severity === 2);
+  const hints = all.filter((p) => p.severity !== 1 && p.severity !== 2);
+  const kind = (p) => (p.severity === 1 ? "error" : p.severity === 2 ? "warning" : "hint");
+  const row = (p) => {
+    const at = p.range?.start ? `${p.range.start.line + 1}:${p.range.start.character + 1}` : "?";
+    return `- ${p.file}:${at} [${p.source} ${kind(p)}${p.rule ? ` ${p.rule}` : ""}] ${p.message}`;
+  };
   if (problems.length === 0) {
     lines.push("problems: none");
   } else {
-    lines.push(`problems (${problems.length}) - abaplint errors stop the run, abap2UI5 lint findings do not but must be fixed:`);
-    for (const p of problems.slice(0, 60)) {
-      const at = p.range?.start ? `${p.range.start.line + 1}:${p.range.start.character + 1}` : "?";
-      lines.push(`- ${p.file}:${at} [${p.source} ${kind(p)}${p.rule ? ` ${p.rule}` : ""}] ${p.message}`);
-    }
+    lines.push(`problems (${problems.length}) - abaplint errors stop the run; abap2UI5 lint errors and warnings do not, but must be fixed:`);
+    for (const p of problems.slice(0, 60)) lines.push(row(p));
+  }
+  if (hints.length > 0) {
+    lines.push(`hints (${hints.length}) - advice, optional:`);
+    for (const p of hints.slice(0, 15)) lines.push(row(p));
   }
 
   const tests = report.tests ?? [];
@@ -679,7 +691,9 @@ export function describeRun(report) {
   const summary = report.started
     ? `ran: ${report.status}${problems.length ? `, ${problems.length} problem${problems.length === 1 ? "" : "s"}` : ""}`
     : `run stopped: ${report.status}`;
-  return { text: lines.join("\n"), summary };
+  // `failed` draws the row as one that went wrong - a run that did not start
+  // had the same ✓ as one that did.
+  return { text: lines.join("\n"), summary, failed: !report.started || (first?.status ?? 0) >= 400 };
 }
 
 // ------------------------------------------------------------------ samples

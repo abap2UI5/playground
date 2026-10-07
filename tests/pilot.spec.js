@@ -292,6 +292,21 @@ test("what the reader typed and did not send goes with the Pilot's step, and not
   expect(await pending()).toEqual({});
 });
 
+test("Ctrl+Enter in the Pilot's chat sends, and does not restart the apps under the reader", async ({ page }) => {
+  await answerWith(page, [{ text: "Here." }]);
+  await openPilot(page);
+  await useKey(page);
+  const app = page.frameLocator("#app");
+  await app.locator("input").first().fill("Bob");
+  await app.locator("input").first().press("Tab");
+  await page.locator("#pilot-input").fill("Are you there?");
+  await page.locator("#pilot-input").press("Control+Enter");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("Here.", { timeout: 60000 });
+  // The playground's Run shortcut started every app over on a fresh
+  // database: the name went back to "World".
+  await expect(app.locator("input").first()).toHaveValue("Bob");
+});
+
 test("several apps side by side: the Pilot opens one beside, works in both, and each keeps its state", async ({ page }) => {
   const requests = await answerWith(page, [
     { tools: [{ name: "open_app", input: { class: "z2ui5_cl_smp_app_009", beside: true } }] },

@@ -531,13 +531,30 @@ function screenChanged(tab) {
   if (!el.seesPanel.hidden) renderSees();
 }
 
+let seesDrawn = "";
+let seesTimer;
 function renderSees() {
   const tab = visibleTab();
   if (!mod || !tab?.mirror) {
+    seesDrawn = "";
     el.seesBody.textContent = "loading…";
     return;
   }
-  el.seesBody.replaceChildren(highlightJson(JSON.stringify(mod.describeMirror(tab.mirror), null, 2)));
+  // The reader's unsent typing is on the model's screen too - typing costs
+  // no roundtrip, so it is looked for while the panel is open.
+  let typed = {};
+  try {
+    typed = frameApi(tab)?.pending?.() ?? {};
+  } catch {
+    typed = {};
+  }
+  const text = JSON.stringify(mod.describeMirror(tab.mirror, undefined, typed), null, 2);
+  if (text !== seesDrawn) {
+    seesDrawn = text;
+    el.seesBody.replaceChildren(highlightJson(text));
+  }
+  clearTimeout(seesTimer);
+  if (!el.seesPanel.hidden) seesTimer = setTimeout(renderSees, 1000);
 }
 
 // What the Pilot is doing, written over the app for a moment: the reader

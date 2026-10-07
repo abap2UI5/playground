@@ -125,10 +125,19 @@ function withDelta(state, delta) {
   return { ...state, models: { ...state.models, [key]: { ...model, data } } };
 }
 
-/** The agent snapshot of the mirror: what the "What Claude sees" panel shows. */
-export function describeMirror(mirror, maxRows = MAX_ROWS) {
+/** The agent snapshot of the mirror: what the "What Claude sees" panel shows.
+ *  `typed` is the reader's unsent typing (the bridge's pending( )), which the
+ *  model's own snapshot carries too (current( ) in createOperator). */
+export function describeMirror(mirror, maxRows = MAX_ROWS, typed = {}) {
   if (!mirror.state.id) return { note: "no app is running" };
-  return analyzeScreen({ state: mirror.state, session: mirror.state.id, maxRows }).snapshot;
+  const snapshot = analyzeScreen({ state: mirror.state, session: mirror.state.id, maxRows }).snapshot;
+  const paths = Object.keys(typed);
+  if (paths.length === 0) return snapshot;
+  return {
+    ...snapshot,
+    fields: snapshot.fields.map((f) => (f.path in typed ? { ...f, value: typed[f.path] } : f)),
+    pending: paths,
+  };
 }
 
 /*
