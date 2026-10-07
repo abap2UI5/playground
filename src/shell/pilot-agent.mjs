@@ -28,7 +28,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AgentError, createAppClient } from "../vendor/agent/appclient.mjs";
 import { analyzeScreen, applyResponse, emptyState, FRONTEND_EVENTS, getAt, modelKeyOf } from "../vendor/agent/snapshot.mjs";
-import { addUsage, catalogueEntries, DEFAULT_SPEED, followStream, rankEntries, SPEEDS } from "./ai-common.mjs";
+import { addUsage, catalogueEntries, CONTEXT_BETA, CONTEXT_MANAGEMENT, DEFAULT_SPEED, followStream, rankEntries, SPEEDS } from "./ai-common.mjs";
 import { attachmentBlocks } from "./attachments.mjs";
 
 export { explainError } from "./ai-common.mjs";
@@ -782,7 +782,8 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
         messages,
         output_config: { effort: settings.effort },
         thinking: { type: "adaptive", display: "updates" },
-        betas: ["server-side-fallback-2026-07-01", "thinking-display-updates-2026-08-18"],
+        betas: ["server-side-fallback-2026-07-01", "thinking-display-updates-2026-08-18", CONTEXT_BETA],
+        context_management: CONTEXT_MANAGEMENT,
         fallbacks: "default",
         cache_control: { type: "ephemeral" },
       });

@@ -122,6 +122,10 @@ test("the Pilot types into the app on screen, presses its button and reads the a
   expect(first).toContain('"path":"/NAME"');
   expect(first).toContain('"event":"GREET"');
   expect(requests[0].headers["x-api-key"]).toBe(KEY);
+  // A long conversation clears its old tool results server-side, late and in
+  // large steps - the history the page sends stays append-only.
+  expect(requests[0].headers["anthropic-beta"]).toContain("context-management-2025-06-27");
+  expect(requests[0].body.context_management.edits[0]).toMatchObject({ type: "clear_tool_uses_20250919", clear_at_least: { type: "input_tokens" } });
   // ...and the act's result is the screen after it, with the app's answer.
   const result = textOf(requests[1].body.messages.at(-1));
   expect(result).toContain("Hello Carol!");

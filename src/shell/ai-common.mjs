@@ -20,6 +20,26 @@ export const SPEEDS = {
 };
 export const DEFAULT_SPEED = "balanced";
 
+/*
+ * Old tool results are cleared by the API once a conversation is long - a
+ * Pilot working through a list row by row read a screen per act, every one
+ * resent with every request, until "the conversation has filled the model's
+ * context" ended it. Server-side, so the history stays append-only and the
+ * thinking blocks stay valid; late and in large steps, because each clear
+ * costs the cache from that point (clear_at_least skips a clear that would
+ * gain too little). The cleared results become a placeholder the model reads
+ * as "removed" - a screen it needs again, it looks at again.
+ */
+export const CONTEXT_BETA = "context-management-2025-06-27";
+export const CONTEXT_MANAGEMENT = {
+  edits: [{
+    type: "clear_tool_uses_20250919",
+    trigger: { type: "input_tokens", value: 200000 },
+    keep: { type: "tool_uses", value: 10 },
+    clear_at_least: { type: "input_tokens", value: 60000 },
+  }],
+};
+
 // A failed request, as the chat says it. `key` marks the one failure the
 // reader answers by entering another key; everything else is said and the
 // conversation stays where it was.

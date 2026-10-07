@@ -804,6 +804,15 @@ link's ABAP runs. Sent by the
   (`cache_control`), and `fallbacks: "default"` behind the
   `server-side-fallback-2026-07-01` beta answers a request a safety classifier
   declines with the fallback model rather than stopping.
+- **A long conversation clears its old tool results, server-side**
+  (`CONTEXT_MANAGEMENT` in `ai-common.mjs`, beta
+  `context-management-2025-06-27`, in both chats): `clear_tool_uses` from
+  200,000 input tokens, the last ten tool uses kept, at least 60,000 tokens
+  per clear. A Pilot working through a list read a screen per act and ended
+  on "the conversation has filled the model's context". Server-side because
+  the history must stay append-only - the thinking blocks are bound to it -
+  and late and in large steps because every clear costs the cache from that
+  point on: it is a context-window guard, not a saving.
 - **Where a turn's time goes, and what was done about it.** A model turn - the
   request, the thinking, the answer - is the unit of waiting, so the loop
   spends as few as it can: after a turn's file changes the page runs the app
