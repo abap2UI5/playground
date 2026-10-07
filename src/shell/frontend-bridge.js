@@ -253,9 +253,11 @@
       return true;
     },
     // What the reader typed in the topmost view and has not sent yet - the
-    // values a click of theirs would carry. Taken (`take`), they go out with
-    // the Pilot's next request, as they would with the reader's own event.
-    pending: function (take) {
+    // values a click of theirs would carry. Only read here: what the Pilot's
+    // session took of them is handed back through carry( ) - a value it
+    // could not take (a field it does not show as editable) stays the
+    // reader's, pending, and goes with their next click.
+    pending: function () {
       var f = frontend();
       var top = f && topSlot(f);
       var changed = top && top.model && top.model._z2ui5ChangedPaths;
@@ -265,9 +267,18 @@
         var value = top.model.getProperty(path);
         if (value === undefined || (value !== null && typeof value === "object")) return;
         values[path] = value;
-        if (take) carry(top.model, path);
       });
       return values;
+    },
+    // The reader's pending paths the Pilot's next request carries.
+    carry: function (paths) {
+      var f = frontend();
+      var top = f && topSlot(f);
+      if (!top || !top.model || !Array.isArray(paths)) return false;
+      paths.forEach(function (path) {
+        carry(top.model, path);
+      });
+      return true;
     },
     busy: function () {
       var f = frontend();

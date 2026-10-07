@@ -901,8 +901,10 @@ controls at any moment - the next message carries the new screen in a
   every later answer and sent again with the reader's next click.
 - **The reader's unsent typing is part of the screen.** Typing costs no
   roundtrip, so the mirror never hears of it: `current( )` takes the frame's
-  pending values (`pending(true)` on the bridge, the topmost view) into the
-  session it builds, and an app whose typing changed counts as changed for
+  pending values (`pending( )` on the bridge, the topmost view) into the
+  session it builds and hands back what the session took (`carry( )`) - a
+  value it could not take stays pending for the reader's own click - and an
+  app whose typing changed counts as changed for
   the next message's `<screen>`. Each app is marked told when its screen is
   read (`snapshotText( )`), not wholesale after every tool round.
 

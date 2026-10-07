@@ -271,6 +271,7 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
   // `files` are the File objects the reader added to this message; they go in
   // front of its text, as the content blocks attachments.mjs makes of them.
   async function send(text, files = []) {
+    const seenBefore = seen;
     stopped = false;
     stopping = new Promise((resolve) => {
       stopNow = resolve;
@@ -291,7 +292,21 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
     }
     content.push({ type: "text", text });
     messages.push({ role: "user", content });
-    await loop();
+    const at = messages.length;
+    try {
+      await loop();
+    } catch (err) {
+      // Nothing answered to it: taken back out, as in the Pilot. Refused as
+      // it stands (a 413 of the attachments), it was resent - and refused -
+      // with every later message until New chat; failed otherwise, "send
+      // again" sent it twice. The editor's files it carried go with the next
+      // message instead. A message the reader stopped stays.
+      if (messages.length === at && !(err instanceof Anthropic.APIUserAbortError)) {
+        messages.pop();
+        seen = seenBefore;
+      }
+      throw err;
+    }
     // Answered so the chat can say "stopped" rather than "done".
     return { stopped };
   }

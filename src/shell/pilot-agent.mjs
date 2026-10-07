@@ -335,7 +335,7 @@ const TOOLS = [
  *   app.frame()       the frame's __z2ui5PlaygroundPilot
  *   app.cls           the class the tab was opened on
  */
-export function createOperator({ app, mirror, ui = {} }) {
+export function createOperator({ app, mirror, ui = {}, halted = () => false }) {
   const host = { drive: (body) => app.drive(body), frame: () => app.frame(), appClass: () => app.cls };
   // The answer the next start is given instead of being sent - see replayOf( ).
   let replay = null;
@@ -404,7 +404,7 @@ export function createOperator({ app, mirror, ui = {} }) {
     await catchUpWithFrame();
     let typed = {};
     try {
-      typed = host.frame()?.pending?.(true) ?? {};
+      typed = host.frame()?.pending?.() ?? {};
     } catch {
       typed = {};
     }
@@ -422,20 +422,33 @@ export function createOperator({ app, mirror, ui = {} }) {
         replay = null;
       }
     };
+    // What the session took goes out with the Pilot's next request, so the
+    // frame clears exactly those once it is answered (carry on the bridge).
+    let taken = Object.keys(typed);
     try {
-      session = await start(Object.keys(typed).length > 0 ? typed : undefined);
+      session = await start(taken.length > 0 ? typed : undefined);
     } catch (e) {
       // A value the snapshot does not take (a path no control shows as
       // editable, text in a number field): the others one by one, rather
       // than no screen at all.
-      if (!(e instanceof AgentError) || Object.keys(typed).length === 0) throw e;
+      if (!(e instanceof AgentError) || taken.length === 0) throw e;
       session = await start();
+      taken = [];
       for (const [path, value] of Object.entries(typed)) {
         try {
           await client.act(session, { values: { [path]: value } });
+          taken.push(path);
         } catch {
-          // left to the frame, which still shows and holds it
+          // left to the frame, which still shows and holds it - pending,
+          // for the reader's own next click
         }
+      }
+    }
+    if (taken.length > 0) {
+      try {
+        host.frame()?.carry?.(taken);
+      } catch {
+        // an older frame: its own next roundtrip sends them
       }
     }
     synced = mirror.version;
@@ -507,6 +520,8 @@ export function createOperator({ app, mirror, ui = {} }) {
       }
       if (!hasEvent) return typed;
       await pause(450);
+      // Stop pressed while the values went in: the press does not follow.
+      if (halted()) throw new AgentError("stopped by the person before the press - the values are typed, nothing was sent");
     }
     const action = actionOf(before, String(event));
     ui.acting?.(`pressing ${action ? `"${action.label}"` : event}`);
@@ -557,7 +572,7 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
   function operatorOf(app) {
     const known = operators.get(app.id);
     if (known && known.mirror === app.mirror) return known.operator;
-    const operator = createOperator({ app, mirror: app.mirror, ui });
+    const operator = createOperator({ app, mirror: app.mirror, ui, halted: () => stopped });
     operators.set(app.id, { mirror: app.mirror, operator });
     return operator;
   }
@@ -656,13 +671,14 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
     try {
       await loop();
     } catch (err) {
-      // A message the API refused as it stands - an attachment past its
-      // limits, a request too large - is refused again on every request
-      // that resends it, and the conversation only ever grows: every later
-      // message, "hello" included, was the same 400 until New chat. Nothing
-      // was answered after it, so it is taken back out, and the screens it
-      // carried are told again with the next one.
-      if (messages.length === at && err instanceof Anthropic.APIError && (err.status === 400 || err.status === 413)) {
+      // A message nothing was answered to is taken back out, and the
+      // screens it carried are told again with the next one. Refused as it
+      // stands (an attachment past its limits, a request too large), it was
+      // refused again on every request that resent it - every later
+      // message, "hello" included, the same 400 until New chat; failed
+      // otherwise (a refused key, a dropped connection), "send again" sent
+      // it twice, attachments and all. A message the reader stopped stays.
+      if (messages.length === at && !(err instanceof Anthropic.APIUserAbortError)) {
         messages.pop();
         told.clear();
         for (const [id, version] of toldBefore) told.set(id, version);
@@ -765,13 +781,20 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
         }
         ui.toolPending({ id: use.id, text: pendingText(use.name, use.input ?? {}) });
         let result;
+        const work = execute(use.name, use.input ?? {});
         try {
           result = await Promise.race([
-            execute(use.name, use.input ?? {}),
-            stopping.then(() => ({ error: "Stopped by the person while this was running - it may still finish on screen." })),
+            work,
+            stopping.then(() => ({ stoppedWhileRunning: true, error: "Stopped by the person while this was running - it may still finish on screen." })),
           ]);
         } catch (e) {
           result = { error: String(e?.message ?? e) };
+        }
+        if (result.stoppedWhileRunning) {
+          // What it still does lands on screen after the model was told
+          // "stopped" - and reading a screen marks it told: every screen
+          // goes with the next message instead.
+          work.catch(() => {}).finally(() => told.clear());
         }
         ui.tool({ id: use.id, summary: result.summary ?? result.error ?? "", error: Boolean(result.error) });
         results.push({

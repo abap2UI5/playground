@@ -448,11 +448,11 @@ async function boot() {
           // Listed like an answer that failed: the AI's run waits for the
           // first roundtrip and read "none arrived within ten seconds",
           // with nothing in the status or the Log to say why.
-          recordRoundtrip({
-            request: body,
-            response: { status: 500, body: `${e?.name === RUNAWAY ? "" : "JavaScript error in the app: "}${String(e?.message ?? e)}` },
-            ms: performance.now() - started,
-          });
+          const failed = { status: 500, body: `${e?.name === RUNAWAY ? "" : "JavaScript error in the app: "}${String(e?.message ?? e)}` };
+          recordRoundtrip({ request: body, response: failed, ms: performance.now() - started });
+          // And to the AI Pilot's mirror of that tab, which otherwise never
+          // heard of the start and waited half a minute for it.
+          sawRoundtrip(body, failed, from);
           if (e?.location) pointAtDump(e.location, String(e.message ?? e), caretMayMove());
           // ABAP that did not finish, stopped by the runtime's watchdog: the
           // frame only sees a failed request, so the page says what happened.
@@ -639,7 +639,11 @@ async function boot() {
       // Not on the Pilot's page, whose Run is Restart: Ctrl+Enter sent the
       // message AND ran - a fresh database under every app as the turn
       // began. Nor from the studio's chat, where it is "send".
-      if (pilotPage || (aiPage && e.target instanceof Element && e.target.closest("#chat"))) return;
+      if (pilotPage || (aiPage && e.target instanceof Element && e.target.closest("#chat"))) {
+        // Ctrl+S is still not the browser's "save page as".
+        if (e.key !== "Enter") e.preventDefault();
+        return;
+      }
       e.preventDefault();
       runAndShow();
     }
