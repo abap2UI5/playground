@@ -1,6 +1,6 @@
 /*
  * VENDORED - do not edit. abap2UI5/mcp-server lib/appclient.mjs
- * at commit 9947371e087a9d1a64bcd31463a12310af107093, copied unchanged by tools/vendor-agent.mjs.
+ * at commit 82b75d8a4db80799f438bdbef626c1b258970177, copied unchanged by tools/vendor-agent.mjs.
  * Change it upstream, then vendor it again.
  */
 /*
@@ -34,7 +34,7 @@
  * next event fired from the same view, exactly as the browser's delta does.
  */
 import {
-  applyResponse, analyzeScreen, emptyState, getAt, setAt, DEFAULT_MAX_ROWS,
+  applyResponse, analyzeScreen, emptyState, getAt, setAt, rebuiltModels, writablePath, DEFAULT_MAX_ROWS,
 } from './snapshot.mjs';
 import { parseBinding, evalExpression } from './viewxml.mjs';
 
@@ -118,21 +118,39 @@ const ERROR_CHARS = 4000;
 const REPLACEMENT = String.fromCodePoint(0xfffd);
 
 export function errorText(status, body) {
+  const text = shownBody(body);
+  return `HTTP ${status}${text ? `: ${text}` : ''}`;
+}
+
+/** A body as errorText shows it, without the status - also the 2xx answer
+ *  that is no JSON (a logon page), which went out with its control
+ *  characters. */
+function shownBody(body, maxChars = ERROR_CHARS) {
   const all = String(body ?? '')
     // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, REPLACEMENT)
     .replace(/\r\n?/g, '\n')
-    .replace(/\s+$/, '');
+    // not /\s+$/: tried at every position of a long whitespace run that is
+    // not at the end, it is quadratic - a body padded with 100k blanks held
+    // the whole server for seconds
+    .trimEnd();
   const lines = all.split('\n');
   let text = lines.slice(0, ERROR_LINES).join('\n');
   let cut = lines.length > ERROR_LINES;
-  if (text.length > ERROR_CHARS) {
-    text = text.slice(0, ERROR_CHARS);
+  if (text.length > maxChars) {
+    text = text.slice(0, maxChars);
     cut = true;
   }
   if (cut) text += `\n... (${all.length - text.length} more characters)`;
-  return `HTTP ${status}${text ? `: ${text}` : ''}`;
+  return text;
 }
+
+/* An argument as an error text repeats it: at most 80 characters - a
+ * session id of 150k characters came back as a 150k error. */
+const echo = (v) => {
+  const t = String(v);
+  return t.length > 80 ? `${t.slice(0, 80)}...` : t;
+};
 
 const listOf = (items) => {
   const shown = items.slice(0, LIST_MAX);
@@ -145,6 +163,9 @@ export const LOCAL_BACKEND_HINT = 'is it running? backend { action: "status" } s
 /** The protocol number this client is written for (protocol
  *  spec/versioning.md): a response declaring another one is refused. */
 export const PROTOCOL = 2;
+
+/** How many earlier draft ids of a session are still named as earlier states. */
+export const EARLIER_IDS = 100;
 
 /** A response header, case-insensitively, a repeated one joined; '' when absent. */
 export function headerOf(headers, name) {
@@ -282,6 +303,9 @@ export function createAppClient({
       res = await send();
       if (csrfRequired(res) && await fetchCsrfToken(session, signal, draftId)) res = await send();
     } catch (e) {
+      // the transport's own refusal (the system mode's breaker) is the
+      // answer as it stands, not a network problem
+      if (e instanceof AgentError) throw e;
       throw new AgentError(`the backend did not answer (${(e && e.message) || e})${backendHint ? ` - ${backendHint}` : ''}`);
     }
     const text = String(res.body ?? '');
@@ -290,9 +314,9 @@ export function createAppClient({
     try {
       json = JSON.parse(text);
     } catch {
-      throw new AgentError(`the backend answered no JSON: ${text.slice(0, 300)}`);
+      throw new AgentError(`the backend answered no JSON: ${shownBody(text, 300)}`);
     }
-    if (!json || !json.S_FRONT) throw new AgentError(`the backend answered without S_FRONT: ${text.slice(0, 300)}`);
+    if (!json || !json.S_FRONT) throw new AgentError(`the backend answered without S_FRONT: ${shownBody(text, 300)}`);
     // checked before anything of the response is read (spec/versioning.md):
     // a present and different number is refused whole, its ID included;
     // an absent one is let through (a backend older than the field)
@@ -310,7 +334,12 @@ export function createAppClient({
     sessions.push(session);
     while (sessions.length > maxSessions) {
       const old = sessions.shift();
-      for (const id of old.ids) byId.delete(id);
+      old.evicted = true; // an act still in flight must not bring it back unlisted (adopt)
+      /* only the ids that still name IT: sessions started from one screen
+       * share its draft id (the playground's Pilot starts one from its
+       * mirror on every change of the reader's typing), and evicting the
+       * oldest took the newest's id with it - "unknown session" */
+      for (const id of old.ids) if (byId.get(id) === old) byId.delete(id);
     }
   }
 
@@ -320,19 +349,56 @@ export function createAppClient({
     session.state = applyResponse(session.state, response);
     const id = session.state.id;
     if (id) {
+      session.ids.delete(id); // the current id last: the eviction below never takes it
       session.ids.add(id);
-      byId.set(id, session);
+      if (!session.evicted) {
+        byId.set(id, session);
+        /* The session in use is the last to go: eviction takes the least
+         * recently USED one, not the first started - an agent working in one
+         * app while it starts others to compare kept losing the one it was
+         * working in. */
+        const at = sessions.indexOf(session);
+        if (at >= 0 && at !== sessions.length - 1) {
+          sessions.splice(at, 1);
+          sessions.push(session);
+        }
+      }
+      /* The earlier ids are kept to name them as earlier states (find) -
+       * the last EARLIER_IDS of them. Every roundtrip answers a new draft id,
+       * and all of them were kept for the session's life: ~150 bytes per act
+       * that a long-running server never gave back. An older id is an
+       * unknown session, whose refusal names the open ones. */
+      while (session.ids.size > EARLIER_IDS + 1) {
+        const old = session.ids.values().next().value;
+        session.ids.delete(old);
+        if (byId.get(old) === session) byId.delete(old);
+      }
     }
     // edits the roundtrip did not carry survive a model push, as the
-    // frontend re-applies its pending paths after setData
+    // frontend re-applies its pending paths after setData - but not a view
+    // the response displays anew: its model is a new one, and the edits made
+    // in the old view are gone with it (they would otherwise go out with the
+    // new view's next event)
+    const rebuilt = rebuiltModels(response);
     for (const [key, map] of Object.entries(session.pending)) {
       const m = session.state.models[key];
-      if (!m) {
+      if (!m || rebuilt.has(key)) {
         session.pending[key] = new Map();
         continue;
       }
-      for (const [p, v] of map) setAt(m.data, p, v);
+      for (const [p, v] of map) reapply(m.data, p, v);
     }
+  }
+
+  /* The re-apply is JSONModel#setProperty's: the value lands where its
+   * parent object exists, nothing is created - an edit of row 5 of a table
+   * the push shrank to two rows stays pending without making the table six
+   * rows long (setAt filled the gap with holes the snapshot listed as rows). */
+  function reapply(data, p, v) {
+    const segs = String(p).split('/').filter((x) => x !== '');
+    if (!segs.length || !writablePath(p)) return;
+    const parent = getAt(data, segs.slice(0, -1).join('/'));
+    if (parent !== null && typeof parent === 'object') parent[segs[segs.length - 1]] = v;
   }
 
   function analyze(session, maxRows) {
@@ -350,7 +416,7 @@ export function createAppClient({
     const s = byId.get(String(sessionId));
     if (!s) {
       const known = sessions.map((x) => `${x.state.id} (${x.state.app})`);
-      throw new AgentError(`unknown session '${sessionId}' - start one with app_start${known.length ? `; open sessions: ${listOf(known)}` : ''}`);
+      throw new AgentError(`unknown session '${echo(sessionId)}' - start one with app_start${known.length ? `; open sessions: ${listOf(known)}` : ''}`);
     }
     if (generation && s.generation !== generation()) {
       throw new AgentError(`session '${sessionId}' was started on a backend that has since stopped or restarted - its drafts are gone; app_start ${s.state.app || 'the app'} again`);
@@ -409,8 +475,13 @@ export function createAppClient({
     }
     if (value !== null && typeof value === 'object') throw new AgentError(`${label} takes a single value, not ${JSON.stringify(value).slice(0, 80)}`);
     if (typeof current === 'number') {
-      const n = Number(value);
-      if (value === '' || Number.isNaN(n)) throw new AgentError(`${label} holds a number - ${JSON.stringify(value)} is none`);
+      /* a number, or a string that IS one in decimal - the agent addon's rule
+       * (describe_arg). Number() also took true (1), '0x10' (16), '1e400'
+       * and 'Infinity', and an infinite value went out as null: the field's
+       * initial value, sent without a word */
+      const n = typeof value === 'number' ? value
+        : (typeof value === 'string' && /^-?[0-9]+(\.[0-9]+)?$/.test(value.trim()) ? Number(value) : NaN);
+      if (!Number.isFinite(n)) throw new AgentError(`${label} holds a number - ${JSON.stringify(value)} is none`);
       return n;
     }
     if (typeof current === 'boolean') return coerce(value, undefined, 'boolean', label);
@@ -423,7 +494,7 @@ export function createAppClient({
     const plan = [];
     for (const [key, value] of Object.entries(values)) {
       const t = resolveTarget(key, snapshot, index);
-      if (!t) throw new AgentError(`no field '${key}' on this screen - ${fieldHelp(snapshot)}`);
+      if (!t) throw new AgentError(`no field '${echo(key)}' on this screen - ${fieldHelp(snapshot)}`);
       if (t.kind === 'field') {
         const f = t.field;
         if (!f.editable) throw new AgentError(`field ${f.id} (${f.label}) is not editable - ${fieldHelp(snapshot)}`);
@@ -453,6 +524,10 @@ export function createAppClient({
         plan.push({ modelKey: entry.modelKey, path: p, value: coerce(value, getAt(data, p), kind, `cell ${p}`) });
       }
     }
+    // a binding through a prototype ({/__proto__/x}) is no model field - the
+    // write would land on Object.prototype of this process
+    const unsafe = plan.find((x) => !writablePath(x.path));
+    if (unsafe) throw new AgentError(`${unsafe.path} is no model path a value can be written to (it runs through __proto__, constructor or prototype)`);
     for (const { modelKey, path, value } of plan) {
       setAt(session.state.models[modelKey].data, path, value);
       if (!session.pending[modelKey]) session.pending[modelKey] = new Map();
@@ -473,10 +548,14 @@ export function createAppClient({
     const hit = index.actions.get(e);
     if (hit) return hit;
     const named = snapshot.actions.filter((a) => a.event === e);
-    if (!named.length) throw new AgentError(`no action '${e}' on this screen - ${actionHelp(snapshot)}`);
+    if (!named.length) throw new AgentError(`no action '${echo(e)}' on this screen - ${actionHelp(snapshot)}`);
     const enabled = named.filter((a) => a.enabled);
     const pool = enabled.length ? enabled : named;
-    const pick = (row !== undefined && row !== null ? pool.find((a) => a.scope === 'row') : null) || pool[0];
+    // without a row, a screen action of that name before a row action - a
+    // "delete selected" button after a table with a DELETE per row was
+    // reachable by its id only
+    const given = row !== undefined && row !== null;
+    const pick = (given ? pool.find((a) => a.scope === 'row') : pool.find((a) => a.scope !== 'row')) || pool[0];
     return index.actions.get(pick.id);
   }
 
@@ -570,6 +649,11 @@ export function createAppClient({
 
   const UNKNOWN = Symbol('unknown');
   const isItem = (v) => v !== null && typeof v === 'object' && !Array.isArray(v) && ('$item' in v || '$ctx' in v || '$cell' in v);
+  /* An item or a context anywhere in a value: `${$parameters>/}` (and
+   * `${$parameters>}`) is the WHOLE parameter object, which holds them one
+   * level down - this client's markers ({"$item":0}, {"$ctx":0}) went out as
+   * the event argument, where the browser sends the controls marshalled. */
+  const holdsItem = (v) => isItem(v) || (v !== null && typeof v === 'object' && Object.values(v).some(holdsItem));
 
   /*
    * `${$parameters>/<path>}` over those parameters, with the semantics of
@@ -602,7 +686,7 @@ export function createAppClient({
       if (k === 0 && !Object.prototype.hasOwnProperty.call(node, seg)) return UNKNOWN;
       node = node[seg];
     }
-    if (isItem(node) || (Array.isArray(node) && node.some(isItem))) return UNKNOWN;
+    if (holdsItem(node)) return UNKNOWN;
     return node;
   }
 
@@ -769,13 +853,62 @@ export function createAppClient({
 
   // ------------------------------------------------------------ act ----
 
-  async function actNow(session, { values, event, args, row, maxRows } = {}) {
+  /* What makes an action the same action across two analyses of one screen:
+   * everything but its id and what values may legitimately change (its
+   * label, its enabled state). */
+  const actionSignature = (a) => JSON.stringify([a.event, a.trigger, a.control, a.scope, a.table, a.layer, a.args]);
+
+  /* `row` is a row index: a non-negative integer, as a JSON number or a
+   * string of decimal digits. It was read with Number() (server.mjs), so ""
+   * false and [] became row 0 and true row 1 - an act on a row nobody
+   * named. The agent addon takes a JSON number that describe_arg reads as
+   * an integer >= 0 and refuses the rest; a string of digits is taken here
+   * too, as for a number field (coerce). */
+  function rowArgument(row) {
+    if (row === undefined || row === null) return undefined;
+    const n = typeof row === 'number' ? row
+      : (typeof row === 'string' && /^[0-9]+$/.test(row.trim()) ? Number(row) : NaN);
+    if (!Number.isInteger(n) || n < 0) throw new AgentError(`\`row\` is a row index (0-based) - a non-negative integer, not ${JSON.stringify(row)}`);
+    return n;
+  }
+
+  /* What an act names on the screen on display: its action (by signature)
+   * and the model path of every value - validated as actNow validates it. */
+  function intentOf(session, { values, event, row: rowGiven, maxRows } = {}) {
+    const row = rowArgument(rowGiven);
+    const res = analyze(session, maxRows);
+    const entry = findAction(event, row, res.snapshot, res.index);
+    return { id: session.state.id, sig: actionSignature(entry.action), paths: targetPaths(values, res.snapshot, res.index) };
+  }
+
+  function targetPaths(values, snapshot, index) {
+    if (!values || typeof values !== 'object' || Array.isArray(values)) return {};
+    const out = {};
+    for (const key of Object.keys(values)) {
+      const t = resolveTarget(key, snapshot, index);
+      out[key] = !t ? null : t.kind === 'field' ? `${t.modelKey}:${t.field.path}` : `${t.entry.modelKey}:${t.table.path}/${t.row}/${t.col}`;
+    }
+    return out;
+  }
+
+  async function actNow(session, { values, event, args, row: rowGiven, maxRows } = {}, expect = null) {
+    const row = rowArgument(rowGiven);
     let res = analyze(session, maxRows);
     session.lastIndex = res.index;
     // validate everything before anything changes
     let entry = null;
     if (event !== undefined && event !== null && event !== '') {
       entry = findAction(event, row, res.snapshot, res.index);
+      if (expect) {
+        const paths = targetPaths(values, res.snapshot, res.index);
+        const moved = actionSignature(entry.action) !== expect.sig
+          || Object.keys(expect.paths).some((k) => paths[k] !== expect.paths[k]);
+        if (moved) {
+          throw new AgentError(`the screen changed while an earlier act was in flight - '${event}' `
+            + `${actionSignature(entry.action) !== expect.sig ? `is ${entry.action.id} (${entry.action.event}) on the new screen` : 'names other fields on the new screen'}; `
+            + `nothing was sent - continue from the new snapshot (session '${session.state.id}')`);
+        }
+      }
       if (!entry.action.enabled) throw new AgentError(`action ${entry.action.id} (${entry.action.label}) is disabled - ${actionHelp(res.snapshot)}`);
     } else if (row !== undefined && row !== null) {
       throw new AgentError('`row` belongs to an event - pass `event` too');
@@ -795,7 +928,33 @@ export function createAppClient({
       // the values may have changed what the args read: re-analyse first
       res = analyze(session, maxRows);
       session.lastIndex = res.index;
-      entry = res.index.actions.get(entry.action.id) || entry;
+      /* Ids follow the document order, so a value that shows or hides a
+       * control renumbers them: the same id can name ANOTHER action now, and
+       * firing it would send an event that was never asked for or checked.
+       * The re-read must be the action validated above - under its id, or
+       * the one action of the new screen that is the same; anything else is
+       * refused (as the abap2UI5 agent addon refuses it). An id the values
+       * left with nothing behind it (they hid the action) is looked for the
+       * same way: the old snapshot's entry was fired, a control the screen
+       * no longer shows. And the re-read action must still be enabled - a
+       * value can disable it (enabled="{/OPEN}"), and the browser cannot
+       * press it then. All before anything is sent; the catch below takes
+       * the values back. */
+      const sig = actionSignature(entry.action);
+      let again = res.index.actions.get(entry.action.id);
+      if (!again || actionSignature(again.action) !== sig) {
+        const same = [...res.index.actions.values()].filter((x) => actionSignature(x.action) === sig);
+        if (same.length !== 1) {
+          throw new AgentError(`the values change the screen - action ${entry.action.id} `
+            + `${again ? `is no longer ${entry.action.event}` : `(${entry.action.event}) is no longer on it`}; `
+            + 'fill the values without an event first, then fire it from the next snapshot');
+        }
+        again = same[0];
+      }
+      if (!again.action.enabled) {
+        throw new AgentError(`action ${again.action.id} (${again.action.label}) is disabled once the values are filled - ${actionHelp(res.snapshot)}`);
+      }
+      entry = again;
       if (entry.frontend) {
         // performed here, as the browser performs it: the slot closes, its
         // unsent edits go with it, no roundtrip
@@ -892,7 +1051,15 @@ export function createAppClient({
       let res = analyze(session, maxRows);
       session.lastIndex = res.index;
       if (values && Object.keys(values).length) {
-        applyValues(session, values, res.snapshot, res.index);
+        /* the app runs whether its values are taken or not: a refusal names
+         * the session it started, as the agent addon's does - without it the
+         * started app was out of reach and the next app_start a second one */
+        try {
+          applyValues(session, values, res.snapshot, res.index);
+        } catch (e) {
+          if (e instanceof AgentError) throw new AgentError(`${e.message} (the app is running: session ${session.state.id} - app_describe shows it)`);
+          throw e;
+        }
         res = analyze(session, maxRows);
         session.lastIndex = res.index;
       }
@@ -931,11 +1098,20 @@ export function createAppClient({
       const session = find(sessionId);
       const { event } = opts;
       if (event === undefined || event === null || event === '') return actNow(session, opts);
+      /* Queued behind a roundtrip in flight, the act runs on the screen that
+       * one answers - but its ids were read from the screen on display now.
+       * Two app_act { event: "a1" } at once fired NEXT and then whatever a1
+       * is on the next screen (DELETE_ALL), unseen. What the act names is
+       * resolved here, and it runs only where it still names the same. */
+      const expect = session.busy ? intentOf(session, opts) : null;
+      session.busy = (session.busy || 0) + 1;
       const run = session.queue.then(() => {
         if (generation && session.generation !== generation()) {
           throw new AgentError(`session '${sessionId}' was started on a backend that has since stopped or restarted - its drafts are gone; app_start ${session.state.app || 'the app'} again`);
         }
-        return actNow(session, opts);
+        return actNow(session, opts, expect && expect.id !== session.state.id ? expect : null);
+      }).finally(() => {
+        session.busy -= 1;
       });
       session.queue = run.catch(() => {});
       return run;
