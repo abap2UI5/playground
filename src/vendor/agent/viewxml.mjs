@@ -1,6 +1,6 @@
 /*
  * VENDORED - do not edit. abap2UI5/mcp-server lib/viewxml.mjs
- * at commit 9947371e087a9d1a64bcd31463a12310af107093, copied unchanged by tools/vendor-agent.mjs.
+ * at commit 82b75d8a4db80799f438bdbef626c1b258970177, copied unchanged by tools/vendor-agent.mjs.
  * Change it upstream, then vendor it again.
  */
 /*
@@ -34,7 +34,9 @@ export function decodeEntities(s) {
   return String(s).replace(/&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);/g, (m, e) => {
     if (e[0] === '#') {
       const code = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : m;
+      // above U+10FFFF fromCodePoint throws - one &#99999999; in a view
+      // threw the whole snapshot (after the act had reached the backend)
+      return Number.isFinite(code) && code <= 0x10ffff ? String.fromCodePoint(code) : m;
     }
     return Object.prototype.hasOwnProperty.call(ENTITIES, e) ? ENTITIES[e] : m;
   });
@@ -221,7 +223,11 @@ function bindingInfo(body) {
     const m = /^(?:([A-Za-z_][\w.-]*)>)?(.*)$/.exec(p[2]);
     const type = (/(?:^|[,{\s])type\s*:\s*(['"])(.*?)\1/.exec(b) || [])[2] || '';
     const formatter = /(?:^|[,{\s])formatter\s*:/.test(b);
-    return { path: m[2], model: m[1] || '', relative: !m[2].startsWith('/'), type, formatter };
+    /* `model: 'name'` binds to that model as `name>/path` does: read as the
+     * default model, a value written here landed on /path of the app's own
+     * model, which the screen does not edit (the agent addon reads it so) */
+    const modelKey = (/(?:^|[,{\s])model\s*:\s*(['"])(.*?)\1/.exec(b) || [])[2] || '';
+    return { path: m[2], model: modelKey || m[1] || '', relative: !m[2].startsWith('/'), type, formatter };
   }
   return { computed: b };
 }
@@ -490,7 +496,11 @@ export function describeArg(raw) {
  */
 export function parseWire(value) {
   const s = String(value || '').trim();
-  const m = /^\.?(eB|eBP|eF)\s*\(([\s\S]*)\)\s*;?\s*$/.exec(s);
+  /* s is trimmed, so what may follow the closing parenthesis is nothing or
+   * blanks and one semicolon: `(?:\s*;)?$`. The `\s*;?\s*$` it replaces
+   * matched the same and retried both \s* splits of a run of blanks after
+   * every ')' - quadratic in a backend-written attribute. */
+  const m = /^\.?(eB|eBP|eF)\s*\(([\s\S]*)\)(?:\s*;)?$/.exec(s);
   if (!m) return null;
   let args = splitArgs(m[2]);
   if (m[1] === 'eF') {

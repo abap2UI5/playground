@@ -1,6 +1,6 @@
 /*
  * VENDORED - do not edit. abap2UI5/mcp-server lib/snapshot.mjs
- * at commit 9947371e087a9d1a64bcd31463a12310af107093, copied unchanged by tools/vendor-agent.mjs.
+ * at commit 82b75d8a4db80799f438bdbef626c1b258970177, copied unchanged by tools/vendor-agent.mjs.
  * Change it upstream, then vendor it again.
  */
 /*
@@ -159,6 +159,23 @@ export function applyResponse(state, response) {
   return next;
 }
 
+/*
+ * The models a response builds afresh: every MAIN, POPUP or POPOVER display
+ * of its T_SYSTEM. The frontend makes a new JSON model for such a view
+ * (core/actions/Slots.js createViewModel), and with it a new, empty set of
+ * changed paths - an edit not sent yet dies with the view it was typed into,
+ * where a model PUSH (updateModelIfRequired) re-applies it.
+ */
+export function rebuiltModels(response) {
+  const keys = new Set();
+  const front = (response && response.S_FRONT) || {};
+  for (const raw of (front.S_ACTION && front.S_ACTION.T_SYSTEM) || []) {
+    const a = asArray(raw);
+    if (a && a[0] === 'VIEW_SLOTS' && a[1] === 'display' && MODEL_OWNING.includes(a[2])) keys.add(a[2]);
+  }
+  return keys;
+}
+
 // --------------------------------------------------------- model access ----
 
 const segments = (p) => String(p).split('/').filter((s) => s !== '');
@@ -172,7 +189,21 @@ export function getAt(data, p) {
   return cur;
 }
 
+/* The path segments no write may follow. A plain object answers
+ * `__proto__` with Object.prototype, so setAt(data, '/__proto__/x', v) set
+ * x on EVERY object of the process - and the paths come from the backend's
+ * view XML (a field bound to {/__proto__/shell}) and from a card's submit
+ * payload, neither of which this process may let write into its own
+ * prototypes. */
+const UNSAFE_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
+
+/** True when a write to `p` stays inside the model (no prototype segment). */
+export const writablePath = (p) => !segments(p).some((s) => UNSAFE_SEGMENTS.has(s));
+
+/** Writes `value` at `p`, creating what is missing; false (nothing written)
+ *  for a path through a prototype. */
 export function setAt(data, p, value) {
+  if (!writablePath(p)) return false;
   const segs = segments(p);
   let cur = data;
   for (let i = 0; i < segs.length - 1; i += 1) {
@@ -180,6 +211,7 @@ export function setAt(data, p, value) {
     cur = cur[segs[i]];
   }
   cur[segs[segs.length - 1]] = value;
+  return true;
 }
 
 /** "/MS_HEAD/KUNNR" -> "MS_HEAD-KUNNR"; the old two-way prefix /XX/ is not
@@ -298,7 +330,10 @@ const MESSAGE_LISTS = { 'sap.m.MessagePopover': 'popover', 'sap.m.MessageView': 
 const MESSAGE_ITEMS = new Set(['sap.m.MessageItem', 'sap.m.MessagePopoverItem']);
 
 function lookupSpec(table, name, metadata) {
-  if (table[name]) return table[name];
+  /* own keys only: an element named `__proto__` (an XML name may start with
+   * an underscore) found Object.prototype here and was taken for a field
+   * spec without `props` - a TypeError out of the whole snapshot */
+  if (Object.hasOwn(table, name)) return table[name];
   if (!metadata || !/^sap\./.test(name)) return null;
   let cur = metadata[name];
   for (let guard = 0; cur && cur.parent && guard < 30; guard += 1) {
@@ -314,7 +349,9 @@ const clip = (s, n = TEXT_MAX_LEN) => {
   const t = String(s).replace(/\s+/g, ' ').trim();
   return t.length > n ? `${t.slice(0, n - 3)}...` : t;
 };
-const stripTags = (s) => String(s).replace(/<[^>]*>/g, ' ');
+// not /<[^>]*>/: from every '<' without a closing '>' it scanned to the end
+// of the text - quadratic, 80k of model text held a describe for seconds
+const stripTags = (s) => String(s).replace(/<[^<>]*>/g, ' ');
 
 // ----------------------------------------------------------- the walker ----
 
