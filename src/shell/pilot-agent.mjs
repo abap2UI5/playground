@@ -28,7 +28,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AgentError, createAppClient } from "../vendor/agent/appclient.mjs";
 import { analyzeScreen, applyResponse, emptyState, FRONTEND_EVENTS, getAt, modelKeyOf } from "../vendor/agent/snapshot.mjs";
-import { addUsage, catalogueEntries, DEFAULT_SPEED, followStream, SPEEDS } from "./ai-common.mjs";
+import { addUsage, catalogueEntries, DEFAULT_SPEED, followStream, rankEntries, SPEEDS } from "./ai-common.mjs";
 import { attachmentBlocks } from "./attachments.mjs";
 
 export { explainError } from "./ai-common.mjs";
@@ -868,16 +868,10 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
   async function findApps(input) {
     const query = str(input.query)?.trim().toLowerCase();
     if (!query) return { error: "find_apps needs a query." };
-    const words = query.split(/\s+/).filter(Boolean);
-    const scored = (await catalogueEntries())
-      .filter((e) => e.runs)
-      .map((e) => ({ e, score: words.reduce((n, w) => n + (e.haystack.includes(w) ? 1 : 0), 0) }))
-      .filter((s) => s.score >= Math.max(1, words.length))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 8);
-    if (scored.length === 0) return { text: `No app that runs here matches "${query}". Try one word.`, summary: `found nothing for "${query}"` };
+    const { hits, all } = rankEntries((await catalogueEntries()).filter((e) => e.runs), query);
+    if (hits.length === 0) return { text: `No app that runs here matches any of "${query}". Try a control name or another word.`, summary: `found nothing for "${query}"` };
     return {
-      text: scored.map(({ e }) => `${e.class} - ${e.title}${e.summary ? `: ${e.summary}` : ""}`).join("\n"),
+      text: (all ? "" : `No app has all of "${query}" - these have some of it:\n`) + hits.map((e) => `${e.class} - ${e.title}${e.summary ? `: ${e.summary}` : ""}`).join("\n"),
       summary: `found apps for "${query}"`,
     };
   }

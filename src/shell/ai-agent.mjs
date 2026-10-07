@@ -24,7 +24,7 @@
 // static page can have a chat at all. `dangerouslyAllowBrowser` is the SDK's
 // name for exactly that choice.
 import Anthropic from "@anthropic-ai/sdk";
-import { addUsage, catalogueEntries, DEFAULT_SPEED, followStream, SPEEDS } from "./ai-common.mjs";
+import { addUsage, catalogueEntries, DEFAULT_SPEED, followStream, rankEntries, SPEEDS } from "./ai-common.mjs";
 // The framework's own guide to building an app, from the abap2UI5 commit
 // tools/fetch-deps.mjs pins - the same commit the runtime in this page is
 // transpiled from, so the API the guide describes is the API that runs here.
@@ -691,17 +691,11 @@ export function describeRun(report) {
 async function searchSamples(input) {
   const query = str(input.query)?.trim().toLowerCase();
   if (!query) return { error: "search_samples needs a query." };
-  const entries = await catalogueEntries();
-  const words = query.split(/\s+/).filter(Boolean);
-  const scored = entries
-    .map((e) => ({ e, score: words.reduce((n, w) => n + (e.haystack.includes(w) ? 1 : 0), 0) + (e.runs ? 0.5 : 0) }))
-    .filter((s) => s.score >= Math.max(1, words.length))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 8);
-  if (scored.length === 0) return { text: `No sample matches "${query}". Try one word.`, summary: `searched "${query}": nothing` };
+  const { hits, all } = rankEntries(await catalogueEntries(), query);
+  if (hits.length === 0) return { text: `No sample matches any of "${query}". Try a control name or another word.`, summary: `searched "${query}": nothing` };
   return {
-    text: scored
-      .map(({ e }) => `${e.class} - ${e.title}${e.summary ? `: ${e.summary}` : ""}${e.runs ? "" : " (does not run in the playground)"}${e.controls.length ? ` [${e.controls.slice(0, 8).join(", ")}]` : ""}`)
+    text: (all ? "" : `No sample has all of "${query}" - these have some of it:\n`) + hits
+      .map((e) => `${e.class} - ${e.title}${e.summary ? `: ${e.summary}` : ""}${e.runs ? "" : " (does not run in the playground)"}${e.controls.length ? ` [${e.controls.slice(0, 8).join(", ")}]` : ""}`)
       .join("\n"),
     summary: `searched samples for "${query}"`,
   };

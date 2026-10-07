@@ -96,6 +96,7 @@ function entriesOf(data) {
         raw: e.raw,
         runs: e.runs === true,
         controls,
+        heading: `${e.title} ${e.class}`.toLowerCase(),
         haystack: `${e.title} ${e.note ?? ""} ${e.summary ?? ""} ${e.class} ${e.group ?? ""} ${(e.keywords || []).join(" ")} ${controls.join(" ")}`.toLowerCase(),
       };
     });
@@ -181,4 +182,36 @@ export function addUsage(total, usage = {}) {
   total.input += (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
   total.cached += usage.cache_read_input_tokens ?? 0;
   total.output += usage.output_tokens ?? 0;
+}
+
+/*
+ * The catalogue entries best matching a query of a few words, for
+ * search_samples and find_apps. Every word that occurs counts, the title and
+ * class twice; a word ending in "s" counts in the singular too ("popups"
+ * finds "popup"). Answers { hits, all } - `all` whether the best ones carry
+ * every word. Requiring every word, a query of three keywords with one of
+ * them off ("table filter excel") found nothing at all, and the model spent
+ * a whole turn on "Try one word".
+ */
+export function rankEntries(entries, query, max = 8) {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const forms = words.map((w) => (w.length > 3 && w.endsWith("s") ? [w, w.slice(0, -1)] : [w]));
+  const scored = [];
+  for (const e of entries) {
+    let found = 0;
+    let score = 0;
+    for (const variants of forms) {
+      if (variants.some((v) => e.heading.includes(v))) {
+        found += 1;
+        score += 2;
+      } else if (variants.some((v) => e.haystack.includes(v))) {
+        found += 1;
+        score += 1;
+      }
+    }
+    if (found > 0) scored.push({ e, found, score: score + (e.runs ? 0.5 : 0) });
+  }
+  scored.sort((a, b) => b.found - a.found || b.score - a.score);
+  const hits = scored.slice(0, max);
+  return { hits: hits.map((s) => s.e), all: hits.length > 0 && hits[0].found === words.length };
 }
