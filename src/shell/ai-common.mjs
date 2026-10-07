@@ -38,6 +38,14 @@ export function explainError(err) {
     return { text: `This key may not use the model - try another speed in the header, or another key: ${err.message}`, key: true };
   }
   if (err instanceof Anthropic.RateLimitError) return { text: "Rate limited - wait a moment and send again." };
+  // Overloaded (529) or a server error: the SDK has already retried twice,
+  // and "The API answered 529: Overloaded" said nothing about what to do.
+  if (err instanceof Anthropic.APIError && (err.status === 529 || /overloaded/i.test(String(err.message)))) {
+    return { text: "The model is overloaded right now - wait a minute and send again, or pick another speed in the header." };
+  }
+  if (err instanceof Anthropic.InternalServerError) {
+    return { text: `api.anthropic.com had an error (${err.status ?? "5xx"}) - send again in a moment.` };
+  }
   if (err instanceof Anthropic.BadRequestError && /anthropic-workspace-id/.test(err.message)) {
     return {
       text:
@@ -96,8 +104,13 @@ function entriesOf(data) {
 /** The catalogue's entries, shaped for the tools that search it - the
  *  studio's search_samples and read_sample, the Pilot's find_apps and
  *  open_app. */
+// Shaped once: some 770 entries, each with its haystack built, were shaped
+// again for every search_samples, read_sample, find_apps and open_app.
+let shaped;
 export async function catalogueEntries() {
-  return entriesOf(await loadIndex());
+  const data = await loadIndex();
+  if (shaped?.data !== data) shaped = { data, entries: entriesOf(data) };
+  return shaped.entries;
 }
 
 // ------------------------------------------------------------ the stream
