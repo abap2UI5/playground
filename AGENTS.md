@@ -907,6 +907,26 @@ controls at any moment - the next message carries the new screen in a
   app whose typing changed counts as changed for
   the next message's `<screen>`. Each app is marked told when its screen is
   read (`snapshotText( )`), not wholesale after every tool round.
+- **An event is pressed only on the screen the model saw.** The tools of one
+  answer were all written for the screens told before it (`shownAt`, frozen
+  per batch from `told`): an act whose app's mirror moved on since - an
+  earlier act of the same answer, a click of the reader's while the model
+  thought, or one during the pause between typing and pressing - is
+  refused with the screen as it is now, nothing typed or pressed. Two
+  `act a1` in one answer pressed NEXT and then the next screen's a1.
+- **A screen is fitted, never cut mid-JSON** (`fitSnapshot( )`, as
+  mcp-server's): long values cut to 2,000 characters and read-only, then
+  rows from the end of the largest table, the JSON whole and `cut` saying
+  what is missing - a 120 KB TextArea pushed every action out of a 30,000
+  character `clip( )`. The `<screen>` of one message holds 60,000 for all
+  apps together; a dump (`lastAnswer`) is 2,000 at most and comes after the
+  screen.
+- **A tool argument the tool does not take is refused** (`execute( )`
+  against the tool's `input_schema`), `row`/`max_rows` are whole numbers
+  (a string of digits too), `beside` a boolean - dropped without a word,
+  `act { value, event }` pressed without the values. Errors and chat rows
+  repeat at most 80 characters of an argument; a closed tab's operator is
+  let go (`prune( )`).
 
 **Several apps, a tab each** (at most four, `.pilot-tabs` over the stage). Tab
 1 is Run's own frame and the class of the first file; the others are frames

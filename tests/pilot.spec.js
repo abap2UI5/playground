@@ -147,6 +147,68 @@ test("an act the screen does not offer is refused with what it does offer, and n
   expect(await page.locator("#roundtrip-count").textContent()).toBe(roundtrips);
 });
 
+test("two presses in one answer: the second, on a screen the model has not seen, is refused", async ({ page }) => {
+  // The model wrote both for the screen it was shown: the second GREET is a
+  // button of the screen the first one answered - as a1 was NEXT, then
+  // DELETE_ALL.
+  const requests = await answerWith(page, [
+    { tools: [{ name: "act", input: { values: { "/NAME": "Ann" }, event: "GREET" } }, { name: "act", input: { event: "GREET" } }] },
+    { text: "Greeted once." },
+  ]);
+  await openPilot(page);
+  await useKey(page);
+  const roundtrips = Number(await page.locator("#roundtrip-count").textContent());
+  await say(page, "Greet Ann twice");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("Greeted once.", { timeout: 60000 });
+  const [first, second] = requests[1].body.messages.at(-1).content;
+  expect(first.is_error).toBeUndefined();
+  expect(second.is_error).toBe(true);
+  expect(second.content).toContain("the screen changed since you saw it");
+  expect(second.content).toContain("The screen now:");
+  expect(Number(await page.locator("#roundtrip-count").textContent())).toBe(roundtrips + 1);
+});
+
+test("an argument a tool does not take is refused, and nothing is typed or pressed", async ({ page }) => {
+  const requests = await answerWith(page, [
+    { tools: [{ name: "act", input: { value: { "/NAME": "Carol" }, event: "GREET" } }, { name: "look", input: { max_rows: "lots" } }] },
+    { text: "I will use values." },
+  ]);
+  await openPilot(page);
+  await useKey(page);
+  const roundtrips = await page.locator("#roundtrip-count").textContent();
+  await say(page, "Greet Carol");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("I will use values.", { timeout: 60000 });
+  const [act, look] = requests[1].body.messages.at(-1).content;
+  expect(act.is_error).toBe(true);
+  expect(act.content).toContain("act has no argument 'value' - its arguments:");
+  expect(act.content).toContain("values");
+  expect(look.is_error).toBe(true);
+  expect(look.content).toContain('max_rows is a whole number, not "lots"');
+  expect(await page.locator("#roundtrip-count").textContent()).toBe(roundtrips);
+  await expect(page.frameLocator("#app").locator("input").first()).not.toHaveValue("Carol");
+});
+
+test("a screen too large for one answer is fitted: whole JSON, its actions and messages kept", async () => {
+  const { fitSnapshot } = await import("../src/shell/pilot-agent.mjs");
+  const snapshot = {
+    snapshotVersion: 1,
+    fields: [{ id: "f1", value: "x".repeat(120000), editable: true }, { id: "f2", path: "/NAME", value: "", editable: true }],
+    actions: [{ id: "a1", event: "SAVE" }],
+    tables: [{ id: "t1", rowCount: 200, truncated: false, editableCells: ["A"], rows: Array.from({ length: 200 }, (_, i) => ({ A: `${i}`.padEnd(500, ".") })) }],
+    messages: [{ type: "success", text: "PONG" }],
+  };
+  const fitted = fitSnapshot(snapshot, 30000);
+  const text = JSON.stringify(fitted);
+  expect(text.length).toBeLessThanOrEqual(30000);
+  expect(fitted.actions).toEqual(snapshot.actions);
+  expect(fitted.messages).toEqual(snapshot.messages);
+  expect(fitted.fields[0].editable).toBe(false);
+  expect(fitted.fields[1].editable).toBe(true);
+  expect(fitted.tables[0].truncated).toBe(true);
+  expect(fitted.cut.join(" ")).toMatch(/f1 .*cut.*table t1 shows its first \d+ row/);
+  expect(fitSnapshot({ fields: [] }, 30000)).toEqual({ fields: [] });
+});
+
 test("an answer whose connection dropped half way is said, not sent again", async ({ page }) => {
   // Started, a few words, then nothing: no message_stop.
   const torn = sse({ text: "Half an ans" }).split("event: content_block_stop")[0];

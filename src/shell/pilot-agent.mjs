@@ -41,6 +41,69 @@ const clip = (text, max = MAX_TOOL_TEXT) =>
   text.length <= max ? text : `${text.slice(0, max)}\n… (${text.length - max} more characters cut)`;
 const str = (v) => (typeof v === "string" ? v : undefined);
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// An argument as an error or a chat row repeats it: at most 80 characters.
+const echo = (v) => {
+  const t = String(v);
+  return t.length > 80 ? `${t.slice(0, 80)}...` : t;
+};
+// A dump of the reader's click as the model is told it.
+const MAX_ERROR_TEXT = 2000;
+// What all the screens one message carries may take together.
+const MAX_SCREENS_TEXT = 60000;
+const VALUE_CAP = 2000;
+
+/*
+ * A snapshot that fits `budget` characters of JSON - clip( ) cut it mid-JSON
+ * at 30,000: a 120 KB TextArea pushed out every action after it, a table of
+ * wide rows the app's answer (the messages come last), and the model read
+ * neither. Long values are cut and made read-only (an edit of the shown part
+ * would replace the whole value), then rows go from the end of the largest
+ * table; the JSON stays whole and `cut` says what is missing. As
+ * mcp-server's fitSnapshot (lib/budget.mjs).
+ */
+export function fitSnapshot(snap, budget) {
+  if (!snap || typeof snap !== "object" || JSON.stringify(snap).length <= budget) return snap;
+  const out = JSON.parse(JSON.stringify(snap));
+  const notes = [];
+  const cut = (v) => (typeof v === "string" && v.length > VALUE_CAP ? `${v.slice(0, VALUE_CAP)}...` : v);
+  const fields = [];
+  for (const f of out.fields ?? []) {
+    const v = cut(f.value);
+    if (v !== f.value) {
+      f.value = v;
+      f.editable = false;
+      fields.push(f.id);
+    }
+  }
+  if (fields.length) notes.push(`the values of ${fields.join(", ")} are cut to ${VALUE_CAP} characters and read-only here`);
+  for (const t of out.tables ?? []) {
+    const cols = new Set();
+    for (const r of t.rows ?? []) {
+      for (const [k, v] of Object.entries(r)) {
+        const c = cut(v);
+        if (c !== v) {
+          r[k] = c;
+          cols.add(k);
+        }
+      }
+    }
+    if (cols.size) {
+      t.editableCells = (t.editableCells ?? []).filter((c) => !cols.has(c));
+      notes.push(`table ${t.id}: cells of ${[...cols].join(", ")} are cut to ${VALUE_CAP} characters and not editable here`);
+    }
+  }
+  const shortened = new Map();
+  while (JSON.stringify(out).length > budget) {
+    const big = (out.tables ?? []).filter((t) => t.rows && t.rows.length > 1)
+      .sort((a, b) => JSON.stringify(b.rows).length - JSON.stringify(a.rows).length)[0];
+    if (!big) break;
+    big.rows = big.rows.slice(0, Math.max(1, Math.floor(big.rows.length / 2)));
+    big.truncated = true;
+    shortened.set(big.id, big.rows.length);
+  }
+  for (const [id, n] of shortened) notes.push(`table ${id} shows its first ${n} row(s) - look with a smaller max_rows`);
+  return notes.length ? { ...out, cut: notes } : out;
+}
 
 // ------------------------------------------------------------- the mirror
 
@@ -71,7 +134,7 @@ export function createMirror({ onChange = () => {} } = {}) {
       // was typed; folded only from the answer, those values were lost.
       if (request?.value?.MODEL && mirror.state.id) mirror.state = withDelta(mirror.state, request.value.MODEL);
       if (!(response.status >= 200 && response.status < 300)) {
-        mirror.error = `HTTP ${response.status}: ${String(response.body ?? "").split("\n").slice(0, 6).join("\n")}`;
+        mirror.error = clip(`HTTP ${response.status}: ${String(response.body ?? "").split("\n").slice(0, 6).join("\n")}`, MAX_ERROR_TEXT);
         mirror.version += 1;
         onChange();
         return;
@@ -519,9 +582,13 @@ export function createOperator({ app, mirror, ui = {}, halted = () => false }) {
         typedKey = "{}";
       }
       if (!hasEvent) return typed;
+      const typedAt = mirror.version;
       await pause(450);
       // Stop pressed while the values went in: the press does not follow.
       if (halted()) throw new AgentError("stopped by the person before the press - the values are typed, nothing was sent");
+      // A click of the reader's meanwhile: the press would go out on the
+      // screen before it.
+      if (mirror.version !== typedAt) throw new AgentError("the screen changed while the values went in (the person used the app) - nothing was pressed");
     }
     const action = actionOf(before, String(event));
     ui.acting?.(`pressing ${action ? `"${action.label}"` : event}`);
@@ -569,7 +636,15 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
   // One operator per app, made the first time the model reaches for it and
   // made again for a tab that was closed and whose number came back.
   const operators = new Map();
+  // A closed tab's operator held its mirror and the client's copies of the
+  // screen for the rest of the chat: tab numbers never come back.
+  function prune() {
+    const open = new Set(host.apps().map((a) => a.id));
+    for (const id of operators.keys()) if (!open.has(id)) operators.delete(id);
+    for (const id of told.keys()) if (!open.has(id)) told.delete(id);
+  }
   function operatorOf(app) {
+    prune();
     const known = operators.get(app.id);
     if (known && known.mirror === app.mirror) return known.operator;
     const operator = createOperator({ app, mirror: app.mirror, ui, halted: () => stopped });
@@ -585,7 +660,7 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
     const key = String(ref).trim();
     const app = apps.find((a) => a.id === key)
       ?? apps.find((a) => (a.mirror?.state.app || a.cls || "").toUpperCase() === key.toUpperCase());
-    if (!app) throw new AgentError(`there is no app ${key} - open apps: ${appList()}`);
+    if (!app) throw new AgentError(`there is no app ${echo(key)} - open apps: ${appList()}`);
     return app;
   }
   const appList = () =>
@@ -612,6 +687,7 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
   };
   let stream;
   let stopped = false;
+  let shownAt = new Map();
   // Resolved by stop( ): a tool still running (an app that will not render,
   // a fetch) is no longer waited for - Stop used to change nothing until it
   // ended on its own, up to half a minute later.
@@ -623,10 +699,12 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
   // failed last answer (a dump of the reader's click), which the snapshot
   // of the screen before it does not show. Whatever is read here is what
   // the model has been told of that app.
-  const snapshotText = (app, snapshot) => {
+  const snapshotText = (app, snapshot, budget = MAX_TOOL_TEXT) => {
     told.set(app.id, stateOf(app));
     const error = app.mirror?.error;
-    return clip(JSON.stringify({ tab: app.id, ...(error ? { lastAnswer: error } : {}), ...snapshot }));
+    // the dump after the screen, and the screen fitted to what is left
+    const fitted = fitSnapshot(snapshot, budget - (error ? error.length : 0) - 200);
+    return clip(JSON.stringify({ tab: app.id, ...fitted, ...(error ? { lastAnswer: error } : {}) }), budget);
   };
 
   // `files` are the File objects the reader added to this message; they go in
@@ -642,9 +720,11 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
     const changed = host.apps().filter((a) => told.get(a.id) !== stateOf(a));
     if (changed.length > 0) {
       const screens = [];
+      // four changed apps were four screens of 30,000 characters each
+      const each = Math.min(MAX_TOOL_TEXT, Math.floor(MAX_SCREENS_TEXT / changed.length));
       for (const app of changed) {
         try {
-          screens.push(snapshotText(app, await operatorOf(app).look()));
+          screens.push(snapshotText(app, await operatorOf(app).look(), each));
         } catch (e) {
           screens.push(`tab ${app.id}: ${String(e?.message ?? e)}`);
         }
@@ -773,6 +853,11 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
       cuts = 0;
 
       const results = [];
+      // The screens the model wrote this batch for: an event is pressed only
+      // on the screen it saw. Two "act a1" in one answer pressed NEXT and
+      // then whatever a1 was on the next screen (DELETE_ALL); a click of
+      // the reader's while the model thought did the same.
+      shownAt = new Map([...told].map(([id, state]) => [id, state.split("|")[0]]));
       for (const use of uses) {
         if (stopped) {
           ui.tool({ id: use.id, summary: `not run: ${use.name} (stopped)`, error: true });
@@ -813,10 +898,26 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
   }
 
   async function execute(name, input) {
+    const tool = TOOLS.find((t) => t.name === name);
+    if (!tool) return { error: `There is no tool called ${echo(name)}.` };
+    /* An argument the tool does not take is refused, not dropped: act
+     * { value: {...}, event } pressed without the values, and act
+     * { values, evnt } typed and pressed nothing - each reported as done. */
+    const known = Object.keys(tool.input_schema.properties ?? {});
+    const unknown = Object.keys(input ?? {}).filter((k) => !known.includes(k));
+    if (unknown.length) {
+      return { error: `${name} has no argument ${unknown.map((k) => `'${echo(k)}'`).join(", ")} - ${known.length ? `its arguments: ${known.join(", ")}` : "it takes none"}. Nothing was done.` };
+    }
+    try {
+      for (const k of ["row", "max_rows"]) if (k in input) input[k] = count(input[k], k);
+      if ("beside" in input && input.beside !== undefined && typeof input.beside !== "boolean") throw new AgentError(`beside is true or false, not ${echo(JSON.stringify(input.beside))}`);
+    } catch (e) {
+      return { error: `${String(e?.message ?? e)}. Nothing was done.` };
+    }
     switch (name) {
       case "look": {
         const app = appOf(input.app);
-        const snapshot = await operatorOf(app).look(num(input.max_rows));
+        const snapshot = await operatorOf(app).look(input.max_rows);
         return { text: snapshotText(app, snapshot), summary: `looked at ${snapshot.title || snapshot.app}` };
       }
       case "act": return act(input);
@@ -852,7 +953,7 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
           summary: `read ${files[0]?.name ?? "the source"}`,
         };
       }
-      default: return { error: `There is no tool called ${name}.` };
+      default: return { error: `There is no tool called ${echo(name)}.` };
     }
   }
 
@@ -869,16 +970,20 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
     if (!app.visible) host.show(app.id);
     const operator = operatorOf(app);
     try {
+      const saw = shownAt.get(app.id);
+      if (event && saw !== undefined && String(app.mirror?.version) !== saw) {
+        throw new AgentError(`the screen changed since you saw it (the person used the app, or an earlier step of yours changed it) - ${echo(event)} was not pressed${values ? " and nothing was typed" : ""}; act on the screen below`);
+      }
       const snapshot = await operator.act({
         values,
         event,
-        row: num(input.row),
+        row: input.row,
         args: Array.isArray(input.args) ? input.args : undefined,
-        maxRows: num(input.max_rows),
+        maxRows: input.max_rows,
       });
       const what = [
         values ? `typed ${Object.keys(values).length} value${Object.keys(values).length === 1 ? "" : "s"}` : "",
-        event ? `pressed ${event}` : "",
+        event ? `pressed ${echo(event)}` : "",
       ].filter(Boolean).join(", ");
       // What the app SAID in answer - a toast, a message box, a field's
       // error - not the strips that stand on the screen anyway.
@@ -893,7 +998,7 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
       } catch {
         screen = "";
       }
-      return { error: `${String(e?.message ?? e)}${screen}` };
+      return { error: `${clip(String(e?.message ?? e), MAX_ERROR_TEXT)}${screen}` };
     }
   }
 
@@ -901,7 +1006,7 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
     const query = str(input.query)?.trim().toLowerCase();
     if (!query) return { error: "find_apps needs a query." };
     const { hits, all } = rankEntries((await catalogueEntries()).filter((e) => e.runs), query);
-    if (hits.length === 0) return { text: `No app that runs here matches any of "${query}". Try a control name or another word.`, summary: `found nothing for "${query}"` };
+    if (hits.length === 0) return { text: `No app that runs here matches any of "${echo(query)}". Try a control name or another word.`, summary: `found nothing for "${echo(query)}"` };
     return {
       text: (all ? "" : `No app has all of "${query}" - these have some of it:\n`) + hits.map((e) => `${e.class} - ${e.title}${e.summary ? `: ${e.summary}` : ""}`).join("\n"),
       summary: `found apps for "${query}"`,
@@ -914,7 +1019,7 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
     let files = host.carried(cls);
     if (!files) {
       const entry = (await catalogueEntries()).find((e) => e.class === cls);
-      if (!entry) return { error: `${cls} is not in the sample catalogue - find_apps first.` };
+      if (!entry) return { error: `${echo(cls)} is not in the sample catalogue - find_apps first.` };
       if (!entry.runs) return { error: `${cls} does not run in the playground (it needs a system or a library this page has not got).` };
       files = await host.fetchLinked(entry.raw);
     }
@@ -946,7 +1051,14 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
   };
 }
 
-const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+/* row and max_rows: a whole number, or a string of digits - num( ) dropped
+ * "2" without a word, and the client then asked for the row that was sent. */
+function count(v, name) {
+  if (v === undefined || v === null) return undefined;
+  const n = typeof v === "number" ? v : typeof v === "string" && /^\s*\d+\s*$/.test(v) ? Number(v) : NaN;
+  if (!Number.isInteger(n) || n < 0) throw new AgentError(`${name} is a whole number, not ${echo(JSON.stringify(v))}`);
+  return n;
+}
 
 // What a tool call is doing while it is under way.
 export function pendingText(name, input) {
@@ -955,12 +1067,12 @@ export function pendingText(name, input) {
     case "act": {
       const event = str(input.event);
       const keys = input.values && typeof input.values === "object" ? Object.keys(input.values) : [];
-      if (event && keys.length) return `typing ${keys.length} value${keys.length === 1 ? "" : "s"}, then ${event}…`;
-      if (event) return `pressing ${event}…`;
-      return keys.length ? `typing ${keys.join(", ")}…` : "acting…";
+      if (event && keys.length) return `typing ${keys.length} value${keys.length === 1 ? "" : "s"}, then ${echo(event)}…`;
+      if (event) return `pressing ${echo(event)}…`;
+      return keys.length ? `typing ${echo(keys.join(", "))}…` : "acting…";
     }
     case "restart_app": return "restarting the app…";
-    case "find_apps": return `looking for apps${str(input.query) ? ` about "${input.query}"` : ""}…`;
+    case "find_apps": return `looking for apps${str(input.query) ? ` about "${echo(input.query)}"` : ""}…`;
     case "open_app": return `opening ${str(input.class) ?? "an app"}${input.beside === true ? " beside" : ""}…`;
     case "show_app": return `showing app ${str(input.app) ?? ""}…`;
     case "close_app": return `closing app ${str(input.app) ?? ""}…`;
