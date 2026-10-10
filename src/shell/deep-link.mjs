@@ -1,6 +1,6 @@
 // Opening ABAP that lives somewhere else.
 //
-//   ?src=https://raw.githubusercontent.com/abap2UI5/samples/main/src/z2ui5_cl_demo.clas.abap
+//   ?src=https://raw.githubusercontent.com/abap2UI5/samples/main/src/z2ui5_cl_smp_app_493.clas.abap
 //
 // This is what a documentation page links when it wants to show one of its
 // examples running rather than only printed. Several `src` parameters may be
