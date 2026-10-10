@@ -19,6 +19,7 @@ import {
   getFiles,
   invalidateAnalysis,
   openFile,
+  preloadEditor,
   redo,
   refresh,
   refreshNow,
@@ -252,6 +253,11 @@ async function boot() {
   // still waiting on the link was every bit of processor work behind it.
   const runtime = startRuntime();
   heard(runtime.ready);
+  // Monaco, which is a chunk of its own now: asked for here, before the
+  // awaits, on every page that will show the editor - and on no other. An
+  // app-only page keeps the files in src/editor/file-store.mjs instead and
+  // never fetches it.
+  if (!appOnly) heard(preloadEditor());
   // The registry's worker, which fetches the corpus itself and has usually
   // done so by now; picked up here the way the runtime's is.
   startRegistry();
@@ -351,7 +357,7 @@ async function boot() {
 
   const { files, from } = await startingReady;
   startedFrom = from;
-  createEditor(document.getElementById("editor"), files, { onChange: remember, dark: isDark() });
+  await createEditor(document.getElementById("editor"), files, { onChange: remember, dark: isDark(), editor: !appOnly });
   // What a link or the default sample put in is not the reader's work until
   // they change it (see `opened`); a restored draft is.
   if (from !== "your last session") opened = JSON.stringify(getFiles());

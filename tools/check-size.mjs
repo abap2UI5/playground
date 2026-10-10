@@ -165,6 +165,46 @@ if (!stackOk) {
   );
 }
 
+// And what an app-only page downloads of the bundle. ?view=app and
+// ?view=full - every demo embedded in the documentation - show no editor,
+// and src/editor/editor.mjs imports Monaco dynamically so that such a page
+// never fetches it. That is a property of the module graph, so it is checked
+// on esbuild's metafile: no Monaco source in the entry or in anything it
+// imports statically, and Monaco's chunk reached by a dynamic import alone.
+// The number printed beside it is what those pages wait for instead.
+console.log("\nwhat an app-only page downloads of it:");
+{
+  const metafile = JSON.parse(fs.readFileSync(path.join(ROOT, "build", "site.metafile.json"), "utf8"));
+  const outputs = metafile.outputs;
+  const shell = Object.keys(outputs).find((o) => outputs[o].entryPoint === "src/shell/main.mjs");
+  const reached = new Set();
+  const stack = [shell];
+  while (stack.length > 0) {
+    const out = stack.pop();
+    if (reached.has(out)) continue;
+    reached.add(out);
+    for (const { path: to, kind, external } of outputs[out]?.imports ?? []) {
+      if (!external && kind === "import-statement" && outputs[to]) stack.push(to);
+    }
+  }
+  const carriesMonaco = (out) => Object.keys(outputs[out].inputs).some((i) => i.startsWith("node_modules/monaco-editor/"));
+  const leaked = [...reached].filter(carriesMonaco);
+  const monaco = Object.keys(outputs).find((o) => outputs[o].entryPoint === "src/editor/monaco-editor.mjs");
+  const appOnlyBytes = [...reached].reduce((n, o) => n + gzipped(path.join(ROOT, o)), 0);
+  const ok = leaked.length === 0 && monaco !== undefined && !reached.has(monaco);
+  if (!ok) failed = true;
+  console.log(
+    `  ${ok ? "ok     " : "OVER   "} the entry and its static imports carry no Monaco` +
+      `   (${mb(appOnlyBytes)} compressed for an app-only page; Monaco's chunk ${monaco ? mb(gzipped(path.join(ROOT, monaco))) : "missing"})`,
+  );
+  if (!ok) {
+    console.error(
+      `  Monaco reached the app-only page: ${leaked.length ? leaked.join(", ") : "its chunk is imported statically"}.\n` +
+        "  src/editor/editor.mjs has to import monaco-editor.mjs dynamically and nothing else may import it at all.",
+    );
+  }
+}
+
 const total = Number(execFileSync("du", ["-sb", DIST]).toString().split("\t")[0]);
 const totalOver = total > TOTAL_LIMIT;
 if (totalOver) failed = true;

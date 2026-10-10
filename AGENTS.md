@@ -19,7 +19,7 @@ them before touching `tools/` or `src/runtime`.
 | Path | Purpose |
 | --- | --- |
 | `src/shell/` | The page: boot and Run (`main.mjs`, which also owns the **Auto** switch beside Run - the debounce, the stored setting and the three reasons Run may be inactive), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the samples browser over the sample catalogue (`examples.mjs`, reading the built index — a near-full-screen modal with the filters and the catalogue's three facets down its side), which UI5 library a control ships in (`ui5-libs.mjs`) beside the closed list of the ones this site carries (`ui5-libraries.mjs`), the bottom panel (`insight.mjs`), the syntax colour it prints XML and JSON in (`highlight.mjs`) and the View tab's edit mode - the builder chain read back out of the ABAP (`chain-read.mjs`), the edited document matched against the one that was shown (`view-edit.mjs`), the change put back as an edit to the ABAP that is there (`chain-patch.mjs`) and, when it cannot be, the chain written again in the house layout (`chain-write.mjs`), the AI chat (`chat.mjs` on screen, `ai-agent.mjs` the conversation and its tools, a chunk loaded on first use, `ai-starter.mjs` the class the AI Studio starts on - see "The AI chat" below), the AI Pilot (`pilot.mjs` on screen and the bridge's half, `pilot-agent.mjs` the mirror, the operator and the conversation, a chunk, with `attachments.mjs`, the files added to a message - see "The AI Pilot" below), what the two share (`ai-common.mjs`: the speeds and how a failed request is said; `attach-ui.mjs`: the files added to a message, on screen), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch in the menu behind the bar's last button, applied as `data-theme` on `<html>` and handed to the editor and the app frame; `extra.mjs` is the six lines that close that menu), where the reader was on each of the neighbouring sites (`site-memory.mjs` — see "One site in three places" below), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the search box in the bar and the matcher under it (`search-box.mjs`, `search-engine.mjs` — one box over the documentation AND every sample, see "One site in three places" below), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
-| `src/editor/` | Monaco plus the abaplint registry — in a worker: `registry-core.mjs` and `transpile-core.mjs` are abaplint and the single-object transpile as they run there, `registry-worker.mjs` the worker's entry, `registry.mjs` the page's client with a promise in front of everything, `providers.mjs` Monaco's language providers answered over it, `lint-core.mjs` the abap2UI5 linter as it runs in that same worker (its bundle, `lint-entry.mjs`, loaded by the worker at start) and `abap2ui5-lint.mjs` the page's half of it (the settings and the rule links) — the file set, and the samples the page carries - `sample-list.mjs`, which is nothing but the class names of a handful of apps in **abap2UI5/samples**, and `samples.mjs`, which pairs what the build resolved them into (`build/samples/`) with the ABAP itself |
+| `src/editor/` | The editor as the page sees it (`editor.mjs`, one set of functions answered by one of two halves: `monaco-editor.mjs`, Monaco itself, a chunk imported dynamically and only where an editor is shown, or `file-store.mjs`, a plain list of files for the app-only pages — see "What a visitor waits for" below) and the analysis both share (`analysis.mjs`, Monaco-free, reading its half through a host), plus the abaplint registry — in a worker: `registry-core.mjs` and `transpile-core.mjs` are abaplint and the single-object transpile as they run there, `registry-worker.mjs` the worker's entry, `registry.mjs` the page's client with a promise in front of everything, `providers.mjs` Monaco's language providers answered over it, `lint-core.mjs` the abap2UI5 linter as it runs in that same worker (its bundle, `lint-entry.mjs`, loaded by the worker at start) and `abap2ui5-lint.mjs` the page's half of it (the settings and the rule links) — the file set, and the samples the page carries - `sample-list.mjs`, which is nothing but the class names of a handful of apps in **abap2UI5/samples**, and `samples.mjs`, which pairs what the build resolved them into (`build/samples/`) with the ABAP itself |
 | `src/runtime/` | The ABAP side of the page: the framework entry (`index.mjs`, `roundtrip()` and `defineClasses()`), `worker.mjs` around it, which is the bundle's entry and answers those over `postMessage` when it runs as the worker the page starts, the sql.js database (`db-setup.mjs`), and the browser shims for Node modules |
 | `src/vendor/agent/` | abap2UI5/mcp-server's agent client - `appclient.mjs`, `snapshot.mjs`, `viewxml.mjs` - copied **unchanged** at a recorded commit by `tools/vendor-agent.mjs`, which writes `source.json` (the commit and each copy's sha256); `--check` holds the copies to it, and `tests/pilot.spec.js` runs that check. Never edited here: a change goes upstream and is vendored again |
 | `src/abap/` | The playground's own ABAP - `zcl_pg_bridge` and nothing else; it travels through the same downport and transpile as the framework. There was a `zcl_pg_hello` beside it, a copy of the hello world in **abap2UI5/samples**; the runtime tests drive the framework's own `z2ui5_cl_ui5_app_hi_world` instead, so this repository holds no app of its own to keep in step with one somebody else maintains |
@@ -127,17 +127,23 @@ of each line. Each step is still its own script and still runnable by name
    writes the editor's source corpus (`dist/editor/corpus.json`), copies examples and the embed kit, and
    writes `dist/sw.js` from `src/shell/sw.js` with an id for this build
    substituted into it. It deletes the directories it owns before writing.
-   The page bundle is **split**: `assets/shell.mjs` is Monaco, and what the
-   page only needs later — Monaco's ABAP grammar, the two AI chunks — is a
-   chunk each, split off wherever the source says `import()`, downloaded
-   during the corpus parse and evaluated when it lands. Two things follow
-   from the hashed chunk names, and both are
-   written by this step rather than by hand: the `modulepreload` tags for the
-   chunks the entry imports statically (a marker in `index.html`; without them
-   a static import is fetched after the bundle instead of beside it), and the
-   list of chunks the service worker precaches (a marker in `sw.js`). The size
-   budget is over `assets/*.mjs` as a sum, so a module that moved into a chunk
-   has not gotten any smaller. Two loaders go with it: Monaco's icon font is
+   The page bundle is **split**: `assets/shell.mjs` is the shell (60 KB
+   compressed), and what only some pages need, or need later — **Monaco**
+   (`src/editor/monaco-editor.mjs`, 0.82 MB, which an app-only page never
+   fetches), Monaco's ABAP grammar, the two AI chunks — is a chunk each,
+   split off wherever the source says `import()`, downloaded during the
+   corpus parse and evaluated when it lands. Three things follow from the
+   hashed chunk names, and all are written by this step rather than by hand:
+   the `modulepreload` tags for the chunks the entry imports statically (a
+   marker in `index.html`; without them a static import is fetched after the
+   bundle instead of beside it), the names of Monaco's chunk and its static
+   imports, which the inline script preloads on every page but an app-only
+   one (`__EDITOR_PRELOADS__`, in that same script), and the list of chunks
+   the service worker precaches (a marker in `sw.js`). The size budget is
+   over `assets/*.mjs` as a sum, so a module that moved into a chunk has not
+   gotten any smaller — and `check-size.mjs` walks the metafile to hold the
+   entry and its static imports free of Monaco, which is the property the
+   app-only pages' saving rests on. Two loaders go with it: Monaco's icon font is
    copied out with a hashed name, and `.abap` is **text** — which is how the
    samples the page carries reach the bundle from `build/samples/`. They are real ABAP
    files rather than template literals inside JavaScript so that the samples
@@ -191,7 +197,8 @@ without it neither ships one.
 
 Five assets stand between opening the page and an app on screen, and
 `tools/check-size.mjs` budgets those five among the nine files it holds: the page bundle with its chunks
-(~1.0 MB compressed — Monaco in `shell.mjs`), the registry worker with the
+(~1.0 MB compressed — Monaco, as a chunk of its own; the shell itself is
+60 KB), the registry worker with the
 linter's bundle beside it (~0.7 MB — abaplint, the transpiler and the
 abap2UI5 linter), the transpiled
 framework (~0.6 MB), the ABAP corpus (~0.4 MB) and SQLite (~0.3 MB). About three megabytes, and then
@@ -230,7 +237,10 @@ code:
   — the runtime's at the one moment the page is waiting on a runtime that
   has not spoken, the registry's after ten seconds without its first word.
 - **The preloads in `src/shell/index.html`.** The chunks `shell.mjs` imports
-  statically (`modulepreload`, written by the build). Left alone each would
+  statically (`modulepreload`, written by the build), and — added by the
+  inline script, on every page but `?view=app` and `?view=full` — Monaco's
+  chunk, which `editor.mjs` imports dynamically so that those two pages
+  never fetch it (below). Left alone each would
   arrive in a chain behind the file that asks for it. The corpus is not
   preloaded any more: the registry worker fetches it, and a document's
   preload does not reach a worker's fetch. Measured when the framework was still an import: no difference where
@@ -1077,7 +1087,14 @@ deploy — readers get the published playground, never your checkout.
   draft — an embedding must not overwrite a reader's work.
 - **`?view=app`**: hides the editor too — the app on its own, for a paragraph
   about what an app does rather than how it is written. **`?view=full`** is the
-  same view under the name the Full screen button opens it by. Neither carries
+  same view under the name the Full screen button opens it by. Neither
+  **fetches Monaco**: `createEditor()` in `src/editor/editor.mjs` keeps the
+  files in `file-store.mjs` on these pages — the registry worker still checks
+  and compiles them, an abaplint error still stops Run — and imports
+  `monaco-editor.mjs`, the 0.82 MB chunk, on no other. Every page used to
+  download, evaluate and instantiate the editor into the hidden pane;
+  `tests/embed.spec.js` holds an app-only page to never asking for the chunk
+  and the playground to asking. Neither carries
   the bar: everything it offers is a click away in the "open this in the
   playground" link an embedding page prints beside the frame, and what it did
   instead was put a strip of this site's furniture across somebody else's

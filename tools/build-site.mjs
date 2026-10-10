@@ -272,10 +272,12 @@ function writeSamples() {
 
 writeSamples();
 
-// The page bundle, in pieces: assets/shell.mjs is what the page cannot start
-// without - Monaco - and what it only needs later comes as chunks of its
-// own, which esbuild splits off wherever the source says import( ): Monaco's
-// own ABAP grammar, the two AI chunks. abaplint, the transpiler and the
+// The page bundle, in pieces: assets/shell.mjs is what every page starts
+// with - the shell - and what only some pages need, or need later, comes as
+// chunks of its own, which esbuild splits off wherever the source says
+// import( ): Monaco (src/editor/monaco-editor.mjs, which an app-only page
+// never fetches - see src/editor/editor.mjs), Monaco's own ABAP grammar, the
+// two AI chunks. abaplint, the transpiler and the
 // abap2UI5 linter are in the registry worker's bundle above. What is split
 // off downloads during the parse, where the network is idle, and is
 // evaluated when it lands. The chunks carry a hash in their name, so the
@@ -591,21 +593,42 @@ function writeServiceWorker() {
 // static imports: the dynamic ones are wanted during the parse and fetched
 // then, where the network is idle.
 function writeIndex() {
-  const entry = result.metafile.outputs[path.relative(ROOT, path.join(ASSETS, "shell.mjs"))];
-  const tags = entry.imports
-    .filter((i) => i.kind === "import-statement")
-    .map((i) => `<link rel="modulepreload" href="${path.relative(DIST, path.join(ROOT, i.path))}">`);
+  const outputs = result.metafile.outputs;
+  const rel = (out) => path.relative(DIST, path.join(ROOT, out)).split(path.sep).join("/");
+  const entry = outputs[path.relative(ROOT, path.join(ASSETS, "shell.mjs"))];
+  const statics = entry.imports.filter((i) => i.kind === "import-statement").map((i) => rel(i.path));
+  const tags = statics.map((href) => `<link rel="modulepreload" href="${href}">`);
+  // Monaco's chunk - the output whose entry point is src/editor/monaco-editor.mjs,
+  // which src/editor/editor.mjs imports dynamically - and whatever it imports
+  // statically that the entry does not already preload. The inline script
+  // preloads these on every page but an app-only one; see index.html.
+  const monaco = Object.keys(outputs).find((o) => outputs[o].entryPoint === "src/editor/monaco-editor.mjs");
+  if (!monaco) {
+    console.error("build-site: ERROR the bundle has no chunk for src/editor/monaco-editor.mjs - is it still imported dynamically?");
+    process.exit(1);
+  }
+  const editorPreloads = [
+    rel(monaco),
+    ...outputs[monaco].imports
+      .filter((i) => i.kind === "import-statement" && !i.external)
+      .map((i) => rel(i.path))
+      .filter((href) => !statics.includes(href)),
+  ];
   const source = fs.readFileSync(path.join(SHELL, "index.html"), "utf8");
   const marker = "<!-- __MODULEPRELOADS__ -->";
-  if (!source.includes(marker)) {
-    console.error(`build-site: ERROR src/shell/index.html no longer has a ${marker} to substitute`);
-    process.exit(1);
+  for (const needed of [marker, "__EDITOR_PRELOADS__"]) {
+    if (!source.includes(needed)) {
+      console.error(`build-site: ERROR src/shell/index.html no longer has a ${needed} to substitute`);
+      process.exit(1);
+    }
   }
   /* After the substitution, without the comments: 9.8 kB of the 37 kB document,
      a third of its compressed weight (tools/html.mjs). */
-  const html = stripHtmlComments(source.replace(marker, tags.join("\n")));
+  const html = stripHtmlComments(
+    source.replace(marker, tags.join("\n")).replace("__EDITOR_PRELOADS__", JSON.stringify(editorPreloads)),
+  );
   fs.writeFileSync(path.join(DIST, "index.html"), html);
-  log(`index.html (${tags.length} chunk${tags.length === 1 ? "" : "s"} preloaded)`);
+  log(`index.html (${tags.length} chunk${tags.length === 1 ? "" : "s"} preloaded, Monaco's ${editorPreloads.length} where the editor is shown)`);
   writeAiPage(html);
   writePilotPage(html);
 }

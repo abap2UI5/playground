@@ -128,6 +128,27 @@
     window.__abap2ui5Runtime = start("runtime/framework.mjs");
     window.__abap2ui5Registry = start("editor/registry.mjs");
 
+    // Monaco, which is a chunk of the page bundle that assets/shell.mjs
+    // imports dynamically - and only on a page that will show the editor.
+    // ?view=app and ?view=full hide the editor pane, and until Monaco left
+    // the bundle every embedded demo downloaded, evaluated and instantiated
+    // 0.85 MB of editor into it. On every other page it is wanted as early
+    // as the bundle itself, so it is preloaded here rather than fetched when
+    // boot( ) reaches for it; the build writes the chunk's hashed name (and
+    // the names of what it imports statically) into the array - a marker
+    // substituted by writeIndex( ) in tools/build-site.mjs, like the
+    // modulepreload tags below. A link added by script preloads like one in
+    // the markup, and the page's later import( ) of the same URL takes it.
+    if (!/[?&]view=(app|full)(&|$)/.test(location.search)) {
+      var editorChunks = __EDITOR_PRELOADS__;
+      for (var i = 0; i < editorChunks.length; i++) {
+        var link = document.createElement("link");
+        link.rel = "modulepreload";
+        link.href = editorChunks[i];
+        document.head.appendChild(link);
+      }
+    }
+
     // SQLite's .wasm, asked for now rather than when the runtime gets round
     // to it. The runtime worker fetches it from db-setup.mjs, which runs only
     // once the whole of framework.mjs has downloaded and been evaluated - so
