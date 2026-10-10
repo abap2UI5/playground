@@ -391,7 +391,7 @@ an edit, closing it — leaves it alone.
 page links when it wants to show its example running rather than only printed:
 
 ```
-?src=https://raw.githubusercontent.com/abap2UI5/samples/main/src/z2ui5_cl_demo.clas.abap
+?src=https://raw.githubusercontent.com/abap2UI5/samples/main/src/z2ui5_cl_smp_app_493.clas.abap
 ```
 
 A `github.com/…/blob/…` page URL works as well — it is read as the raw file
