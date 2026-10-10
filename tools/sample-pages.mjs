@@ -72,6 +72,7 @@ import fs from "fs";
 import { stripHtmlComments, withPolicy } from "./html.mjs";
 import path from "path";
 import { isSapui5Only } from "../src/shell/ui5-libs.mjs";
+import { githubUrlOf, rawUrlOf } from "../src/shell/catalogue-urls.mjs";
 import { highlightAbapLines } from "./abap-highlight.mjs";
 import { fetchSampleSources } from "./sample-sources.mjs";
 
@@ -1514,7 +1515,11 @@ export async function prepareSamplePages(index) {
   let skipped = 0;
   for (const entry of index.entries || []) {
     const dir = dirOf(entry.class);
-    if (dir === undefined || taken.has(dir) || safe(entry.raw) === undefined) {
+    /* The two URLs, from the entry's path and its repository - the index
+     * carries the path, not the URLs (src/shell/catalogue-urls.mjs). */
+    const raw = rawUrlOf(entry, index.sources);
+    const github = githubUrlOf(entry, index.sources);
+    if (dir === undefined || taken.has(dir) || safe(raw) === undefined) {
       skipped += 1;
       continue;
     }
@@ -1525,6 +1530,8 @@ export async function prepareSamplePages(index) {
     entry.page = `${dir}/`;
     rows.push({
       ...entry,
+      raw,
+      github,
       dir,
       class: String(entry.class),
       title: String(entry.title || entry.class),
@@ -1706,7 +1713,11 @@ text. A page that swaps content without reloading calls
 ## Read it as data
 
 - [apps.json](${SITE}samples/apps.json): the whole index, one object per sample
-  under \`entries\`: \`class\`, \`title\`, \`summary\`, \`source\` (which repository),
+  under \`entries\`: \`class\`, \`title\`, \`summary\`, \`source\` (which repository -
+  its GitHub name is under \`sources\`), \`file\` (the class's path in it, on
+  \`branch\` where that is not main - so the ABAP is at
+  \`https://raw.githubusercontent.com/<repo>/<branch>/<file>\` and its page at
+  \`https://github.com/<repo>/blob/<branch>/<file>\`),
   \`group\`, \`stage\`, \`keywords\`, the \`controls\` it builds, the \`libraries\` it
   needs, the oldest UI5 release it runs on (\`minUi5\`), whether it \`runs\` in the
   browser, and \`page\` - the directory of its own page here. The top level also

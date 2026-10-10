@@ -59,7 +59,7 @@ const TRANSFERRED = [
    * corpus - a sample added in any of the three repositories adds a row - and
    * it is what stands between opening the page and seeing a list. It
    * compresses hard: it is 770 near-identical objects. */
-  { file: "samples/apps.json", limit: 0.25 * MB, note: "the sample catalogue's index, 770 samples" },
+  { file: "samples/apps.json", limit: 0.15 * MB, note: "the sample catalogue's index, 800 samples" },
   { file: "samples/catalogue.mjs", limit: 0.02 * MB, note: "the catalogue page itself" },
   /* The bar's search box, loaded by the catalogue and by every per-sample
    * page - so it is one file for 773 documents, and the budget is on the file

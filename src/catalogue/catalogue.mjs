@@ -23,6 +23,7 @@
 // The round trip is still the point: find it here, read it there, run it, come
 // back and keep looking.
 import { cmpVersion } from "../shell/ui5-libs.mjs";
+import { githubUrlOf } from "../shell/catalogue-urls.mjs";
 import { foldCase, termsOf, matchesTerms } from "../shell/search-terms.mjs";
 import { rememberHere, keepSiteLinksCurrent } from "../shell/site-memory.mjs";
 
@@ -274,7 +275,8 @@ function card(row) {
      * stand behind: the class in its repository. */
     const actions = text("div", "actions");
     const read = text("a", "", "Read the source");
-    read.href = row.github;
+    // The index carries the class's path, not its URL (catalogue-urls.mjs).
+    read.href = githubUrlOf(row, index.sources) ?? "";
     read.target = "_blank";
     read.rel = "noopener";
     actions.append(read);

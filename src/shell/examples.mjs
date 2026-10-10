@@ -42,6 +42,7 @@
 // what is always here: the samples the page carries and the reader's drafts.
 // No error, no console noise of this module's making.
 import { SAMPLES } from "../editor/samples.mjs";
+import { githubUrlOf, rawUrlOf } from "./catalogue-urls.mjs";
 import { foldCase, termsOf, matchesTerms } from "./search-terms.mjs";
 import { deleteDraft, draftNameProblem, listDrafts, saveDraft } from "./drafts.mjs";
 import { readStoredJson, writeStoredJson } from "./storage.mjs";
@@ -159,8 +160,10 @@ function groupsFrom(data) {
       title: str(entry.title) || str(entry.class),
       note: str(entry.note),
       who: str(entry.class),
-      url: str(entry.raw),
-      github: str(entry.github),
+      // From the entry's path and its repository (catalogue-urls.mjs) - the
+      // index carries no URL; the helper refuses a path the build would.
+      url: str(rawUrlOf(entry, data.sources)),
+      github: str(githubUrlOf(entry, data.sources)),
       // https only, here as well as where the index is written: the index of
       // a deploy from before that check, served from a cache, is still read.
       docs: (entry.docs || []).filter((d) => typeof d === "string" && /^https:\/\//.test(d)),

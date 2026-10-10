@@ -1266,6 +1266,23 @@ this site carries, so "does this render here" is that set against this mapping.
 `runs` and `needs` are computed once, at build time, from that plus
 `UI5_VERSION`; the page and the dialog only display them.
 
+**An entry carries its path, not its URLs.** `file` (the class's path in its
+repository) and, off `main`, `branch`; the repository is in `sources`. The
+raw file and the GitHub page are one template each over those three facts,
+written in `src/shell/catalogue-urls.mjs` and built where they are wanted -
+the dialog, the catalogue page, the AI tools' `catalogueEntries()`, and
+`tools/sample-pages.mjs` at build time, which still works on rows carrying
+both. The index used to carry both URLs on all 804 entries: 135 KB of an
+816 KB file (6 KB of its 110 KB compressed), the same two prefixes over and
+over. `keywords` stay: the dialog, the catalogue page and the AI search all
+match on them at the first keystroke, and the plugin commands and READMEs
+in abap2UI5/abap2UI5 send agents to `apps.json` for exactly "title,
+summary and keywords" - a second file would be a second fetch on every
+catalogue visit and a contract broken for nothing. `samples/llms.txt`
+documents the fields, `file` and `branch` among them. The helper still
+takes an entry that carries `raw` and `github` - a cached index from before
+the change - and checks a path by the build's own rule.
+
 **It degrades per repository and per half.** No `catalogue.json` and that
 repository contributes nothing and says so in `sources`; no
 `catalogue-derived.json` and its samples are listed with the tree's facts and

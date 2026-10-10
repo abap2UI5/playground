@@ -5,6 +5,7 @@
 // with it; tools/build-site.mjs keeps all of it out of the service worker's
 // precache, read off the module graph.
 import Anthropic from "@anthropic-ai/sdk";
+import { rawUrlOf } from "./catalogue-urls.mjs";
 // The SDK's own parser for a tool input that is still arriving - the one it
 // runs itself on every delta while an `inputJson` listener is registered.
 import { partialParse } from "@anthropic-ai/sdk/_vendor/partial-json-parser/parser.mjs";
@@ -106,14 +107,18 @@ async function loadIndex() {
 function entriesOf(data) {
   const names = data.controls || [];
   return (data.entries || [])
-    .filter((e) => typeof e.raw === "string" && typeof e.class === "string")
-    .map((e) => {
+    // The raw URL is built from the entry's path and its repository
+    // (catalogue-urls.mjs); an entry that does not say where it is, is not
+    // one the tools can read.
+    .map((e) => ({ e, raw: typeof e.class === "string" ? rawUrlOf(e, data.sources) : undefined }))
+    .filter(({ raw }) => typeof raw === "string")
+    .map(({ e, raw }) => {
       const controls = (e.controls || []).map((i) => names[i]).filter(Boolean);
       return {
         class: e.class.toLowerCase(),
         title: str(e.title) ?? e.class,
         summary: str(e.summary) ?? str(e.note) ?? "",
-        raw: e.raw,
+        raw,
         runs: e.runs === true,
         controls,
         heading: `${e.title} ${e.class}`.toLowerCase(),

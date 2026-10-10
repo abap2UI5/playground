@@ -34,6 +34,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { UI5_LIBRARIES, UI5_VERSION } from "../src/shell/ui5-libraries.mjs";
 import { cmpVersion, isCarried, isSapui5Only, libraryOf } from "../src/shell/ui5-libs.mjs";
+import { isBranch, isSampleFile } from "../src/shell/catalogue-urls.mjs";
 import { SITE, prepareSamplePages, writeSamplePages } from "./sample-pages.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -88,15 +89,18 @@ const httpsLinks = (v) => list(v).filter((u) => /^https:\/\/[^\s"'<>]+$/.test(u)
 /* A path out of a catalogue becomes a URL under its own repository, and only a
  * plain relative one does. The playground's own loader checks the host and the
  * file name again (src/shell/deep-link.mjs); this check is about not letting a
- * catalogue point anywhere its repository is not. */
-function urls(repo, file, branch = "main") {
-  if (!/^[\w./-]+\.clas\.abap$/.test(file) || file.startsWith("/") || file.includes("..")) return undefined;
-  // `..` is made of allowed characters and climbs out of the repository.
-  if (!/^[\w.-]+$/.test(branch) || /^\.+$/.test(branch)) return undefined;
-  return {
-    raw: `https://raw.githubusercontent.com/${repo}/${branch}/${file}`,
-    github: `https://github.com/${repo}/blob/${branch}/${file}`,
-  };
+ * catalogue point anywhere its repository is not.
+ *
+ * What the entry carries is the PATH (`file`) and, off `main`, the `branch`
+ * - not the two URLs. Every reader builds those from the path and the
+ * repository in `sources` through src/shell/catalogue-urls.mjs (the examples
+ * dialog, the catalogue page, the AI tools, and tools/sample-pages.mjs at
+ * build time): 804 entries carrying both in full were 135 KB of the index
+ * that were the same two prefixes over and over. The rule is the helper's,
+ * so the index never holds a path the readers would refuse. */
+function urls(file, branch = "main") {
+  if (!isSampleFile(file) || !isBranch(branch)) return undefined;
+  return { file };
 }
 
 /* One fetch, cached on disk for a day. The cache is for the dozen local
@@ -150,7 +154,7 @@ async function fetchJson(repo, name) {
 function readLearn(source, data) {
   const entries = [];
   for (const sample of data.samples || []) {
-    const link = urls(source.repo, str(sample.file));
+    const link = urls(str(sample.file));
     if (link === undefined) continue;
     entries.push({
       source: source.id,
@@ -180,7 +184,7 @@ function readLearn(source, data) {
 function readControls(source, data) {
   const entries = [];
   for (const port of data.ports || []) {
-    const link = urls(source.repo, str(port.file));
+    const link = urls(str(port.file));
     if (link === undefined) continue;
     entries.push({
       source: source.id,
@@ -215,7 +219,7 @@ function readStack(source, data) {
      * looking for it will look. */
     if (str(sample.technology) === "Overview") continue;
     const branch = str(sample.branch) || "main";
-    const link = urls(source.repo, str(sample.path), branch);
+    const link = urls(str(sample.path), branch);
     if (link === undefined) continue;
     entries.push({
       source: source.id,
