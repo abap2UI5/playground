@@ -42,8 +42,7 @@ import {
   forgetOrigins,
   originOf,
 } from "./deep-link.mjs";
-import { DEFAULT_FILES, isSample, SAMPLES, sampleById } from "../editor/samples.mjs";
-import { openExamples, setUpExamples } from "./examples.mjs";
+import { carriedSampleFiles, DEFAULT_FILES, isSample, loadSampleFiles } from "../editor/samples.mjs";
 import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
 import { setTestResults, setUpInsight, showInsight, updateInsight } from "./insight.mjs";
 import { restoreCheckerSettings } from "./checker-settings.mjs";
@@ -52,10 +51,8 @@ import { keepSiteLinksCurrent, rememberHere } from "./site-memory.mjs";
 import { setUpSearch } from "./search-box.mjs";
 import { announceAppHeight, announceReady, announceStatus, startEmbedMessages } from "./embed.mjs";
 import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
-import { openShare, setUpShareDialog } from "./share-dialog.mjs";
+
 import { clearRoundtrips, recordRoundtrip, roundtripList } from "./roundtrips.mjs";
-import { chatDropped, setUpChat } from "./chat.mjs";
-import { pilotDropped, pilotPicked, pilotRan, sawRoundtrip, setUpPilot, takePilotRequest } from "./pilot.mjs";
 import { AI_FILE, AI_STARTER, isUntouchedStarter } from "./ai-starter.mjs";
 import { state } from "./state.mjs";
 import { RUNAWAY, STALLED, startRuntime } from "./runtime-client.mjs";
@@ -100,6 +97,33 @@ const aiPage = document.documentElement.dataset.page === "ai";
 // sample, and like the studio it neither restores nor stores the
 // playground's draft.
 const pilotPage = document.documentElement.dataset.page === "pilot";
+
+// FOUR CHUNKS THE SHELL DOES NOT CARRY. The studio's room (src/shell/chat.mjs)
+// and the Pilot's (src/shell/pilot.mjs) are wanted on their own pages and
+// nowhere else, so each is an import( ) started here, on its page, the moment
+// this module runs - its document preloads the chunk (writeAiPage,
+// writePilotPage in tools/build-site.mjs), so it travels with the bundle -
+// and awaited at the top of boot( ), before anything that could reach for
+// it. Everywhere else `chat` and `pilot` stay null and every call site is a
+// `?.`. The samples browser (src/shell/examples.mjs) and the Share dialog
+// (src/shell/share-dialog.mjs, with export.mjs and zip.mjs) are wanted on a
+// click: each is imported and set up the first time it is opened, and the
+// samples browser's chunk is asked for once the page is idle after boot, so
+// the first click does not wait on it. Together they were a third of the
+// shell's bundle, evaluated on every page before the first paint of the
+// toolbar.
+let chat = null;
+let pilot = null;
+const chatChunk = aiPage && !embedded ? import("./chat.mjs") : null;
+const pilotChunk = pilotPage && !embedded ? import("./pilot.mjs") : null;
+let examplesChunk = null;
+let shareChunk = null;
+// The Share dialog, set up when it is first opened (share( ) below).
+const shareReady = () =>
+  (shareChunk ??= import("./share-dialog.mjs").then((m) => {
+    m.setUpShareDialog();
+    return m;
+  }));
 
 /* Opened from the sample catalogue - see showSourceLink( ). `back` is that
  * page's own query string, passed through so the reader lands on the search
@@ -209,6 +233,9 @@ const LEGACY_KEY = "abap2ui5-playground:anthropic-key";
 
 async function boot() {
   removeStored(LEGACY_KEY);
+  // The room of this page, if it has one - see the four chunks above.
+  if (chatChunk) chat = await chatChunk;
+  if (pilotChunk) pilot = await pilotChunk;
   if (embedded) document.body.classList.add("is-embedded");
   if (appOnly) document.body.classList.add("is-app-only");
   // Where the playground is furniture in somebody else's page, the panel stays
@@ -332,7 +359,6 @@ async function boot() {
   setUpAutorun({ restore: !embedded && !pilotPage && !aiPage });
   setUpSplitter();
   setUpAbout();
-  setUpShareDialog();
   const tabs = setUpTabs(appOnly);
 
   // The files, as a promise the registry build can hold: the corpus parse does
@@ -383,18 +409,27 @@ async function boot() {
   // URL of a catalogued class; the URL goes through the same code a ?src=
   // link goes through. It is the one way to a sample - there is no sample
   // menu beside it, and the built-ins are its first group.
-  setUpExamples({
+  // A chunk, imported and set up on the first open - see the four chunks
+  // above - and asked for once the page is idle after boot, below, so the
+  // first click finds it there.
+  const examplesHandlers = {
     // On the Pilot's page a pick goes to the Pilot, which opens it in place
     // of the app on screen or beside it (src/shell/pilot.mjs).
-    openSample: (id) => (pilotPage ? pilotPicked(sampleById(id)?.files) : loadSample(id, tabs)),
-    openLinked: (url) => (pilotPage ? pilotPicked(carriedFiles(url) ?? linkedFiles(url)) : loadLinked(url, tabs)),
+    openSample: (id) => (pilotPage ? pilot?.pilotPicked(loadSampleFiles(id)) : loadSample(id, tabs)),
+    openLinked: (url) => (pilotPage ? pilot?.pilotPicked(carriedFiles(url) ?? linkedFiles(url)) : loadLinked(url, tabs)),
     // The reader's own drafts (src/shell/drafts.mjs): what is open, to save,
     // and a saved one to open - which runs, the way a sample does.
     currentFiles: () => getFiles(),
     // On the Pilot's page a draft is an app like any other pick, in place
     // or beside: run as the playground runs it, it restarted every tab.
-    openDraft: (files) => (pilotPage ? pilotPicked(files) : loadDraft(files, tabs)),
-  });
+    openDraft: (files) => (pilotPage ? pilot?.pilotPicked(files) : loadDraft(files, tabs)),
+  };
+  const examplesReady = () =>
+    (examplesChunk ??= import("./examples.mjs").then((m) => {
+      m.setUpExamples(examplesHandlers);
+      return m;
+    }));
+  const openExamples = () => examplesReady().then((m) => m.openExamples());
 
   try {
     setStatus("loading the ABAP runtime…");
@@ -423,34 +458,34 @@ async function boot() {
           // A step of the AI Pilot parked for this frame goes with it: left
           // parked, it was handed to the new document's app start and sent
           // in its place - an event on a draft the fresh database never held.
-          takePilotRequest(from)?.reject(new Error("the app was restarted before this step reached it - look again"));
+          pilot?.takePilotRequest(from)?.reject(new Error("the app was restarted before this step reached it - look again"));
           throw new Error("this app was replaced by a newer Run");
         }
         // The AI Pilot's act (src/shell/pilot.mjs): the frame was made to send
         // a roundtrip so that it renders the answer, and what goes to the
         // framework is the Pilot's request in place of the frame's. Every
         // answer, the reader's clicks included, is shown to the Pilot after.
-        let pilot = takePilotRequest(from);
+        let parked = pilot?.takePilotRequest(from) ?? null;
         // Only ever in place of a request on a running app: an app start (no
         // draft id - the frame reloaded, or a Run) is the frame's own.
-        if (pilot && !draftOf(body)) {
-          pilot.reject(new Error("the app started again before this step reached it - look again"));
-          pilot = null;
+        if (parked && !draftOf(body)) {
+          parked.reject(new Error("the app started again before this step reached it - look again"));
+          parked = null;
         }
-        if (pilot) body = pilot.body;
+        if (parked) body = parked.body;
         const started = performance.now();
         try {
           const response = await state.runtime.roundtrip(body);
           recordRoundtrip({ request: body, response, ms: performance.now() - started });
-          sawRoundtrip(body, response, from);
-          pilot?.resolve(response);
+          pilot?.sawRoundtrip(body, response, from);
+          parked?.resolve(response);
           if (response.location) pointAtDump(response.location, firstLine(response.body), caretMayMove());
           return response;
         } catch (e) {
           // A JavaScript error out of the transpiled code, rather than an
           // ABAP exception the framework turned into a dump: the frame's
           // fetch rejects, and the line is still worth pointing at.
-          pilot?.reject(e);
+          parked?.reject(e);
           // Listed like an answer that failed: the AI's run waits for the
           // first roundtrip and read "none arrived within ten seconds",
           // with nothing in the status or the Log to say why.
@@ -458,7 +493,7 @@ async function boot() {
           recordRoundtrip({ request: body, response: failed, ms: performance.now() - started });
           // And to the AI Pilot's mirror of that tab, which otherwise never
           // heard of the start and waited half a minute for it.
-          sawRoundtrip(body, failed, from);
+          pilot?.sawRoundtrip(body, failed, from);
           if (e?.location) pointAtDump(e.location, String(e.message ?? e), caretMayMove());
           // ABAP that did not finish, stopped by the runtime's watchdog: the
           // frame only sees a failed request, so the page says what happened.
@@ -483,7 +518,7 @@ async function boot() {
       // Files dropped on the app in a frame, on the AI Pilot's page or the AI
       // Studio's: they go to that page's chat (pilot.mjs, chat.mjs).
       // Elsewhere a frame keeps the browser's own answer to a drop.
-      dropFiles: pilotPage ? (files) => pilotDropped(files) : aiPage ? (files) => chatDropped(files) : undefined,
+      dropFiles: pilotPage ? (files) => pilot?.pilotDropped(files) : aiPage ? (files) => chat?.chatDropped(files) : undefined,
     };
     const version = `abap2UI5 ${state.runtime.abapVersion()}`;
     document.getElementById("versions").textContent = version;
@@ -534,8 +569,8 @@ async function boot() {
   // The AI chat (src/shell/chat.mjs, src/shell/ai-agent.mjs): the model works
   // on the same editor and presses the same Run, through these. Only on the
   // studio's own page - the playground carries no way into it.
-  if (aiPage && !embedded) {
-    setUpChat(
+  if (chat) {
+    chat.setUpChat(
       {
         files: () => getFiles(),
         // Through replaceWith( ), like a sample: written into the models that
@@ -556,8 +591,8 @@ async function boot() {
   // The AI Pilot (src/shell/pilot.mjs): the model operates the app in the
   // frame. It opens the samples the way the samples browser does and
   // restarts the app the way Run does - these, and nothing else.
-  if (pilotPage && !embedded) {
-    setUpPilot({
+  if (pilot) {
+    pilot.setUpPilot({
       files: () => getFiles(),
       run: () => runForAgent(),
       // A catalogued class by its raw URL, and the classes it needs beside it -
@@ -579,8 +614,9 @@ async function boot() {
         return src.href;
       },
       mainFrame: frame,
-      // One of the samples the page carries, by its class - no network.
-      carried: (cls) => carriedClass(cls),
+      // One of the samples the page carries, by its class - no network; a
+      // promise of its files, since the sample's chunk may not have landed.
+      carried: (cls) => carriedSampleFiles(cls),
       openSamples: () => openExamples(),
       frame: () => frame.contentWindow?.__z2ui5PlaygroundPilot,
       appClass: () => entryClass(getFiles()),
@@ -632,6 +668,9 @@ async function boot() {
   shareButton.addEventListener("click", () => share());
   fullscreenButton.addEventListener("click", () => openFullScreen());
   examplesButton.addEventListener("click", () => openExamples());
+  // The samples browser's chunk, fetched once the page is idle - so the first
+  // click opens the dialog rather than waiting on a download.
+  (window.requestIdleCallback ?? ((fn) => setTimeout(fn, 1000)))(() => heard(examplesReady()));
 
   // Ctrl+S as well as Ctrl+Enter: the hand that has typed in an editor for
   // twenty years presses it, and a browser answers with a dialog for saving
@@ -891,13 +930,22 @@ function remember(files) {
 // newer one drops what it fetched.
 let latestPick = 0;
 
-// One of the samples the page carries, chosen in the samples browser.
-function loadSample(id, tabs) {
-  const sample = sampleById(id);
-  if (!sample) return;
-  latestPick++;
+// One of the samples the page carries, chosen in the samples browser. Its
+// files are a chunk (src/editor/samples.mjs), so this waits for them - and a
+// newer pick made meanwhile wins, like a linked class that arrives late.
+async function loadSample(id, tabs) {
+  const pick = ++latestPick;
+  let files;
+  try {
+    files = await loadSampleFiles(id);
+  } catch (e) {
+    setStatus("the sample could not be loaded", true);
+    showOutput("Samples", String(e?.message ?? e));
+    return;
+  }
+  if (!files || pick !== latestPick) return;
   forgetOrigins();
-  const keptHow = replaceWith(sample.files);
+  const keptHow = replaceWith(files);
   // Picking a sample is a request to see it, so it runs without a second click.
   runWhenFree().then((started) => {
     if (!started) return;
@@ -1026,11 +1074,10 @@ async function loadLinked(url, tabs) {
   }
 }
 
-// One of the samples the page carries, by its class - no network.
-const carriedClass = (cls) => SAMPLES.find((s) => s.files[0].name === `${cls.toLowerCase()}.clas.abap`)?.files;
-// ...and by the raw URL the samples browser hands over for its catalogue row:
-// the AI Pilot opens the copy the page carries rather than fetching it.
-const carriedFiles = (url) => carriedClass(String(url).split("/").pop().replace(/\.clas\.abap$/, ""));
+// One of the samples the page carries, by the raw URL the samples browser
+// hands over for its catalogue row: the AI Pilot opens the copy the page
+// carries rather than fetching it (a promise of the files, or undefined).
+const carriedFiles = (url) => carriedSampleFiles(String(url).split("/").pop().replace(/\.clas\.abap$/, ""));
 
 // A catalogued class by its raw URL and the classes it needs beside it, as
 // files - the ?src= path without the run.
@@ -1135,7 +1182,7 @@ async function share() {
     history.replaceState(null, "", url);
     const copied = await copyToClipboard(url);
     setStatus(copied ? "link copied to the clipboard" : "link is in the address bar");
-    openShare(files, url, copied);
+    (await shareReady()).openShare(files, url, copied);
   } catch (e) {
     setStatus("the link could not be built", true);
     showOutput("Share", String(e.message || e));
@@ -1592,7 +1639,7 @@ export async function run({ quiet = false } = {}) {
     if (appOnly) announceAppHeight(frame);
     // The AI Pilot's further apps start again with this Run - same fresh
     // database, new Run number (src/shell/pilot.mjs).
-    if (pilotPage) pilotRan();
+    pilot?.pilotRan();
     // Answered rather than returned blank, because on a narrow screen the
     // caller brings the app forward - and every path out of here above this
     // line is one where there is no app to bring: nothing compiled, or the

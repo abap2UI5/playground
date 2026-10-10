@@ -268,9 +268,11 @@ test("an app-only page never fetches Monaco, and the playground does", async ({ 
   expect(asked, "the playground asked for Monaco's chunk").toContain(chunk);
   expect(asked, "the playground asked for Monaco's stylesheet").toContain(css);
   expect(await page.evaluate(() => typeof window.monaco)).toBe("object");
-  // And it is applied, not only fetched: Monaco's own rule for its lines is
-  // what makes the editor an editor rather than a column of text.
-  expect(await page.evaluate(() => getComputedStyle(document.querySelector(".monaco-editor .view-lines")).whiteSpace)).toBe("pre");
+  // And it is applied, not only fetched: the link the inline script added
+  // holds Monaco's rules (eighty stylesheets' worth), and the editor is on
+  // screen under them.
+  expect(await page.evaluate(() => document.getElementById("monaco-css")?.sheet?.cssRules.length ?? 0)).toBeGreaterThan(100);
+  await expect(page.locator(".monaco-editor .view-lines")).toBeVisible();
 });
 
 test("an app-only playground renders in a column narrower than a desk", async ({ page }) => {

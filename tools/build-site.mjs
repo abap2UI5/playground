@@ -187,9 +187,13 @@ function writeCorpus() {
 //                      which is the name the editor has to open it under
 //   index.json         id, title, blurb, files, GitHub link; Node reads this
 //                      one (the tests do), which is why it is JSON
-//   sources.mjs        one `import` per file plus the map, because a bundler
-//                      has to see every import statically and the list is not
-//                      static any more
+//   sources.mjs        the default sample's files as static imports, and a
+//                      loader per sample - an import( ) of sample-<id>.mjs,
+//                      one `import` per file in it - because a bundler has to
+//                      see every import statically and the list is not static
+//                      any more. Only the default sample's ABAP is in the
+//                      shell's bundle; every other sample is a chunk fetched
+//                      when it is picked (src/editor/samples.mjs)
 //
 // Titles and blurbs are read out of that repository's catalogue.json rather
 // than restated here: it is the same catalogue the samples browser lists the
@@ -275,14 +279,30 @@ function writeSamples() {
   }
 
   fs.writeFileSync(path.join(BUILD_SAMPLES, "index.json"), JSON.stringify(index, null, 2) + "\n");
-  const imports = [...copied.keys()].map((base, i) => `import S${i} from "./${base}";`).join("\n");
-  const map = [...copied.keys()].map((base, i) => `  ${JSON.stringify(base)}: S${i},`).join("\n");
+  /* One module per sample, its files as text, and the default sample's files
+   * in the module the shell imports statically: the page opens on those and
+   * needs nothing else until a sample is picked. A file two samples share
+   * (an app one of them navigates into) is imported by both modules, and
+   * esbuild gives it a chunk of its own. */
+  const moduleFor = (files) =>
+    `// Written by tools/build-site.mjs - see writeSamples( ). Do not edit.\n` +
+    `${files.map((base, i) => `import S${i} from "./${base}";`).join("\n")}\n\n` +
+    `export default {\n${files.map((base, i) => `  ${JSON.stringify(base)}: S${i},`).join("\n")}\n};\n`;
+  for (const sample of index.slice(1)) fs.writeFileSync(path.join(BUILD_SAMPLES, `sample-${sample.id}.mjs`), moduleFor(sample.files));
+  const [first, ...rest] = index;
   fs.writeFileSync(
     path.join(BUILD_SAMPLES, "sources.mjs"),
     `// Written by tools/build-site.mjs - see writeSamples( ). Do not edit.\n` +
-      `${imports}\n\nexport const SOURCES = {\n${map}\n};\n`,
+      `${first.files.map((base, i) => `import D${i} from "./${base}";`).join("\n")}\n\n` +
+      `// The sample the page opens on, in the bundle.\n` +
+      `export const DEFAULT_SOURCES = {\n${first.files.map((base, i) => `  ${JSON.stringify(base)}: D${i},`).join("\n")}\n};\n\n` +
+      `// Every sample's files, by id, each a chunk fetched when it is picked.\n` +
+      `export const LOADERS = {\n` +
+      `  ${JSON.stringify(first.id)}: () => Promise.resolve(DEFAULT_SOURCES),\n` +
+      rest.map((s) => `  ${JSON.stringify(s.id)}: () => import(${JSON.stringify(`./sample-${s.id}.mjs`)}).then((m) => m.default),`).join("\n") +
+      `\n};\n`,
   );
-  log(`samples: ${index.length} from ${SAMPLE_REPO}, ${copied.size} file(s)`);
+  log(`samples: ${index.length} from ${SAMPLE_REPO}, ${copied.size} file(s), ${first.files.length} in the bundle`);
 }
 
 writeSamples();
@@ -754,7 +774,7 @@ function writeIndex() {
 function writeAiPage(html) {
   const page = html
     .replace(/<html([^>]*)>/, '<html$1 data-page="ai">')
-    .replace("<head>", '<head>\n<base href="../">\n<meta name="robots" content="noindex">')
+    .replace("<head>", `<head>\n<base href="../">\n<meta name="robots" content="noindex">${preloadsFor("src/shell/chat.mjs")}`)
     .replace(/<title>[^<]*<\/title>/, "<title>AI Studio · abap2UI5</title>")
     .replace(/<link rel="canonical"[^>]*>\n?/, "");
   for (const mark of ['data-page="ai"', '<base href="../">', "<title>AI Studio"]) {
@@ -776,7 +796,7 @@ function writeAiPage(html) {
 function writePilotPage(html) {
   const page = html
     .replace(/<html([^>]*)>/, '<html$1 data-page="pilot">')
-    .replace("<head>", '<head>\n<base href="../">\n<meta name="robots" content="noindex">')
+    .replace("<head>", `<head>\n<base href="../">\n<meta name="robots" content="noindex">${preloadsFor("src/shell/pilot.mjs")}`)
     .replace(/<title>[^<]*<\/title>/, "<title>AI Pilot · abap2UI5</title>")
     .replace(/<link rel="canonical"[^>]*>\n?/, "");
   for (const mark of ['data-page="pilot"', '<base href="../">', "<title>AI Pilot"]) {
@@ -788,6 +808,28 @@ function writePilotPage(html) {
   fs.mkdirSync(path.join(DIST, "pilot"), { recursive: true });
   fs.writeFileSync(path.join(DIST, "pilot", "index.html"), page);
   log("pilot/index.html (the AI Pilot)");
+}
+
+// The room of an AI page - src/shell/chat.mjs for the studio, src/shell/pilot.mjs
+// for the Pilot - is a chunk main.mjs imports on that page alone, the moment
+// boot( ) starts; its hashed name is only known here, so each page preloads
+// its own, with whatever that chunk imports statically that the shell does
+// not already preload - the way index.html preloads Monaco's.
+function preloadsFor(entryPoint) {
+  const outputs = result.metafile.outputs;
+  const rel = (out) => path.relative(DIST, path.join(ROOT, out)).split(path.sep).join("/");
+  const shell = Object.keys(outputs).find((o) => outputs[o].entryPoint === "src/shell/main.mjs");
+  const statics = outputs[shell].imports.filter((i) => i.kind === "import-statement").map((i) => rel(i.path));
+  const room = Object.keys(outputs).find((o) => outputs[o].entryPoint === entryPoint);
+  if (!room) {
+    console.error(`build-site: ERROR the bundle has no chunk for ${entryPoint} - is it still imported dynamically?`);
+    process.exit(1);
+  }
+  const hrefs = [rel(room), ...outputs[room].imports
+    .filter((i) => i.kind === "import-statement" && !i.external)
+    .map((i) => rel(i.path))
+    .filter((href) => !statics.includes(href))];
+  return hrefs.map((href) => `\n<link rel="modulepreload" href="${href}">`).join("");
 }
 
 // The chunks the two AI pages load (src/shell/ai-agent.mjs, the AI Studio's
@@ -805,7 +847,11 @@ function writePilotPage(html) {
 // A function rather than a constant: the service worker is written above
 // this line, and a const read there would still be in its temporal dead zone.
 function precachedChunks() {
-  const ON_USE_ENTRIES = /^src\/shell\/(?:ai|pilot)-agent\.mjs$/;
+  /* The two AI conversations, and since the rooms around them became chunks
+     of their own (src/shell/chat.mjs, src/shell/pilot.mjs - imported by
+     main.mjs on their pages alone), those rooms too: a visitor who never
+     opens either page has no use for them. */
+  const ON_USE_ENTRIES = /^src\/shell\/(?:ai-agent|pilot-agent|chat|pilot)\.mjs$/;
   const outputs = result.metafile.outputs;
   const shell = Object.keys(outputs).find((o) => outputs[o].entryPoint === "src/shell/main.mjs");
   const reached = new Set();

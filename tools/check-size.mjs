@@ -38,6 +38,12 @@ const MB = 1024 * 1024;
 // that moved from the entry into a chunk has not gotten any smaller.
 const TRANSFERRED = [
   { file: "assets/*.mjs", limit: 1.15 * MB, note: "Monaco" },
+  /* The shell on its own - what every page evaluates before anything is on
+   * screen. The AI rooms, the samples browser, the Share dialog and every
+   * sample but the default one are chunks (src/shell/main.mjs says which and
+   * why), so a module that drifts back into the entry shows here where the
+   * sum above would hide it. */
+  { file: "assets/shell.mjs", limit: 0.04 * MB, note: "the shell itself, on every page" },
   /* The two stylesheets, apart on purpose: shell.css is on every page and
    * Monaco's only where an editor is drawn (index.html's inline script links
    * it; monacoCssPlugin in tools/esbuild-plugins.mjs keeps it out of

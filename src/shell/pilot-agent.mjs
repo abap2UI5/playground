@@ -1017,7 +1017,9 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
   async function openApp(input) {
     const cls = str(input.class)?.trim().toLowerCase();
     if (!cls) return { error: "open_app needs a class." };
-    let files = host.carried(cls);
+    // A carried sample's files are a promise (its chunk may still be on
+    // the way); a class the page does not carry is undefined.
+    let files = await host.carried(cls);
     if (!files) {
       const entry = (await catalogueEntries()).find((e) => e.class === cls);
       if (!entry) return { error: `${echo(cls)} is not in the sample catalogue - find_apps first.` };
