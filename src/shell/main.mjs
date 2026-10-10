@@ -1316,13 +1316,20 @@ function autorunAfterChange() {
 }
 
 // Starts what is in the editor: compile it, register it with the runtime, then
-// a new database and a new frame.
+// a new database and a new app in the frame.
 //
-// The frame is reloaded rather than told to restart, because a reload is the
-// only thing that resets everything the frontend keeps outside the model - view
-// slots, routing state, the UI5 component itself. The counter in the URL makes
-// each run a different document, so the browser cannot serve a cached one and
-// the load event is unambiguous.
+// The frame used to be reloaded on every Run, because a reload was the only
+// thing that reset everything the frontend keeps outside the model - view
+// slots, routing state, the UI5 component itself. The frontend's component
+// tears all of that down in its exit( ) now (it is built to be re-launched
+// in a living page), so a frame that is up is told to restart in place
+// (__z2ui5PlaygroundRestart in frontend-bridge.js): the component destroyed
+// and created again on the new Run's address, the UI5 core, the libraries
+// and the theme kept - which is most of what a Run used to wait for. The
+// first Run, and any frame that is not on this origin, not booted or on an
+// older bridge, loads the document as before; so does one whose restart
+// fails. The counter in the address is the same either way: it is what a
+// late roundtrip from the app being replaced is refused by.
 let running = false;
 // The files the last run started from, as text - see autorunAfterChange( ).
 let lastRunText;
@@ -1331,6 +1338,41 @@ let lastRunText;
 let quietRun;
 // What the last run's unit tests said, for runForAgent( ).
 let lastTestResults = [];
+
+// Asks the frame to start the new Run's app without reloading its document
+// - see frontend-bridge.js. Answers false wherever that cannot be asked: the
+// first Run (no document yet), a frame on another origin (an error page),
+// one that never booted UI5, an older bridge without the function; and false
+// again when the frame refused or took too long, after which the caller
+// reloads it as before. Thirty seconds, like the load it stands in for.
+async function restartInPlace(frame, src) {
+  let restart;
+  try {
+    const win = frame.contentWindow;
+    if (!win || !win.sap?.ui || new URL(win.location.href).pathname !== src.pathname) return false;
+    if (win.document?.readyState !== "complete") return false;
+    restart = win.__z2ui5PlaygroundRestart;
+  } catch {
+    return false;
+  }
+  if (typeof restart !== "function") return false;
+  let gaveUp;
+  try {
+    await Promise.race([
+      restart(src.href),
+      new Promise((_, reject) => {
+        gaveUp = setTimeout(() => reject(new Error("the frame did not restart the app in time")), 30000);
+      }),
+    ]);
+    frame.dataset.src = src.href;
+    return true;
+  } catch (e) {
+    showOutput("Run", `The app frame could not restart in place and is reloaded instead: ${String(e?.message ?? e)}`);
+    return false;
+  } finally {
+    clearTimeout(gaveUp);
+  }
+}
 
 // `quiet` is a run nobody asked for: autorun's, 700ms after the typing
 // stopped. It says what it found like any other - the status line, the
@@ -1464,11 +1506,15 @@ export async function run({ quiet = false } = {}) {
     // themes are built into dist/app; a third would have to be added there.
     src.searchParams.set("sap-ui-theme", uiTheme());
 
+    // In place where the frame can: same document, same origin, UI5 up, the
+    // bridge offering it. The address of the Run is recorded the same way,
+    // and `src` is the reload's fallback below when the restart is refused.
+    const restarted = await restartInPlace(frame, src);
     // Bounded, because everything in run() hangs off this one event: if the
     // frame never fires it, `running` would stay true and Run would be dead
     // until a full reload. Thirty seconds is an eternity for a same-origin
     // document - reaching it means the load is not coming.
-    await new Promise((resolve, reject) => {
+    if (!restarted) await new Promise((resolve, reject) => {
       const loaded = () => {
         clearTimeout(gaveUp);
         resolve();

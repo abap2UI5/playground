@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { open, runSample } from "./helpers.mjs";
+import { getSource, open, runSample, sampleFiles, setSource } from "./helpers.mjs";
 
 // The playground as a user meets it: the class in the editor is compiled and
 // started, it renders in the frame, and clicking something in it runs ABAP.
@@ -52,6 +52,48 @@ test("Run restarts the app from scratch", async ({ page }) => {
   // check_on_init( ) puts there, and nothing the backend wrote survives.
   await expect(nameField(page)).toHaveValue("World", { timeout: 30000 });
   await expect(app(page).getByText("Hello Changed!")).toHaveCount(0);
+});
+
+// A Run after the first restarts the app INSIDE the frame's document - the
+// component destroyed and created again on the new Run's address - rather
+// than reloading it (frontend-bridge.js, __z2ui5PlaygroundRestart). What has
+// to stay true is what the reload guaranteed: nothing of the old app
+// survives, neither in the frontend (its typed values, its hash) nor in the
+// database (the draft), and the new code is what runs. What is new is held
+// by a mark on the frame's window, which a reload would have lost.
+test("a second Run restarts the app in the kept frame, and nothing of the old one survives", async ({ page }) => {
+  await open(page);
+  await runSample(page, "binding");
+  const frame = () => page.frames().find((f) => f.url().includes("/app/index.html"));
+
+  await nameField(page).fill("Changed");
+  await greetButton(page).click();
+  await expect(app(page).getByText("Hello Changed!")).toBeVisible({ timeout: 30000 });
+  await frame().evaluate(() => {
+    window.__playgroundMark = "kept";
+    // Routing state an app leaves in the address, which a reload dropped.
+    window.location.hash = "#/somewhere";
+  });
+  const before = new URL(frame().url()).searchParams.get("run");
+
+  // New code: the title changes, so the app on screen says which one runs.
+  const [file] = sampleFiles("binding");
+  await setSource(page, (await getSource(page, file)).replace("Data Binding: Input and Button", "Data Binding: Restarted"), file);
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+
+  await expect(app(page).getByText("Data Binding: Restarted")).toBeVisible({ timeout: 30000 });
+  await expect(nameField(page)).toHaveValue("World", { timeout: 30000 });
+  await expect(app(page).getByText("Hello Changed!")).toHaveCount(0);
+  // The same document: the mark is still there, the address is the new Run's.
+  expect(await frame().evaluate(() => window.__playgroundMark)).toBe("kept");
+  const after = new URL(frame().url());
+  expect(after.searchParams.get("run")).not.toBe(before);
+  expect(after.hash).toBe("");
+  // And the restarted app works: a click runs ABAP against the fresh draft.
+  await nameField(page).fill("Again");
+  await greetButton(page).click();
+  await expect(app(page).getByText("Hello Again!")).toBeVisible({ timeout: 30000 });
 });
 
 test("a run loads only from this origin, and nothing 404s", async ({ page }) => {

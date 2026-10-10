@@ -181,8 +181,24 @@ a field somebody is typing in on the page - the editor, the AI chat: an app's
 first render focuses a field of its own, and the app Auto started, or the AI
 ran, took the next keystrokes. Once the reader is in the app, the app has it.
 The drafts abap2UI5 keeps in a database live in an in-memory SQLite — sql.js,
-compiled to WebAssembly. Run means: a fresh database, then reload the iframe
-with `?app_start=<CLASS>&run=<n>`. "Fresh" is SQLite reopened on an image of
+compiled to WebAssembly. Run means: a fresh database, then the app started
+again in the iframe on `?app_start=<CLASS>&run=<n>` — **in place** where the
+frame is up (`__z2ui5PlaygroundRestart` in `frontend-bridge.js`, asked by
+`restartInPlace()` in `main.mjs`): the ComponentContainer that
+ComponentSupport made is destroyed and made again on the new address, which
+is what the frontend's own `Component.exit()`/`init()` are built for (an FLP
+re-launch — every listener detached, the roundtrips in flight aborted, the
+timers cancelled, the popup slots and the context destroyed), with what UI5
+keeps in its static area outside any component closed by hand (a MessageBox,
+a popover) and the hash cleared; the UI5 core, the libraries and the theme
+are kept, which was most of what a Run waited for. The first Run, a frame on
+another origin, one that never booted UI5 or carries an older bridge, and a
+restart that fails or takes thirty seconds, load the document as before —
+the one path there used to be, because a reload was the only thing that
+reset the view slots, the routing and the component until the frontend
+learned to. `tests/app.spec.js` holds a second Run to the kept document (a
+mark on the frame's window survives it) and to nothing of the old app
+surviving: its typed values, its hash, its draft. "Fresh" is SQLite reopened on an image of
 the empty database taken once after the transpiled init seeded it
 (`db-setup.mjs`) — under a millisecond, where rebuilding it from the DDL (27
 tables, then 724 seed rows) was 85 ms per Run on a desk and several times that
@@ -472,7 +488,7 @@ both are easy to undo by tidying up:
 **Auto, the switch beside Run** (`main.mjs`, `tests/shell.spec.js`). On, Run
 itself goes inactive — there is nothing left for it to do — and every change
 to the ABAP starts the app again 700 ms after the typing stops. Off by
-default, because a run is a fresh database and a full reload of the app frame,
+default, because a run is a fresh database and a fresh app in the frame,
 which throws away whatever was on screen: not what somebody halfway through a
 form in their own app wants, and exactly what somebody watching a view take
 shape wants. Three details are easy to undo by tidying up: Run's disabled

@@ -386,12 +386,25 @@ test("two samples picked during a run start the second one once", async ({ page 
       await route.continue();
     },
   );
+  // A Run restarts the app inside the frame's document where it can
+  // (frontend-bridge.js), and the network never hears of it. The route above
+  // holds a document load, so the first Run here is made to be one: a frame
+  // whose bridge does not offer the restart is reloaded as it always was.
+  const frame = () => page.frames().find((f) => f.url().includes("/app/index.html"));
+  await frame().evaluate(() => {
+    delete window.__z2ui5PlaygroundRestart;
+  });
   await page.locator("#run").click();
   await expect.poll(() => started.length, { timeout: 60000 }).toBe(1);
   await pickSample(page, SAMPLES[1].id);
   await pickSample(page, SAMPLES[2].id);
   release();
-  await expect.poll(() => started.length, { timeout: 60000 }).toBe(2);
+  // The second run restarts the app in the document the first one loaded,
+  // so what it started is on the frame's address rather than on the wire.
+  const second = SAMPLES[2].files[0].replace(/\.clas\.abap$/, "");
+  await expect
+    .poll(() => new URL(frame().url()).searchParams.get("app_start"), { timeout: 60000 })
+    .toBe(second.toUpperCase());
   // The second run has ended: Run is free again and its app is up.
   await expect(page.locator("#run")).toBeEnabled({ timeout: 60000 });
   await expect(page.locator("#status")).toHaveText(/^running/);
@@ -403,6 +416,8 @@ test("two samples picked during a run start the second one once", async ({ page 
     () => new Promise((resolve) => setTimeout(() => resolve(document.getElementById("run").disabled), 300)),
   );
   expect(startedAgain).toBe(false);
-  const second = SAMPLES[2].files[0].replace(/\.clas\.abap$/, "");
-  expect(started).toEqual([MAIN_CLASS.toUpperCase(), second.toUpperCase()]);
+  // One document load - the held one - and the sample picked first never
+  // started: the run that waited took the text as it was when it got its turn.
+  expect(started).toEqual([MAIN_CLASS.toUpperCase()]);
+  expect(new URL(frame().url()).searchParams.get("app_start")).toBe(second.toUpperCase());
 });

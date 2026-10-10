@@ -297,6 +297,99 @@
     },
   };
 
+  // Run, without reloading this document.
+  //
+  // A Run used to be a reload of this frame on a new ?run= address, because
+  // a reload was the only thing that reset everything the frontend keeps
+  // outside the model: the view slots, the hash routing, the component
+  // itself. The frontend's Component is built to be torn down and started
+  // again in a living page (an FLP re-launch): its exit( ) detaches every
+  // listener it attached, aborts the roundtrips in flight, cancels the
+  // timers, destroys the popup slots and the context, and its init( ) starts
+  // from fresh defaults. So a Run is that, here: the ComponentContainer
+  // ComponentSupport created from the <div data-sap-ui-component> is
+  // destroyed (lifecycle Container - the component goes with it), what UI5
+  // keeps in the static area outside any component is closed (a MessageBox,
+  // a popover), the address is rewritten to the new Run's - app_start, run,
+  // the hash cleared - the way a reload would have set it, and a container
+  // exactly like ComponentSupport's is placed into the same element. The
+  // new component reads ?app_start= off window.location for its first
+  // roundtrip, as it always did, and ?run= is what the page refuses a stale
+  // request by - a roundtrip the old component sent before the teardown
+  // carries the old address and is refused like a late one from a replaced
+  // frame used to be. What this saves is the frame's whole boot: the UI5
+  // core, the libraries and the theme are kept, and the app is on screen
+  // in the time of its first roundtrip. Resolves when the new component
+  // exists; rejects when it could not be created, and the page then falls
+  // back to the reload.
+  var restarting = null;
+  window.__z2ui5PlaygroundRestart = function (href) {
+    if (restarting) return Promise.reject(new Error("a restart is already under way"));
+    var require_ = window.sap && sap.ui && sap.ui.require;
+    var Element = require_ && require_("sap/ui/core/Element");
+    // ComponentSupport's container, by the id the <div data-id> gave it. Not
+    // there yet means ComponentSupport has not run (UI5 goes on booting
+    // after the document's load event): a second container placed now would
+    // be a second app beside the one on its way, so this is refused and the
+    // page reloads the frame as it always did.
+    var old = Element && Element.getElementById && Element.getElementById("container");
+    if (!old || !old.getUIArea || !old.getUIArea()) {
+      return Promise.reject(new Error("the frontend is not up to be restarted in place"));
+    }
+    restarting = new Promise(function (resolve, reject) {
+      // The modules the restart needs, loaded the asynchronous way: the
+      // one-argument require only answers for a module that has been
+      // required by name before, and the container's own module was not.
+      // Everything is in the preloads the frame already has, so nothing is
+      // fetched.
+      require_(
+        ["sap/ui/core/ComponentContainer", "sap/m/InstanceManager"],
+        function (ComponentContainer, InstanceManager) {
+          try {
+            var mount = old.getUIArea().getRootNode();
+            old.destroy();
+            // What a component does not own and a reload took with it: a
+            // MessageBox or a popover opened into UI5's static area.
+            InstanceManager.closeAllDialogs();
+            InstanceManager.closeAllPopovers();
+            carried = null;
+            var url = new URL(href, window.location.href);
+            window.history.replaceState(null, "", url.pathname + url.search);
+            var container = new ComponentContainer({
+              id: "container",
+              name: "z2ui5",
+              settings: { id: "z2ui5", componentData: { checkLocal: true } },
+              handleValidation: true,
+              async: true,
+              manifest: true,
+              lifecycle: "Container",
+            });
+            container.attachComponentCreated(function () {
+              resolve(true);
+            });
+            container.attachComponentFailed(function (event) {
+              var reason = event && event.getParameter && event.getParameter("reason");
+              reject(reason instanceof Error ? reason : new Error("the component could not be created again"));
+            });
+            container.placeAt(mount);
+          } catch (e) {
+            reject(e);
+          }
+        },
+        reject,
+      );
+    });
+    restarting.then(
+      function () {
+        restarting = null;
+      },
+      function () {
+        restarting = null;
+      },
+    );
+    return restarting;
+  };
+
   // A LEAK IN UI5, worked around here until it is fixed there. sap.m.Shell's
   // init attaches a Theming "applied" listener (a bound function) and its exit
   // never detaches it - so every Shell a view_display destroys stays in that
