@@ -115,6 +115,13 @@ of each line. Each step is still its own script and still runnable by name
    by design - a catalogue or a tarball that does not arrive costs what it
    carried and never the build; see "The sample catalogue" below for what
    degrades and why the index is built rather than fetched by the page.
+   It keeps a stamp of its own (`catalogue.stamp`, like `app.stamp`): over
+   the index as it will be written (`built` left out), the ABAP the pages
+   print, `SITE`, and the bytes of the five tools and two shared modules
+   that lay the pages out - and when none of it moved the 804 pages and
+   `apps.json` are left in place (2.2 s → 0.4 s; `--force` writes anyway).
+   The index is still built on every run, because it is what the stamp is
+   over; `apps.json` keeps the `built` of the build that last changed it.
 5. **`tools/build-site.mjs`** bundles the page and, as bundles of their own,
    the registry worker (`dist/editor/registry.mjs`: abaplint, the corpus
    parse and the transpiler, from `src/editor/registry-worker.mjs`) and the

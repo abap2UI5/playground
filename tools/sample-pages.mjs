@@ -1495,23 +1495,17 @@ ${PAGE_SCRIPT(BASE)}
 }
 
 /**
- * Writes the pages and the sitemap. Everything comes from the index this build
- * just produced, so the pages are exactly as current as it is.
+ * The rows the pages are written from: which entries get a page (stamped on
+ * the entry as `page`, see below), with the ABAP of each fetched in. The
+ * first half of what used to be one function, split so the build can hash
+ * what the pages would be written FROM before writing 804 of them again -
+ * tools/build-catalogue.mjs keeps a stamp over the index, these rows' code
+ * and the tools that lay the pages out, and skips the write when none of it
+ * moved. The index is still built and still stamped on every run, because
+ * that is where the answer comes from.
  */
-export async function writeSamplePages(index, distDir) {
-  const samplesDir = path.join(distDir, "samples");
-  fs.mkdirSync(samplesDir, { recursive: true });
-
-  /* Every directory under dist/samples belongs to this step: a sample that was
-   * renamed or dropped upstream has to stop being a page here, and a stale one
-   * is indistinguishable from a live one once it is deployed. */
-  for (const name of fs.readdirSync(samplesDir)) {
-    const full = path.join(samplesDir, name);
-    if (fs.statSync(full).isDirectory()) fs.rmSync(full, { recursive: true, force: true });
-  }
-
+export async function prepareSamplePages(index) {
   const names = index.controls || [];
-  const sources = new Map((index.sources || []).map((s) => [s.id, s]));
   const stages = new Map((index.stages || []).map((s) => [`${s.source}:${s.id}`, s.title]));
   const floor = index.minUi5 || "1.71";
 
@@ -1548,6 +1542,28 @@ export async function writeSamplePages(index, distDir) {
    * and the one part of these pages that is allowed not to arrive. */
   const code = await fetchSampleSources(rows);
   for (const row of rows) row.code = code.get(row.raw);
+  return { rows, skipped };
+}
+
+/**
+ * Writes the pages and the sitemap from the rows prepareSamplePages( ) made.
+ * Everything comes from the index this build just produced, so the pages are
+ * exactly as current as it is.
+ */
+export function writeSamplePages(index, distDir, { rows, skipped }) {
+  const samplesDir = path.join(distDir, "samples");
+  fs.mkdirSync(samplesDir, { recursive: true });
+
+  /* Every directory under dist/samples belongs to this step: a sample that was
+   * renamed or dropped upstream has to stop being a page here, and a stale one
+   * is indistinguishable from a live one once it is deployed. */
+  for (const name of fs.readdirSync(samplesDir)) {
+    const full = path.join(samplesDir, name);
+    if (fs.statSync(full).isDirectory()) fs.rmSync(full, { recursive: true, force: true });
+  }
+
+  const sources = new Map((index.sources || []).map((s) => [s.id, s]));
+  const floor = index.minUi5 || "1.71";
 
   const byGroup = new Map();
   for (const row of rows) {
