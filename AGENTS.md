@@ -1972,6 +1972,24 @@ host in a test run — and is a unit test over there
   never GETs — the frame's document comes from `dist/app`. Wiring that branch
   up would mean carrying 1.7 MB of frontend text a second time for nothing
   on screen.
+- **The open-abap classes the framework never reaches stay in its bundle.**
+  Measured 2026-10-10, to save the next person the exercise: a scan of every
+  transpiled module, the runtime, the page's sources, `@abaplint/runtime`,
+  the carried samples and the three sample repositories' tarballs finds 93
+  open-abap classes nothing names - `cl_aunit_authority_check`,
+  `cl_os_ca_common`, `cl_shm_area`, `kernel_scan_abap_source`, sixty
+  exception classes - 0.59 MB of the 7.3 MB transpilat. Stubbed the way the
+  generated frontend is (31 classes, the exceptions left alone), the bundle
+  went from 6.94 to 6.54 MB, 0.64 to 0.60 MB compressed - and the worker's
+  boot, fetch to `ready`, from a median of 657 ms to 673 ms over seven runs
+  (minimum 634 → 612): nothing, because V8 compiles a class body it never
+  calls lazily and the registration is a line each. What it would have
+  cost is a failure mode: a catalogued sample that reaches one of them
+  (`cl_abap_datfm`, `cl_abap_dyn_prg`) would die in the browser with the
+  stub's message, and the gate that keeps the list honest cannot see the
+  sample repositories on a fresh runner - the catalogue step that fetches
+  them runs after the framework step. Forty kilobytes of download was not
+  worth that.
 - **The `?src=` host allow list stays short.** The playground fetches on
   behalf of whoever opened the link and must not become a general-purpose
   reader for arbitrary URLs.
