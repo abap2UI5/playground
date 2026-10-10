@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { clickEditor, MAIN_CLASS, markers, open, setSource } from "./helpers.mjs";
+import { clickEditor, MAIN_CLASS, MAIN_FILE, markers, open, setSource } from "./helpers.mjs";
 
 // The editor half: Monaco with abaplint behind it, checking the class against
 // the real abap2UI5 sources rather than against a grammar.
@@ -97,6 +97,53 @@ test("hover explains a symbol from the framework", async ({ page }) => {
   const target = page.getByText("z2ui5_if_client").first();
   await target.hover();
   await expect(page.locator(".monaco-hover").first()).toBeVisible({ timeout: 10000 });
+});
+
+// Every language-server question carries the open files, but a file the
+// worker was already sent under the same version goes by name and version
+// alone (src/editor/providers.mjs; `ls` in registry-worker.mjs) - a document
+// highlight is asked on every cursor move, and each used to carry every
+// file's text across the thread. Watched at the worker's door: the question
+// after an edit carries the text, the questions after it do not, and the
+// answers are the same hovers either way.
+test("a language-server question names an unchanged file by version rather than sending its text again", async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => {
+    const worker = window.__abap2ui5Registry;
+    const post = worker.postMessage.bind(worker);
+    window.__lsSent = [];
+    worker.postMessage = (message) => {
+      if (message?.op === "ls") window.__lsSent.push(message.args[2]);
+      return post(message);
+    };
+  });
+  const sent = () => page.evaluate(() => window.__lsSent.splice(0));
+  const hoverOn = async (word) => {
+    await page.mouse.move(0, 0);
+    await page.getByText(word).first().hover();
+    await expect(page.locator(".monaco-hover").first()).toBeVisible({ timeout: 10000 });
+  };
+
+  await setSource(page, CLEAN);
+  await hoverOn("z2ui5_if_client");
+  const afterEdit = await sent();
+  expect(afterEdit.length, "the edit was followed by at least one question").toBeGreaterThan(0);
+  expect(afterEdit[0].some((f) => typeof f.source === "string"), "the first question after an edit carries the text").toBe(true);
+  expect(afterEdit[0].every((f) => typeof f.version === "string"), "and names each file's version").toBe(true);
+
+  await hoverOn("view_display");
+  const unchanged = await sent();
+  expect(unchanged.length).toBeGreaterThan(0);
+  for (const files of unchanged) {
+    expect(files.map((f) => f.name)).toContain(MAIN_FILE);
+    expect(files.every((f) => f.source === undefined && typeof f.version === "string"), "an unchanged file goes by version alone").toBe(true);
+  }
+
+  // And a change is a change: the text travels again, once.
+  await setSource(page, CLEAN.replace("DATA client", "DATA my_client"));
+  await hoverOn("z2ui5_if_client");
+  const afterSecondEdit = await sent();
+  expect(afterSecondEdit.some((files) => files.some((f) => typeof f.source === "string")), "the text travels after an edit").toBe(true);
 });
 
 test("the pretty printer reformats the class", async ({ page }) => {

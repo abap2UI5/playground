@@ -268,7 +268,15 @@ code:
   is a round trip: `refresh()` answers with what was last known and
   `whenAnalysed()` delivers the fresh one; Run waits on `refreshNow()`; the
   Monaco providers (`src/editor/providers.mjs`) return promises, which Monaco
-  allows. Two consequences of starting that early, both held by
+  allows. Every provider question carries the open files so the answer is
+  for the text on screen - but a file the worker was already sent under the
+  same version (Monaco's model id and version id, `host.version`) goes as
+  `{ name, version }` alone, and only a new or changed one as text; the
+  worker is the judge (`holdsVersion` in `registry-core.mjs`), answers
+  `needsText` with the names it does not hold at that version - a fresh
+  worker, a text a fix moved under it - and the client asks again with them
+  in full, so a lost version costs one round trip and never a stale answer
+  (`tests/editor.spec.js` watches the worker's door for both halves). Two consequences of starting that early, both held by
   `tests/site.spec.js`: what a worker says before the bundle is listening
   (`ready`, `corpus`, or an error) is buffered by the inline script and
   replayed by the client; and a worker script Chromium could not fetch fires

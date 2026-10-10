@@ -259,7 +259,18 @@ export function connectRegistry() {
   // The formatting provider - Shift+Alt+F, which is Monaco's own binding -
   // formats through the same worker call the bar's button does, and needs the
   // whole file set to do it: an include is not an object on its own.
-  registerProviders({ files: () => getFiles(), write: writeSource, format: () => format() });
+  // `version` names a file's text: Monaco's version id, bumped on every
+  // edit, with the model's own id in front of it, because a file closed and
+  // opened again is a new model whose versions start over at one.
+  registerProviders({
+    files: () => getFiles(),
+    version: (name) => {
+      const model = modelFor(name);
+      return model ? `${model.id}@${model.getVersionId()}` : undefined;
+    },
+    write: writeSource,
+    format: () => format(),
+  });
   monaco.languages.registerCompletionItemProvider("abap", abapNameCompletion());
   connected = true;
   analysis.connect();

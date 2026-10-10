@@ -95,8 +95,20 @@ const OPS = {
   symbols(name) {
     return core.documentSymbols(name);
   },
+  // Every language-server question comes with the files as the editor has
+  // them - but not every file with its text: one the worker was sent under
+  // the same version before comes as `{ name, version }` alone (the client
+  // half is in src/editor/providers.mjs). A version this worker does not
+  // hold - a fresh worker, a text that moved under it through another door
+  // - is answered with `needsText`, the names to send in full, and the
+  // client asks again; so a restarted worker costs one extra round trip and
+  // never a stale answer.
   ls(method, params, files) {
-    if (files) core.updateFiles(files);
+    if (files) {
+      const needsText = files.filter((f) => f.source === undefined && !core.holdsVersion(f.name, f.version)).map((f) => f.name);
+      if (needsText.length > 0) return { needsText };
+      core.updateFiles(files);
+    }
     return core.languageServer(method, params);
   },
   compile(files) {

@@ -137,6 +137,14 @@ let registry;
 // The user's files as the registry currently holds them, so a change can be
 // reduced to what actually differs.
 let held = new Map();
+// And, per file, the version the editor named when it last sent the text -
+// so a language-server request can name the version instead of sending the
+// text again (see `ls` in registry-worker.mjs and src/editor/providers.mjs).
+// Only a request that carries a version sets it; the text may change under
+// a version through any other door (an analysis without one, a fix applied
+// here), and each of those forgets the version rather than guesses.
+let versions = new Map();
+export const holdsVersion = (name, version) => version !== undefined && versions.get(name) === version;
 
 function addFile(reg, file) {
   reg.addFile(new abaplint.MemoryFile(uriFor(file.name), file.source));
@@ -174,6 +182,7 @@ export async function buildRegistry(corpus, filesReady, onProgress) {
   await parseWithYields(reg, onProgress);
 
   held = new Map();
+  versions = new Map();
   for (const file of await filesReady) {
     addFile(reg, file);
     held.set(file.name, file.source);
@@ -251,22 +260,49 @@ export function getRegistry() {
 
 // Brings the registry in line with the editor. Only what changed is touched, so
 // this costs a few milliseconds however large the corpus is.
+//
+// A file may come as `{ name, version }` with no text at all: the editor's
+// way of saying "the text you were sent under this version" - and it has to
+// be a version this holds (holdsVersion), which the worker's `ls` checks
+// before calling, so the throw below is a contract and not a path. A file
+// that comes with its text and a version is remembered under it; one with
+// text and no version (an analysis) keeps the version remembered while the
+// text is the one it named, and forgets it when the text moved.
 export function updateFiles(files) {
-  const wanted = new Map(files.map((f) => [f.name, f.source]));
+  const wanted = new Map();
+  for (const file of files) {
+    if (file.source === undefined) {
+      if (!holdsVersion(file.name, file.version)) {
+        throw new Error(`${file.name} was named by version and the registry does not hold it at that version`);
+      }
+      wanted.set(file.name, held.get(file.name));
+    } else {
+      wanted.set(file.name, file.source);
+    }
+  }
 
   for (const name of [...held.keys()]) {
     if (!wanted.has(name)) {
       removeFile(registry, name);
       held.delete(name);
+      versions.delete(name);
     }
   }
+  const moved = new Set();
   for (const [name, source] of wanted) {
     if (!held.has(name)) {
       addFile(registry, { name, source });
+      moved.add(name);
     } else if (held.get(name) !== source) {
       registry.updateFile(new abaplint.MemoryFile(uriFor(name), source));
+      moved.add(name);
     }
     held.set(name, source);
+  }
+  for (const file of files) {
+    if (file.source === undefined) continue;
+    if (file.version !== undefined) versions.set(file.name, file.version);
+    else if (moved.has(file.name)) versions.delete(file.name);
   }
 
   registry.parse();
@@ -370,7 +406,12 @@ export function applyAbaplintFixes(files) {
     // The registry now holds the fixed text; `held` has to agree, or the next
     // updateFiles( ) would see the editor's old text as a change and write it
     // straight back over the fix.
-    if (source !== undefined) held.set(file.name, source);
+    if (source !== undefined) {
+      held.set(file.name, source);
+      // ...and the version the editor named for its old text no longer
+      // names this one.
+      versions.delete(file.name);
+    }
   }
   return { fixed: touched, files: out };
 }
