@@ -234,7 +234,16 @@ code:
   downloaded twice and warned about in the console, so if what the page
   fetches changes, these change with it — and that is why SQLite's `.wasm` is
   no longer preloaded: the worker fetches it, and a document's preload does
-  not reach a worker's fetch.
+  not reach a worker's fetch. What reaches it is the **HTTP cache**, so the
+  inline script that starts the two workers also starts a low-priority
+  `fetch` of `runtime/sql-wasm.wasm` and reads the body — the same move
+  `warm-up.mjs` makes for the app frame. Left alone, the runtime asked for
+  the 0.3 MB only from `db-setup.mjs`, which runs after the whole of
+  `framework.mjs` has downloaded and been evaluated; now the two travel side
+  by side and the worker's own request is answered from the cache (on Pages,
+  which serves with a max-age; the test server sends none on purpose, so a
+  test can hold the asking and not the hitting). A cache that keeps nothing
+  costs the one download it always cost.
 - **The warm-up of the app frame** (`src/shell/warm-up.mjs`). Nothing asked
   for UI5 until Run set the frame's src, which is the last thing boot does —
   so the frame's megabyte and a half (the core, two library preloads, the two

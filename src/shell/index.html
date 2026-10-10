@@ -123,11 +123,29 @@
     }
     // The ABAP runtime, and the abaplint registry - which fetches and parses
     // the corpus the editor checks against, so nothing here preloads it: a
-    // document's preload does not reach a worker's fetch, and neither does
-    // SQLite's .wasm, which the runtime fetches for itself. Both scripts are
+    // document's preload does not reach a worker's fetch. Both scripts are
     // named in tools/build-site.mjs and tools/build-framework.mjs.
     window.__abap2ui5Runtime = start("runtime/framework.mjs");
     window.__abap2ui5Registry = start("editor/registry.mjs");
+
+    // SQLite's .wasm, asked for now rather than when the runtime gets round
+    // to it. The runtime worker fetches it from db-setup.mjs, which runs only
+    // once the whole of framework.mjs has downloaded and been evaluated - so
+    // 0.3 MB that could have travelled beside the framework travelled after
+    // it. A <link rel=preload> cannot help (a document's preload does not
+    // reach a worker's fetch), but the HTTP cache is shared with the worker:
+    // this fetch puts the bytes there at low priority, the way warm-up.mjs
+    // primes the app frame's first load, and the worker's own request for the
+    // same URL is answered from it. Nothing depends on it: a cache that does
+    // not keep it costs one download more, as before. The body is read so the
+    // response is complete and cacheable, and errors are swallowed.
+    try {
+      fetch(new URL("runtime/sql-wasm.wasm", document.baseURI), { priority: "low" })
+        .then(function (r) { return r.arrayBuffer(); })
+        .catch(function () {});
+    } catch (e) {
+      // An old fetch that refuses the option, or no fetch at all.
+    }
 
     // The theme the switch in the bar chose last time, applied before the
     // first paint - src/shell/theme.mjs owns the key and the rule, and reads
