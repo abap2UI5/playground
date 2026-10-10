@@ -11,7 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
-import { abap2ui5LinterPlugin, nodeStubPlugin } from "./esbuild-plugins.mjs";
+import { MONACO_CSS, abap2ui5LinterPlugin, monacoCssPlugin, nodeStubPlugin } from "./esbuild-plugins.mjs";
 import { appFirstLoad } from "../src/shell/warm-up.mjs";
 import { SAMPLE_LIST, SAMPLE_REPO } from "../src/editor/sample-list.mjs";
 import { SITE } from "./sample-pages.mjs";
@@ -326,12 +326,16 @@ async function buildPage() {
     sourcemap: process.env.PG_DEBUG === "1",
     logLevel: "warning",
     metafile: true,
-    // Monaco pulls in its stylesheet and its icon font through the module graph;
-    // the CSS lands next to the bundle as assets/shell.css (the shell's own
-    // stylesheet is imported by main.mjs so both end up in that one file), and
-    // the font is copied out with a hashed name.
-    // Monaco's icon font is copied out beside the bundle; the ABAP of the samples
-    // the page carries is inlined into it as text. They are real .clas.abap
+    // assets/shell.css is the shell's own stylesheet and nothing else: main.mjs
+    // imports src/shell/shell.css, and esbuild writes it beside the bundle.
+    // Monaco pulls its own eighty stylesheets in through the module graph,
+    // and esbuild would fold those into shell.css too - CSS reached through a
+    // dynamic import( ) goes to the entry's stylesheet, since nothing loads a
+    // chunk's CSS at run time - so monacoCssPlugin keeps them out of the
+    // graph and buildMonacoCss( ) below bundles them as a stylesheet of their
+    // own, with the icon font copied out beside it under a hashed name.
+    // The ABAP of the samples
+    // the page carries is inlined into the bundle as text. They are real .clas.abap
     // files, copied out of the pinned abap2UI5/samples by writeSamples( ) above
     // into build/samples/, and reached through the import module it writes there
     // - see src/editor/samples.mjs, which is the only importer.
@@ -351,7 +355,7 @@ async function buildPage() {
     external: ["*.woff2"],
     // The linter plugin goes first: it claims `fs` and `path` for the abap2UI5
     // linter alone, and leaves every other importer to the ordinary stubs.
-    plugins: [abap2ui5LinterPlugin(ROOT), nodeStubPlugin(ROOT)],
+    plugins: [abap2ui5LinterPlugin(ROOT), monacoCssPlugin(ROOT), nodeStubPlugin(ROOT)],
     // No Buffer shim either: it was injected for abaplint, which now runs in the
     // registry worker (the shim is injected there). What is left on the page
     // reaches for Buffer only behind a typeof check, so the shim was a 31 KB
@@ -385,6 +389,71 @@ async function buildCatalogue() {
 // only when it finished, so a build that failed left nothing half-written
 // for the others to trip over, and the first failure is the one to read.
 const [result] = await Promise.all([buildPage(), buildRegistry(), buildLinter(), buildCatalogue()]);
+// The page build's metafile, kept for check-size.mjs and the tests - written
+// now, so a failure further down leaves the file that describes this build
+// rather than the one before it.
+fs.writeFileSync(path.join(ROOT, "build", "site.metafile.json"), JSON.stringify(result.metafile));
+
+// Monaco's stylesheet, as a file of its own: assets/monaco-editor-<hash>.css.
+// The page build above left Monaco's CSS imports out of the bundle
+// (monacoCssPlugin in tools/esbuild-plugins.mjs says why: esbuild folded
+// them into assets/shell.css on every page, the app-only ones included) and
+// left each as an empty module the metafile still records). This walks the
+// graph for them, in esbuild's own order, and bundles the real files in that
+// order, minified, with the icon font copied
+// out beside it the way the page build used to. The name goes into
+// index.html's inline script, which links it on every page that will show
+// the editor (writeIndex), and into the service worker's precache
+// (writeServiceWorker) - a hashed name, so it needs no CORE hash.
+const monacoCss = await buildMonacoCss();
+async function buildMonacoCss() {
+  /* The stylesheets in the order esbuild would have bundled them: a walk of
+     the import graph from Monaco's module, each module's imports in the
+     order they are written, each stylesheet the first time it is reached -
+     which is what esbuild does with CSS reached from JavaScript, and was
+     checked against the order it had used while the CSS was still in the
+     bundle. The stubs are empty modules and so appear in the metafile's
+     inputs, not in any output's. */
+  const inputs = result.metafile.inputs;
+  const seen = new Set();
+  const files = [];
+  const walk = (module) => {
+    if (seen.has(module)) return;
+    seen.add(module);
+    for (const { path: to, kind, external } of inputs[module]?.imports ?? []) {
+      if (external) continue;
+      if (to.startsWith(`${MONACO_CSS}:`)) {
+        const file = to.slice(MONACO_CSS.length + 1);
+        if (!files.includes(file)) files.push(file);
+      } else if (kind === "import-statement") {
+        walk(to);
+      }
+    }
+  };
+  walk("src/editor/monaco-editor.mjs");
+  if (files.length === 0) {
+    console.error("build-site: ERROR Monaco's chunk imports no stylesheet - did monacoCssPlugin stop matching?");
+    process.exit(1);
+  }
+  const css = await esbuild.build({
+    stdin: {
+      contents: files.map((f) => `@import ${JSON.stringify(f)};`).join("\n"),
+      resolveDir: ROOT,
+      loader: "css",
+    },
+    outdir: ASSETS,
+    entryNames: "monaco-editor-[hash]",
+    bundle: true,
+    minify: true,
+    logLevel: "warning",
+    metafile: true,
+    loader: { ".ttf": "file" },
+  });
+  const out = Object.keys(css.metafile.outputs).find((o) => o.endsWith(".css"));
+  const rel = path.relative(DIST, path.join(ROOT, out)).split(path.sep).join("/");
+  log(`${rel} (${kb(path.join(DIST, rel))}, ${files.length} of Monaco's stylesheets)`);
+  return rel;
+}
 
 writeIndex();
 // The icons and the app manifest - what a tab, a home screen and an install
@@ -500,7 +569,7 @@ for (const name of fs.readdirSync(path.join(ROOT, "src", "embed"))) {
   fs.copyFileSync(path.join(ROOT, "src", "embed", name), path.join(DIST, "embed", name));
 }
 
-log(`shell.mjs (${kb(path.join(ASSETS, "shell.mjs"))})`);
+log(`shell.mjs (${kb(path.join(ASSETS, "shell.mjs"))}), shell.css (${kb(path.join(ASSETS, "shell.css"))})`);
 for (const chunk of chunks()) log(`${path.basename(chunk)} (${kb(path.join(DIST, chunk))})`);
 
 // Fail loudly rather than publish a page whose two halves are missing - the
@@ -608,7 +677,10 @@ function writeServiceWorker() {
     path.join(DIST, "sw.js"),
     source
       .replaceAll("__BUILD_ID__", build)
-      .replace("__CHUNKS__", JSON.stringify(chunks().filter((c) => !onUseOnly(c))))
+      /* Monaco's stylesheet is precached with the chunks: hashed in its name
+         like them, and loaded by the first visit's page before the worker
+         controls it, so the on-use path never sees that request. */
+      .replace("__CHUNKS__", JSON.stringify([...chunks().filter((c) => !onUseOnly(c)), monacoCss]))
       .replace("__APP_FIRST_LOAD__", JSON.stringify(firstLoad))
       .replace("__CORE__", JSON.stringify(hashes))
       .replace("__DOCS__", JSON.stringify(docs)),
@@ -650,7 +722,7 @@ function writeIndex() {
   ];
   const source = fs.readFileSync(path.join(SHELL, "index.html"), "utf8");
   const marker = "<!-- __MODULEPRELOADS__ -->";
-  for (const needed of [marker, "__EDITOR_PRELOADS__"]) {
+  for (const needed of [marker, "__EDITOR_PRELOADS__", "__EDITOR_CSS__"]) {
     if (!source.includes(needed)) {
       console.error(`build-site: ERROR src/shell/index.html no longer has a ${needed} to substitute`);
       process.exit(1);
@@ -659,7 +731,11 @@ function writeIndex() {
   /* After the substitution, without the comments: 9.8 kB of the 37 kB document,
      a third of its compressed weight (tools/html.mjs). */
   const html = stripHtmlComments(
-    source.replace(marker, tags.join("\n")).replace("__EDITOR_PRELOADS__", JSON.stringify(editorPreloads)),
+    source
+      .replace(marker, tags.join("\n"))
+      .replace("__EDITOR_PRELOADS__", JSON.stringify(editorPreloads))
+      /* Monaco's stylesheet, linked by the same script on the same pages. */
+      .replace("__EDITOR_CSS__", JSON.stringify(monacoCss)),
   );
   fs.writeFileSync(path.join(DIST, "index.html"), html);
   log(`index.html (${tags.length} chunk${tags.length === 1 ? "" : "s"} preloaded, Monaco's ${editorPreloads.length} where the editor is shown)`);
@@ -770,5 +846,4 @@ function listing(dir, prefix = "") {
   return out;
 }
 
-fs.writeFileSync(path.join(ROOT, "build", "site.metafile.json"), JSON.stringify(result.metafile));
 log("dist/ complete");

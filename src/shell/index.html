@@ -139,6 +139,15 @@
     // substituted by writeIndex( ) in tools/build-site.mjs, like the
     // modulepreload tags below. A link added by script preloads like one in
     // the markup, and the page's later import( ) of the same URL takes it.
+    //
+    // And Monaco's stylesheet, on the same pages: a file of its own
+    // (assets/monaco-editor-<hash>.css, its name written here the same way)
+    // rather than part of shell.css, so the pages that never show an editor
+    // never download it either - it was 150 KB of the 211. Linked rather
+    // than preloaded, because it is wanted the moment Monaco draws; a link
+    // added by script does not hold the first paint the way one in the
+    // markup would, and src/editor/monaco-editor.mjs waits on it (by this
+    // id) before it creates the editor.
     if (!/[?&]view=(app|full)(&|$)/.test(location.search)) {
       var editorChunks = __EDITOR_PRELOADS__;
       for (var i = 0; i < editorChunks.length; i++) {
@@ -147,6 +156,11 @@
         link.href = editorChunks[i];
         document.head.appendChild(link);
       }
+      var css = document.createElement("link");
+      css.rel = "stylesheet";
+      css.id = "monaco-css";
+      css.href = __EDITOR_CSS__;
+      document.head.appendChild(css);
     }
 
     // SQLite's .wasm, asked for now rather than when the runtime gets round

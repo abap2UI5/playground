@@ -43,6 +43,9 @@ export function preloadEditor() {
 // checked, and nothing is drawn.
 export async function createEditor(container, files, options = {}) {
   impl = options.editor === false ? store : await preloadEditor();
+  // Monaco's stylesheet, linked by index.html beside the chunk's preload and
+  // all but always there before the chunk is; see monaco-editor.mjs.
+  if (impl !== store) await impl.stylesheetReady();
   return impl.createEditor(container, files, options);
 }
 

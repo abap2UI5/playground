@@ -251,3 +251,40 @@ export const generatedFrontendStubPlugin = {
     });
   },
 };
+
+// Monaco's stylesheets, kept OUT of the page bundle's module graph.
+//
+// Monaco imports its CSS from its JavaScript - eighty files, 150 KB - and
+// esbuild bundles CSS reached that way into a stylesheet per ENTRY POINT,
+// counting what is reached through a dynamic import( ) as well: the entry
+// has no way to load a chunk's CSS at run time, so esbuild gives it to the
+// entry. Monaco is a chunk precisely so that an app-only page never fetches
+// it (src/editor/editor.mjs), and its CSS went to every page all the same -
+// 150 KB of the 211 KB assets/shell.css, 22 KB compressed, in front of the
+// first paint of pages with no editor on them - beside an orphan
+// monaco-editor-<hash>.css that nothing linked.
+//
+// So each of those imports resolves to an empty module here (`monaco-css:`
+// in the metafile's inputs, where the import that reached it is recorded),
+// and tools/build-site.mjs walks the graph for them and bundles the real
+// files into assets/monaco-editor-<hash>.css, a stylesheet of its own, which
+// index.html's inline script links on every page that will show the editor
+// and src/editor/monaco-editor.mjs waits on before it draws.
+//
+// The order matters and is esbuild's own - the walk of the import graph it
+// would have bundled the CSS in - because a rule in one of Monaco's later
+// files does overwrite one in an earlier file at equal specificity.
+export const MONACO_CSS = "monaco-css";
+export function monacoCssPlugin(root) {
+  const MONACO = path.join(root, "node_modules", "monaco-editor") + path.sep;
+  return {
+    name: "monaco-css-as-its-own-stylesheet",
+    setup(build) {
+      build.onResolve({ filter: /\.css$/ }, (args) => {
+        if (!args.importer.startsWith(MONACO)) return null;
+        return { path: path.resolve(args.resolveDir, args.path), namespace: MONACO_CSS };
+      });
+      build.onLoad({ filter: /.*/, namespace: MONACO_CSS }, () => ({ contents: "", loader: "js" }));
+    },
+  };
+}

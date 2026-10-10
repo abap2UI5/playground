@@ -54,7 +54,9 @@ const BASE = new URL(self.registration.scope);
 
 // The bundle's chunks - Monaco's ABAP grammar, the AI chunks' shared half -
 // split off the shell bundle and named with a hash, written in by
-// tools/build-site.mjs, which is the only place that knows their names. The
+// tools/build-site.mjs, which is the only place that knows their names, and
+// Monaco's stylesheet beside them, hashed the same way (the page links it
+// before this worker controls it, so on-use caching would never see it). The
 // abap2UI5 linter is not one of them any more: it is editor/lint.mjs, loaded
 // by the registry worker and listed with the core assets.
 const CHUNKS = __CHUNKS__;
@@ -221,10 +223,11 @@ function isCacheable(url) {
   // The sample catalogue's own files go through isLive( ) below - kept, but
   // never ahead of the network.
   if (LIVE.has(rel)) return true;
-  // Monaco's icon font and the bundle's chunks, under the hashed names esbuild
-  // gave them - the chunks are in CORE by name as well, this is for a chunk of
-  // a build this worker was not written for, which is still worth keeping.
-  if (/^assets\/[\w.-]+\.(ttf|mjs)$/.test(rel)) return true;
+  // Monaco's icon font, its stylesheet and the bundle's chunks, under the
+  // hashed names esbuild gave them - the chunks and the stylesheet are in
+  // CORE by name as well, this is for one of a build this worker was not
+  // written for, which is still worth keeping.
+  if (/^assets\/[\w.-]+\.(ttf|mjs|css)$/.test(rel)) return true;
   return false;
 }
 

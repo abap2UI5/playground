@@ -116,6 +116,31 @@ analysis.useHost({
   lineMaxColumn: (name, line) => modelFor(name)?.getLineMaxColumn(line) ?? 1,
 });
 
+// Monaco's stylesheet is a file of its own - assets/monaco-editor-<hash>.css,
+// bundled apart from shell.css by tools/build-site.mjs so that a page with no
+// editor never downloads it - and index.html's inline script links it, under
+// this id, on every page that will show the editor, at the same moment it
+// preloads this chunk. The chunk is forty times the stylesheet, so the sheet
+// has all but always landed first; this is for the time it has not, so the
+// editor is never created against a document Monaco's rules are not in yet.
+// Bounded: a stylesheet the network lost costs an unstyled editor, not a
+// playground that never starts. A document without the link at all is one
+// the inline script did not run on, which no page of this site is - said
+// loudly rather than drawn unstyled.
+export function stylesheetReady() {
+  const link = document.getElementById("monaco-css");
+  if (!link) {
+    throw new Error("Monaco's stylesheet is not on this page - index.html's inline script links it wherever the editor is shown");
+  }
+  if (link.sheet) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => resolve();
+    link.addEventListener("load", done, { once: true });
+    link.addEventListener("error", done, { once: true });
+    setTimeout(done, 5000);
+  });
+}
+
 // options.dark says which theme to start in; the shell decides that (see
 // src/shell/theme.mjs) and calls setEditorTheme( ) when it changes.
 export function createEditor(container, files, options = {}) {

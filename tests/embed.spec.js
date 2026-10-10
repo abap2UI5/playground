@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { MAIN_MARK } from "./helpers.mjs";
 
 // Putting a live demo in somebody else's page: the app-only view, the messages
@@ -237,9 +237,18 @@ const monacoChunk = () => {
   expect(out, "the bundle has a chunk for src/editor/monaco-editor.mjs").toBeTruthy();
   return "/" + out.replace(/^dist\//, "");
 };
+// And Monaco's stylesheet, a file of its own beside the chunk since esbuild
+// folded it into shell.css on every page (monacoCssPlugin in
+// tools/esbuild-plugins.mjs): held the same way, by its real hashed name.
+const monacoCss = () => {
+  const name = readdirSync(new URL("../dist/assets/", import.meta.url)).find((n) => /^monaco-editor-[\w]+\.css$/.test(n));
+  expect(name, "the build wrote Monaco's stylesheet beside the bundle").toBeTruthy();
+  return `/assets/${name}`;
+};
 
 test("an app-only page never fetches Monaco, and the playground does", async ({ page }) => {
   const chunk = monacoChunk();
+  const css = monacoCss();
   const asked = [];
   page.on("request", (r) => asked.push(new URL(r.url()).pathname));
 
@@ -247,6 +256,7 @@ test("an app-only page never fetches Monaco, and the playground does", async ({ 
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
   await expect(page.frameLocator("#app").getByText(MAIN_MARK)).toBeVisible();
   expect(asked, "the app-only page asked for Monaco's chunk").not.toContain(chunk);
+  expect(asked, "the app-only page asked for Monaco's stylesheet").not.toContain(css);
   expect(asked.some((p) => p.endsWith("/assets/shell.mjs")), "the page bundle was asked for").toBe(true);
   // And nothing instantiated it: the editor half puts Monaco on the window
   // for the tests' own use, and an app-only page has none to put there.
@@ -256,7 +266,11 @@ test("an app-only page never fetches Monaco, and the playground does", async ({ 
   await page.goto("/");
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
   expect(asked, "the playground asked for Monaco's chunk").toContain(chunk);
+  expect(asked, "the playground asked for Monaco's stylesheet").toContain(css);
   expect(await page.evaluate(() => typeof window.monaco)).toBe("object");
+  // And it is applied, not only fetched: Monaco's own rule for its lines is
+  // what makes the editor an editor rather than a column of text.
+  expect(await page.evaluate(() => getComputedStyle(document.querySelector(".monaco-editor .view-lines")).whiteSpace)).toBe("pre");
 });
 
 test("an app-only playground renders in a column narrower than a desk", async ({ page }) => {

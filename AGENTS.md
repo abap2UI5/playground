@@ -155,8 +155,19 @@ of each line. Each step is still its own script and still runnable by name
    over `assets/*.mjs` as a sum, so a module that moved into a chunk has not
    gotten any smaller — and `check-size.mjs` walks the metafile to hold the
    entry and its static imports free of Monaco, which is the property the
-   app-only pages' saving rests on. Two loaders go with it: Monaco's icon font is
-   copied out with a hashed name, and `.abap` is **text** — which is how the
+   app-only pages' saving rests on. **Monaco's stylesheet is a file of its
+   own** (`assets/monaco-editor-<hash>.css`): esbuild gives the CSS a chunk
+   reaches to the *entry's* stylesheet, dynamic import or not, so Monaco's
+   eighty stylesheets - 150 KB of a 211 KB `shell.css`, 22 KB compressed -
+   went to every page, the app-only ones included, beside an orphan copy
+   nothing linked. `monacoCssPlugin` (`tools/esbuild-plugins.mjs`) resolves
+   each of them to an empty module, `buildMonacoCss()` walks the metafile's
+   import graph for them in esbuild's own order and bundles the real files,
+   the inline script links the result (`__EDITOR_CSS__`, beside the chunk's
+   preload, on the same pages), `monaco-editor.mjs` waits on the link before
+   it draws, and `check-size.mjs` budgets the two stylesheets apart and holds
+   `shell.css` free of Monaco's. Two loaders go with it: Monaco's icon font is
+   copied out with a hashed name (by the stylesheet's build now), and `.abap` is **text** — which is how the
    samples the page carries reach the bundle from `build/samples/`. They are real ABAP
    files rather than template literals inside JavaScript so that the samples
    browser can link a row to the ABAP, and `src/editor/samples.mjs` is their
@@ -268,7 +279,8 @@ code:
   statically (`modulepreload`, written by the build), and — added by the
   inline script, on every page but `?view=app` and `?view=full` — Monaco's
   chunk, which `editor.mjs` imports dynamically so that those two pages
-  never fetch it (below). Left alone each would
+  never fetch it (below), and Monaco's stylesheet, linked outright on the
+  same pages (a link added by script does not hold the first paint). Left alone each would
   arrive in a chain behind the file that asks for it. The corpus is not
   preloaded any more: the registry worker fetches it, and a document's
   preload does not reach a worker's fetch. Measured when the framework was still an import: no difference where
@@ -311,7 +323,7 @@ code:
 - **The service worker** (`src/shell/sw.js`, `tests/worker.spec.js`). Cache
   first, over an allow list, in a cache named after the build. Its own comment
   is the long form: what it caches (the core assets — the linter's bundle
-  among them — and the chunks by name,
+  among them — and the chunks by name, Monaco's stylesheet among those,
   everything under `app/` except the frame's document — *with* the queries
   UI5 puts on its stylesheets and manifest, which name the build, not a
   moment), what it deliberately leaves live (the app frame's document, linked
@@ -1119,10 +1131,11 @@ deploy — readers get the published playground, never your checkout.
   **fetches Monaco**: `createEditor()` in `src/editor/editor.mjs` keeps the
   files in `file-store.mjs` on these pages — the registry worker still checks
   and compiles them, an abaplint error still stops Run — and imports
-  `monaco-editor.mjs`, the 0.82 MB chunk, on no other. Every page used to
+  `monaco-editor.mjs`, the 0.82 MB chunk, on no other - nor its stylesheet,
+  which the inline script links only where the chunk is preloaded. Every page used to
   download, evaluate and instantiate the editor into the hidden pane;
   `tests/embed.spec.js` holds an app-only page to never asking for the chunk
-  and the playground to asking. Neither carries
+  or the stylesheet and the playground to asking for both. Neither carries
   the bar: everything it offers is a click away in the "open this in the
   playground" link an embedding page prints beside the frame, and what it did
   instead was put a strip of this site's furniture across somebody else's

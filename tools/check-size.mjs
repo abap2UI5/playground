@@ -38,6 +38,13 @@ const MB = 1024 * 1024;
 // that moved from the entry into a chunk has not gotten any smaller.
 const TRANSFERRED = [
   { file: "assets/*.mjs", limit: 1.15 * MB, note: "Monaco" },
+  /* The two stylesheets, apart on purpose: shell.css is on every page and
+   * Monaco's only where an editor is drawn (index.html's inline script links
+   * it; monacoCssPlugin in tools/esbuild-plugins.mjs keeps it out of
+   * shell.css, where esbuild would fold it). A budget on each rather than on
+   * the sum, because the sum is what hid Monaco's 150 KB in shell.css. */
+  { file: "assets/shell.css", limit: 0.015 * MB, note: "the shell's own stylesheet, on every page" },
+  { file: "assets/monaco-editor-*.css", limit: 0.03 * MB, note: "Monaco's stylesheet, where the editor is shown" },
   /* The worker's bundle and the linter's beside it: the abap2UI5 linter
    * moved here from the page's chunks when it moved off the page's thread,
    * and the budget moved with it - 0.15 MB out of the page's, into the
@@ -188,6 +195,13 @@ console.log("\nwhat an app-only page downloads of it:");
     }
   }
   const carriesMonaco = (out) => Object.keys(outputs[out].inputs).some((i) => i.startsWith("node_modules/monaco-editor/"));
+  /* And its stylesheet: esbuild gives a dynamically imported chunk's CSS to
+   * the entry, so this is the one place that would silently come back. */
+  const shellCss = fs.readFileSync(path.join(DIST, "assets", "shell.css"), "utf8");
+  if (shellCss.includes("--monaco-monospace-font")) {
+    failed = true;
+    console.error("  OVER    assets/shell.css carries Monaco's stylesheet again - see monacoCssPlugin in tools/esbuild-plugins.mjs");
+  }
   const leaked = [...reached].filter(carriesMonaco);
   const monaco = Object.keys(outputs).find((o) => outputs[o].entryPoint === "src/editor/monaco-editor.mjs");
   const appOnlyBytes = [...reached].reduce((n, o) => n + gzipped(path.join(ROOT, o)), 0);
