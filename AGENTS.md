@@ -1505,7 +1505,14 @@ Monaco's blob workers and UI5 in a frame are a separate piece of work.
 keystroke; the URL and the position memory follow 200ms later, once, in a
 try/catch — Safari refuses `replaceState( )` after a hundred calls in thirty
 seconds, and the two synchronous writes in front of every render were where a
-fast typist's handler died. The cards carry `content-visibility: auto` so a
+fast typist's handler died. **A card is built once** (`cardFor( )`, a
+`WeakMap` from row to node) and moved into place on every draw: building all
+771 again on every keystroke, a dozen elements apiece and thrown away at the
+next key, was the cost of a keystroke, not the filtering. A card that does
+not match is left out rather than hidden, so the list and the count agree
+and nothing counts a hidden card. The samples dialog's rows follow the same
+rule (`rowFor( )` in `src/shell/examples.mjs`). The cards carry
+`content-visibility: auto` so a
 keystroke lays out the screenful that is visible rather than all 771; the
 four filter lists are drawn at the width their longest option gives them and
 the results box keeps its height until it is filled, which is what took the

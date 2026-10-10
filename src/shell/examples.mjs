@@ -519,7 +519,7 @@ function render() {
 
     const list = document.createElement("ul");
     list.className = "insight-list examples-list";
-    for (const entry of entries) list.append(row(entry));
+    for (const entry of entries) list.append(rowFor(entry));
     frag.append(list);
   }
 
@@ -557,6 +557,26 @@ function render() {
   const count = document.getElementById("examples-count");
   if (count) count.textContent = loading ? "" : `${shown} of ${total}`;
   if (clear) clear.hidden = !isNarrowed();
+}
+
+// The row for an entry, built ONCE and moved into place on every draw. The
+// list is drawn again on every keystroke in the search box, and it used to
+// build every row again each time - 770 entries at a dozen elements and a
+// handler apiece, the whole of it thrown away at the next key - which is the
+// one thing on this page that made typing in the box lag. An entry's row
+// cannot change under it: everything it shows comes off the index, the
+// filters only decide whether it is on screen. Rows that are not are left
+// out rather than hidden, so what is in the list is what passes - nothing
+// counts a hidden row. The drafts' entries are built anew with their group
+// (draftsCache), and their rows with them.
+const rowCache = new WeakMap();
+function rowFor(entry) {
+  let node = rowCache.get(entry);
+  if (node === undefined) {
+    node = row(entry);
+    rowCache.set(entry, node);
+  }
+  return node;
 }
 
 /** A badge on a row: what the index knows about it in one or two words. */
