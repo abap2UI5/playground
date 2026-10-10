@@ -52,9 +52,11 @@ const CACHE = `abap2ui5-playground-${BUILD}`;
 // path below is relative to it, so none of this assumes where the site lives.
 const BASE = new URL(self.registration.scope);
 
-// The bundle's chunks - the transpiler and the abap2UI5 linter, split off the
-// shell bundle and named with a hash - written in by tools/build-site.mjs,
-// which is the only place that knows their names.
+// The bundle's chunks - Monaco's ABAP grammar, the AI chunks' shared half -
+// split off the shell bundle and named with a hash, written in by
+// tools/build-site.mjs, which is the only place that knows their names. The
+// abap2UI5 linter is not one of them any more: it is editor/lint.mjs, loaded
+// by the registry worker and listed with the core assets.
 const CHUNKS = __CHUNKS__;
 
 // What the app frame loads first, in both themes - the same list the page

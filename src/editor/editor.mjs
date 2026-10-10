@@ -23,12 +23,18 @@ import "monaco-editor/editor/contrib/contextmenu/browser/contextmenu.js";
 import "monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching.js";
 // Ctrl+M (Ctrl+Shift+M on a Mac): Tab moves the focus instead of indenting.
 import "monaco-editor/editor/contrib/toggleTabFocusMode/browser/toggleTabFocusMode.js";
-import { applyLinterFixes, fixableAmong, checkFor, ruleUrl } from "./abap2ui5-lint.mjs";
+import { ruleUrl } from "./abap2ui5-lint.mjs";
 
 import { uriFor } from "./files.mjs";
 import { registerProviders } from "./providers.mjs";
 import { libraryOf, isCarried } from "../shell/ui5-libs.mjs";
-import { analyse as analyseInWorker, applyAbaplintFixes, formatFiles, knownObjectNames } from "./registry.mjs";
+import {
+  analyse as analyseInWorker,
+  applyAbaplintFixes,
+  applyLinterFixes,
+  formatFiles,
+  knownObjectNames,
+} from "./registry.mjs";
 
 // @abaplint/monaco's snippet provider reaches for a global `monaco`, the way a
 // script tag would have provided it. It is a library written for a page that
@@ -342,7 +348,7 @@ export function setFiles(files) {
 // answer already computed. What that does NOT cover is a checker whose
 // configuration changed under unchanged text, which is why the Config tabs
 // call invalidateAnalysis( ) before they ask again.
-let analysis = { key: undefined, problems: [], fixable: 0 };
+let analysis = { key: undefined, problems: [], fixable: 0, lint: {} };
 
 const analysisKey = () =>
   monaco.editor
@@ -354,7 +360,7 @@ const analysisKey = () =>
 // Throws the kept answer away. For the one caller whose change is invisible to
 // the key: a checker reconfigured while the text stayed exactly as it was.
 export function invalidateAnalysis() {
-  analysis = { key: undefined, problems: [], fixable: 0 };
+  analysis = { key: undefined, problems: [], fixable: 0, lint: {} };
 }
 
 // Everything wrong with what is open, from both checkers, and the markers to
@@ -391,7 +397,8 @@ async function analyse() {
 async function analyseKey(key) {
   const files = getFiles();
   // One round trip: the registry brought in line with the editor, then
-  // abaplint's diagnostics per file and its count of what it could fix.
+  // abaplint's diagnostics per file and its count of what it could fix, and
+  // the abap2UI5 linter's findings per file with the views they came from.
   const told = await analyseInWorker(files);
   // The text moved on while the worker was answering: this answer is about a
   // key nobody holds any more, so it is thrown away and the question asked
@@ -431,12 +438,12 @@ async function analyseKey(key) {
       problems.push({ file: file.name, source: "abaplint", ...issue });
     }
 
-    // The linter's findings, asked for once and then used three times over:
-    // the underlines, the Problems rows, and how many of them carry a fix -
-    // and the views they came from, for the one check the linter cannot make
-    // (below).
-    const { findings, docs } = checkFor(file.source);
-    fixable += fixableAmong(findings).length;
+    // The linter's findings, computed once in the worker and used three times
+    // over: the underlines, the Problems rows, and how many of them carry a
+    // fix - and the views they came from, for the one check the linter
+    // cannot make (below) and for the View tab (lintViewsFor).
+    const { findings, docs, fixable: linterFixable } = told.lint?.[file.name] ?? NOT_LINTED;
+    fixable += linterFixable;
     monaco.editor.setModelMarkers(
       model,
       LINT_OWNER,
@@ -470,9 +477,26 @@ async function analyseKey(key) {
     problems.push(...librariesNotCarried(file, docs));
   }
 
-  analysis = { key, problems, fixable };
+  analysis = { key, problems, fixable, lint: told.lint ?? {} };
   onAnalysed?.(currentProblems());
   return analysis;
+}
+
+const NOT_LINTED = { findings: [], docs: [], notes: [], fixable: 0, loaded: false };
+
+// The views the abap2UI5 linter reconstructed from one open file, as the
+// last analysis left them - what the View tab shows. The same reconstruction
+// the findings came from, so what is shown is what was checked; the notes
+// are the linter's own remarks about how sure it is of the shape (a level
+// left open at stringify( ), a helper it could not follow). `loaded` is
+// false until the linter's chunk has reached the worker AND an analysis has
+// run over this file - the tab says so in both cases, and is drawn again
+// when the next analysis lands (whenAnalysed). Read off the kept answer, so
+// it costs nothing: the tab used to run the linter a second time for this.
+export function lintViewsFor(name) {
+  const kept = analysis.lint[name];
+  if (kept === undefined || !kept.loaded) return { docs: [], notes: [], loaded: false };
+  return { docs: kept.docs, notes: kept.notes, loaded: true };
 }
 
 /* The one thing the abap2UI5 linter cannot know: which UI5 libraries THIS
@@ -820,8 +844,12 @@ export async function applyFixes() {
   for (let pass = 0; pass < 5; pass++) {
     let changed = 0;
     for (const file of getFiles()) {
-      const result = applyLinterFixes(file.source);
-      if (result.fixed === 0) continue;
+      // A round trip: the linter runs in the registry worker. The reader's
+      // own edit in the meantime wins, as it does over abaplint's above -
+      // guarded per file, since the pass before has moved the versions.
+      const still = versionGuard();
+      const result = await applyLinterFixes(file.source);
+      if (result.fixed === 0 || !still(file.name)) continue;
       // The passes after abaplint's join the step its write opened: one
       // Ctrl+Z per file for the whole of Fix them.
       writeSource(file.name, result.source, { sameStep: true });

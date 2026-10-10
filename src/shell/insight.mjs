@@ -14,6 +14,7 @@ import {
   getFiles,
   getSource,
   invalidateAnalysis,
+  lintViewsFor,
   onFileShown,
   refresh,
   refreshNow,
@@ -27,7 +28,7 @@ import {
   applyAbaplintSettings,
   documentSymbols,
 } from "../editor/registry.mjs";
-import { applyLinterSettings, linterDefaults, linterSettings, viewsFor } from "../editor/abap2ui5-lint.mjs";
+import { applyLinterSettings, linterDefaults, linterSettings } from "../editor/abap2ui5-lint.mjs";
 import { copyToClipboard } from "./share.mjs";
 import { onRoundtrip, roundtripList } from "./roundtrips.mjs";
 import { prettyXml } from "./xml-pretty.mjs";
@@ -631,8 +632,10 @@ function viewPreview() {
   // rather than writing this XML into that file.
   if (editing && editing.file !== file) stopEditing();
 
-  const { docs, notes, loaded } = viewsFor(source);
-  if (!loaded) return empty("The abap2UI5 linter is still loading - the view appears when it has.");
+  // Off the kept analysis - the worker reconstructed it for the findings, and
+  // this tab is drawn again whenever a fresh one lands.
+  const { docs, notes, loaded } = lintViewsFor(file);
+  if (!loaded) return empty("The abap2UI5 linter has not looked at this file yet - the view appears when it has.");
   if (docs.length === 0) {
     return empty("This file builds no view with z2ui5_cl_ui5_view_builder - nothing to reconstruct.");
   }

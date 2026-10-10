@@ -239,11 +239,20 @@ export async function applyAbaplintSettings(next, progress) {
 
 // ---------------------------------------------------------------- questions
 
-// Everything abaplint has to say about what is open, per file, and how much
-// of it the fixer could repair. One round trip per analysis.
+// Everything both checkers have to say about what is open, per file, and
+// how much of it each fixer could repair: abaplint's diagnostics and the
+// abap2UI5 linter's findings, with the views the linter reconstructed them
+// from. One round trip per analysis.
 export const analyse = (files) => call("analyse", files);
 
 export const applyAbaplintFixes = (files) => call("applyFixes", files);
+
+// The abap2UI5 linter, which runs in the same worker (lint-core.mjs) and
+// answers inside `analyse` above: resolves when its chunk has landed there,
+// is told the settings the page holds, and repairs one source on request.
+export const loadLinter = () => call("loadLinter");
+export const useLinterSettings = (settings) => call("lintSettings", settings);
+export const applyLinterFixes = (source) => call("lintFix", source);
 
 // Layout, over the files as they are open: abaplint's whitespace fixes and
 // then its pretty printer - see formatFiles( ) in registry-core.mjs.

@@ -1,4 +1,4 @@
-// The abap2UI5 linter, next to abaplint.
+// The abap2UI5 linter, next to abaplint - the page's side.
 //
 // The two answer different questions and neither replaces the other. abaplint
 // answers "does this ABAP compile" - types, syntax, whether the method exists.
@@ -15,28 +15,26 @@
 //
 // The findings carry the same `severity` names as the config file, and the
 // same rule names, so a message here is the message CI would print.
-// The linter itself, and the half-megabyte of UI5 metadata it checks against,
-// arrive as a chunk of their own rather than with the page: nothing needs
-// them before the corpus has parsed, and until then they were being
-// downloaded and evaluated on the way to the first editor frame. boot( ) asks
-// for them as soon as the corpus has landed, and re-runs the analysis when
-// they arrive; until then this module answers "no findings", which is also
-// what it answers for a class that builds no view. The settings below are
-// this module's own and need nothing loaded.
-let lib;
-let loading;
+//
+// The linter itself runs in the registry worker (src/editor/lint-core.mjs),
+// where abaplint runs, and answers in the same analysis message the page
+// asks abaplint with (`analyse` in registry.mjs): it used to run on this
+// thread over every open file on every keystroke pause, and on a phone that
+// was the better part of the pause. What is left here is what the page
+// decides - the settings, validated here and told to the worker - and what
+// the page prints: the link to a rule's card.
+import { loadLinter as loadInWorker, useLinterSettings } from "./registry.mjs";
+
+// Resolves when the worker has the linter's chunk - the moment boot( ) throws
+// the kept analysis away and asks again, because every answer before it said
+// "no findings". The worker asks for the chunk the moment it starts; this is
+// the page waiting on that, not starting it. The settings the page holds go
+// first - the defaults, or what restoreCheckerSettings( ) put back - so a
+// worker that is never told anything else lints at the floor, not at the
+// linter's own; messages to a worker arrive in the order they were sent.
 export function loadLinter() {
-  // Named exports, or the same names on `default` - which is where a bundler
-  // puts a CommonJS module's exports when it is imported dynamically.
-  const named = (mod, name) => mod[name] ?? mod.default?.[name];
-  loading ??= Promise.all([import("@abap2ui5/linter"), import("@abap2ui5/linter/fix")]).then(([main, fix]) => {
-    lib = {
-      checkAbapSource: named(main, "checkAbapSource"),
-      applyFixes: named(fix, "applyFixes"),
-      isFixable: named(fix, "isFixable"),
-    };
-  });
-  return loading;
+  useLinterSettings(settingsFor(settings)).catch(() => {});
+  return loadInWorker();
 }
 
 // The floor abap2UI5 holds its own shipped apps to (abap2ui5lint.jsonc), and
@@ -74,11 +72,13 @@ function validated(next) {
 }
 
 // Applies an edited configuration. Cheap, unlike abaplint's: the linter holds
-// no parsed corpus, so the next keystroke simply asks it again. Throws what
-// validated( ) throws, which is the sentence the Config tab shows.
+// no parsed corpus, so the next analysis simply asks it again - the worker
+// drops its memo when it is told. Throws what validated( ) throws, which is
+// the sentence the Config tab shows. The message to the worker is heard: a
+// worker that has died is reported by the boot, not by a Config tab.
 export function applyLinterSettings(next) {
   settings = validated(next);
-  memo.clear();
+  useLinterSettings(settingsFor(settings)).catch(() => {});
 }
 
 // The settings in the shape the linter takes them.
@@ -104,92 +104,9 @@ const FILE_FORMAT_RULES_THE_EXPORT_NORMALISES = {
   "crlf-line-ending": false,
   "missing-final-newline": false,
 };
-// The last few answers, by source. The linter runs on the page's thread over
-// every open file on every analysis, and again for the View tab - 10 to 100ms
-// a file on a desk, several times that on a phone - for files that, but for
-// the one being typed in, did not change. Kept per source text and dropped
-// whenever the settings change; a handful is all the open files need.
-const memo = new Map();
-const MEMO_SIZE = 8;
-function check(source) {
-  if (memo.has(source)) {
-    const hit = memo.get(source);
-    memo.delete(source);
-    memo.set(source, hit);
-    return hit;
-  }
-  let result;
-  try {
-    result = lib.checkAbapSource(source, settingsFor(settings));
-  } catch {
-    result = null;
-  }
-  memo.set(source, result);
-  if (memo.size > MEMO_SIZE) memo.delete(memo.keys().next().value);
-  return result;
-}
 
 const settingsFor = (s) => ({
   minUi5: s.ui5,
   distribution: s.distribution,
   rules: FILE_FORMAT_RULES_THE_EXPORT_NORMALISES,
 });
-
-// One pass of the linter over one source: its findings AND the views it
-// reconstructed them from. The editor's analysis wants both - the findings
-// for the Problems list, the views to check their libraries against what this
-// site carries - and asking twice was reconstructing the same builder chain
-// twice per keystroke. Never throws: a rule that falls over on unusual input
-// must not take the editor's diagnostics with it, and the file being typed
-// into is unusual input by definition. A class that builds no view has
-// nothing for this linter to say - reporting that as a finding would put a
-// message on every helper class - so it comes back as no findings and no
-// views, `usesBuilder` false.
-export function checkFor(source) {
-  if (lib === undefined) return { findings: [], docs: [], usesBuilder: false, loaded: false };
-  const result = check(source);
-  if (!result?.usesBuilder) return { findings: [], docs: [], usesBuilder: false, loaded: true };
-  return { findings: result.findings ?? [], docs: result.docs ?? [], usesBuilder: true, loaded: true };
-}
-
-// Everything the linter has to say about one source - checkFor( ) without
-// the views, for a caller that only wants the findings.
-export function findingsFor(source) {
-  return checkFor(source).findings;
-}
-
-// The view itself, as the linter reconstructed it - what the View tab shows.
-// The same reconstruction the findings come from, so what is shown is what
-// was checked; the notes are the linter's own remarks about how sure it is
-// of the shape (a level left open at stringify( ), a helper it could not
-// follow). Empty until the linter has loaded, and for a class that builds no
-// view - the tab says so in both cases.
-export function viewsFor(source) {
-  if (lib === undefined) return { docs: [], notes: [], loaded: false };
-  const result = check(source);
-  if (!result?.usesBuilder) return { docs: [], notes: [], loaded: true };
-  return { docs: result.docs ?? [], notes: result.notes ?? [], loaded: true };
-}
-
-// Which of a set of findings this linter can repair itself. Not all of them:
-// an icon that does not exist has no correct replacement to guess at, while a
-// missing namespace declaration or a chain that has drifted out of the house
-// layout has exactly one right answer.
-//
-// Takes findings rather than a source, because both callers already have them:
-// the editor's one analysis pass has just asked findingsFor( ), and asking it
-// again from here was a second reconstruction of the same builder chain.
-export function fixableAmong(findings) {
-  if (lib === undefined) return [];
-  return findings.filter(lib.isFixable);
-}
-
-// Repairs what can be repaired, and says how much. `deferred` counts fixes that
-// overlapped one already applied - they are not lost, they are simply for the
-// next press, which is why the caller runs this until it stops changing things.
-export function applyLinterFixes(source) {
-  const fixable = fixableAmong(findingsFor(source));
-  if (fixable.length === 0) return { source, fixed: 0 };
-  const { output, applied } = lib.applyFixes(source, fixable);
-  return { source: output, fixed: applied };
-}

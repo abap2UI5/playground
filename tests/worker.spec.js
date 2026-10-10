@@ -74,6 +74,7 @@ test("the heavy assets come out of the worker's cache on a second visit", async 
   for (const asset of [
     "/assets/shell.mjs",
     "/editor/registry.mjs",
+    "/editor/lint.mjs",
     "/editor/corpus.json",
     "/runtime/framework.mjs",
     "/runtime/sql-wasm.wasm",
@@ -143,6 +144,9 @@ test("the documents are answered from the network first, and the cache is only t
         // one the reader's own font stack draws.
         /^\/fonts\/inter-(roman|italic)-latin\.woff2$/.test(entry) ||
         /^\/assets\/[\w.-]+\.(ttf|mjs)$/.test(entry) ||
+        // The abap2UI5 linter, which the registry worker loads at run time -
+        // a core asset like the worker itself.
+        entry === "/editor/lint.mjs" ||
         entry.startsWith("/app/"),
       `${entry} is in the cache and is not on the allow list`,
     ).toBe(true);

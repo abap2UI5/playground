@@ -37,8 +37,12 @@ const MB = 1024 * 1024;
 // the budget is over their sum: a chunk is still a download, and a module
 // that moved from the entry into a chunk has not gotten any smaller.
 const TRANSFERRED = [
-  { file: "assets/*.mjs", limit: 1.3 * MB, note: "Monaco and the abap2UI5 linter" },
-  { file: "editor/registry.mjs", limit: 0.7 * MB, note: "abaplint and the transpiler, in the registry worker" },
+  { file: "assets/*.mjs", limit: 1.15 * MB, note: "Monaco" },
+  /* The worker's bundle and the linter's beside it: the abap2UI5 linter
+   * moved here from the page's chunks when it moved off the page's thread,
+   * and the budget moved with it - 0.15 MB out of the page's, into the
+   * worker's. */
+  { file: "editor/*.mjs", limit: 0.85 * MB, note: "abaplint, the transpiler and the abap2UI5 linter, in the registry worker" },
   { file: "runtime/framework.mjs", limit: 0.8 * MB, note: "abap2UI5 and open-abap, transpiled" },
   { file: "editor/corpus.json", limit: 0.6 * MB, note: "the ABAP sources the editor checks against" },
   { file: "runtime/sql-wasm.wasm", limit: 0.4 * MB, note: "SQLite" },

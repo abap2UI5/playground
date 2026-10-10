@@ -66,7 +66,8 @@ writeCorpus();
 // own bundle rather than a chunk of the page's, because a worker's script
 // is a top-level fetch of its own - started by index.html before the page
 // bundle has arrived - and because nothing in it is shared with the page:
-// abaplint left the page bundle when the registry left the page's thread.
+// abaplint left the page bundle when the registry left the page's thread,
+// and the abap2UI5 linter followed it (src/editor/lint-core.mjs).
 await esbuild.build({
   entryPoints: [path.join(ROOT, "src", "editor", "registry-worker.mjs")],
   outfile: path.join(DIST, "editor", "registry.mjs"),
@@ -84,6 +85,30 @@ await esbuild.build({
   inject: [path.join(ROOT, "src", "runtime", "buffer-shim.mjs")],
 });
 log(`editor/registry.mjs (${Math.round(fs.statSync(path.join(DIST, "editor", "registry.mjs")).size / 1024)} KB)`);
+
+// The abap2UI5 linter with its half-megabyte of UI5 metadata, which the
+// worker imports at run time (lint-core.mjs) the moment it starts: not in
+// the worker's bundle, where it would sit in front of the corpus fetch, and
+// not a chunk split off it either - a chunk shares its helpers with the
+// entry, and that shared piece became a static import the worker had to
+// fetch before it could run a line, one more round trip in front of the
+// corpus. So it is a bundle of its own under a fixed name, precached and
+// hashed against the build like the worker itself (writeServiceWorker).
+await esbuild.build({
+  entryPoints: [path.join(ROOT, "src", "editor", "lint-entry.mjs")],
+  outfile: path.join(DIST, "editor", "lint.mjs"),
+  bundle: true,
+  format: "esm",
+  platform: "browser",
+  target: "es2022",
+  minify: true,
+  sourcemap: process.env.PG_DEBUG === "1",
+  logLevel: "warning",
+  // The linter plugin goes first: it claims `fs` and `path` for the abap2UI5
+  // linter alone, and leaves every other importer to the ordinary stubs.
+  plugins: [abap2ui5LinterPlugin(ROOT), nodeStubPlugin(ROOT)],
+});
+log(`editor/lint.mjs (${Math.round(fs.statSync(path.join(DIST, "editor", "lint.mjs")).size / 1024)} KB)`);
 
 // --------------------------------------------------------------- ABAP corpus
 
@@ -249,15 +274,13 @@ writeSamples();
 
 // The page bundle, in pieces: assets/shell.mjs is what the page cannot start
 // without - Monaco - and what it only needs later comes as chunks of its
-// own, which esbuild splits off wherever the source says import( ): the
-// abap2UI5 linter with its half-megabyte of UI5 metadata
-// (src/editor/abap2ui5-lint.mjs), which nothing needs before the corpus has
-// parsed, and Monaco's own ABAP grammar. abaplint and the transpiler are in
-// the registry worker's bundle above. What is split off downloads during
-// the parse, where the network is idle, and is evaluated when it lands. The chunks
-// carry a hash in their name, so the service worker's precache list and the
-// build id are written from the directory rather than from a fixed list -
-// see writeServiceWorker( ) below.
+// own, which esbuild splits off wherever the source says import( ): Monaco's
+// own ABAP grammar, the two AI chunks. abaplint, the transpiler and the
+// abap2UI5 linter are in the registry worker's bundle above. What is split
+// off downloads during the parse, where the network is idle, and is
+// evaluated when it lands. The chunks carry a hash in their name, so the
+// service worker's precache list and the build id are written from the
+// directory rather than from a fixed list - see writeServiceWorker( ) below.
 const result = await esbuild.build({
   entryPoints: [{ in: path.join(SHELL, "main.mjs"), out: "shell" }],
   outdir: ASSETS,
@@ -485,6 +508,9 @@ function writeServiceWorker() {
     "assets/shell.mjs",
     "assets/shell.css",
     "editor/registry.mjs",
+    // The abap2UI5 linter, which the worker loads at run time: unhashed in
+    // its name like the worker, so hashed here like the worker.
+    "editor/lint.mjs",
     "editor/corpus.json",
     "runtime/framework.mjs",
     "runtime/sql-wasm.wasm",

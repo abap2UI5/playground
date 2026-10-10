@@ -17,6 +17,7 @@
 // objects and strings, which structured cloning copies as they are.
 import * as core from "./registry-core.mjs";
 import { compile } from "./transpile-core.mjs";
+import * as lint from "./lint-core.mjs";
 
 const post = (message) => self.postMessage(message);
 
@@ -31,6 +32,13 @@ corpusReady.then(
   () => post({ type: "corpus" }),
   (e) => post({ type: "failed", error: describe(e) }),
 );
+
+// And the abap2UI5 linter's chunk, asked for in the same breath so it
+// downloads beside the corpus and is evaluated when it lands, between two
+// objects of the parse. Heard here: the page waits on it through the
+// loadLinter op and reports a failure there.
+const linterReady = lint.loadLinter();
+linterReady.catch(() => {});
 
 // The files the editor holds, handed over when the page knows them - which
 // for a ?src= link is two round trips to GitHub later. The parse does not
@@ -58,11 +66,25 @@ const OPS = {
     resolveFiles(files);
   },
   // One analysis of what is open: the registry brought in line with the
-  // editor, then everything abaplint has to say about each file, and how much
-  // of that it could fix itself - one run of the rules for all of it.
+  // editor, then everything abaplint has to say about each file and how much
+  // of that it could fix itself - one run of the rules for all of it - and
+  // the abap2UI5 linter's answer per file beside it (lint-core.mjs): the
+  // findings, their fixable count, the views they came from.
   analyse(files) {
     core.updateFiles(files);
-    return core.analyseFiles(files);
+    const told = core.analyseFiles(files);
+    told.lint = {};
+    for (const file of files) told.lint[file.name] = lint.lintFor(file.source);
+    return told;
+  },
+  loadLinter() {
+    return linterReady;
+  },
+  lintSettings(settings) {
+    lint.useLinterSettings(settings);
+  },
+  lintFix(source) {
+    return lint.applyLinterFixes(source);
   },
   applyFixes(files) {
     return core.applyAbaplintFixes(files);
@@ -95,7 +117,7 @@ const OPS = {
 // blocking go: seconds with the progress frozen. Behind `busy` it waits for
 // the parse that is already under way instead. `files` is not on the list -
 // the build waits for it.
-const WAITS = new Set(["analyse", "applyFixes", "format", "symbols", "ls", "compile"]);
+const WAITS = new Set(["analyse", "applyFixes", "format", "symbols", "ls", "compile", "lintFix"]);
 let busy = Promise.resolve();
 
 self.addEventListener("message", async (event) => {
