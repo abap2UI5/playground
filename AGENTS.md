@@ -1654,6 +1654,22 @@ order. It leaves out exactly one thing `check.yml` does: `npx playwright install
 chromium`, a browser download rather than a step, which `npm test` then asks for
 by name (CONVENTIONS section 3 asks for that omission to be named here).
 
+Every test boots its own playground - about three and a half seconds of
+the four seconds a typical test takes - and that is deliberate, measured
+and kept. Two ways of spending less were looked at on 2026-10-10. Fewer
+workers than Playwright's default of half the cores (a boot keeps three
+threads busy, so "a worker per three cores"): on 4 cores the shell, boot,
+embed and editor specs took 215 s on two workers and 317 s on one, because
+a boot's three threads are not busy at once and two of them idle for most
+of a test. And one boot per file with a shared page for the specs that
+only read: there are almost none - `bfcache.spec.js` boots nothing,
+`site-memory.spec.js` is about what each visit leaves in storage,
+`view-edit.spec.js` saves on every test, and `shell.spec.js` edits, shares,
+switches Auto and moves the splitter; the handful that only look (the bar's
+two ends, the phone layouts) each need a viewport of their own. A shared
+page would have bought a minute and cost the isolation that lets a failure
+be read on its own. The full suite is 382 tests and about sixteen minutes on 4 cores.
+
 The tests are the gate: everything runs through a real browser, and
 `tests/samples.spec.js` imports the list of samples the page carries (`build/samples/index.json`) and drives every entry —
 a sample without a test is not possible. CI:

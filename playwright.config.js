@@ -15,7 +15,12 @@ export default defineConfig({
   // Two workers in CI, said rather than left to the default: one playground
   // boot keeps three threads busy at once (the page with Monaco, the corpus
   // parse, the runtime evaluating its bundle), so two already fill a 4-core
-  // runner, and more only turn boots into timeouts.
+  // runner, and more only turn boots into timeouts. At a desk the default
+  // stays - half the cores - and the obvious refinement, a worker per three
+  // cores, was measured and refused: on a 4-core machine the shell, boot,
+  // embed and editor specs took 215 s on two workers and 317 s on one. The
+  // three threads of a boot are not all busy at once, and the runtime's
+  // and the registry's are idle for most of a test.
   workers: process.env.CI ? 2 : undefined,
   use: {
     baseURL: "http://localhost:8080",
