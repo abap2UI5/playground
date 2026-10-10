@@ -127,6 +127,11 @@ of each line. Each step is still its own script and still runnable by name
    writes the editor's source corpus (`dist/editor/corpus.json`), copies examples and the embed kit, and
    writes `dist/sw.js` from `src/shell/sw.js` with an id for this build
    substituted into it. It deletes the directories it owns before writing.
+   Its four esbuild builds - the page, the registry worker, the linter, the
+   catalogue's three bundles - run **together** under one `Promise.all`:
+   none reads what another writes, and only `writeIndex()` and
+   `writeServiceWorker()` read the page build's metafile, after all four
+   have landed (measured warm: 1.8 s in series, 1.4 s together).
    The page bundle is **split**: `assets/shell.mjs` is the shell (60 KB
    compressed), and what only some pages need, or need later — **Monaco**
    (`src/editor/monaco-editor.mjs`, 0.82 MB, which an app-only page never

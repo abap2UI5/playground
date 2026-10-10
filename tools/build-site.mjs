@@ -68,23 +68,36 @@ writeCorpus();
 // bundle has arrived - and because nothing in it is shared with the page:
 // abaplint left the page bundle when the registry left the page's thread,
 // and the abap2UI5 linter followed it (src/editor/lint-core.mjs).
-await esbuild.build({
-  entryPoints: [path.join(ROOT, "src", "editor", "registry-worker.mjs")],
-  outfile: path.join(DIST, "editor", "registry.mjs"),
-  bundle: true,
-  format: "esm",
-  platform: "browser",
-  target: "es2022",
-  minify: true,
-  // abaplint identifies some of its own node types by class name - see the
-  // page bundle below, which needed this for the same library.
-  keepNames: true,
-  sourcemap: process.env.PG_DEBUG === "1",
-  logLevel: "warning",
-  plugins: [nodeStubPlugin(ROOT)],
-  inject: [path.join(ROOT, "src", "runtime", "buffer-shim.mjs")],
-});
-log(`editor/registry.mjs (${Math.round(fs.statSync(path.join(DIST, "editor", "registry.mjs")).size / 1024)} KB)`);
+//
+// THE FOUR BUNDLES ARE BUILT TOGETHER - this one, the linter's, the page's
+// and the catalogue's, each a function here and all four under one
+// Promise.all below. They read different sources and write different files,
+// and nothing between them depends on another's result: only writeIndex( )
+// and writeServiceWorker( ) read the page build's metafile, and both run
+// after all four have landed. Run one after the other they cost their sum;
+// esbuild runs each on every core it has, but a bundle spends much of its
+// wall time reading files and waiting on plugins, which is where the next
+// one's work fits. Each logs its own size when it finishes, so the lines
+// arrive in the order the builds land rather than the order they stand here.
+async function buildRegistry() {
+  await esbuild.build({
+    entryPoints: [path.join(ROOT, "src", "editor", "registry-worker.mjs")],
+    outfile: path.join(DIST, "editor", "registry.mjs"),
+    bundle: true,
+    format: "esm",
+    platform: "browser",
+    target: "es2022",
+    minify: true,
+    // abaplint identifies some of its own node types by class name - see the
+    // page bundle below, which needed this for the same library.
+    keepNames: true,
+    sourcemap: process.env.PG_DEBUG === "1",
+    logLevel: "warning",
+    plugins: [nodeStubPlugin(ROOT)],
+    inject: [path.join(ROOT, "src", "runtime", "buffer-shim.mjs")],
+  });
+  log(`editor/registry.mjs (${kb(path.join(DIST, "editor", "registry.mjs"))})`);
+}
 
 // The abap2UI5 linter with its half-megabyte of UI5 metadata, which the
 // worker imports at run time (lint-core.mjs) the moment it starts: not in
@@ -94,21 +107,23 @@ log(`editor/registry.mjs (${Math.round(fs.statSync(path.join(DIST, "editor", "re
 // fetch before it could run a line, one more round trip in front of the
 // corpus. So it is a bundle of its own under a fixed name, precached and
 // hashed against the build like the worker itself (writeServiceWorker).
-await esbuild.build({
-  entryPoints: [path.join(ROOT, "src", "editor", "lint-entry.mjs")],
-  outfile: path.join(DIST, "editor", "lint.mjs"),
-  bundle: true,
-  format: "esm",
-  platform: "browser",
-  target: "es2022",
-  minify: true,
-  sourcemap: process.env.PG_DEBUG === "1",
-  logLevel: "warning",
-  // The linter plugin goes first: it claims `fs` and `path` for the abap2UI5
-  // linter alone, and leaves every other importer to the ordinary stubs.
-  plugins: [abap2ui5LinterPlugin(ROOT), nodeStubPlugin(ROOT)],
-});
-log(`editor/lint.mjs (${Math.round(fs.statSync(path.join(DIST, "editor", "lint.mjs")).size / 1024)} KB)`);
+async function buildLinter() {
+  await esbuild.build({
+    entryPoints: [path.join(ROOT, "src", "editor", "lint-entry.mjs")],
+    outfile: path.join(DIST, "editor", "lint.mjs"),
+    bundle: true,
+    format: "esm",
+    platform: "browser",
+    target: "es2022",
+    minify: true,
+    sourcemap: process.env.PG_DEBUG === "1",
+    logLevel: "warning",
+    // The linter plugin goes first: it claims `fs` and `path` for the abap2UI5
+    // linter alone, and leaves every other importer to the ordinary stubs.
+    plugins: [abap2ui5LinterPlugin(ROOT), nodeStubPlugin(ROOT)],
+  });
+  log(`editor/lint.mjs (${kb(path.join(DIST, "editor", "lint.mjs"))})`);
+}
 
 // --------------------------------------------------------------- ABAP corpus
 
@@ -283,60 +298,93 @@ writeSamples();
 // evaluated when it lands. The chunks carry a hash in their name, so the
 // service worker's precache list and the build id are written from the
 // directory rather than from a fixed list - see writeServiceWorker( ) below.
-const result = await esbuild.build({
-  entryPoints: [{ in: path.join(SHELL, "main.mjs"), out: "shell" }],
-  outdir: ASSETS,
-  outExtension: { ".js": ".mjs" },
-  splitting: true,
-  chunkNames: "[name]-[hash]",
-  bundle: true,
-  format: "esm",
-  platform: "browser",
-  target: "es2022",
-  minify: true,
-  // No keepNames here any more: it was for abaplint, which identifies some of
-  // its own node types by class name - and abaplint has left this bundle for
-  // the registry worker (which keeps it). Nothing left here (Monaco, the
-  // abap2UI5 linter, the SDK, the shell) goes by a class's name, and the
-  // renaming wrappers were 145 KB of the page's JavaScript, 36 KB brotli.
-  // 20 MB of source map, a sixth of the published site, that only a browser
-  // with devtools open ever fetches - and anyone debugging the playground has
-  // the sources anyway. PG_DEBUG=1 builds it, the same switch the framework
-  // bundle uses.
-  sourcemap: process.env.PG_DEBUG === "1",
-  logLevel: "warning",
-  metafile: true,
-  // Monaco pulls in its stylesheet and its icon font through the module graph;
-  // the CSS lands next to the bundle as assets/shell.css (the shell's own
-  // stylesheet is imported by main.mjs so both end up in that one file), and
-  // the font is copied out with a hashed name.
-  // Monaco's icon font is copied out beside the bundle; the ABAP of the samples
-  // the page carries is inlined into it as text. They are real .clas.abap
-  // files, copied out of the pinned abap2UI5/samples by writeSamples( ) above
-  // into build/samples/, and reached through the import module it writes there
-  // - see src/editor/samples.mjs, which is the only importer.
-  //
-  // `.md` is text for one importer: src/shell/ai-agent.mjs, the chat's chunk,
-  // which carries abap2UI5's own guide to building an app
-  // (deps/abap2ui5/docs/agents/building-apps.md, at the pinned commit) as the
-  // model's instructions.
-  loader: { ".ttf": "file", ".abap": "text", ".md": "text" },
-  // ...and Inter is NOT one of the things this bundle carries. The two urls in
-  // shell.css point at `../fonts/`, which from the stylesheet's place in the
-  // build (`assets/shell.css`) is `dist/fonts/` - the one copy the catalogue's
-  // stylesheet reaches by the same relative path. Left external so the url
-  // survives verbatim; bundled, esbuild would copy the file a second time,
-  // beside this bundle and under a hashed name, and the two documents would
-  // then fetch two identical fonts.
-  external: ["*.woff2"],
-  // The linter plugin goes first: it claims `fs` and `path` for the abap2UI5
-  // linter alone, and leaves every other importer to the ordinary stubs.
-  plugins: [abap2ui5LinterPlugin(ROOT), nodeStubPlugin(ROOT)],
-  // No Buffer shim either: it was injected for abaplint, which now runs in the
-  // registry worker (the shim is injected there). What is left on the page
-  // reaches for Buffer only behind a typeof check, so the shim was a 31 KB
-  // chunk, modulepreloaded and evaluated at every start, that nothing used.
-});
+//
+// `result` is the page build's metafile - what writeIndex( ) and
+// writeServiceWorker( ) read the chunk names off - and buildPage( ) is the
+// one of the four that answers with it.
+async function buildPage() {
+  return esbuild.build({
+    entryPoints: [{ in: path.join(SHELL, "main.mjs"), out: "shell" }],
+    outdir: ASSETS,
+    outExtension: { ".js": ".mjs" },
+    splitting: true,
+    chunkNames: "[name]-[hash]",
+    bundle: true,
+    format: "esm",
+    platform: "browser",
+    target: "es2022",
+    minify: true,
+    // No keepNames here any more: it was for abaplint, which identifies some of
+    // its own node types by class name - and abaplint has left this bundle for
+    // the registry worker (which keeps it). Nothing left here (Monaco, the
+    // abap2UI5 linter, the SDK, the shell) goes by a class's name, and the
+    // renaming wrappers were 145 KB of the page's JavaScript, 36 KB brotli.
+    // 20 MB of source map, a sixth of the published site, that only a browser
+    // with devtools open ever fetches - and anyone debugging the playground has
+    // the sources anyway. PG_DEBUG=1 builds it, the same switch the framework
+    // bundle uses.
+    sourcemap: process.env.PG_DEBUG === "1",
+    logLevel: "warning",
+    metafile: true,
+    // Monaco pulls in its stylesheet and its icon font through the module graph;
+    // the CSS lands next to the bundle as assets/shell.css (the shell's own
+    // stylesheet is imported by main.mjs so both end up in that one file), and
+    // the font is copied out with a hashed name.
+    // Monaco's icon font is copied out beside the bundle; the ABAP of the samples
+    // the page carries is inlined into it as text. They are real .clas.abap
+    // files, copied out of the pinned abap2UI5/samples by writeSamples( ) above
+    // into build/samples/, and reached through the import module it writes there
+    // - see src/editor/samples.mjs, which is the only importer.
+    //
+    // `.md` is text for one importer: src/shell/ai-agent.mjs, the chat's chunk,
+    // which carries abap2UI5's own guide to building an app
+    // (deps/abap2ui5/docs/agents/building-apps.md, at the pinned commit) as the
+    // model's instructions.
+    loader: { ".ttf": "file", ".abap": "text", ".md": "text" },
+    // ...and Inter is NOT one of the things this bundle carries. The two urls in
+    // shell.css point at `../fonts/`, which from the stylesheet's place in the
+    // build (`assets/shell.css`) is `dist/fonts/` - the one copy the catalogue's
+    // stylesheet reaches by the same relative path. Left external so the url
+    // survives verbatim; bundled, esbuild would copy the file a second time,
+    // beside this bundle and under a hashed name, and the two documents would
+    // then fetch two identical fonts.
+    external: ["*.woff2"],
+    // The linter plugin goes first: it claims `fs` and `path` for the abap2UI5
+    // linter alone, and leaves every other importer to the ordinary stubs.
+    plugins: [abap2ui5LinterPlugin(ROOT), nodeStubPlugin(ROOT)],
+    // No Buffer shim either: it was injected for abaplint, which now runs in the
+    // registry worker (the shim is injected there). What is left on the page
+    // reaches for Buffer only behind a typeof check, so the shim was a 31 KB
+    // chunk, modulepreloaded and evaluated at every start, that nothing used.
+  });
+}
+
+// The sample catalogue page's bundles - see the catalogue section below for
+// what they are; this is only the esbuild call, so it can run beside the
+// other three.
+async function buildCatalogue() {
+  await esbuild.build({
+    entryPoints: [
+      { in: path.join(ROOT, "src", "catalogue", "catalogue.mjs"), out: "catalogue" },
+      { in: path.join(ROOT, "src", "catalogue", "search-entry.mjs"), out: "search" },
+      { in: path.join(ROOT, "src", "catalogue", "page-entry.mjs"), out: "page" },
+    ],
+    outdir: path.join(DIST, "samples"),
+    outExtension: { ".js": ".mjs" },
+    bundle: true,
+    format: "esm",
+    platform: "browser",
+    target: "es2022",
+    minify: true,
+    sourcemap: process.env.PG_DEBUG === "1",
+    logLevel: "warning",
+  });
+}
+
+// All four at once. `all` rather than `allSettled`: esbuild writes a bundle
+// only when it finished, so a build that failed left nothing half-written
+// for the others to trip over, and the first failure is the one to read.
+const [result] = await Promise.all([buildPage(), buildRegistry(), buildLinter(), buildCatalogue()]);
 
 writeIndex();
 // The icons and the app manifest - what a tab, a home screen and an install
@@ -365,22 +413,8 @@ for (const name of ["favicon.png", "apple-touch-icon.png", "icon-192.png", "icon
 // the catalogue loads it and so does every one of the 772 per-sample pages,
 // which have no bundle of their own. One module beside them is fetched once
 // and cached for every page after it; inlined it would be written 773 times.
-await esbuild.build({
-  entryPoints: [
-    { in: path.join(ROOT, "src", "catalogue", "catalogue.mjs"), out: "catalogue" },
-    { in: path.join(ROOT, "src", "catalogue", "search-entry.mjs"), out: "search" },
-    { in: path.join(ROOT, "src", "catalogue", "page-entry.mjs"), out: "page" },
-  ],
-  outdir: path.join(DIST, "samples"),
-  outExtension: { ".js": ".mjs" },
-  bundle: true,
-  format: "esm",
-  platform: "browser",
-  target: "es2022",
-  minify: true,
-  sourcemap: process.env.PG_DEBUG === "1",
-  logLevel: "warning",
-});
+// The bundles themselves came out of buildCatalogue( ) above, beside the
+// other three; what follows is the document and the stylesheet.
 fs.copyFileSync(path.join(ROOT, "src", "catalogue", "catalogue.css"), path.join(DIST, "samples", "catalogue.css"));
 /* The catalogue's document, without the comments its source is written with -
    four kilobytes of a twenty-kilobyte page - and with its policy in the head
