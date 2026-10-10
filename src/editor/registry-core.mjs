@@ -19,6 +19,11 @@
 // parseAsync so the worker can report progress while it happens. Everything
 // after that is incremental: only the file that changed is dirty.
 import * as abaplint from "@abaplint/core";
+// The language server's own issue-to-diagnostic mapping, reached directly:
+// abaplint exports it only through LanguageServer.diagnostics( ), which runs
+// the rules for the one file it is asked about, and analyse( ) below runs them
+// once for every open file instead.
+import { Diagnostics } from "@abaplint/core/build/src/lsp/diagnostics.js";
 import { parseName, sidecarFor, uriFor } from "./files.mjs";
 
 // v750 is the release abap2UI5 lints itself against, so the playground holds
@@ -267,9 +272,28 @@ export function updateFiles(files) {
   registry.parse();
 }
 
-// Everything wrong with one of the user's files, in the shape Monaco wants.
-export function diagnostics(fileName) {
-  return new abaplint.LanguageServer(registry).diagnostics({ uri: uriFor(fileName) });
+// Everything abaplint has to say about the user's files, in one run of the
+// rules: the diagnostics per file, in the shape Monaco wants, and how many of
+// the issues carry a fix. It used to be one language-server call per open file
+// - each a run of every rule over that file's object - and then findIssues( )
+// over the lot once more to count the fixable ones, so a class with its test
+// include ran the rules three times per keystroke pause. The corpus is held as
+// dependencies, which the rules runner skips, so one findIssues( ) is exactly
+// the user's objects and nothing else. The mapping is the language server's
+// own (Diagnostics.mapDiagnostic), so what the page sees is what it saw.
+export function analyseFiles(files) {
+  const diagnostics = {};
+  for (const file of files) diagnostics[file.name] = [];
+  let fixable = 0;
+  for (const issue of registry.findIssues()) {
+    const name = nameOf(issue.getFilename());
+    if (!held.has(name)) continue;
+    if (issue.getDefaultFix() !== undefined) fixable++;
+    // A file the registry holds that the editor does not list - the sidecar
+    // of a class, say - has nowhere to be shown and is not asked for.
+    if (diagnostics[name] !== undefined) diagnostics[name].push(Diagnostics.mapDiagnostic(issue));
+  }
+  return { diagnostics, fixable };
 }
 
 // One language server call, by name: hover, gotoDefinition, references,
@@ -349,15 +373,6 @@ export function applyAbaplintFixes(files) {
     if (source !== undefined) held.set(file.name, source);
   }
   return { fixed: touched, files: out };
-}
-
-// How many of the issues in the user's files carry a fix. Asked before the
-// button is offered: a Fix button that does nothing when pressed is worse than
-// no button at all.
-export function abaplintFixable() {
-  return registry
-    .findIssues()
-    .filter((i) => held.has(nameOf(i.getFilename())) && i.getDefaultFix() !== undefined).length;
 }
 
 // ------------------------------------------------------------------ format

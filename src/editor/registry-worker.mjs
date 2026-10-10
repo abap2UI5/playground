@@ -59,12 +59,10 @@ const OPS = {
   },
   // One analysis of what is open: the registry brought in line with the
   // editor, then everything abaplint has to say about each file, and how much
-  // of that it could fix itself.
+  // of that it could fix itself - one run of the rules for all of it.
   analyse(files) {
     core.updateFiles(files);
-    const diagnostics = {};
-    for (const file of files) diagnostics[file.name] = core.diagnostics(file.name);
-    return { diagnostics, fixable: core.abaplintFixable() };
+    return core.analyseFiles(files);
   },
   applyFixes(files) {
     return core.applyAbaplintFixes(files);
