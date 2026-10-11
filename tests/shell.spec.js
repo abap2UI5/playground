@@ -695,6 +695,9 @@ test("the Share dialog offers an embed block, a markdown fence and an abapGit zi
   expect(entries[2].text).not.toContain("\r");
   expect(entries[2].text.endsWith("\n")).toBe(true);
   expect(entries[3].text).toContain(`<CLSNAME>${MAIN_CLASS.toUpperCase()}</CLSNAME>`);
+  // Named after the class: a constant one fails abaplint's
+  // identical_descriptions as soon as a second class is exported beside it.
+  expect(entries[3].text).toContain(`<DESCRIPT>playground ${MAIN_CLASS.toLowerCase()}</DESCRIPT>`);
   // Every sidecar starts with the byte order mark abapGit writes, or a pull
   // into a system is a diff on line 1 of it.
   expect([...entries[3].bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
