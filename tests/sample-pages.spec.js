@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
+import { githubUrlOf, rawUrlOf } from "../src/shell/catalogue-urls.mjs";
 
 // One static page per sample, at samples/<class>/ - written by
 // tools/sample-pages.mjs from the index the build just produced.
@@ -25,6 +26,14 @@ import path from "node:path";
 const CORS = { "access-control-allow-origin": "*" };
 const DIST = path.join(process.cwd(), "dist");
 const index = JSON.parse(fs.readFileSync(path.join(DIST, "samples", "apps.json"), "utf8"));
+/* The index carries each entry's path and repository, not its URLs
+ * (src/shell/catalogue-urls.mjs builds them) - put on the entries here the
+ * way the page writer puts them on its rows, so the assertions below read as
+ * they did. */
+for (const entry of index.entries) {
+  entry.raw = rawUrlOf(entry, index.sources);
+  entry.github = githubUrlOf(entry, index.sources);
+}
 
 /* The three shapes tools/sample-pages.mjs writes: the catalogue it copies, the
  * full list, and a per-sample page. Anything true of all three is asserted

@@ -21,14 +21,42 @@ const locations = (found) => (found ?? []).map((f) => ({ uri: monaco.Uri.parse(f
 // because a file is formatted in the company of the others: an include is not
 // an object on its own, and abaplint has nothing to print for one.
 export function registerProviders(host) {
-  // Every question goes with the text as the editor has it NOW. The worker's
-  // copy is brought up to date by the analysis, 150ms after the typing stops
-  // plus a round trip - and Monaco asks for semantic tokens 100ms after an
-  // edit, so the last request was answered for the previous text and the
-  // colours stayed shifted; a hover, a rename or a code action straight after
-  // typing hit positions in text that was no longer there. Unchanged files
-  // cost the worker a string comparison.
-  const languageServer = (method, params) => askServer(method, params, host.files());
+  // Every question goes with the files as the editor has them NOW. The
+  // worker's copy is brought up to date by the analysis, 150ms after the
+  // typing stops plus a round trip - and Monaco asks for semantic tokens
+  // 100ms after an edit, so the last request was answered for the previous
+  // text and the colours stayed shifted; a hover, a rename or a code action
+  // straight after typing hit positions in text that was no longer there.
+  //
+  // But not every file with its TEXT. A file whose version (`host.version`,
+  // Monaco's model id and version id) is the one this last sent the text
+  // under goes as `{ name, version }` alone - a document highlight is asked
+  // on every cursor move, and every one of them used to carry every open
+  // file across the thread. The worker is the judge: `sent` is what THIS
+  // side sent, and a worker that does not hold a file at that version (a
+  // fresh worker, a text changed under it by a fix) answers `needsText`
+  // with the names, and the question is asked again with them in full - so
+  // the answer is always for the text on screen, and a lost version costs
+  // one round trip rather than a wrong answer.
+  const sent = new Map();
+  const payload = (inFull) =>
+    host.files().map(({ name, source }) => {
+      const version = host.version(name);
+      return !inFull.has(name) && sent.get(name) === version ? { name, version } : { name, source, version };
+    });
+  const languageServer = async (method, params) => {
+    let files = payload(new Set());
+    let answer = await askServer(method, params, files);
+    if (answer?.needsText) {
+      files = payload(new Set(answer.needsText));
+      answer = await askServer(method, params, files);
+    }
+    // Only now, with the worker's answer: a question it did not take did
+    // not teach it the text.
+    for (const name of [...sent.keys()]) if (!files.some((f) => f.name === name)) sent.delete(name);
+    for (const { name, version } of files) sent.set(name, version);
+    return answer;
+  };
   monaco.languages.registerCompletionItemProvider("abap", new ABAPSnippetProvider());
 
   monaco.languages.registerHoverProvider("abap", {

@@ -11,7 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
-import { abap2ui5LinterPlugin, nodeStubPlugin } from "./esbuild-plugins.mjs";
+import { MONACO_CSS, abap2ui5LinterPlugin, monacoCssPlugin, nodeStubPlugin } from "./esbuild-plugins.mjs";
 import { appFirstLoad } from "../src/shell/warm-up.mjs";
 import { SAMPLE_LIST, SAMPLE_REPO } from "../src/editor/sample-list.mjs";
 import { SITE } from "./sample-pages.mjs";
@@ -66,24 +66,64 @@ writeCorpus();
 // own bundle rather than a chunk of the page's, because a worker's script
 // is a top-level fetch of its own - started by index.html before the page
 // bundle has arrived - and because nothing in it is shared with the page:
-// abaplint left the page bundle when the registry left the page's thread.
-await esbuild.build({
-  entryPoints: [path.join(ROOT, "src", "editor", "registry-worker.mjs")],
-  outfile: path.join(DIST, "editor", "registry.mjs"),
-  bundle: true,
-  format: "esm",
-  platform: "browser",
-  target: "es2022",
-  minify: true,
-  // abaplint identifies some of its own node types by class name - see the
-  // page bundle below, which needed this for the same library.
-  keepNames: true,
-  sourcemap: process.env.PG_DEBUG === "1",
-  logLevel: "warning",
-  plugins: [nodeStubPlugin(ROOT)],
-  inject: [path.join(ROOT, "src", "runtime", "buffer-shim.mjs")],
-});
-log(`editor/registry.mjs (${Math.round(fs.statSync(path.join(DIST, "editor", "registry.mjs")).size / 1024)} KB)`);
+// abaplint left the page bundle when the registry left the page's thread,
+// and the abap2UI5 linter followed it (src/editor/lint-core.mjs).
+//
+// THE FOUR BUNDLES ARE BUILT TOGETHER - this one, the linter's, the page's
+// and the catalogue's, each a function here and all four under one
+// Promise.all below. They read different sources and write different files,
+// and nothing between them depends on another's result: only writeIndex( )
+// and writeServiceWorker( ) read the page build's metafile, and both run
+// after all four have landed. Run one after the other they cost their sum;
+// esbuild runs each on every core it has, but a bundle spends much of its
+// wall time reading files and waiting on plugins, which is where the next
+// one's work fits. Each logs its own size when it finishes, so the lines
+// arrive in the order the builds land rather than the order they stand here.
+async function buildRegistry() {
+  await esbuild.build({
+    entryPoints: [path.join(ROOT, "src", "editor", "registry-worker.mjs")],
+    outfile: path.join(DIST, "editor", "registry.mjs"),
+    bundle: true,
+    format: "esm",
+    platform: "browser",
+    target: "es2022",
+    minify: true,
+    // abaplint identifies some of its own node types by class name - see the
+    // page bundle below, which needed this for the same library.
+    keepNames: true,
+    sourcemap: process.env.PG_DEBUG === "1",
+    logLevel: "warning",
+    plugins: [nodeStubPlugin(ROOT)],
+    inject: [path.join(ROOT, "src", "runtime", "buffer-shim.mjs")],
+  });
+  log(`editor/registry.mjs (${kb(path.join(DIST, "editor", "registry.mjs"))})`);
+}
+
+// The abap2UI5 linter with its half-megabyte of UI5 metadata, which the
+// worker imports at run time (lint-core.mjs) the moment it starts: not in
+// the worker's bundle, where it would sit in front of the corpus fetch, and
+// not a chunk split off it either - a chunk shares its helpers with the
+// entry, and that shared piece became a static import the worker had to
+// fetch before it could run a line, one more round trip in front of the
+// corpus. So it is a bundle of its own under a fixed name, precached and
+// hashed against the build like the worker itself (writeServiceWorker).
+async function buildLinter() {
+  await esbuild.build({
+    entryPoints: [path.join(ROOT, "src", "editor", "lint-entry.mjs")],
+    outfile: path.join(DIST, "editor", "lint.mjs"),
+    bundle: true,
+    format: "esm",
+    platform: "browser",
+    target: "es2022",
+    minify: true,
+    sourcemap: process.env.PG_DEBUG === "1",
+    logLevel: "warning",
+    // The linter plugin goes first: it claims `fs` and `path` for the abap2UI5
+    // linter alone, and leaves every other importer to the ordinary stubs.
+    plugins: [abap2ui5LinterPlugin(ROOT), nodeStubPlugin(ROOT)],
+  });
+  log(`editor/lint.mjs (${kb(path.join(DIST, "editor", "lint.mjs"))})`);
+}
 
 // --------------------------------------------------------------- ABAP corpus
 
@@ -147,9 +187,13 @@ function writeCorpus() {
 //                      which is the name the editor has to open it under
 //   index.json         id, title, blurb, files, GitHub link; Node reads this
 //                      one (the tests do), which is why it is JSON
-//   sources.mjs        one `import` per file plus the map, because a bundler
-//                      has to see every import statically and the list is not
-//                      static any more
+//   sources.mjs        the default sample's files as static imports, and a
+//                      loader per sample - an import( ) of sample-<id>.mjs,
+//                      one `import` per file in it - because a bundler has to
+//                      see every import statically and the list is not static
+//                      any more. Only the default sample's ABAP is in the
+//                      shell's bundle; every other sample is a chunk fetched
+//                      when it is picked (src/editor/samples.mjs)
 //
 // Titles and blurbs are read out of that repository's catalogue.json rather
 // than restated here: it is the same catalogue the samples browser lists the
@@ -235,83 +279,201 @@ function writeSamples() {
   }
 
   fs.writeFileSync(path.join(BUILD_SAMPLES, "index.json"), JSON.stringify(index, null, 2) + "\n");
-  const imports = [...copied.keys()].map((base, i) => `import S${i} from "./${base}";`).join("\n");
-  const map = [...copied.keys()].map((base, i) => `  ${JSON.stringify(base)}: S${i},`).join("\n");
+  /* One module per sample, its files as text, and the default sample's files
+   * in the module the shell imports statically: the page opens on those and
+   * needs nothing else until a sample is picked. A file two samples share
+   * (an app one of them navigates into) is imported by both modules, and
+   * esbuild gives it a chunk of its own. */
+  const moduleFor = (files) =>
+    `// Written by tools/build-site.mjs - see writeSamples( ). Do not edit.\n` +
+    `${files.map((base, i) => `import S${i} from "./${base}";`).join("\n")}\n\n` +
+    `export default {\n${files.map((base, i) => `  ${JSON.stringify(base)}: S${i},`).join("\n")}\n};\n`;
+  for (const sample of index.slice(1)) fs.writeFileSync(path.join(BUILD_SAMPLES, `sample-${sample.id}.mjs`), moduleFor(sample.files));
+  const [first, ...rest] = index;
   fs.writeFileSync(
     path.join(BUILD_SAMPLES, "sources.mjs"),
     `// Written by tools/build-site.mjs - see writeSamples( ). Do not edit.\n` +
-      `${imports}\n\nexport const SOURCES = {\n${map}\n};\n`,
+      `${first.files.map((base, i) => `import D${i} from "./${base}";`).join("\n")}\n\n` +
+      `// The sample the page opens on, in the bundle.\n` +
+      `export const DEFAULT_SOURCES = {\n${first.files.map((base, i) => `  ${JSON.stringify(base)}: D${i},`).join("\n")}\n};\n\n` +
+      `// Every sample's files, by id, each a chunk fetched when it is picked.\n` +
+      `export const LOADERS = {\n` +
+      `  ${JSON.stringify(first.id)}: () => Promise.resolve(DEFAULT_SOURCES),\n` +
+      rest.map((s) => `  ${JSON.stringify(s.id)}: () => import(${JSON.stringify(`./sample-${s.id}.mjs`)}).then((m) => m.default),`).join("\n") +
+      `\n};\n`,
   );
-  log(`samples: ${index.length} from ${SAMPLE_REPO}, ${copied.size} file(s)`);
+  log(`samples: ${index.length} from ${SAMPLE_REPO}, ${copied.size} file(s), ${first.files.length} in the bundle`);
 }
 
 writeSamples();
 
-// The page bundle, in pieces: assets/shell.mjs is what the page cannot start
-// without - Monaco - and what it only needs later comes as chunks of its
-// own, which esbuild splits off wherever the source says import( ): the
-// abap2UI5 linter with its half-megabyte of UI5 metadata
-// (src/editor/abap2ui5-lint.mjs), which nothing needs before the corpus has
-// parsed, and Monaco's own ABAP grammar. abaplint and the transpiler are in
-// the registry worker's bundle above. What is split off downloads during
-// the parse, where the network is idle, and is evaluated when it lands. The chunks
-// carry a hash in their name, so the service worker's precache list and the
-// build id are written from the directory rather than from a fixed list -
-// see writeServiceWorker( ) below.
-const result = await esbuild.build({
-  entryPoints: [{ in: path.join(SHELL, "main.mjs"), out: "shell" }],
-  outdir: ASSETS,
-  outExtension: { ".js": ".mjs" },
-  splitting: true,
-  chunkNames: "[name]-[hash]",
-  bundle: true,
-  format: "esm",
-  platform: "browser",
-  target: "es2022",
-  minify: true,
-  // No keepNames here any more: it was for abaplint, which identifies some of
-  // its own node types by class name - and abaplint has left this bundle for
-  // the registry worker (which keeps it). Nothing left here (Monaco, the
-  // abap2UI5 linter, the SDK, the shell) goes by a class's name, and the
-  // renaming wrappers were 145 KB of the page's JavaScript, 36 KB brotli.
-  // 20 MB of source map, a sixth of the published site, that only a browser
-  // with devtools open ever fetches - and anyone debugging the playground has
-  // the sources anyway. PG_DEBUG=1 builds it, the same switch the framework
-  // bundle uses.
-  sourcemap: process.env.PG_DEBUG === "1",
-  logLevel: "warning",
-  metafile: true,
-  // Monaco pulls in its stylesheet and its icon font through the module graph;
-  // the CSS lands next to the bundle as assets/shell.css (the shell's own
-  // stylesheet is imported by main.mjs so both end up in that one file), and
-  // the font is copied out with a hashed name.
-  // Monaco's icon font is copied out beside the bundle; the ABAP of the samples
-  // the page carries is inlined into it as text. They are real .clas.abap
-  // files, copied out of the pinned abap2UI5/samples by writeSamples( ) above
-  // into build/samples/, and reached through the import module it writes there
-  // - see src/editor/samples.mjs, which is the only importer.
-  //
-  // `.md` is text for one importer: src/shell/ai-agent.mjs, the chat's chunk,
-  // which carries abap2UI5's own guide to building an app
-  // (deps/abap2ui5/docs/agents/building-apps.md, at the pinned commit) as the
-  // model's instructions.
-  loader: { ".ttf": "file", ".abap": "text", ".md": "text" },
-  // ...and Inter is NOT one of the things this bundle carries. The two urls in
-  // shell.css point at `../fonts/`, which from the stylesheet's place in the
-  // build (`assets/shell.css`) is `dist/fonts/` - the one copy the catalogue's
-  // stylesheet reaches by the same relative path. Left external so the url
-  // survives verbatim; bundled, esbuild would copy the file a second time,
-  // beside this bundle and under a hashed name, and the two documents would
-  // then fetch two identical fonts.
-  external: ["*.woff2"],
-  // The linter plugin goes first: it claims `fs` and `path` for the abap2UI5
-  // linter alone, and leaves every other importer to the ordinary stubs.
-  plugins: [abap2ui5LinterPlugin(ROOT), nodeStubPlugin(ROOT)],
-  // No Buffer shim either: it was injected for abaplint, which now runs in the
-  // registry worker (the shim is injected there). What is left on the page
-  // reaches for Buffer only behind a typeof check, so the shim was a 31 KB
-  // chunk, modulepreloaded and evaluated at every start, that nothing used.
-});
+// The page bundle, in pieces: assets/shell.mjs is what every page starts
+// with - the shell - and what only some pages need, or need later, comes as
+// chunks of its own, which esbuild splits off wherever the source says
+// import( ): Monaco (src/editor/monaco-editor.mjs, which an app-only page
+// never fetches - see src/editor/editor.mjs), Monaco's own ABAP grammar, the
+// two AI chunks. abaplint, the transpiler and the
+// abap2UI5 linter are in the registry worker's bundle above. What is split
+// off downloads during the parse, where the network is idle, and is
+// evaluated when it lands. The chunks carry a hash in their name, so the
+// service worker's precache list and the build id are written from the
+// directory rather than from a fixed list - see writeServiceWorker( ) below.
+//
+// `result` is the page build's metafile - what writeIndex( ) and
+// writeServiceWorker( ) read the chunk names off - and buildPage( ) is the
+// one of the four that answers with it.
+async function buildPage() {
+  return esbuild.build({
+    entryPoints: [{ in: path.join(SHELL, "main.mjs"), out: "shell" }],
+    outdir: ASSETS,
+    outExtension: { ".js": ".mjs" },
+    splitting: true,
+    chunkNames: "[name]-[hash]",
+    bundle: true,
+    format: "esm",
+    platform: "browser",
+    target: "es2022",
+    minify: true,
+    // No keepNames here any more: it was for abaplint, which identifies some of
+    // its own node types by class name - and abaplint has left this bundle for
+    // the registry worker (which keeps it). Nothing left here (Monaco, the
+    // abap2UI5 linter, the SDK, the shell) goes by a class's name, and the
+    // renaming wrappers were 145 KB of the page's JavaScript, 36 KB brotli.
+    // 20 MB of source map, a sixth of the published site, that only a browser
+    // with devtools open ever fetches - and anyone debugging the playground has
+    // the sources anyway. PG_DEBUG=1 builds it, the same switch the framework
+    // bundle uses.
+    sourcemap: process.env.PG_DEBUG === "1",
+    logLevel: "warning",
+    metafile: true,
+    // assets/shell.css is the shell's own stylesheet and nothing else: main.mjs
+    // imports src/shell/shell.css, and esbuild writes it beside the bundle.
+    // Monaco pulls its own eighty stylesheets in through the module graph,
+    // and esbuild would fold those into shell.css too - CSS reached through a
+    // dynamic import( ) goes to the entry's stylesheet, since nothing loads a
+    // chunk's CSS at run time - so monacoCssPlugin keeps them out of the
+    // graph and buildMonacoCss( ) below bundles them as a stylesheet of their
+    // own, with the icon font copied out beside it under a hashed name.
+    // The ABAP of the samples
+    // the page carries is inlined into the bundle as text. They are real .clas.abap
+    // files, copied out of the pinned abap2UI5/samples by writeSamples( ) above
+    // into build/samples/, and reached through the import module it writes there
+    // - see src/editor/samples.mjs, which is the only importer.
+    //
+    // `.md` is text for one importer: src/shell/ai-agent.mjs, the chat's chunk,
+    // which carries abap2UI5's own guide to building an app
+    // (deps/abap2ui5/docs/agents/building-apps.md, at the pinned commit) as the
+    // model's instructions.
+    loader: { ".ttf": "file", ".abap": "text", ".md": "text" },
+    // ...and Inter is NOT one of the things this bundle carries. The two urls in
+    // shell.css point at `../fonts/`, which from the stylesheet's place in the
+    // build (`assets/shell.css`) is `dist/fonts/` - the one copy the catalogue's
+    // stylesheet reaches by the same relative path. Left external so the url
+    // survives verbatim; bundled, esbuild would copy the file a second time,
+    // beside this bundle and under a hashed name, and the two documents would
+    // then fetch two identical fonts.
+    external: ["*.woff2"],
+    // The linter plugin goes first: it claims `fs` and `path` for the abap2UI5
+    // linter alone, and leaves every other importer to the ordinary stubs.
+    plugins: [abap2ui5LinterPlugin(ROOT), monacoCssPlugin(ROOT), nodeStubPlugin(ROOT)],
+    // No Buffer shim either: it was injected for abaplint, which now runs in the
+    // registry worker (the shim is injected there). What is left on the page
+    // reaches for Buffer only behind a typeof check, so the shim was a 31 KB
+    // chunk, modulepreloaded and evaluated at every start, that nothing used.
+  });
+}
+
+// The sample catalogue page's bundles - see the catalogue section below for
+// what they are; this is only the esbuild call, so it can run beside the
+// other three.
+async function buildCatalogue() {
+  await esbuild.build({
+    entryPoints: [
+      { in: path.join(ROOT, "src", "catalogue", "catalogue.mjs"), out: "catalogue" },
+      { in: path.join(ROOT, "src", "catalogue", "search-entry.mjs"), out: "search" },
+      { in: path.join(ROOT, "src", "catalogue", "page-entry.mjs"), out: "page" },
+    ],
+    outdir: path.join(DIST, "samples"),
+    outExtension: { ".js": ".mjs" },
+    bundle: true,
+    format: "esm",
+    platform: "browser",
+    target: "es2022",
+    minify: true,
+    sourcemap: process.env.PG_DEBUG === "1",
+    logLevel: "warning",
+  });
+}
+
+// All four at once. `all` rather than `allSettled`: esbuild writes a bundle
+// only when it finished, so a build that failed left nothing half-written
+// for the others to trip over, and the first failure is the one to read.
+const [result] = await Promise.all([buildPage(), buildRegistry(), buildLinter(), buildCatalogue()]);
+// The page build's metafile, kept for check-size.mjs and the tests - written
+// now, so a failure further down leaves the file that describes this build
+// rather than the one before it.
+fs.writeFileSync(path.join(ROOT, "build", "site.metafile.json"), JSON.stringify(result.metafile));
+
+// Monaco's stylesheet, as a file of its own: assets/monaco-editor-<hash>.css.
+// The page build above left Monaco's CSS imports out of the bundle
+// (monacoCssPlugin in tools/esbuild-plugins.mjs says why: esbuild folded
+// them into assets/shell.css on every page, the app-only ones included) and
+// left each as an empty module the metafile still records). This walks the
+// graph for them, in esbuild's own order, and bundles the real files in that
+// order, minified, with the icon font copied
+// out beside it the way the page build used to. The name goes into
+// index.html's inline script, which links it on every page that will show
+// the editor (writeIndex), and into the service worker's precache
+// (writeServiceWorker) - a hashed name, so it needs no CORE hash.
+const monacoCss = await buildMonacoCss();
+async function buildMonacoCss() {
+  /* The stylesheets in the order esbuild would have bundled them: a walk of
+     the import graph from Monaco's module, each module's imports in the
+     order they are written, each stylesheet the first time it is reached -
+     which is what esbuild does with CSS reached from JavaScript, and was
+     checked against the order it had used while the CSS was still in the
+     bundle. The stubs are empty modules and so appear in the metafile's
+     inputs, not in any output's. */
+  const inputs = result.metafile.inputs;
+  const seen = new Set();
+  const files = [];
+  const walk = (module) => {
+    if (seen.has(module)) return;
+    seen.add(module);
+    for (const { path: to, kind, external } of inputs[module]?.imports ?? []) {
+      if (external) continue;
+      if (to.startsWith(`${MONACO_CSS}:`)) {
+        const file = to.slice(MONACO_CSS.length + 1);
+        if (!files.includes(file)) files.push(file);
+      } else if (kind === "import-statement") {
+        walk(to);
+      }
+    }
+  };
+  walk("src/editor/monaco-editor.mjs");
+  if (files.length === 0) {
+    console.error("build-site: ERROR Monaco's chunk imports no stylesheet - did monacoCssPlugin stop matching?");
+    process.exit(1);
+  }
+  const css = await esbuild.build({
+    stdin: {
+      contents: files.map((f) => `@import ${JSON.stringify(f)};`).join("\n"),
+      resolveDir: ROOT,
+      loader: "css",
+    },
+    outdir: ASSETS,
+    entryNames: "monaco-editor-[hash]",
+    bundle: true,
+    minify: true,
+    logLevel: "warning",
+    metafile: true,
+    loader: { ".ttf": "file" },
+  });
+  const out = Object.keys(css.metafile.outputs).find((o) => o.endsWith(".css"));
+  const rel = path.relative(DIST, path.join(ROOT, out)).split(path.sep).join("/");
+  log(`${rel} (${kb(path.join(DIST, rel))}, ${files.length} of Monaco's stylesheets)`);
+  return rel;
+}
 
 writeIndex();
 // The icons and the app manifest - what a tab, a home screen and an install
@@ -340,22 +502,8 @@ for (const name of ["favicon.png", "apple-touch-icon.png", "icon-192.png", "icon
 // the catalogue loads it and so does every one of the 772 per-sample pages,
 // which have no bundle of their own. One module beside them is fetched once
 // and cached for every page after it; inlined it would be written 773 times.
-await esbuild.build({
-  entryPoints: [
-    { in: path.join(ROOT, "src", "catalogue", "catalogue.mjs"), out: "catalogue" },
-    { in: path.join(ROOT, "src", "catalogue", "search-entry.mjs"), out: "search" },
-    { in: path.join(ROOT, "src", "catalogue", "page-entry.mjs"), out: "page" },
-  ],
-  outdir: path.join(DIST, "samples"),
-  outExtension: { ".js": ".mjs" },
-  bundle: true,
-  format: "esm",
-  platform: "browser",
-  target: "es2022",
-  minify: true,
-  sourcemap: process.env.PG_DEBUG === "1",
-  logLevel: "warning",
-});
+// The bundles themselves came out of buildCatalogue( ) above, beside the
+// other three; what follows is the document and the stylesheet.
 fs.copyFileSync(path.join(ROOT, "src", "catalogue", "catalogue.css"), path.join(DIST, "samples", "catalogue.css"));
 /* The catalogue's document, without the comments its source is written with -
    four kilobytes of a twenty-kilobyte page - and with its policy in the head
@@ -441,7 +589,7 @@ for (const name of fs.readdirSync(path.join(ROOT, "src", "embed"))) {
   fs.copyFileSync(path.join(ROOT, "src", "embed", name), path.join(DIST, "embed", name));
 }
 
-log(`shell.mjs (${kb(path.join(ASSETS, "shell.mjs"))})`);
+log(`shell.mjs (${kb(path.join(ASSETS, "shell.mjs"))}), shell.css (${kb(path.join(ASSETS, "shell.css"))})`);
 for (const chunk of chunks()) log(`${path.basename(chunk)} (${kb(path.join(DIST, chunk))})`);
 
 // Fail loudly rather than publish a page whose two halves are missing - the
@@ -485,6 +633,9 @@ function writeServiceWorker() {
     "assets/shell.mjs",
     "assets/shell.css",
     "editor/registry.mjs",
+    // The abap2UI5 linter, which the worker loads at run time: unhashed in
+    // its name like the worker, so hashed here like the worker.
+    "editor/lint.mjs",
     "editor/corpus.json",
     "runtime/framework.mjs",
     "runtime/sql-wasm.wasm",
@@ -546,7 +697,10 @@ function writeServiceWorker() {
     path.join(DIST, "sw.js"),
     source
       .replaceAll("__BUILD_ID__", build)
-      .replace("__CHUNKS__", JSON.stringify(chunks().filter((c) => !onUseOnly(c))))
+      /* Monaco's stylesheet is precached with the chunks: hashed in its name
+         like them, and loaded by the first visit's page before the worker
+         controls it, so the on-use path never sees that request. */
+      .replace("__CHUNKS__", JSON.stringify([...chunks().filter((c) => !onUseOnly(c)), monacoCss]))
       .replace("__APP_FIRST_LOAD__", JSON.stringify(firstLoad))
       .replace("__CORE__", JSON.stringify(hashes))
       .replace("__DOCS__", JSON.stringify(docs)),
@@ -565,21 +719,46 @@ function writeServiceWorker() {
 // static imports: the dynamic ones are wanted during the parse and fetched
 // then, where the network is idle.
 function writeIndex() {
-  const entry = result.metafile.outputs[path.relative(ROOT, path.join(ASSETS, "shell.mjs"))];
-  const tags = entry.imports
-    .filter((i) => i.kind === "import-statement")
-    .map((i) => `<link rel="modulepreload" href="${path.relative(DIST, path.join(ROOT, i.path))}">`);
+  const outputs = result.metafile.outputs;
+  const rel = (out) => path.relative(DIST, path.join(ROOT, out)).split(path.sep).join("/");
+  const entry = outputs[path.relative(ROOT, path.join(ASSETS, "shell.mjs"))];
+  const statics = entry.imports.filter((i) => i.kind === "import-statement").map((i) => rel(i.path));
+  const tags = statics.map((href) => `<link rel="modulepreload" href="${href}">`);
+  // Monaco's chunk - the output whose entry point is src/editor/monaco-editor.mjs,
+  // which src/editor/editor.mjs imports dynamically - and whatever it imports
+  // statically that the entry does not already preload. The inline script
+  // preloads these on every page but an app-only one; see index.html.
+  const monaco = Object.keys(outputs).find((o) => outputs[o].entryPoint === "src/editor/monaco-editor.mjs");
+  if (!monaco) {
+    console.error("build-site: ERROR the bundle has no chunk for src/editor/monaco-editor.mjs - is it still imported dynamically?");
+    process.exit(1);
+  }
+  const editorPreloads = [
+    rel(monaco),
+    ...outputs[monaco].imports
+      .filter((i) => i.kind === "import-statement" && !i.external)
+      .map((i) => rel(i.path))
+      .filter((href) => !statics.includes(href)),
+  ];
   const source = fs.readFileSync(path.join(SHELL, "index.html"), "utf8");
   const marker = "<!-- __MODULEPRELOADS__ -->";
-  if (!source.includes(marker)) {
-    console.error(`build-site: ERROR src/shell/index.html no longer has a ${marker} to substitute`);
-    process.exit(1);
+  for (const needed of [marker, "__EDITOR_PRELOADS__", "__EDITOR_CSS__"]) {
+    if (!source.includes(needed)) {
+      console.error(`build-site: ERROR src/shell/index.html no longer has a ${needed} to substitute`);
+      process.exit(1);
+    }
   }
   /* After the substitution, without the comments: 9.8 kB of the 37 kB document,
      a third of its compressed weight (tools/html.mjs). */
-  const html = stripHtmlComments(source.replace(marker, tags.join("\n")));
+  const html = stripHtmlComments(
+    source
+      .replace(marker, tags.join("\n"))
+      .replace("__EDITOR_PRELOADS__", JSON.stringify(editorPreloads))
+      /* Monaco's stylesheet, linked by the same script on the same pages. */
+      .replace("__EDITOR_CSS__", JSON.stringify(monacoCss)),
+  );
   fs.writeFileSync(path.join(DIST, "index.html"), html);
-  log(`index.html (${tags.length} chunk${tags.length === 1 ? "" : "s"} preloaded)`);
+  log(`index.html (${tags.length} chunk${tags.length === 1 ? "" : "s"} preloaded, Monaco's ${editorPreloads.length} where the editor is shown)`);
   writeAiPage(html);
   writePilotPage(html);
 }
@@ -595,7 +774,7 @@ function writeIndex() {
 function writeAiPage(html) {
   const page = html
     .replace(/<html([^>]*)>/, '<html$1 data-page="ai">')
-    .replace("<head>", '<head>\n<base href="../">\n<meta name="robots" content="noindex">')
+    .replace("<head>", `<head>\n<base href="../">\n<meta name="robots" content="noindex">${preloadsFor("src/shell/chat.mjs")}`)
     .replace(/<title>[^<]*<\/title>/, "<title>AI Studio · abap2UI5</title>")
     .replace(/<link rel="canonical"[^>]*>\n?/, "");
   for (const mark of ['data-page="ai"', '<base href="../">', "<title>AI Studio"]) {
@@ -617,7 +796,7 @@ function writeAiPage(html) {
 function writePilotPage(html) {
   const page = html
     .replace(/<html([^>]*)>/, '<html$1 data-page="pilot">')
-    .replace("<head>", '<head>\n<base href="../">\n<meta name="robots" content="noindex">')
+    .replace("<head>", `<head>\n<base href="../">\n<meta name="robots" content="noindex">${preloadsFor("src/shell/pilot.mjs")}`)
     .replace(/<title>[^<]*<\/title>/, "<title>AI Pilot · abap2UI5</title>")
     .replace(/<link rel="canonical"[^>]*>\n?/, "");
   for (const mark of ['data-page="pilot"', '<base href="../">', "<title>AI Pilot"]) {
@@ -629,6 +808,28 @@ function writePilotPage(html) {
   fs.mkdirSync(path.join(DIST, "pilot"), { recursive: true });
   fs.writeFileSync(path.join(DIST, "pilot", "index.html"), page);
   log("pilot/index.html (the AI Pilot)");
+}
+
+// The room of an AI page - src/shell/chat.mjs for the studio, src/shell/pilot.mjs
+// for the Pilot - is a chunk main.mjs imports on that page alone, the moment
+// boot( ) starts; its hashed name is only known here, so each page preloads
+// its own, with whatever that chunk imports statically that the shell does
+// not already preload - the way index.html preloads Monaco's.
+function preloadsFor(entryPoint) {
+  const outputs = result.metafile.outputs;
+  const rel = (out) => path.relative(DIST, path.join(ROOT, out)).split(path.sep).join("/");
+  const shell = Object.keys(outputs).find((o) => outputs[o].entryPoint === "src/shell/main.mjs");
+  const statics = outputs[shell].imports.filter((i) => i.kind === "import-statement").map((i) => rel(i.path));
+  const room = Object.keys(outputs).find((o) => outputs[o].entryPoint === entryPoint);
+  if (!room) {
+    console.error(`build-site: ERROR the bundle has no chunk for ${entryPoint} - is it still imported dynamically?`);
+    process.exit(1);
+  }
+  const hrefs = [rel(room), ...outputs[room].imports
+    .filter((i) => i.kind === "import-statement" && !i.external)
+    .map((i) => rel(i.path))
+    .filter((href) => !statics.includes(href))];
+  return hrefs.map((href) => `\n<link rel="modulepreload" href="${href}">`).join("");
 }
 
 // The chunks the two AI pages load (src/shell/ai-agent.mjs, the AI Studio's
@@ -646,7 +847,11 @@ function writePilotPage(html) {
 // A function rather than a constant: the service worker is written above
 // this line, and a const read there would still be in its temporal dead zone.
 function precachedChunks() {
-  const ON_USE_ENTRIES = /^src\/shell\/(?:ai|pilot)-agent\.mjs$/;
+  /* The two AI conversations, and since the rooms around them became chunks
+     of their own (src/shell/chat.mjs, src/shell/pilot.mjs - imported by
+     main.mjs on their pages alone), those rooms too: a visitor who never
+     opens either page has no use for them. */
+  const ON_USE_ENTRIES = /^src\/shell\/(?:ai-agent|pilot-agent|chat|pilot)\.mjs$/;
   const outputs = result.metafile.outputs;
   const shell = Object.keys(outputs).find((o) => outputs[o].entryPoint === "src/shell/main.mjs");
   const reached = new Set();
@@ -687,5 +892,4 @@ function listing(dir, prefix = "") {
   return out;
 }
 
-fs.writeFileSync(path.join(ROOT, "build", "site.metafile.json"), JSON.stringify(result.metafile));
 log("dist/ complete");

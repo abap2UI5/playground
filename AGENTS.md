@@ -19,7 +19,7 @@ them before touching `tools/` or `src/runtime`.
 | Path | Purpose |
 | --- | --- |
 | `src/shell/` | The page: boot and Run (`main.mjs`, which also owns the **Auto** switch beside Run - the debounce, the stored setting and the three reasons Run may be inactive), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the samples browser over the sample catalogue (`examples.mjs`, reading the built index — a near-full-screen modal with the filters and the catalogue's three facets down its side), which UI5 library a control ships in (`ui5-libs.mjs`) beside the closed list of the ones this site carries (`ui5-libraries.mjs`), the bottom panel (`insight.mjs`), the syntax colour it prints XML and JSON in (`highlight.mjs`) and the View tab's edit mode - the builder chain read back out of the ABAP (`chain-read.mjs`), the edited document matched against the one that was shown (`view-edit.mjs`), the change put back as an edit to the ABAP that is there (`chain-patch.mjs`) and, when it cannot be, the chain written again in the house layout (`chain-write.mjs`), the AI chat (`chat.mjs` on screen, `ai-agent.mjs` the conversation and its tools, a chunk loaded on first use, `ai-starter.mjs` the class the AI Studio starts on - see "The AI chat" below), the AI Pilot (`pilot.mjs` on screen and the bridge's half, `pilot-agent.mjs` the mirror, the operator and the conversation, a chunk, with `attachments.mjs`, the files added to a message - see "The AI Pilot" below), what the two share (`ai-common.mjs`: the speeds and how a failed request is said; `attach-ui.mjs`: the files added to a message, on screen), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch in the menu behind the bar's last button, applied as `data-theme` on `<html>` and handed to the editor and the app frame; `extra.mjs` is the six lines that close that menu), where the reader was on each of the neighbouring sites (`site-memory.mjs` — see "One site in three places" below), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the search box in the bar and the matcher under it (`search-box.mjs`, `search-engine.mjs` — one box over the documentation AND every sample, see "One site in three places" below), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
-| `src/editor/` | Monaco plus the abaplint registry — in a worker: `registry-core.mjs` and `transpile-core.mjs` are abaplint and the single-object transpile as they run there, `registry-worker.mjs` the worker's entry, `registry.mjs` the page's client with a promise in front of everything, `providers.mjs` Monaco's language providers answered over it — the abap2UI5 linter wrapper (`abap2ui5-lint.mjs`), the file set, and the samples the page carries - `sample-list.mjs`, which is nothing but the class names of a handful of apps in **abap2UI5/samples**, and `samples.mjs`, which pairs what the build resolved them into (`build/samples/`) with the ABAP itself |
+| `src/editor/` | The editor as the page sees it (`editor.mjs`, one set of functions answered by one of two halves: `monaco-editor.mjs`, Monaco itself, a chunk imported dynamically and only where an editor is shown, or `file-store.mjs`, a plain list of files for the app-only pages — see "What a visitor waits for" below) and the analysis both share (`analysis.mjs`, Monaco-free, reading its half through a host), plus the abaplint registry — in a worker: `registry-core.mjs` and `transpile-core.mjs` are abaplint and the single-object transpile as they run there, `registry-worker.mjs` the worker's entry, `registry.mjs` the page's client with a promise in front of everything, `providers.mjs` Monaco's language providers answered over it, `lint-core.mjs` the abap2UI5 linter as it runs in that same worker (its bundle, `lint-entry.mjs`, loaded by the worker at start) and `abap2ui5-lint.mjs` the page's half of it (the settings and the rule links) — the file set, and the samples the page carries - `sample-list.mjs`, which is nothing but the class names of a handful of apps in **abap2UI5/samples**, and `samples.mjs`, which pairs what the build resolved them into (`build/samples/`) with the ABAP itself - the default sample's in the bundle, every other sample's a chunk fetched when it is picked (`loadSampleFiles()`), which is also why `isSample()` answers from what has landed |
 | `src/runtime/` | The ABAP side of the page: the framework entry (`index.mjs`, `roundtrip()` and `defineClasses()`), `worker.mjs` around it, which is the bundle's entry and answers those over `postMessage` when it runs as the worker the page starts, the sql.js database (`db-setup.mjs`), and the browser shims for Node modules |
 | `src/vendor/agent/` | abap2UI5/mcp-server's agent client - `appclient.mjs`, `snapshot.mjs`, `viewxml.mjs` - copied **unchanged** at a recorded commit by `tools/vendor-agent.mjs`, which writes `source.json` (the commit and each copy's sha256); `--check` holds the copies to it, and `tests/pilot.spec.js` runs that check. Never edited here: a change goes upstream and is vendored again |
 | `src/abap/` | The playground's own ABAP - `zcl_pg_bridge` and nothing else; it travels through the same downport and transpile as the framework. There was a `zcl_pg_hello` beside it, a copy of the hello world in **abap2UI5/samples**; the runtime tests drive the framework's own `z2ui5_cl_ui5_app_hi_world` instead, so this repository holds no app of its own to keep in step with one somebody else maintains |
@@ -115,25 +115,67 @@ of each line. Each step is still its own script and still runnable by name
    by design - a catalogue or a tarball that does not arrive costs what it
    carried and never the build; see "The sample catalogue" below for what
    degrades and why the index is built rather than fetched by the page.
-5. **`tools/build-site.mjs`** bundles the page and, as a bundle of its own,
+   It keeps a stamp of its own (`catalogue.stamp`, like `app.stamp`): over
+   the index as it will be written (`built` left out), the ABAP the pages
+   print, `SITE`, and the bytes of the five tools and two shared modules
+   that lay the pages out - and when none of it moved the 804 pages and
+   `apps.json` are left in place (2.2 s → 0.4 s; `--force` writes anyway).
+   The index is still built on every run, because it is what the stamp is
+   over; `apps.json` keeps the `built` of the build that last changed it.
+5. **`tools/build-site.mjs`** bundles the page and, as bundles of their own,
    the registry worker (`dist/editor/registry.mjs`: abaplint, the corpus
-   parse and the transpiler, from `src/editor/registry-worker.mjs`), writes
-   the editor's source corpus (`dist/editor/corpus.json`), copies examples and the embed kit, and
+   parse and the transpiler, from `src/editor/registry-worker.mjs`) and the
+   abap2UI5 linter with its UI5 metadata (`dist/editor/lint.mjs`, from
+   `src/editor/lint-entry.mjs`), which the worker imports at run time the
+   moment it starts — a bundle under a fixed name rather than a chunk split
+   off the worker's, because a chunk shares its helpers with the entry and
+   that shared piece became a static import the worker had to fetch before
+   it could run a line, one more round trip in front of the corpus fetch. It
+   writes the editor's source corpus (`dist/editor/corpus.json`), copies examples and the embed kit, and
    writes `dist/sw.js` from `src/shell/sw.js` with an id for this build
    substituted into it. It deletes the directories it owns before writing.
-   The page bundle is **split**: `assets/shell.mjs` is Monaco and abaplint,
-   and what the page only needs later — the transpiler
-   (`src/editor/transpile.mjs`) and the abap2UI5 linter with its UI5 metadata
-   (`src/editor/abap2ui5-lint.mjs`) — is a chunk each, split off wherever the
-   source says `import()`, downloaded during the corpus parse and evaluated
-   when it lands. Two things follow from the hashed chunk names, and both are
-   written by this step rather than by hand: the `modulepreload` tags for the
-   chunks the entry imports statically (a marker in `index.html`; without them
-   a static import is fetched after the bundle instead of beside it), and the
-   list of chunks the service worker precaches (a marker in `sw.js`). The size
-   budget is over `assets/*.mjs` as a sum, so a module that moved into a chunk
-   has not gotten any smaller. Two loaders go with it: Monaco's icon font is
-   copied out with a hashed name, and `.abap` is **text** — which is how the
+   Its four esbuild builds - the page, the registry worker, the linter, the
+   catalogue's three bundles - run **together** under one `Promise.all`:
+   none reads what another writes, and only `writeIndex()` and
+   `writeServiceWorker()` read the page build's metafile, after all four
+   have landed (measured warm: 1.8 s in series, 1.4 s together).
+   The page bundle is **split**: `assets/shell.mjs` is the shell (32 KB
+   compressed, down from 58), and what only some pages need, or need later — **Monaco**
+   (`src/editor/monaco-editor.mjs`, 0.82 MB, which an app-only page never
+   fetches), Monaco's ABAP grammar, the two AI rooms (`chat.mjs`, `pilot.mjs`,
+   imported by `main.mjs` on their own pages alone, each page preloading its
+   own) and the two AI conversations behind them, the samples browser
+   (`examples.mjs`, imported and set up on its first open, and asked for once
+   the page is idle after boot), the Share dialog (`share-dialog.mjs` with
+   `export.mjs` and `zip.mjs`, on the first Share), and every carried sample
+   but the default one (`build/samples/sample-<id>.mjs`) — is a chunk each,
+   split off wherever the source says `import()`, downloaded during the
+   corpus parse and evaluated when it lands. The bar's search box is not
+   one of them: `mountSearch()` draws the box into the bar, so it is part of
+   the first paint rather than something a click could wait for. Three things follow from the
+   hashed chunk names, and all are written by this step rather than by hand:
+   the `modulepreload` tags for the chunks the entry imports statically (a
+   marker in `index.html`; without them a static import is fetched after the
+   bundle instead of beside it), the names of Monaco's chunk and its static
+   imports, which the inline script preloads on every page but an app-only
+   one (`__EDITOR_PRELOADS__`, in that same script), and the list of chunks
+   the service worker precaches (a marker in `sw.js`). The size budget is
+   over `assets/*.mjs` as a sum, so a module that moved into a chunk has not
+   gotten any smaller — and `check-size.mjs` walks the metafile to hold the
+   entry and its static imports free of Monaco, which is the property the
+   app-only pages' saving rests on. **Monaco's stylesheet is a file of its
+   own** (`assets/monaco-editor-<hash>.css`): esbuild gives the CSS a chunk
+   reaches to the *entry's* stylesheet, dynamic import or not, so Monaco's
+   eighty stylesheets - 150 KB of a 211 KB `shell.css`, 22 KB compressed -
+   went to every page, the app-only ones included, beside an orphan copy
+   nothing linked. `monacoCssPlugin` (`tools/esbuild-plugins.mjs`) resolves
+   each of them to an empty module, `buildMonacoCss()` walks the metafile's
+   import graph for them in esbuild's own order and bundles the real files,
+   the inline script links the result (`__EDITOR_CSS__`, beside the chunk's
+   preload, on the same pages), `monaco-editor.mjs` waits on the link before
+   it draws, and `check-size.mjs` budgets the two stylesheets apart and holds
+   `shell.css` free of Monaco's. Two loaders go with it: Monaco's icon font is
+   copied out with a hashed name (by the stylesheet's build now), and `.abap` is **text** — which is how the
    samples the page carries reach the bundle from `build/samples/`. They are real ABAP
    files rather than template literals inside JavaScript so that the samples
    browser can link a row to the ABAP, and `src/editor/samples.mjs` is their
@@ -170,8 +212,24 @@ a field somebody is typing in on the page - the editor, the AI chat: an app's
 first render focuses a field of its own, and the app Auto started, or the AI
 ran, took the next keystrokes. Once the reader is in the app, the app has it.
 The drafts abap2UI5 keeps in a database live in an in-memory SQLite — sql.js,
-compiled to WebAssembly. Run means: a fresh database, then reload the iframe
-with `?app_start=<CLASS>&run=<n>`. "Fresh" is SQLite reopened on an image of
+compiled to WebAssembly. Run means: a fresh database, then the app started
+again in the iframe on `?app_start=<CLASS>&run=<n>` — **in place** where the
+frame is up (`__z2ui5PlaygroundRestart` in `frontend-bridge.js`, asked by
+`restartInPlace()` in `main.mjs`): the ComponentContainer that
+ComponentSupport made is destroyed and made again on the new address, which
+is what the frontend's own `Component.exit()`/`init()` are built for (an FLP
+re-launch — every listener detached, the roundtrips in flight aborted, the
+timers cancelled, the popup slots and the context destroyed), with what UI5
+keeps in its static area outside any component closed by hand (a MessageBox,
+a popover) and the hash cleared; the UI5 core, the libraries and the theme
+are kept, which was most of what a Run waited for. The first Run, a frame on
+another origin, one that never booted UI5 or carries an older bridge, and a
+restart that fails or takes thirty seconds, load the document as before —
+the one path there used to be, because a reload was the only thing that
+reset the view slots, the routing and the component until the frontend
+learned to. `tests/app.spec.js` holds a second Run to the kept document (a
+mark on the frame's window survives it) and to nothing of the old app
+surviving: its typed values, its hash, its draft. "Fresh" is SQLite reopened on an image of
 the empty database taken once after the transpiled init seeded it
 (`db-setup.mjs`) — under a millisecond, where rebuilding it from the DDL (27
 tables, then 724 seed rows) was 85 ms per Run on a desk and several times that
@@ -186,8 +244,10 @@ without it neither ships one.
 
 Five assets stand between opening the page and an app on screen, and
 `tools/check-size.mjs` budgets those five among the nine files it holds: the page bundle with its chunks
-(~1.1 MB compressed — Monaco in `shell.mjs`, the abap2UI5 linter as a chunk),
-the registry worker (~0.5 MB — abaplint and the transpiler), the transpiled
+(~1.0 MB compressed — Monaco, as a chunk of its own; the shell itself is
+32 KB, budgeted on its own), the registry worker with the
+linter's bundle beside it (~0.7 MB — abaplint, the transpiler and the
+abap2UI5 linter), the transpiled
 framework (~0.6 MB), the ABAP corpus (~0.4 MB) and SQLite (~0.3 MB). About three megabytes, and then
 several seconds of processor to parse them. The same file carries a fifth
 budget that is not a size at all — how much **JavaScript stack** the boot parse
@@ -216,7 +276,15 @@ code:
   is a round trip: `refresh()` answers with what was last known and
   `whenAnalysed()` delivers the fresh one; Run waits on `refreshNow()`; the
   Monaco providers (`src/editor/providers.mjs`) return promises, which Monaco
-  allows. Two consequences of starting that early, both held by
+  allows. Every provider question carries the open files so the answer is
+  for the text on screen - but a file the worker was already sent under the
+  same version (Monaco's model id and version id, `host.version`) goes as
+  `{ name, version }` alone, and only a new or changed one as text; the
+  worker is the judge (`holdsVersion` in `registry-core.mjs`), answers
+  `needsText` with the names it does not hold at that version - a fresh
+  worker, a text a fix moved under it - and the client asks again with them
+  in full, so a lost version costs one round trip and never a stale answer
+  (`tests/editor.spec.js` watches the worker's door for both halves). Two consequences of starting that early, both held by
   `tests/site.spec.js`: what a worker says before the bundle is listening
   (`ready`, `corpus`, or an error) is buffered by the inline script and
   replayed by the client; and a worker script Chromium could not fetch fires
@@ -224,7 +292,11 @@ code:
   — the runtime's at the one moment the page is waiting on a runtime that
   has not spoken, the registry's after ten seconds without its first word.
 - **The preloads in `src/shell/index.html`.** The chunks `shell.mjs` imports
-  statically (`modulepreload`, written by the build). Left alone each would
+  statically (`modulepreload`, written by the build), and — added by the
+  inline script, on every page but `?view=app` and `?view=full` — Monaco's
+  chunk, which `editor.mjs` imports dynamically so that those two pages
+  never fetch it (below), and Monaco's stylesheet, linked outright on the
+  same pages (a link added by script does not hold the first paint). Left alone each would
   arrive in a chain behind the file that asks for it. The corpus is not
   preloaded any more: the registry worker fetches it, and a document's
   preload does not reach a worker's fetch. Measured when the framework was still an import: no difference where
@@ -234,7 +306,16 @@ code:
   downloaded twice and warned about in the console, so if what the page
   fetches changes, these change with it — and that is why SQLite's `.wasm` is
   no longer preloaded: the worker fetches it, and a document's preload does
-  not reach a worker's fetch.
+  not reach a worker's fetch. What reaches it is the **HTTP cache**, so the
+  inline script that starts the two workers also starts a low-priority
+  `fetch` of `runtime/sql-wasm.wasm` and reads the body — the same move
+  `warm-up.mjs` makes for the app frame. Left alone, the runtime asked for
+  the 0.3 MB only from `db-setup.mjs`, which runs after the whole of
+  `framework.mjs` has downloaded and been evaluated; now the two travel side
+  by side and the worker's own request is answered from the cache (on Pages,
+  which serves with a max-age; the test server sends none on purpose, so a
+  test can hold the asking and not the hitting). A cache that keeps nothing
+  costs the one download it always cost.
 - **The warm-up of the app frame** (`src/shell/warm-up.mjs`). Nothing asked
   for UI5 until Run set the frame's src, which is the last thing boot does —
   so the frame's megabyte and a half (the core, two library preloads, the two
@@ -257,7 +338,8 @@ code:
   round trip the frame only started once the one before had answered.
 - **The service worker** (`src/shell/sw.js`, `tests/worker.spec.js`). Cache
   first, over an allow list, in a cache named after the build. Its own comment
-  is the long form: what it caches (the core assets and the chunks by name,
+  is the long form: what it caches (the core assets — the linter's bundle
+  among them — and the chunks by name, Monaco's stylesheet among those,
   everything under `app/` except the frame's document — *with* the queries
   UI5 puts on its stylesheets and manifest, which name the build, not a
   moment), what it deliberately leaves live (the app frame's document, linked
@@ -348,17 +430,20 @@ Two orderings in `boot()` keep those costs overlapping rather than stacking,
 and both are easy to undo by accident:
 
 - **Both workers' handles are picked up before anything is awaited**, and
-  the linter chunk and the app frame's warm-up are asked for the moment the
-  registry worker says the corpus has landed, so they download during the
-  parse. They used to be
+  the app frame's warm-up is asked for the moment the registry worker says
+  the corpus has landed, so it downloads during the parse. The abap2UI5
+  linter's bundle is asked for earlier still, by the registry worker itself
+  the moment it starts (`lint-core.mjs`), so it downloads beside the corpus
+  and is evaluated between two objects of the parse. They used to be
   started after `startingFiles()`, which is instant for a draft or a sample
   and is two round trips to GitHub for a `?src=` link — the linked class, then
   the classes beside it — which is the path every Run button in the
   documentation takes. The preloads had the *bytes* moving with the document
   already; what still waited on the link was every bit of processor work
   behind them. The linter arriving after the first analysis is the one
-  wrinkle: `boot()` invalidates the kept analysis and asks again when it
-  lands, and `abap2ui5-lint.mjs` answers "no findings" until then.
+  wrinkle: `boot()` waits on `loadLinter()`, which the worker answers when
+  the bundle has landed, then invalidates the kept analysis and asks again;
+  until then every file's answer is "no findings".
 - **`buildRegistry()` takes the files as a promise, not a list.** The corpus is
   nine hundred objects and several seconds, and none of it depends on what the
   user is about to edit — so it parses against itself, and the handful of files
@@ -378,6 +463,18 @@ open models' version ids and a generation counter — so anything that changes
 the text recomputes and a second reader of unchanged text does not. A checker
 whose *configuration* changed under unchanged text is invisible to that key,
 which is why the Config tabs call `invalidateAnalysis()` before asking again.
+**And the walk is one message.** The worker's `analyse` op answers with
+abaplint's diagnostics per file and its fixable count — one `findIssues()`
+over the user's objects, grouped by file and mapped with abaplint's own
+`Diagnostics.mapDiagnostic`; it used to be a language-server call per file
+and `findIssues()` once more for the count — and, beside them, the abap2UI5
+linter's answer per file: the findings, how many carry a fix, the views they
+were reconstructed from and the linter's notes on them (`lint-core.mjs`).
+The linter ran on the page's thread until then, over every open file on
+every keystroke pause — 10 to 100 ms a file on a desk, several times that on
+a phone, between the keystroke and the paint. Its eight-entry memo by source
+moved with it, dropped when the settings change; the page's
+`abap2ui5-lint.mjs` keeps the settings, validates them and tells the worker.
 
 ## On a phone
 
@@ -431,7 +528,7 @@ both are easy to undo by tidying up:
 **Auto, the switch beside Run** (`main.mjs`, `tests/shell.spec.js`). On, Run
 itself goes inactive — there is nothing left for it to do — and every change
 to the ABAP starts the app again 700 ms after the typing stops. Off by
-default, because a run is a fresh database and a full reload of the app frame,
+default, because a run is a fresh database and a fresh app in the frame,
 which throws away whatever was on screen: not what somebody halfway through a
 form in their own app wants, and exactly what somebody watching a view take
 shape wants. Three details are easy to undo by tidying up: Run's disabled
@@ -501,8 +598,9 @@ back byte for byte included.
   the real framework sources at release v750, with a deliberately small rule
   set — only rules that answer "would this work", never house style. An
   abaplint error blocks Run.
-- **The abap2UI5 linter** (`src/editor/abap2ui5-lint.mjs`,
-  `@abap2ui5/linter`) reconstructs the view the builder chain produces and
+- **The abap2UI5 linter** (`src/editor/lint-core.mjs` in the registry
+  worker, `src/editor/abap2ui5-lint.mjs` on the page, `@abap2ui5/linter`)
+  reconstructs the view the builder chain produces and
   checks it against UI5 **1.71**, the floor abap2UI5 holds its shipped apps to.
   A finding does not block Run: the app runs and is wrong somewhere, and
   looking at it is the fastest way to understand the finding. Its
@@ -541,12 +639,14 @@ choice only while it differs from what the system says, so a page switched back
 follows the system again, and an embedded playground never restores one.
 
 The **View tab** (`viewPreview()` in `src/shell/insight.mjs`) shows the XML
-the linter reconstructs from the open file's builder chain — `viewsFor()` in
-`abap2ui5-lint.mjs`, the same reconstruction the findings come from, put one
-element per line by `xml-pretty.mjs` and coloured by `highlight.mjs`. It is a
-second reconstruction beside the analysis pass, run only while that tab is
-open; the tab says so when the linter has not loaded yet and when the file
-builds no view.
+the linter reconstructs from the open file's builder chain — `lintViewsFor()`
+in `editor.mjs`, read off the kept analysis: the same reconstruction the
+findings come from, carried back from the worker in the same message, put one
+element per line by `xml-pretty.mjs` and coloured by `highlight.mjs`. It
+costs nothing beside the analysis (it used to be a second run of the linter
+while the tab was open), and the tab is drawn again whenever a fresh analysis
+lands; it says so when the linter has not looked at the file yet and when the
+file builds no view.
 
 **Edit** turns that tab around: change the XML and the chain is written again
 to build it. Four files, and the middle one is the whole design.
@@ -678,7 +778,8 @@ what makes the second sentence true.
 
 **Fix them** (`applyFixes()` in `src/editor/editor.mjs`) applies both checkers'
 fixes to everything open: abaplint's structural fixes first, then the linter's,
-each in a bounded loop because one fix uncovers the next. The rewrite is
+each in a bounded loop because one fix uncovers the next — both a round trip
+to the worker per file, guarded so a file typed into meanwhile is left alone. The rewrite is
 written back through `pushEditOperations` as **one edit per file**, so a single
 Ctrl+Z takes the whole thing back. Nothing without a correct answer is guessed
 at — an icon that does not exist stays reported. Keep all of that true when
@@ -775,8 +876,9 @@ link's ABAP runs. Sent by the
   precached, every visitor the worker installs for would download them.
   `onUseOnly( )` in `build-site.mjs` reads that off esbuild's module graph -
   the precache is what `shell.mjs` reaches without a dynamic import of
-  `ai-agent.mjs` or `pilot-agent.mjs` - because a shared chunk's name says
-  nothing about who needs it. Once used, the worker keeps them like any
+  `ai-agent.mjs`, `pilot-agent.mjs`, `chat.mjs` or `pilot.mjs` (the two
+  rooms are chunks of their own since they left the shell) - because a
+  shared chunk's name says nothing about who needs it. Once used, the worker keeps them like any
   chunk.
 - **The conversation is append-only.** `messages` in `createAgent( )` is only
   ever pushed to — the model's thinking blocks are bound to the history they
@@ -1042,7 +1144,15 @@ deploy — readers get the published playground, never your checkout.
   draft — an embedding must not overwrite a reader's work.
 - **`?view=app`**: hides the editor too — the app on its own, for a paragraph
   about what an app does rather than how it is written. **`?view=full`** is the
-  same view under the name the Full screen button opens it by. Neither carries
+  same view under the name the Full screen button opens it by. Neither
+  **fetches Monaco**: `createEditor()` in `src/editor/editor.mjs` keeps the
+  files in `file-store.mjs` on these pages — the registry worker still checks
+  and compiles them, an abaplint error still stops Run — and imports
+  `monaco-editor.mjs`, the 0.82 MB chunk, on no other - nor its stylesheet,
+  which the inline script links only where the chunk is preloaded. Every page used to
+  download, evaluate and instantiate the editor into the hidden pane;
+  `tests/embed.spec.js` holds an app-only page to never asking for the chunk
+  or the stylesheet and the playground to asking for both. Neither carries
   the bar: everything it offers is a click away in the "open this in the
   playground" link an embedding page prints beside the frame, and what it did
   instead was put a strip of this site's furniture across somebody else's
@@ -1164,6 +1274,23 @@ the question is actually asked — `UI5_LIBRARIES` beside it is the closed set
 this site carries, so "does this render here" is that set against this mapping.
 `runs` and `needs` are computed once, at build time, from that plus
 `UI5_VERSION`; the page and the dialog only display them.
+
+**An entry carries its path, not its URLs.** `file` (the class's path in its
+repository) and, off `main`, `branch`; the repository is in `sources`. The
+raw file and the GitHub page are one template each over those three facts,
+written in `src/shell/catalogue-urls.mjs` and built where they are wanted -
+the dialog, the catalogue page, the AI tools' `catalogueEntries()`, and
+`tools/sample-pages.mjs` at build time, which still works on rows carrying
+both. The index used to carry both URLs on all 804 entries: 135 KB of an
+816 KB file (6 KB of its 110 KB compressed), the same two prefixes over and
+over. `keywords` stay: the dialog, the catalogue page and the AI search all
+match on them at the first keystroke, and the plugin commands and READMEs
+in abap2UI5/abap2UI5 send agents to `apps.json` for exactly "title,
+summary and keywords" - a second file would be a second fetch on every
+catalogue visit and a contract broken for nothing. `samples/llms.txt`
+documents the fields, `file` and `branch` among them. The helper still
+takes an entry that carries `raw` and `github` - a cached index from before
+the change - and checks a path by the build's own rule.
 
 **It degrades per repository and per half.** No `catalogue.json` and that
 repository contributes nothing and says so in `sources`; no
@@ -1496,7 +1623,14 @@ Monaco's blob workers and UI5 in a frame are a separate piece of work.
 keystroke; the URL and the position memory follow 200ms later, once, in a
 try/catch — Safari refuses `replaceState( )` after a hundred calls in thirty
 seconds, and the two synchronous writes in front of every render were where a
-fast typist's handler died. The cards carry `content-visibility: auto` so a
+fast typist's handler died. **A card is built once** (`cardFor( )`, a
+`WeakMap` from row to node) and moved into place on every draw: building all
+771 again on every keystroke, a dozen elements apiece and thrown away at the
+next key, was the cost of a keystroke, not the filtering. A card that does
+not match is left out rather than hidden, so the list and the count agree
+and nothing counts a hidden card. The samples dialog's rows follow the same
+rule (`rowFor( )` in `src/shell/examples.mjs`). The cards carry
+`content-visibility: auto` so a
 keystroke lays out the screenful that is visible rather than all 771; the
 four filter lists are drawn at the width their longest option gives them and
 the results box keeps its height until it is filled, which is what took the
@@ -1519,6 +1653,22 @@ built" — `npm run check` is the entry point that cannot be typed in the wrong
 order. It leaves out exactly one thing `check.yml` does: `npx playwright install
 chromium`, a browser download rather than a step, which `npm test` then asks for
 by name (CONVENTIONS section 3 asks for that omission to be named here).
+
+Every test boots its own playground - about three and a half seconds of
+the four seconds a typical test takes - and that is deliberate, measured
+and kept. Two ways of spending less were looked at on 2026-10-10. Fewer
+workers than Playwright's default of half the cores (a boot keeps three
+threads busy, so "a worker per three cores"): on 4 cores the shell, boot,
+embed and editor specs took 215 s on two workers and 317 s on one, because
+a boot's three threads are not busy at once and two of them idle for most
+of a test. And one boot per file with a shared page for the specs that
+only read: there are almost none - `bfcache.spec.js` boots nothing,
+`site-memory.spec.js` is about what each visit leaves in storage,
+`view-edit.spec.js` saves on every test, and `shell.spec.js` edits, shares,
+switches Auto and moves the splitter; the handful that only look (the bar's
+two ends, the phone layouts) each need a viewport of their own. A shared
+page would have bought a minute and cost the isolation that lets a failure
+be read on its own. The full suite is 382 tests and about sixteen minutes on 4 cores.
 
 The tests are the gate: everything runs through a real browser, and
 `tests/samples.spec.js` imports the list of samples the page carries (`build/samples/index.json`) and drives every entry —
@@ -1838,6 +1988,24 @@ host in a test run — and is a unit test over there
   never GETs — the frame's document comes from `dist/app`. Wiring that branch
   up would mean carrying 1.7 MB of frontend text a second time for nothing
   on screen.
+- **The open-abap classes the framework never reaches stay in its bundle.**
+  Measured 2026-10-10, to save the next person the exercise: a scan of every
+  transpiled module, the runtime, the page's sources, `@abaplint/runtime`,
+  the carried samples and the three sample repositories' tarballs finds 93
+  open-abap classes nothing names - `cl_aunit_authority_check`,
+  `cl_os_ca_common`, `cl_shm_area`, `kernel_scan_abap_source`, sixty
+  exception classes - 0.59 MB of the 7.3 MB transpilat. Stubbed the way the
+  generated frontend is (31 classes, the exceptions left alone), the bundle
+  went from 6.94 to 6.54 MB, 0.64 to 0.60 MB compressed - and the worker's
+  boot, fetch to `ready`, from a median of 657 ms to 673 ms over seven runs
+  (minimum 634 → 612): nothing, because V8 compiles a class body it never
+  calls lazily and the registration is a line each. What it would have
+  cost is a failure mode: a catalogued sample that reaches one of them
+  (`cl_abap_datfm`, `cl_abap_dyn_prg`) would die in the browser with the
+  stub's message, and the gate that keeps the list honest cannot see the
+  sample repositories on a fresh runner - the catalogue step that fetches
+  them runs after the framework step. Forty kilobytes of download was not
+  worth that.
 - **The `?src=` host allow list stays short.** The playground fetches on
   behalf of whoever opened the link and must not become a general-purpose
   reader for arbitrary URLs.

@@ -19,6 +19,11 @@
 // parseAsync so the worker can report progress while it happens. Everything
 // after that is incremental: only the file that changed is dirty.
 import * as abaplint from "@abaplint/core";
+// The language server's own issue-to-diagnostic mapping, reached directly:
+// abaplint exports it only through LanguageServer.diagnostics( ), which runs
+// the rules for the one file it is asked about, and analyse( ) below runs them
+// once for every open file instead.
+import { Diagnostics } from "@abaplint/core/build/src/lsp/diagnostics.js";
 import { parseName, sidecarFor, uriFor } from "./files.mjs";
 
 // v750 is the release abap2UI5 lints itself against, so the playground holds
@@ -132,6 +137,14 @@ let registry;
 // The user's files as the registry currently holds them, so a change can be
 // reduced to what actually differs.
 let held = new Map();
+// And, per file, the version the editor named when it last sent the text -
+// so a language-server request can name the version instead of sending the
+// text again (see `ls` in registry-worker.mjs and src/editor/providers.mjs).
+// Only a request that carries a version sets it; the text may change under
+// a version through any other door (an analysis without one, a fix applied
+// here), and each of those forgets the version rather than guesses.
+let versions = new Map();
+export const holdsVersion = (name, version) => version !== undefined && versions.get(name) === version;
 
 function addFile(reg, file) {
   reg.addFile(new abaplint.MemoryFile(uriFor(file.name), file.source));
@@ -169,6 +182,7 @@ export async function buildRegistry(corpus, filesReady, onProgress) {
   await parseWithYields(reg, onProgress);
 
   held = new Map();
+  versions = new Map();
   for (const file of await filesReady) {
     addFile(reg, file);
     held.set(file.name, file.source);
@@ -246,30 +260,76 @@ export function getRegistry() {
 
 // Brings the registry in line with the editor. Only what changed is touched, so
 // this costs a few milliseconds however large the corpus is.
+//
+// A file may come as `{ name, version }` with no text at all: the editor's
+// way of saying "the text you were sent under this version" - and it has to
+// be a version this holds (holdsVersion), which the worker's `ls` checks
+// before calling, so the throw below is a contract and not a path. A file
+// that comes with its text and a version is remembered under it; one with
+// text and no version (an analysis) keeps the version remembered while the
+// text is the one it named, and forgets it when the text moved.
 export function updateFiles(files) {
-  const wanted = new Map(files.map((f) => [f.name, f.source]));
+  const wanted = new Map();
+  for (const file of files) {
+    if (file.source === undefined) {
+      if (!holdsVersion(file.name, file.version)) {
+        throw new Error(`${file.name} was named by version and the registry does not hold it at that version`);
+      }
+      wanted.set(file.name, held.get(file.name));
+    } else {
+      wanted.set(file.name, file.source);
+    }
+  }
 
   for (const name of [...held.keys()]) {
     if (!wanted.has(name)) {
       removeFile(registry, name);
       held.delete(name);
+      versions.delete(name);
     }
   }
+  const moved = new Set();
   for (const [name, source] of wanted) {
     if (!held.has(name)) {
       addFile(registry, { name, source });
+      moved.add(name);
     } else if (held.get(name) !== source) {
       registry.updateFile(new abaplint.MemoryFile(uriFor(name), source));
+      moved.add(name);
     }
     held.set(name, source);
+  }
+  for (const file of files) {
+    if (file.source === undefined) continue;
+    if (file.version !== undefined) versions.set(file.name, file.version);
+    else if (moved.has(file.name)) versions.delete(file.name);
   }
 
   registry.parse();
 }
 
-// Everything wrong with one of the user's files, in the shape Monaco wants.
-export function diagnostics(fileName) {
-  return new abaplint.LanguageServer(registry).diagnostics({ uri: uriFor(fileName) });
+// Everything abaplint has to say about the user's files, in one run of the
+// rules: the diagnostics per file, in the shape Monaco wants, and how many of
+// the issues carry a fix. It used to be one language-server call per open file
+// - each a run of every rule over that file's object - and then findIssues( )
+// over the lot once more to count the fixable ones, so a class with its test
+// include ran the rules three times per keystroke pause. The corpus is held as
+// dependencies, which the rules runner skips, so one findIssues( ) is exactly
+// the user's objects and nothing else. The mapping is the language server's
+// own (Diagnostics.mapDiagnostic), so what the page sees is what it saw.
+export function analyseFiles(files) {
+  const diagnostics = {};
+  for (const file of files) diagnostics[file.name] = [];
+  let fixable = 0;
+  for (const issue of registry.findIssues()) {
+    const name = nameOf(issue.getFilename());
+    if (!held.has(name)) continue;
+    if (issue.getDefaultFix() !== undefined) fixable++;
+    // A file the registry holds that the editor does not list - the sidecar
+    // of a class, say - has nowhere to be shown and is not asked for.
+    if (diagnostics[name] !== undefined) diagnostics[name].push(Diagnostics.mapDiagnostic(issue));
+  }
+  return { diagnostics, fixable };
 }
 
 // One language server call, by name: hover, gotoDefinition, references,
@@ -346,18 +406,14 @@ export function applyAbaplintFixes(files) {
     // The registry now holds the fixed text; `held` has to agree, or the next
     // updateFiles( ) would see the editor's old text as a change and write it
     // straight back over the fix.
-    if (source !== undefined) held.set(file.name, source);
+    if (source !== undefined) {
+      held.set(file.name, source);
+      // ...and the version the editor named for its old text no longer
+      // names this one.
+      versions.delete(file.name);
+    }
   }
   return { fixed: touched, files: out };
-}
-
-// How many of the issues in the user's files carry a fix. Asked before the
-// button is offered: a Fix button that does nothing when pressed is worse than
-// no button at all.
-export function abaplintFixable() {
-  return registry
-    .findIssues()
-    .filter((i) => held.has(nameOf(i.getFilename())) && i.getDefaultFix() !== undefined).length;
 }
 
 // ------------------------------------------------------------------ format

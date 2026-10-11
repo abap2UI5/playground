@@ -123,11 +123,64 @@
     }
     // The ABAP runtime, and the abaplint registry - which fetches and parses
     // the corpus the editor checks against, so nothing here preloads it: a
-    // document's preload does not reach a worker's fetch, and neither does
-    // SQLite's .wasm, which the runtime fetches for itself. Both scripts are
+    // document's preload does not reach a worker's fetch. Both scripts are
     // named in tools/build-site.mjs and tools/build-framework.mjs.
     window.__abap2ui5Runtime = start("runtime/framework.mjs");
     window.__abap2ui5Registry = start("editor/registry.mjs");
+
+    // Monaco, which is a chunk of the page bundle that assets/shell.mjs
+    // imports dynamically - and only on a page that will show the editor.
+    // ?view=app and ?view=full hide the editor pane, and until Monaco left
+    // the bundle every embedded demo downloaded, evaluated and instantiated
+    // 0.85 MB of editor into it. On every other page it is wanted as early
+    // as the bundle itself, so it is preloaded here rather than fetched when
+    // boot( ) reaches for it; the build writes the chunk's hashed name (and
+    // the names of what it imports statically) into the array - a marker
+    // substituted by writeIndex( ) in tools/build-site.mjs, like the
+    // modulepreload tags below. A link added by script preloads like one in
+    // the markup, and the page's later import( ) of the same URL takes it.
+    //
+    // And Monaco's stylesheet, on the same pages: a file of its own
+    // (assets/monaco-editor-<hash>.css, its name written here the same way)
+    // rather than part of shell.css, so the pages that never show an editor
+    // never download it either - it was 150 KB of the 211. Linked rather
+    // than preloaded, because it is wanted the moment Monaco draws; a link
+    // added by script does not hold the first paint the way one in the
+    // markup would, and src/editor/monaco-editor.mjs waits on it (by this
+    // id) before it creates the editor.
+    if (!/[?&]view=(app|full)(&|$)/.test(location.search)) {
+      var editorChunks = __EDITOR_PRELOADS__;
+      for (var i = 0; i < editorChunks.length; i++) {
+        var link = document.createElement("link");
+        link.rel = "modulepreload";
+        link.href = editorChunks[i];
+        document.head.appendChild(link);
+      }
+      var css = document.createElement("link");
+      css.rel = "stylesheet";
+      css.id = "monaco-css";
+      css.href = __EDITOR_CSS__;
+      document.head.appendChild(css);
+    }
+
+    // SQLite's .wasm, asked for now rather than when the runtime gets round
+    // to it. The runtime worker fetches it from db-setup.mjs, which runs only
+    // once the whole of framework.mjs has downloaded and been evaluated - so
+    // 0.3 MB that could have travelled beside the framework travelled after
+    // it. A <link rel=preload> cannot help (a document's preload does not
+    // reach a worker's fetch), but the HTTP cache is shared with the worker:
+    // this fetch puts the bytes there at low priority, the way warm-up.mjs
+    // primes the app frame's first load, and the worker's own request for the
+    // same URL is answered from it. Nothing depends on it: a cache that does
+    // not keep it costs one download more, as before. The body is read so the
+    // response is complete and cacheable, and errors are swallowed.
+    try {
+      fetch(new URL("runtime/sql-wasm.wasm", document.baseURI), { priority: "low" })
+        .then(function (r) { return r.arrayBuffer(); })
+        .catch(function () {});
+    } catch (e) {
+      // An old fetch that refuses the option, or no fetch at all.
+    }
 
     // The theme the switch in the bar chose last time, applied before the
     // first paint - src/shell/theme.mjs owns the key and the rule, and reads
