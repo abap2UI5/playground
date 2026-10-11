@@ -1,6 +1,6 @@
 /*
  * VENDORED - do not edit. abap2UI5/mcp-server lib/viewxml.mjs
- * at commit 82b75d8a4db80799f438bdbef626c1b258970177, copied unchanged by tools/vendor-agent.mjs.
+ * at commit edc42df13b3bc49ca53df331bf55c44c5ab38e70, copied unchanged by tools/vendor-agent.mjs.
  * Change it upstream, then vendor it again.
  */
 /*

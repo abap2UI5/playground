@@ -1,6 +1,6 @@
 /*
  * VENDORED - do not edit. abap2UI5/mcp-server lib/snapshot.mjs
- * at commit 82b75d8a4db80799f438bdbef626c1b258970177, copied unchanged by tools/vendor-agent.mjs.
+ * at commit edc42df13b3bc49ca53df331bf55c44c5ab38e70, copied unchanged by tools/vendor-agent.mjs.
  * Change it upstream, then vendor it again.
  */
 /*
@@ -107,6 +107,12 @@ function destroySlot(next, slot) {
  * A response without MODEL leaves every model as it was: the backend only
  * sends what changed, and the client keeps what the user typed.
  */
+/* An action list of the response, or none: a T_SYSTEM or T_CUSTOM that is
+ * no array (an object, a number) threw a TypeError out of this pure fold -
+ * the client refuses such a response with a sentence first (appclient
+ * receive), and a direct caller gets an empty list, never a throw. */
+const listOf = (v) => (Array.isArray(v) ? v : []);
+
 export function applyResponse(state, response) {
   const prev = state || emptyState();
   const next = { app: prev.app, id: prev.id, slots: { ...prev.slots }, models: { ...prev.models }, custom: [] };
@@ -121,7 +127,7 @@ export function applyResponse(state, response) {
   const data = hasModel ? response.MODEL : {};
   const actions = front.S_ACTION || {};
   const displayed = new Set();
-  for (const raw of actions.T_SYSTEM || []) {
+  for (const raw of listOf(actions.T_SYSTEM)) {
     const a = asArray(raw);
     if (!a || a[0] !== 'VIEW_SLOTS') continue;
     const [, method, slot, xml, options] = a;
@@ -139,7 +145,7 @@ export function applyResponse(state, response) {
       }
     }
   }
-  for (const raw of actions.T_CUSTOM || []) {
+  for (const raw of listOf(actions.T_CUSTOM)) {
     const a = asArray(raw);
     if (!a) continue;
     const b = a[0] === 'CONTROL_GLOBAL' ? a.slice(1) : a;
@@ -169,7 +175,7 @@ export function applyResponse(state, response) {
 export function rebuiltModels(response) {
   const keys = new Set();
   const front = (response && response.S_FRONT) || {};
-  for (const raw of (front.S_ACTION && front.S_ACTION.T_SYSTEM) || []) {
+  for (const raw of listOf(front.S_ACTION && front.S_ACTION.T_SYSTEM)) {
     const a = asArray(raw);
     if (a && a[0] === 'VIEW_SLOTS' && a[1] === 'display' && MODEL_OWNING.includes(a[2])) keys.add(a[2]);
   }
