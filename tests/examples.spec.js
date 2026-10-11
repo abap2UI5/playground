@@ -27,8 +27,6 @@ const json = (data) => ({
   body: JSON.stringify(data),
 });
 
-const raw = (repo, file, branch = "main") => `https://raw.githubusercontent.com/${repo}/${branch}/${file}`;
-const blob = (repo, file, branch = "main") => `https://github.com/${repo}/blob/${branch}/${file}`;
 
 // The merged index, cut down to what these tests need but in the real shape:
 // a controls dictionary every entry indexes into, the learning path's stages,
@@ -73,8 +71,7 @@ const APPS_INDEX = {
       group: "Basics",
       stage: "start",
       keywords: ["hello", "world", "smallest"],
-      raw: raw("abap2UI5/samples", "src/01/z2ui5_cl_smp_app_493.clas.abap"),
-      github: blob("abap2UI5/samples", "src/01/z2ui5_cl_smp_app_493.clas.abap"),
+      file: "src/01/z2ui5_cl_smp_app_493.clas.abap",
     }),
     entry({
       source: "learn",
@@ -85,8 +82,7 @@ const APPS_INDEX = {
       stage: "rows",
       controls: [0, 1],
       keywords: ["table", "rows"],
-      raw: raw("abap2UI5/samples", "src/01/z2ui5_cl_smp_app_040.clas.abap"),
-      github: blob("abap2UI5/samples", "src/01/z2ui5_cl_smp_app_040.clas.abap"),
+      file: "src/01/z2ui5_cl_smp_app_040.clas.abap",
     }),
     entry({
       class: "z2ui5_cl_smpc_app_003",
@@ -97,8 +93,7 @@ const APPS_INDEX = {
       sample: "sap.m.sample.Breadcrumbs",
       controls: [0, 2],
       keywords: ["breadcrumbs", "sap.m", "link", "trail"],
-      raw: raw("abap2UI5/samples-controls", "src/01/01/z2ui5_cl_smpc_app_003.clas.abap"),
-      github: blob("abap2UI5/samples-controls", "src/01/01/z2ui5_cl_smpc_app_003.clas.abap"),
+      file: "src/01/01/z2ui5_cl_smpc_app_003.clas.abap",
     }),
     // The SAPUI5-only collection: listed, never offered.
     entry({
@@ -111,8 +106,7 @@ const APPS_INDEX = {
       runs: false,
       needs: "needs SAPUI5",
       needsDetail: "sap.ui.comp",
-      raw: raw("abap2UI5/samples-controls", "src/03/z2ui5_cl_smpc_app_900.clas.abap"),
-      github: blob("abap2UI5/samples-controls", "src/03/z2ui5_cl_smpc_app_900.clas.abap"),
+      file: "src/03/z2ui5_cl_smpc_app_900.clas.abap",
     }),
     // A library this build does not carry, and not one only SAPUI5 has: the
     // row names the library rather than the runtime, because that is the
@@ -125,8 +119,7 @@ const APPS_INDEX = {
       libraries: ["sap.ui.webc.main"],
       runs: false,
       needs: "needs sap.ui.webc.main",
-      raw: raw("abap2UI5/samples-controls", "src/02/z2ui5_cl_smpc_app_902.clas.abap"),
-      github: blob("abap2UI5/samples-controls", "src/02/z2ui5_cl_smpc_app_902.clas.abap"),
+      file: "src/02/z2ui5_cl_smpc_app_902.clas.abap",
     }),
     // Above the floor: what the "newer than 1.71" box hides.
     entry({
@@ -136,8 +129,7 @@ const APPS_INDEX = {
       group: "sap.m",
       minUi5: "1.120",
       since: [{ name: "sap.m.Something.prop", since: "1.120" }],
-      raw: raw("abap2UI5/samples-controls", "src/02/z2ui5_cl_smpc_app_901.clas.abap"),
-      github: blob("abap2UI5/samples-controls", "src/02/z2ui5_cl_smpc_app_901.clas.abap"),
+      file: "src/02/z2ui5_cl_smpc_app_901.clas.abap",
     }),
     // On a delivery branch of its own, and no system here to run it on.
     entry({
@@ -150,8 +142,7 @@ const APPS_INDEX = {
       needs: "needs a system",
       needsDetail: "SAPUI5 + an activated Gateway service",
       keywords: ["odata", "model", "smart"],
-      raw: raw("abap2UI5/samples-stack", "src/02/z2ui5_cl_smps_app_314.clas.abap", "02-smart-controls"),
-      github: blob("abap2UI5/samples-stack", "src/02/z2ui5_cl_smps_app_314.clas.abap", "02-smart-controls"),
+      file: "src/02/z2ui5_cl_smps_app_314.clas.abap", branch: "02-smart-controls",
     }),
   ],
 };

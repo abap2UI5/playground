@@ -17,6 +17,7 @@
 // objects and strings, which structured cloning copies as they are.
 import * as core from "./registry-core.mjs";
 import { compile } from "./transpile-core.mjs";
+import * as lint from "./lint-core.mjs";
 
 const post = (message) => self.postMessage(message);
 
@@ -31,6 +32,13 @@ corpusReady.then(
   () => post({ type: "corpus" }),
   (e) => post({ type: "failed", error: describe(e) }),
 );
+
+// And the abap2UI5 linter's chunk, asked for in the same breath so it
+// downloads beside the corpus and is evaluated when it lands, between two
+// objects of the parse. Heard here: the page waits on it through the
+// loadLinter op and reports a failure there.
+const linterReady = lint.loadLinter();
+linterReady.catch(() => {});
 
 // The files the editor holds, handed over when the page knows them - which
 // for a ?src= link is two round trips to GitHub later. The parse does not
@@ -58,13 +66,25 @@ const OPS = {
     resolveFiles(files);
   },
   // One analysis of what is open: the registry brought in line with the
-  // editor, then everything abaplint has to say about each file, and how much
-  // of that it could fix itself.
+  // editor, then everything abaplint has to say about each file and how much
+  // of that it could fix itself - one run of the rules for all of it - and
+  // the abap2UI5 linter's answer per file beside it (lint-core.mjs): the
+  // findings, their fixable count, the views they came from.
   analyse(files) {
     core.updateFiles(files);
-    const diagnostics = {};
-    for (const file of files) diagnostics[file.name] = core.diagnostics(file.name);
-    return { diagnostics, fixable: core.abaplintFixable() };
+    const told = core.analyseFiles(files);
+    told.lint = {};
+    for (const file of files) told.lint[file.name] = lint.lintFor(file.source);
+    return told;
+  },
+  loadLinter() {
+    return linterReady;
+  },
+  lintSettings(settings) {
+    lint.useLinterSettings(settings);
+  },
+  lintFix(source) {
+    return lint.applyLinterFixes(source);
   },
   applyFixes(files) {
     return core.applyAbaplintFixes(files);
@@ -75,8 +95,20 @@ const OPS = {
   symbols(name) {
     return core.documentSymbols(name);
   },
+  // Every language-server question comes with the files as the editor has
+  // them - but not every file with its text: one the worker was sent under
+  // the same version before comes as `{ name, version }` alone (the client
+  // half is in src/editor/providers.mjs). A version this worker does not
+  // hold - a fresh worker, a text that moved under it through another door
+  // - is answered with `needsText`, the names to send in full, and the
+  // client asks again; so a restarted worker costs one extra round trip and
+  // never a stale answer.
   ls(method, params, files) {
-    if (files) core.updateFiles(files);
+    if (files) {
+      const needsText = files.filter((f) => f.source === undefined && !core.holdsVersion(f.name, f.version)).map((f) => f.name);
+      if (needsText.length > 0) return { needsText };
+      core.updateFiles(files);
+    }
     return core.languageServer(method, params);
   },
   compile(files) {
@@ -97,7 +129,7 @@ const OPS = {
 // blocking go: seconds with the progress frozen. Behind `busy` it waits for
 // the parse that is already under way instead. `files` is not on the list -
 // the build waits for it.
-const WAITS = new Set(["analyse", "applyFixes", "format", "symbols", "ls", "compile"]);
+const WAITS = new Set(["analyse", "applyFixes", "format", "symbols", "ls", "compile", "lintFix"]);
 let busy = Promise.resolve();
 
 self.addEventListener("message", async (event) => {

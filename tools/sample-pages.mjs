@@ -72,6 +72,7 @@ import fs from "fs";
 import { stripHtmlComments, withPolicy } from "./html.mjs";
 import path from "path";
 import { isSapui5Only } from "../src/shell/ui5-libs.mjs";
+import { githubUrlOf, rawUrlOf } from "../src/shell/catalogue-urls.mjs";
 import { highlightAbapLines } from "./abap-highlight.mjs";
 import { fetchSampleSources } from "./sample-sources.mjs";
 
@@ -1495,23 +1496,17 @@ ${PAGE_SCRIPT(BASE)}
 }
 
 /**
- * Writes the pages and the sitemap. Everything comes from the index this build
- * just produced, so the pages are exactly as current as it is.
+ * The rows the pages are written from: which entries get a page (stamped on
+ * the entry as `page`, see below), with the ABAP of each fetched in. The
+ * first half of what used to be one function, split so the build can hash
+ * what the pages would be written FROM before writing 804 of them again -
+ * tools/build-catalogue.mjs keeps a stamp over the index, these rows' code
+ * and the tools that lay the pages out, and skips the write when none of it
+ * moved. The index is still built and still stamped on every run, because
+ * that is where the answer comes from.
  */
-export async function writeSamplePages(index, distDir) {
-  const samplesDir = path.join(distDir, "samples");
-  fs.mkdirSync(samplesDir, { recursive: true });
-
-  /* Every directory under dist/samples belongs to this step: a sample that was
-   * renamed or dropped upstream has to stop being a page here, and a stale one
-   * is indistinguishable from a live one once it is deployed. */
-  for (const name of fs.readdirSync(samplesDir)) {
-    const full = path.join(samplesDir, name);
-    if (fs.statSync(full).isDirectory()) fs.rmSync(full, { recursive: true, force: true });
-  }
-
+export async function prepareSamplePages(index) {
   const names = index.controls || [];
-  const sources = new Map((index.sources || []).map((s) => [s.id, s]));
   const stages = new Map((index.stages || []).map((s) => [`${s.source}:${s.id}`, s.title]));
   const floor = index.minUi5 || "1.71";
 
@@ -1520,7 +1515,11 @@ export async function writeSamplePages(index, distDir) {
   let skipped = 0;
   for (const entry of index.entries || []) {
     const dir = dirOf(entry.class);
-    if (dir === undefined || taken.has(dir) || safe(entry.raw) === undefined) {
+    /* The two URLs, from the entry's path and its repository - the index
+     * carries the path, not the URLs (src/shell/catalogue-urls.mjs). */
+    const raw = rawUrlOf(entry, index.sources);
+    const github = githubUrlOf(entry, index.sources);
+    if (dir === undefined || taken.has(dir) || safe(raw) === undefined) {
       skipped += 1;
       continue;
     }
@@ -1531,6 +1530,8 @@ export async function writeSamplePages(index, distDir) {
     entry.page = `${dir}/`;
     rows.push({
       ...entry,
+      raw,
+      github,
       dir,
       class: String(entry.class),
       title: String(entry.title || entry.class),
@@ -1548,6 +1549,28 @@ export async function writeSamplePages(index, distDir) {
    * and the one part of these pages that is allowed not to arrive. */
   const code = await fetchSampleSources(rows);
   for (const row of rows) row.code = code.get(row.raw);
+  return { rows, skipped };
+}
+
+/**
+ * Writes the pages and the sitemap from the rows prepareSamplePages( ) made.
+ * Everything comes from the index this build just produced, so the pages are
+ * exactly as current as it is.
+ */
+export function writeSamplePages(index, distDir, { rows, skipped }) {
+  const samplesDir = path.join(distDir, "samples");
+  fs.mkdirSync(samplesDir, { recursive: true });
+
+  /* Every directory under dist/samples belongs to this step: a sample that was
+   * renamed or dropped upstream has to stop being a page here, and a stale one
+   * is indistinguishable from a live one once it is deployed. */
+  for (const name of fs.readdirSync(samplesDir)) {
+    const full = path.join(samplesDir, name);
+    if (fs.statSync(full).isDirectory()) fs.rmSync(full, { recursive: true, force: true });
+  }
+
+  const sources = new Map((index.sources || []).map((s) => [s.id, s]));
+  const floor = index.minUi5 || "1.71";
 
   const byGroup = new Map();
   for (const row of rows) {
@@ -1690,7 +1713,11 @@ text. A page that swaps content without reloading calls
 ## Read it as data
 
 - [apps.json](${SITE}samples/apps.json): the whole index, one object per sample
-  under \`entries\`: \`class\`, \`title\`, \`summary\`, \`source\` (which repository),
+  under \`entries\`: \`class\`, \`title\`, \`summary\`, \`source\` (which repository -
+  its GitHub name is under \`sources\`), \`file\` (the class's path in it, on
+  \`branch\` where that is not main - so the ABAP is at
+  \`https://raw.githubusercontent.com/<repo>/<branch>/<file>\` and its page at
+  \`https://github.com/<repo>/blob/<branch>/<file>\`),
   \`group\`, \`stage\`, \`keywords\`, the \`controls\` it builds, the \`libraries\` it
   needs, the oldest UI5 release it runs on (\`minUi5\`), whether it \`runs\` in the
   browser, and \`page\` - the directory of its own page here. The top level also

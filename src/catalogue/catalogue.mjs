@@ -23,6 +23,7 @@
 // The round trip is still the point: find it here, read it there, run it, come
 // back and keep looking.
 import { cmpVersion } from "../shell/ui5-libs.mjs";
+import { githubUrlOf } from "../shell/catalogue-urls.mjs";
 import { foldCase, termsOf, matchesTerms } from "../shell/search-terms.mjs";
 import { rememberHere, keepSiteLinksCurrent } from "../shell/site-memory.mjs";
 
@@ -274,7 +275,8 @@ function card(row) {
      * stand behind: the class in its repository. */
     const actions = text("div", "actions");
     const read = text("a", "", "Read the source");
-    read.href = row.github;
+    // The index carries the class's path, not its URL (catalogue-urls.mjs).
+    read.href = githubUrlOf(row, index.sources) ?? "";
     read.target = "_blank";
     read.rel = "noopener";
     actions.append(read);
@@ -317,6 +319,22 @@ function grouped(hits) {
   return groups;
 }
 
+/* A row's card, built once and moved into place on every draw. render( )
+   runs on every keystroke and used to build all 770 cards again each time -
+   a dozen elements apiece, thrown away at the next key - and that, not the
+   filtering, was the cost of a keystroke. A card cannot change under its row:
+   everything on it comes off the index. Cards that do not match are left out
+   rather than hidden, so the count and the list agree. */
+const cardCache = new WeakMap();
+function cardFor(row) {
+  let node = cardCache.get(row);
+  if (node === undefined) {
+    node = card(row);
+    cardCache.set(row, node);
+  }
+  return node;
+}
+
 function render() {
   const hits = rows.filter(matches);
   const frag = document.createDocumentFragment();
@@ -332,12 +350,12 @@ function render() {
         if (group.blurb) head.append(text("p", "", group.blurb));
         frag.append(head);
         const cards = text("div", "cards");
-        for (const row of group.entries) cards.append(card(row));
+        for (const row of group.entries) cards.append(cardFor(row));
         frag.append(cards);
       }
     } else {
       const cards = text("div", "cards");
-      for (const row of hits) cards.append(card(row));
+      for (const row of hits) cards.append(cardFor(row));
       frag.append(cards);
     }
   }

@@ -28,16 +28,20 @@
 // A build with no catalogue at all is still a build: the page says the
 // catalogue could not be fetched, which is the honest thing for it to say, and
 // the playground itself does not depend on any of this.
+import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { UI5_LIBRARIES, UI5_VERSION } from "../src/shell/ui5-libraries.mjs";
 import { cmpVersion, isCarried, isSapui5Only, libraryOf } from "../src/shell/ui5-libs.mjs";
-import { writeSamplePages } from "./sample-pages.mjs";
+import { isBranch, isSampleFile } from "../src/shell/catalogue-urls.mjs";
+import { SITE, prepareSamplePages, writeSamplePages } from "./sample-pages.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const OUT = path.join(ROOT, "dist", "samples", "apps.json");
+const DIST = path.join(ROOT, "dist");
+const OUT = path.join(DIST, "samples", "apps.json");
 const CACHE = path.join(ROOT, "build", "catalogues");
+const STAMP = path.join(ROOT, "build", "catalogue.stamp");
 
 const log = (m) => console.log(`build-catalogue: ${m}`);
 
@@ -85,15 +89,18 @@ const httpsLinks = (v) => list(v).filter((u) => /^https:\/\/[^\s"'<>]+$/.test(u)
 /* A path out of a catalogue becomes a URL under its own repository, and only a
  * plain relative one does. The playground's own loader checks the host and the
  * file name again (src/shell/deep-link.mjs); this check is about not letting a
- * catalogue point anywhere its repository is not. */
-function urls(repo, file, branch = "main") {
-  if (!/^[\w./-]+\.clas\.abap$/.test(file) || file.startsWith("/") || file.includes("..")) return undefined;
-  // `..` is made of allowed characters and climbs out of the repository.
-  if (!/^[\w.-]+$/.test(branch) || /^\.+$/.test(branch)) return undefined;
-  return {
-    raw: `https://raw.githubusercontent.com/${repo}/${branch}/${file}`,
-    github: `https://github.com/${repo}/blob/${branch}/${file}`,
-  };
+ * catalogue point anywhere its repository is not.
+ *
+ * What the entry carries is the PATH (`file`) and, off `main`, the `branch`
+ * - not the two URLs. Every reader builds those from the path and the
+ * repository in `sources` through src/shell/catalogue-urls.mjs (the examples
+ * dialog, the catalogue page, the AI tools, and tools/sample-pages.mjs at
+ * build time): 804 entries carrying both in full were 135 KB of the index
+ * that were the same two prefixes over and over. The rule is the helper's,
+ * so the index never holds a path the readers would refuse. */
+function urls(file, branch = "main") {
+  if (!isSampleFile(file) || !isBranch(branch)) return undefined;
+  return { file };
 }
 
 /* One fetch, cached on disk for a day. The cache is for the dozen local
@@ -147,7 +154,7 @@ async function fetchJson(repo, name) {
 function readLearn(source, data) {
   const entries = [];
   for (const sample of data.samples || []) {
-    const link = urls(source.repo, str(sample.file));
+    const link = urls(str(sample.file));
     if (link === undefined) continue;
     entries.push({
       source: source.id,
@@ -177,7 +184,7 @@ function readLearn(source, data) {
 function readControls(source, data) {
   const entries = [];
   for (const port of data.ports || []) {
-    const link = urls(source.repo, str(port.file));
+    const link = urls(str(port.file));
     if (link === undefined) continue;
     entries.push({
       source: source.id,
@@ -212,7 +219,7 @@ function readStack(source, data) {
      * looking for it will look. */
     if (str(sample.technology) === "Overview") continue;
     const branch = str(sample.branch) || "main";
-    const link = urls(source.repo, str(sample.path), branch);
+    const link = urls(str(sample.path), branch);
     if (link === undefined) continue;
     entries.push({
       source: source.id,
@@ -386,13 +393,54 @@ const index = {
  * pages print the ABAP itself, and tools/sample-sources.mjs fetches it one
  * tarball per ref. That fetch degrades exactly like the six above - a ref that
  * does not arrive costs its samples their code block and nothing else. */
-await writeSamplePages(index, path.join(ROOT, "dist"));
+const pages = await prepareSamplePages(index);
 
-fs.mkdirSync(path.dirname(OUT), { recursive: true });
-/* Undefined values drop out of JSON.stringify on their own, which is what the
- * `undefined`s above are for - a row carries a key only when it means
- * something. */
-fs.writeFileSync(OUT, `${JSON.stringify(index)}\n`);
+/* A STAMP, LIKE app.stamp: the pages are 804 files and 54 MB, and they were
+ * written again on every build - including the dozen a day somebody does
+ * while working on the editor, where not one catalogue has moved. The stamp
+ * is over everything the output is a function of: the index as it will be
+ * written (which carries the six catalogues, UI5_VERSION, the library
+ * tables and what prepareSamplePages( ) stamped on it), the ABAP the pages
+ * print, the site's address, and the tools that lay the pages out - each
+ * by its bytes, so an edit to the markup or the highlighter rebuilds. The
+ * `built` timestamp is left out, and it follows that apps.json keeps the
+ * one from the build that last changed it: nothing reads the field, and
+ * "when this index last changed" is the truer thing for it to say.
+ *
+ * What is checked to be on disk is the few files one visit needs; a tree
+ * somebody emptied out under them is believed, which is the bargain every
+ * stamp in tools/ makes, and `--force` is the answer to it. */
+const stamp = crypto.createHash("sha256");
+stamp.update(JSON.stringify({ ...index, built: undefined }));
+stamp.update(SITE);
+for (const row of pages.rows) stamp.update(`${row.raw}\0${row.code ?? ""}\0`);
+for (const tool of ["build-catalogue.mjs", "sample-pages.mjs", "sample-sources.mjs", "abap-highlight.mjs", "html.mjs"]) {
+  stamp.update(fs.readFileSync(path.join(ROOT, "tools", tool)));
+}
+for (const shared of ["ui5-libs.mjs", "ui5-libraries.mjs"]) stamp.update(fs.readFileSync(path.join(ROOT, "src", "shell", shared)));
+const hash = stamp.digest("hex");
+const written = ["samples/apps.json", "samples/all/index.html", "samples/sample.css", "samples/llms.txt", "sitemap.xml", "404.html", "llms.txt"];
+const current =
+  !process.argv.includes("--force") &&
+  fs.existsSync(STAMP) &&
+  fs.readFileSync(STAMP, "utf8").trim() === hash &&
+  written.every((rel) => fs.existsSync(path.join(DIST, rel)));
+
+if (current) {
+  log(`dist/samples up to date (${pages.rows.length} pages, apps.json), leaving it in place`);
+} else {
+  // The stamp goes first, as in the other steps: a write interrupted half way
+  // left the old stamp beside half the pages, and the next build believed it.
+  fs.rmSync(STAMP, { force: true });
+  writeSamplePages(index, DIST, pages);
+
+  fs.mkdirSync(path.dirname(OUT), { recursive: true });
+  /* Undefined values drop out of JSON.stringify on their own, which is what the
+   * `undefined`s above are for - a row carries a key only when it means
+   * something. */
+  fs.writeFileSync(OUT, `${JSON.stringify(index)}\n`);
+  fs.writeFileSync(STAMP, hash);
+}
 
 const size = (fs.statSync(OUT).size / 1024).toFixed(0);
 log(

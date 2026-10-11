@@ -119,6 +119,27 @@ test("the ABAP runtime runs in a worker, not on the page's thread", async ({ pag
   expect(await page.evaluate(() => typeof globalThis.abap)).toBe("undefined");
 });
 
+// SQLite's .wasm used to be asked for only by db-setup.mjs, which runs once
+// the whole of framework.mjs has downloaded and been evaluated - so it
+// travelled after the framework rather than beside it. The inline script in
+// index.html now fetches it at low priority the moment the workers are
+// started, into the HTTP cache the worker's own request hits. What a test can
+// see of that is the order: a request for the .wasm that began before the
+// framework bundle had finished arriving can only be the page's.
+test("SQLite's .wasm is asked for while the framework is still downloading", async ({ page }) => {
+  let frameworkDone = false;
+  let wasmBeforeFramework = false;
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.endsWith("/runtime/sql-wasm.wasm") && !frameworkDone) wasmBeforeFramework = true;
+  });
+  page.on("requestfinished", (request) => {
+    if (new URL(request.url()).pathname.endsWith("/runtime/framework.mjs")) frameworkDone = true;
+  });
+  await page.goto("/");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  expect(wasmBeforeFramework, "the page asked for sql-wasm.wasm before framework.mjs had arrived").toBe(true);
+});
+
 test("a registry worker that will not start is reported, not waited for", async ({ page }) => {
   await page.route("**/editor/registry.mjs", (route) => route.fulfill({ status: 503, body: "" }));
 

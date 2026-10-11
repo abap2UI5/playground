@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { readFileSync, readdirSync } from "node:fs";
 import { MAIN_MARK } from "./helpers.mjs";
 
 // Putting a live demo in somebody else's page: the app-only view, the messages
@@ -221,6 +222,57 @@ test("the loader hands out the URL it would open", async ({ page }) => {
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
   await expect(page.locator("#files")).toContainText("z2ui5_cl_demo_linked.clas.abap");
   await expect(page.locator("#editor")).toContainText("From a link");
+});
+
+// Monaco is a chunk of the page bundle that src/editor/editor.mjs imports
+// dynamically, and only when an editor is going to be shown. An app-only page
+// hides the editor pane - and used to download, evaluate and instantiate the
+// 0.85 MB of Monaco into it all the same. The chunk is named off esbuild's
+// metafile, which the build keeps, so the test holds the real file rather
+// than a pattern; and the playground proper is held to the opposite, so the
+// check cannot pass by the chunk having been renamed away.
+const monacoChunk = () => {
+  const outputs = JSON.parse(readFileSync(new URL("../build/site.metafile.json", import.meta.url), "utf8")).outputs;
+  const out = Object.keys(outputs).find((o) => outputs[o].entryPoint === "src/editor/monaco-editor.mjs");
+  expect(out, "the bundle has a chunk for src/editor/monaco-editor.mjs").toBeTruthy();
+  return "/" + out.replace(/^dist\//, "");
+};
+// And Monaco's stylesheet, a file of its own beside the chunk since esbuild
+// folded it into shell.css on every page (monacoCssPlugin in
+// tools/esbuild-plugins.mjs): held the same way, by its real hashed name.
+const monacoCss = () => {
+  const name = readdirSync(new URL("../dist/assets/", import.meta.url)).find((n) => /^monaco-editor-[\w]+\.css$/.test(n));
+  expect(name, "the build wrote Monaco's stylesheet beside the bundle").toBeTruthy();
+  return `/assets/${name}`;
+};
+
+test("an app-only page never fetches Monaco, and the playground does", async ({ page }) => {
+  const chunk = monacoChunk();
+  const css = monacoCss();
+  const asked = [];
+  page.on("request", (r) => asked.push(new URL(r.url()).pathname));
+
+  await page.goto("/?embed=1&view=app");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await expect(page.frameLocator("#app").getByText(MAIN_MARK)).toBeVisible();
+  expect(asked, "the app-only page asked for Monaco's chunk").not.toContain(chunk);
+  expect(asked, "the app-only page asked for Monaco's stylesheet").not.toContain(css);
+  expect(asked.some((p) => p.endsWith("/assets/shell.mjs")), "the page bundle was asked for").toBe(true);
+  // And nothing instantiated it: the editor half puts Monaco on the window
+  // for the tests' own use, and an app-only page has none to put there.
+  expect(await page.evaluate(() => typeof window.monaco)).toBe("undefined");
+
+  asked.length = 0;
+  await page.goto("/");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  expect(asked, "the playground asked for Monaco's chunk").toContain(chunk);
+  expect(asked, "the playground asked for Monaco's stylesheet").toContain(css);
+  expect(await page.evaluate(() => typeof window.monaco)).toBe("object");
+  // And it is applied, not only fetched: the link the inline script added
+  // holds Monaco's rules (eighty stylesheets' worth), and the editor is on
+  // screen under them.
+  expect(await page.evaluate(() => document.getElementById("monaco-css")?.sheet?.cssRules.length ?? 0)).toBeGreaterThan(100);
+  await expect(page.locator(".monaco-editor .view-lines")).toBeVisible();
 });
 
 test("an app-only playground renders in a column narrower than a desk", async ({ page }) => {

@@ -37,8 +37,25 @@ const MB = 1024 * 1024;
 // the budget is over their sum: a chunk is still a download, and a module
 // that moved from the entry into a chunk has not gotten any smaller.
 const TRANSFERRED = [
-  { file: "assets/*.mjs", limit: 1.3 * MB, note: "Monaco and the abap2UI5 linter" },
-  { file: "editor/registry.mjs", limit: 0.7 * MB, note: "abaplint and the transpiler, in the registry worker" },
+  { file: "assets/*.mjs", limit: 1.15 * MB, note: "Monaco" },
+  /* The shell on its own - what every page evaluates before anything is on
+   * screen. The AI rooms, the samples browser, the Share dialog and every
+   * sample but the default one are chunks (src/shell/main.mjs says which and
+   * why), so a module that drifts back into the entry shows here where the
+   * sum above would hide it. */
+  { file: "assets/shell.mjs", limit: 0.04 * MB, note: "the shell itself, on every page" },
+  /* The two stylesheets, apart on purpose: shell.css is on every page and
+   * Monaco's only where an editor is drawn (index.html's inline script links
+   * it; monacoCssPlugin in tools/esbuild-plugins.mjs keeps it out of
+   * shell.css, where esbuild would fold it). A budget on each rather than on
+   * the sum, because the sum is what hid Monaco's 150 KB in shell.css. */
+  { file: "assets/shell.css", limit: 0.015 * MB, note: "the shell's own stylesheet, on every page" },
+  { file: "assets/monaco-editor-*.css", limit: 0.03 * MB, note: "Monaco's stylesheet, where the editor is shown" },
+  /* The worker's bundle and the linter's beside it: the abap2UI5 linter
+   * moved here from the page's chunks when it moved off the page's thread,
+   * and the budget moved with it - 0.15 MB out of the page's, into the
+   * worker's. */
+  { file: "editor/*.mjs", limit: 0.85 * MB, note: "abaplint, the transpiler and the abap2UI5 linter, in the registry worker" },
   { file: "runtime/framework.mjs", limit: 0.8 * MB, note: "abap2UI5 and open-abap, transpiled" },
   { file: "editor/corpus.json", limit: 0.6 * MB, note: "the ABAP sources the editor checks against" },
   { file: "runtime/sql-wasm.wasm", limit: 0.4 * MB, note: "SQLite" },
@@ -48,7 +65,7 @@ const TRANSFERRED = [
    * corpus - a sample added in any of the three repositories adds a row - and
    * it is what stands between opening the page and seeing a list. It
    * compresses hard: it is 770 near-identical objects. */
-  { file: "samples/apps.json", limit: 0.25 * MB, note: "the sample catalogue's index, 770 samples" },
+  { file: "samples/apps.json", limit: 0.15 * MB, note: "the sample catalogue's index, 800 samples" },
   { file: "samples/catalogue.mjs", limit: 0.02 * MB, note: "the catalogue page itself" },
   /* The bar's search box, loaded by the catalogue and by every per-sample
    * page - so it is one file for 773 documents, and the budget is on the file
@@ -159,6 +176,53 @@ if (!stackOk) {
       "  that does not start on a browser with less of one than this machine has - see the\n" +
       "  GENERATED_FRONTEND note in tools/build-site.mjs for the last source of it.",
   );
+}
+
+// And what an app-only page downloads of the bundle. ?view=app and
+// ?view=full - every demo embedded in the documentation - show no editor,
+// and src/editor/editor.mjs imports Monaco dynamically so that such a page
+// never fetches it. That is a property of the module graph, so it is checked
+// on esbuild's metafile: no Monaco source in the entry or in anything it
+// imports statically, and Monaco's chunk reached by a dynamic import alone.
+// The number printed beside it is what those pages wait for instead.
+console.log("\nwhat an app-only page downloads of it:");
+{
+  const metafile = JSON.parse(fs.readFileSync(path.join(ROOT, "build", "site.metafile.json"), "utf8"));
+  const outputs = metafile.outputs;
+  const shell = Object.keys(outputs).find((o) => outputs[o].entryPoint === "src/shell/main.mjs");
+  const reached = new Set();
+  const stack = [shell];
+  while (stack.length > 0) {
+    const out = stack.pop();
+    if (reached.has(out)) continue;
+    reached.add(out);
+    for (const { path: to, kind, external } of outputs[out]?.imports ?? []) {
+      if (!external && kind === "import-statement" && outputs[to]) stack.push(to);
+    }
+  }
+  const carriesMonaco = (out) => Object.keys(outputs[out].inputs).some((i) => i.startsWith("node_modules/monaco-editor/"));
+  /* And its stylesheet: esbuild gives a dynamically imported chunk's CSS to
+   * the entry, so this is the one place that would silently come back. */
+  const shellCss = fs.readFileSync(path.join(DIST, "assets", "shell.css"), "utf8");
+  if (shellCss.includes("--monaco-monospace-font")) {
+    failed = true;
+    console.error("  OVER    assets/shell.css carries Monaco's stylesheet again - see monacoCssPlugin in tools/esbuild-plugins.mjs");
+  }
+  const leaked = [...reached].filter(carriesMonaco);
+  const monaco = Object.keys(outputs).find((o) => outputs[o].entryPoint === "src/editor/monaco-editor.mjs");
+  const appOnlyBytes = [...reached].reduce((n, o) => n + gzipped(path.join(ROOT, o)), 0);
+  const ok = leaked.length === 0 && monaco !== undefined && !reached.has(monaco);
+  if (!ok) failed = true;
+  console.log(
+    `  ${ok ? "ok     " : "OVER   "} the entry and its static imports carry no Monaco` +
+      `   (${mb(appOnlyBytes)} compressed for an app-only page; Monaco's chunk ${monaco ? mb(gzipped(path.join(ROOT, monaco))) : "missing"})`,
+  );
+  if (!ok) {
+    console.error(
+      `  Monaco reached the app-only page: ${leaked.length ? leaked.join(", ") : "its chunk is imported statically"}.\n` +
+        "  src/editor/editor.mjs has to import monaco-editor.mjs dynamically and nothing else may import it at all.",
+    );
+  }
 }
 
 const total = Number(execFileSync("du", ["-sb", DIST]).toString().split("\t")[0]);
