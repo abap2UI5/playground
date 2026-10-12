@@ -59,6 +59,10 @@ export function sidecarFor(fileName) {
   // A test include is a second file of its class, which has the sidecar.
   if (!parsed || parsed.include) return undefined;
   const xmlName = fileName.replace(/\.abap$/, ".xml");
+  // Named after the object: one constant description on every sidecar failed
+  // abaplint's identical_descriptions (on in app-template's config) as soon
+  // as an export carried a second class or an interface.
+  const descript = `playground ${parsed.object.toLowerCase()}`;
 
   if (parsed.kind === "intf") {
     return {
@@ -70,7 +74,7 @@ export function sidecarFor(fileName) {
    <VSEOINTERF>
     <CLSNAME>${parsed.object}</CLSNAME>
     <LANGU>E</LANGU>
-    <DESCRIPT>playground</DESCRIPT>
+    <DESCRIPT>${descript}</DESCRIPT>
     <EXPOSURE>2</EXPOSURE>
     <STATE>1</STATE>
     <UNICODE>X</UNICODE>
@@ -90,7 +94,7 @@ export function sidecarFor(fileName) {
    <VSEOCLASS>
     <CLSNAME>${parsed.object}</CLSNAME>
     <LANGU>E</LANGU>
-    <DESCRIPT>playground</DESCRIPT>
+    <DESCRIPT>${descript}</DESCRIPT>
     <STATE>1</STATE>
     <CLSCCINCL>X</CLSCCINCL>
     <FIXPT>X</FIXPT>
