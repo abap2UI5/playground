@@ -248,14 +248,10 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
     else writeStored(SPEED_STORAGE, el.speed.value);
   });
 
-  // A reload or a closed tab takes the conversation with it, and the app
-  // while a turn is still writing it: the browser asks first. The files
-  // themselves are kept (the studio's draft in main.mjs), the chat is not.
-  window.addEventListener("beforeunload", (e) => {
-    if (!busy && host.files().every(isUntouchedStarter)) return;
-    e.preventDefault();
-    e.returnValue = "";
-  });
+  // No beforeunload here, though a reload takes the conversation with it:
+  // nothing on this site may keep a page out of the back/forward cache
+  // (tests/bfcache.spec.js). The files are kept (the studio's draft in
+  // main.mjs) and the conversation can be exported; that is the net.
 
   showWelcome();
   if (el.toggle) el.toggle.disabled = false;

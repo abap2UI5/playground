@@ -506,7 +506,7 @@ test("files go with a studio message: the paperclip, a drop anywhere on the page
 // The studio keeps what the model built under a key of its own (main.mjs),
 // and the welcome offers it back; the playground's own draft is never
 // touched. The conversation is not kept, which is why leaving asks first.
-test("a built app comes back after a reload from the welcome, and leaving with one asks first", async ({ page }) => {
+test("a built app comes back after a reload from the welcome", async ({ page }) => {
   await page.route("https://api.anthropic.com/**", async (route) => {
     if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
     const first = route.request().postDataJSON().messages.length === 1;
@@ -516,11 +516,6 @@ test("a built app comes back after a reload from the welcome, and leaving with o
     await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: answer });
   });
   await openStudio(page);
-  // Untouched, the studio asks nothing on the way out.
-  const quiet = page.waitForEvent("dialog", { timeout: 1500 }).then(() => true, () => false);
-  await page.reload();
-  expect(await quiet).toBe(false);
-  await expect(page.locator("#status")).toHaveText("ready - describe the app you want", { timeout: 120000 });
   await expect(page.locator(".chat-resume")).toHaveCount(0);
 
   await saveKey(page);
@@ -529,12 +524,9 @@ test("a built app comes back after a reload from the welcome, and leaving with o
   await expect(page.locator(".chat-assistant").last()).toHaveText("Done.", { timeout: 90000 });
   await expect(page.frameLocator("#app").getByText(MARK)).toBeVisible();
 
-  // Built: the browser asks before the page goes.
-  const asked = page.waitForEvent("dialog");
-  page.reload().catch(() => {});
-  const dialog = await asked;
-  expect(dialog.type()).toBe("beforeunload");
-  await dialog.accept();
+  // Gone with the reload (no beforeunload - the back/forward cache rule,
+  // tests/bfcache.spec.js), and back from the welcome.
+  await page.reload();
   await expect(page.locator("#status")).toHaveText("ready - describe the app you want", { timeout: 120000 });
 
   // Back on the minimal class, the last build one click away.

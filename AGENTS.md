@@ -898,9 +898,10 @@ link's ABAP runs. Sent by the
   are not the untouched starter - a key of its own, so the playground's draft
   is never written over - and the welcome offers them back
   (`host.lastBuild( )`, `.chat-resume` in `chat.mjs`); the studio still
-  starts on the minimal class every time. The conversation is not kept, so
-  `beforeunload` asks before the page goes while something is built or a
-  turn is running.
+  starts on the minimal class every time. The conversation is not kept, and
+  no `beforeunload` asks before the page goes: nothing on this site may keep
+  a page out of the back/forward cache (`tests/bfcache.spec.js`); Export is
+  the way to keep a conversation.
 - **Its instructions come from the pin.** `ai-agent.mjs` imports
   `deps/abap2ui5/docs/agents/building-apps.md` as text (the `.md` loader in
   `build-site.mjs`) under `PLAYGROUND_RULES`, which says what is different
