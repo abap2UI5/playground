@@ -211,11 +211,26 @@ export function followStream(stream, ui, pendingText) {
   return started;
 }
 
-/** Adds one answer's usage to `total` ({ input, output, cached }). */
+/** Adds one answer's usage to `total` ({ input, output, cached, written }):
+ *  `input` is what was read fresh plus what was written to the cache,
+ *  `written` that second part on its own (it costs more than fresh input),
+ *  `cached` what was read from the cache (it costs a tenth). */
 export function addUsage(total, usage = {}) {
   total.input += (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
+  total.written = (total.written ?? 0) + (usage.cache_creation_input_tokens ?? 0);
   total.cached += usage.cache_read_input_tokens ?? 0;
   total.output += usage.output_tokens ?? 0;
+}
+
+/** The usage line and its tooltip, for both chats' headers. */
+export function usageText({ input, output, cached, written = 0 }) {
+  const k = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+  return {
+    text: `${k(input + cached)} in · ${k(output)} out`,
+    title:
+      `${input - written} input tokens read fresh, ${written} written to the cache (a quarter more than fresh), ` +
+      `${cached} read from the cache (a tenth of fresh), ${output} output tokens - billed to your key at your plan's rates`,
+  };
 }
 
 /*

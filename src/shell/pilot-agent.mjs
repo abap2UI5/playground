@@ -26,7 +26,7 @@ import { createOperator, fitSnapshot, MAX_ERROR_TEXT } from "./ai-operator.mjs";
 import { addUsage, catalogueEntries, CONTEXT_BETA, CONTEXT_MANAGEMENT, DEFAULT_SPEED, followStream, rankEntries, SPEEDS } from "./ai-common.mjs";
 import { attachmentBlocks } from "./attachments.mjs";
 
-export { explainError } from "./ai-common.mjs";
+export { explainError, usageText } from "./ai-common.mjs";
 // The mirror and the fitted snapshot, for pilot.mjs and the tests - they live
 // in ai-operator.mjs now, which the studio's chunk imports as well.
 export { createMirror, describeMirror, fitSnapshot } from "./ai-operator.mjs";
@@ -293,7 +293,7 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
   // ended on its own, up to half a minute later.
   let stopping;
   let stopNow = () => {};
-  const total = { input: 0, output: 0, cached: 0 };
+  const total = { input: 0, output: 0, cached: 0, written: 0 };
 
   // A snapshot as the model reads it, with the tab it belongs to - and a
   // failed last answer (a dump of the reader's click), which the snapshot
