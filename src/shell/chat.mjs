@@ -25,6 +25,7 @@
 import { isUntouchedStarter } from "./ai-starter.mjs";
 import { listenForFileDrops, listSentFiles, setUpAttaching } from "./attach-ui.mjs";
 import { abapGitZip, download } from "./export.mjs";
+import { createDriver } from "./frame-drive.mjs";
 import { readStored, removeStored, writeStored } from "./storage.mjs";
 import { setStatus } from "./ui.mjs";
 
@@ -50,10 +51,19 @@ const SUGGESTIONS = [
   "A table of flights with a search field that filters by carrier",
   "A form to enter a travel request - name, destination, dates - with validation and a confirmation popup",
   "A to-do list where I can add, tick off and delete entries",
+  "A maintenance app for the rows of the Excel sheet I attach - a table to edit them, and a form to add one",
 ];
 
 let host;
 let agent;
+// Run's frame as the model's transport, and the mirror of its screen - what
+// lets the model try the app it built (look and act in ai-agent.mjs, the
+// operator in ai-operator.mjs, as in the Pilot). The driver is here from the
+// start, so an answer from before the agent's chunk landed is kept for the
+// mirror; the mirror needs the chunk and is made with the agent.
+const driver = createDriver();
+let mirror;
+const frameApi = () => document.getElementById("app")?.contentWindow?.__z2ui5PlaygroundPilot;
 // The agent whose turn is running, which is not always `agent`: a new key or
 // New chat replaces `agent` while a turn may still be under way, and Stop has
 // to reach the turn that is actually running.
@@ -75,6 +85,11 @@ let open = false;
 let el;
 // The files going with the next message (attach-ui.mjs, shared with the Pilot).
 let attaching;
+// The conversation as text, for the export: { role, text } per line.
+let transcript = [];
+// The reader's latest message, which can be edited and sent again once the
+// turn is over (rewind( ) in ai-agent.mjs takes the exchange out).
+let lastUser;
 
 /**
  * `chatHost` is the page (main.mjs): files(), setFiles(files), run(),
@@ -101,6 +116,7 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
     keyRemove: document.getElementById("chat-key-remove"),
     usage: document.getElementById("chat-usage"),
     download: document.getElementById("chat-download"),
+    export: document.getElementById("chat-export"),
     reset: document.getElementById("chat-new"),
     speed: document.getElementById("chat-speed"),
     bar: document.getElementById("studio-bar"),
@@ -211,6 +227,19 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
     }
   });
 
+  // The conversation as a markdown file - what was asked, what the model
+  // said and did - for an issue, a colleague or a note; the key never, the
+  // files as the abapGit zip.
+  el.export.addEventListener("click", () => {
+    if (transcript.length === 0) {
+      setStatus("nothing to export yet");
+      return;
+    }
+    const name = `abap2ui5-ai-studio-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-")}.md`;
+    download(name, new TextEncoder().encode(transcriptMarkdown()), "text/markdown");
+    setStatus(`${name} is on its way`);
+  });
+
   // Asked before every request, so a change applies from the next turn on.
   const stored = readStored(SPEED_STORAGE);
   if (stored && [...el.speed.options].some((o) => o.value === stored)) el.speed.value = stored;
@@ -219,12 +248,28 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
     else writeStored(SPEED_STORAGE, el.speed.value);
   });
 
+  // No beforeunload here, though a reload takes the conversation with it:
+  // nothing on this site may keep a page out of the back/forward cache
+  // (tests/bfcache.spec.js). The files are kept (the studio's draft in
+  // main.mjs) and the conversation can be exported; that is the net.
+
   showWelcome();
   if (el.toggle) el.toggle.disabled = false;
   if (startOpen) setOpen(true);
 }
 
 export const chatOpen = () => open;
+
+/** main.mjs, in the bridge's roundtrip( ): the model's request parked for
+ *  Run's frame, taken - the one frame this page has (the Pilot has tabs). */
+export function takePilotRequest() {
+  return driver.take();
+}
+
+/** main.mjs, after every answer the framework gave the frame. */
+export function sawRoundtrip(body, response) {
+  driver.saw(body, response);
+}
 
 /** A file drop on the studio's page, or on the app in its frame (main.mjs,
  *  the bridge's dropFiles): to the chat, which a phone brings forward. */
@@ -252,6 +297,80 @@ function startOver() {
   // Its tokens went with it.
   el.usage.textContent = "";
   el.usage.title = "";
+  transcript = [];
+  lastUser = undefined;
+}
+
+function transcriptMarkdown() {
+  const lines = [`# abap2UI5 AI Studio - ${new Date().toLocaleString()}`, ""];
+  for (const { role, text } of transcript) {
+    if (role === "user") lines.push(`## You`, "", text, "");
+    else if (role === "assistant") lines.push(`## Claude`, "", text, "");
+    else lines.push(`> ${role}: ${text.replace(/\n/g, "\n> ")}`, "");
+  }
+  lines.push("---", "", `Files in the editor: ${host.files().map((f) => f.name).join(", ")}`, "");
+  return lines.join("\n");
+}
+
+// The files as they were before a step, offered back under its answer:
+// Ctrl+Z is per file and knows no turn, and a step that went the wrong
+// way is three files changed at once.
+function addCheckpoint(before) {
+  const line = document.createElement("div");
+  line.className = "chat-checkpoint";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "ghost chat-checkpoint-restore";
+  button.textContent = "↩ Put the files back as before this step";
+  button.addEventListener("click", () => {
+    if (busy) return;
+    try {
+      host.setFiles(before);
+    } catch (e) {
+      addLine("notice is-error", `The files could not be put back: ${String(e?.message ?? e)}`);
+      return;
+    }
+    line.remove();
+    showAppName();
+    addLine("notice", "The files are back as they were before that step - the model is told with your next message.");
+    transcript.push({ role: "note", text: "the files were put back as before the last step" });
+    host.run().catch(() => {});
+  });
+  line.append(button);
+  el.log.append(line);
+  scrollDown();
+}
+
+// "Edit" on the reader's latest message: the exchange is taken out of the
+// conversation and the text put back to send again, changed.
+function offerEdit() {
+  if (!lastUser || !agent) return;
+  const { div, text, files } = lastUser;
+  if (div.querySelector(".chat-edit")) return;
+  const edit = document.createElement("button");
+  edit.type = "button";
+  edit.className = "chat-edit";
+  edit.title = "Edit this message and send it again - the answer to it is taken back";
+  edit.setAttribute("aria-label", "Edit this message and send it again");
+  edit.textContent = "✎";
+  edit.addEventListener("click", () => {
+    if (busy || !agent?.rewind()) return;
+    for (let node = div.nextSibling; node; ) {
+      const next = node.nextSibling;
+      node.remove();
+      node = next;
+    }
+    div.remove();
+    rows.clear();
+    const at = transcript.findLastIndex((t) => t.role === "user");
+    if (at !== -1) transcript.length = at;
+    lastUser = undefined;
+    el.input.value = text;
+    if (files.length > 0) attaching.add(files);
+    el.input.focus();
+    setStatus("edit the message and send it again");
+  });
+  div.append(edit);
 }
 
 // Every tool row still drawn as pending is a call that will not finish now -
@@ -376,6 +495,42 @@ function showWelcome() {
     list.append(b);
   }
   intro.append(title, lead, list);
+  // The last build this browser kept (main.mjs stores the studio's files
+  // under a key of its own): offered back, not opened by itself - the
+  // studio starts on the minimal class every time, and the model is told
+  // what the editor holds with the first message (<editor_files>).
+  const last = host.lastBuild?.();
+  if (last && host.files().every(isUntouchedStarter)) {
+    const resume = document.createElement("div");
+    resume.className = "chat-resume";
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "chat-suggestion chat-resume-open";
+    open.textContent = `Open the last build again · ${last[0].name.replace(/\.clas\.abap$/, "").toUpperCase()}${last.length > 1 ? ` · ${last.length} files` : ""}`;
+    open.addEventListener("click", () => {
+      try {
+        host.setFiles(last);
+      } catch (e) {
+        addLine("notice is-error", `The last build could not be opened: ${String(e?.message ?? e)}`);
+        return;
+      }
+      resume.remove();
+      showAppName();
+      addLine("notice", "The last build is back in the editor - ask for a change, or describe something new.");
+      // Run, so the stage shows it; the report goes nowhere.
+      host.run().catch(() => {});
+    });
+    const forget = document.createElement("button");
+    forget.type = "button";
+    forget.className = "ghost chat-resume-forget";
+    forget.textContent = "forget it";
+    forget.addEventListener("click", () => {
+      host.forgetLastBuild?.();
+      resume.remove();
+    });
+    resume.append(open, forget);
+    intro.append(resume);
+  }
   el.log.append(intro);
 }
 
@@ -412,7 +567,9 @@ function setBusy(value) {
 
 async function submit() {
   const typed = el.input.value.trim();
-  if (typed === "" && attaching.count === 0) return;
+  // A file dropped a moment ago may still be being checked in.
+  await attaching.settled();
+  if (busy || (typed === "" && attaching.count === 0)) return;
   // Files alone are a message too: the model is told they are what it is about.
   const text = typed || "Here are the files.";
   const key = storedKey();
@@ -424,7 +581,14 @@ async function submit() {
   el.log.querySelector(".chat-welcome")?.remove();
   el.input.value = "";
   const files = attaching.take();
-  listSentFiles(addLine("user", typed), files, "chat-user-files");
+  lastUser?.div.querySelector(".chat-edit")?.remove();
+  const userLine = addLine("user", typed);
+  listSentFiles(userLine, files, "chat-user-files");
+  lastUser = { div: userLine, text: typed, files };
+  transcript.push({ role: "user", text: `${typed}${files.length ? `\n\n${files.map((f) => `📎 ${f.name}`).join("\n")}` : ""}` });
+  // The files as they are now - offered back under the answer when the
+  // step changed them.
+  const before = host.files().map((f) => ({ ...f }));
   scrollDown(true);
   setBusy(true);
   stopAsked = false;
@@ -483,8 +647,12 @@ async function submit() {
           raw += delta;
           renderMarkdown(current, raw);
           scrollDown();
+          // The answer so far, in the transcript - replaced on every delta.
+          const last = transcript[transcript.length - 1];
+          if (last?.role === "assistant" && last.el === current) last.text = raw;
+          else transcript.push({ role: "assistant", text: raw, el: current });
         },
-        tool({ id, summary, error }) {
+        tool({ id, summary, error, started }) {
           current = undefined;
           note = undefined;
           const row = rows.get(id) ?? addLine("tool", "");
@@ -492,26 +660,50 @@ async function submit() {
           row.className = `chat-msg chat-tool${error ? " is-error" : ""}`;
           row.textContent = summary;
           scrollDown();
-          if (!error && /^ran: running/.test(summary)) appUpdated();
+          transcript.push({ role: error ? "failed" : "did", text: summary });
+          if (started) appUpdated();
         },
-        usage({ input, output, cached }) {
-          const k = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
-          el.usage.textContent = `${k(input + cached)} in · ${k(output)} out`;
-          el.usage.title = `${input} input tokens, ${cached} of them from the cache, ${output} output tokens - billed to your key`;
+        usage(total) {
+          const { text, title } = mod.usageText(total);
+          el.usage.textContent = text;
+          el.usage.title = title;
         },
         notice(t) {
           current = undefined;
           addLine("notice", t);
+          transcript.push({ role: "note", text: t });
+        },
+        // The model is about to do something in the app: said in the bar,
+        // and on a phone the app comes forward so the reader sees it happen.
+        acting(t) {
+          setStatus(t);
+          if (narrow()) setStage("preview");
         },
       };
       const agentGen = generation;
       const guarded = Object.fromEntries(
         Object.entries(ui).map(([k, f]) => [k, (...args) => (agentGen === generation ? f(...args) : undefined)]),
       );
+      if (!mirror) {
+        mirror = mod.createMirror();
+        driver.observe((body, response) => mirror.observe(body, response));
+      }
       agent = mod.createAgent({
         apiKey: key,
         workspace: readStored(WORKSPACE_STORAGE) ?? undefined,
-        host,
+        host: {
+          ...host,
+          // The running app, for look and act: its frame as the transport,
+          // its screen as the mirror, the class Run starts.
+          app: {
+            drive: (body) => driver.drive(frameApi, body),
+            frame: frameApi,
+            mirror: () => mirror,
+            get cls() {
+              return host.files()[0]?.name.replace(/\.clas\.abap$/, "") ?? "";
+            },
+          },
+        },
         speed: () => el.speed.value,
         ui: guarded,
       });
@@ -523,6 +715,7 @@ async function submit() {
     if (!live()) return;
     if (stopped) addLine("notice", "Stopped.");
     setStatus(stopped ? "stopped" : "the AI is done");
+    if (JSON.stringify(host.files()) !== JSON.stringify(before)) addCheckpoint(before);
   } catch (e) {
     if (!live()) return;
     const said = mod ? mod.explainError(e) : { text: `The AI part of the page could not be loaded: ${String(e?.message ?? e)}` };
@@ -545,6 +738,7 @@ async function submit() {
     if (live()) {
       finishRows();
       setBusy(false);
+      offerEdit();
     }
   }
 }
@@ -579,6 +773,26 @@ export function renderMarkdown(target, text) {
       c.textContent = code.join("\n");
       pre.append(c);
       blocks.push(pre);
+      continue;
+    }
+    // A table: a header row, a separator row of dashes, then rows - each
+    // cell rendered inline, so a field list the model proposes keeps its
+    // columns. Pipes at the edges are optional, as in GitHub's markdown.
+    if (/^\s*\|?.*\|.*$/.test(line) && /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(lines[i + 1] ?? "")) {
+      endParagraph();
+      endList();
+      const cells = (row) => row.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
+      const table = document.createElement("table");
+      const thead = document.createElement("thead");
+      thead.append(element("tr", cells(line).map((c) => element("th", inline(c)))));
+      table.append(thead);
+      const tbody = document.createElement("tbody");
+      for (i += 2; i < lines.length && lines[i].includes("|") && lines[i].trim() !== ""; i++) {
+        tbody.append(element("tr", cells(lines[i]).map((c) => element("td", inline(c)))));
+      }
+      i -= 1;
+      table.append(tbody);
+      blocks.push(table);
       continue;
     }
     const item = /^\s*(?:([-*])|(\d+)\.)\s+(.*)$/.exec(line);
@@ -623,12 +837,21 @@ function element(tag, children) {
 
 function inline(text) {
   const nodes = [];
-  for (const part of text.split(/(`[^`]+`|\*\*[^*]+\*\*)/)) {
+  for (const part of text.split(/(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\(https:\/\/[^\s)]+\))/)) {
     if (part === "") continue;
+    const link = /^\[([^\]]+)\]\((https:\/\/[^\s)]+)\)$/.exec(part);
     if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
       nodes.push(element("code", [part.slice(1, -1)]));
     } else if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
       nodes.push(element("strong", [part.slice(2, -2)]));
+    } else if (link) {
+      // Only https, opened beside, and never a handle on this page: the
+      // address is text the model wrote.
+      const a = element("a", [link[1]]);
+      a.href = link[2];
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      nodes.push(a);
     } else {
       nodes.push(document.createTextNode(part));
     }

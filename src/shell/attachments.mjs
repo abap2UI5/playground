@@ -5,16 +5,19 @@
 //   PDF                       a document block, as it is (base64)
 //   PNG, JPEG, GIF, WebP      an image block
 //   .xlsx                     each sheet as CSV, a text document per sheet
-//   .docx                     its paragraphs as text
+//                             (a date cell as a date, read off the cell's
+//                             number format)
+//   .docx                     its paragraphs as text, a table as rows
+//   .pptx                     the text of each slide
 //   text (csv, txt, json, md, xml, abap, …)   a text document
 //
-// The two Office formats are zip files of XML, read here rather than with a
+// The Office formats are zip files of XML, read here rather than with a
 // library: the central directory, each entry inflated by the browser's own
 // DecompressionStream, the XML by DOMParser - a hundred lines instead of a
-// spreadsheet library in the chunk. What they cannot carry (formulas, styles,
-// dates as dates - a date cell is the serial number Excel keeps) is said in
-// the document's own first line, so the model is not left guessing. The old
-// binary formats (.xls, .doc) are refused with what to save them as.
+// spreadsheet library in the chunk. What CSV cannot carry (a formula - its
+// last result goes) is said in the document's own first line, so the model
+// is not left guessing. The old binary formats (.xls, .doc, .ppt) are refused
+// with what to save them as.
 
 export const MAX_FILES = 5;
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -58,11 +61,12 @@ export function kindOf(file) {
   }
   if (ext === "xlsx" || ext === "xlsm") return { kind: "xlsx" };
   if (ext === "docx") return { kind: "docx" };
-  if (ext === "xls" || ext === "doc") {
+  if (ext === "pptx") return { kind: "pptx" };
+  if (ext === "xls" || ext === "doc" || ext === "ppt") {
     return { error: `${file.name} is the old binary Office format - save it as .${ext}x, .csv or .pdf and add it again` };
   }
   if (TEXT_EXTENSIONS.has(ext) || file.type.startsWith("text/")) return { kind: "text" };
-  return { error: `${file.name} is not a file the chat can read - PDF, images, .xlsx, .docx and text files are` };
+  return { error: `${file.name} is not a file the chat can read - PDF, images, .xlsx, .docx, .pptx and text files are` };
 }
 
 /**
@@ -110,6 +114,8 @@ async function blocksOf(file, { kind, mediaType }, budget) {
         textDocument(`${file.name} - sheet ${name}`, `${note}\n${csv}`));
     case "docx":
       return [textDocument(file.name, await wordText(await file.arrayBuffer()))];
+    case "pptx":
+      return [textDocument(file.name, await slidesText(await file.arrayBuffer()))];
     default:
       return [textDocument(file.name, decodeText(await file.arrayBuffer()))];
   }
@@ -200,18 +206,23 @@ export async function spreadsheet(buffer) {
   const zip = readZip(buffer);
   const workbook = await zip.text("xl/workbook.xml");
   if (!workbook) throw new Error("it has no workbook - is it really an .xlsx?");
+  const workbookXml = xml(workbook);
   const rels = xml((await zip.text("xl/_rels/workbook.xml.rels")) ?? "<Relationships/>");
   const targets = new Map(all(rels, "Relationship").map((r) => [r.getAttribute("Id"), r.getAttribute("Target")]));
   const sharedXml = await zip.text("xl/sharedStrings.xml");
   const shared = sharedXml ? all(xml(sharedXml), "si").map(stringOf) : [];
+  // Which cell styles are dates (styles.xml), and which calendar the
+  // workbook counts from.
+  const stylesXml = await zip.text("xl/styles.xml");
+  const dates = { styles: stylesXml ? dateStyles(xml(stylesXml)) : new Set(), epoch1904: all(workbookXml, "workbookPr").some((p) => /^(1|true)$/.test(p.getAttribute("date1904") ?? "")) };
   const sheets = [];
-  for (const sheet of all(xml(workbook), "sheet")) {
+  for (const sheet of all(workbookXml, "sheet")) {
     const id = sheet.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id")
       ?? sheet.getAttribute("r:id");
     const target = (targets.get(id) ?? "").replace(/^\/?xl\//, "").replace(/^\//, "");
     const part = await zip.text(`xl/${target}`);
     if (!part) continue;
-    sheets.push({ name: sheet.getAttribute("name") ?? target, ...sheetCsv(xml(part), shared) });
+    sheets.push({ name: sheet.getAttribute("name") ?? target, ...sheetCsv(xml(part), shared, dates) });
   }
   if (sheets.length === 0) throw new Error("it has no sheet with cells");
   return sheets;
@@ -240,7 +251,43 @@ const columnIndex = (ref) => {
   return n - 1;
 };
 
-function sheetCsv(doc, shared) {
+/* The indexes into cellXfs whose number format shows a date or a time: the
+ * built-in date formats (14-22 and 45-47), and a custom format whose code
+ * has a day, month, year, hour or second in it - outside quotes, brackets
+ * (a colour, a condition) and the escaped characters. */
+export function dateStyles(styles) {
+  const custom = new Map(all(styles, "numFmt").map((f) => [f.getAttribute("numFmtId"), f.getAttribute("formatCode") ?? ""]));
+  const isDate = (id) => {
+    const n = Number(id);
+    if ((n >= 14 && n <= 22) || (n >= 45 && n <= 47)) return true;
+    const code = custom.get(id);
+    if (!code) return false;
+    const bare = code.replace(/"[^"]*"/g, "").replace(/\[[^\]]*\]/g, "").replace(/\\./g, "");
+    return /[dmyhs]/i.test(bare) && !/^[#0,.?%E+\-\s_*@]*$/.test(bare);
+  };
+  const result = new Set();
+  const xfs = all(styles, "cellXfs")[0];
+  if (!xfs) return result;
+  all(xfs, "xf").forEach((xf, index) => {
+    if (isDate(xf.getAttribute("numFmtId") ?? "0")) result.add(String(index));
+  });
+  return result;
+}
+
+// Excel's serial day as an ISO date, with the time when the cell has one.
+// 1900's calendar counts from 1899-12-30 (Excel keeps Lotus's imaginary
+// 29 February 1900), 1904's from 1904-01-01.
+export function serialToDate(serial, epoch1904 = false) {
+  const base = epoch1904 ? Date.UTC(1904, 0, 1) : Date.UTC(1899, 11, 30);
+  const ms = Math.round(serial * 86400000);
+  const at = new Date(base + ms);
+  if (Number.isNaN(at.getTime())) return String(serial);
+  const date = at.toISOString().slice(0, 10);
+  const time = at.toISOString().slice(11, 19);
+  return time === "00:00:00" ? date : `${date} ${time}`;
+}
+
+function sheetCsv(doc, shared, dates = { styles: new Set(), epoch1904: false }) {
   const rows = [];
   const rowNodes = all(doc, "row");
   let cut = false;
@@ -263,7 +310,10 @@ function sheetCsv(doc, shared) {
       if (type === "s") value = v === "" ? "" : (shared[Number(v)] ?? "");
       else if (type === "inlineStr") value = stringOf(c);
       else if (type === "b") value = v === "1" ? "TRUE" : "FALSE";
-      else value = v;
+      else if (type === "d") value = v;
+      else if ((type === null || type === "n") && v !== "" && dates.styles.has(c.getAttribute("s") ?? "") && Number.isFinite(Number(v))) {
+        value = serialToDate(Number(v), dates.epoch1904);
+      } else value = v;
       column = columnIndex(c.getAttribute("r")) ?? column + 1;
       cells[column] = value;
     }
@@ -273,7 +323,7 @@ function sheetCsv(doc, shared) {
   const last = Number(rowNodes[rowNodes.length - 1]?.getAttribute("r")) || rowNodes.length;
   return {
     csv: rows.join("\n"),
-    note: `(a spreadsheet sheet as CSV${cut ? `, the first ${MAX_ROWS} of ${last} rows` : ""}; a CSV line is the sheet's row of that number; values as Excel stores them - a date is its serial number, a formula its last result)`,
+    note: `(a spreadsheet sheet as CSV${cut ? `, the first ${MAX_ROWS} of ${last} rows` : ""}; a CSV line is the sheet's row of that number; a date cell as YYYY-MM-DD, a formula as its last result, other values as Excel stores them)`,
   };
 }
 
@@ -288,26 +338,92 @@ export async function wordText(buffer) {
   const zip = readZip(buffer);
   const body = await zip.text("word/document.xml");
   if (!body) throw new Error("it has no document - is it really a .docx?");
-  return all(xml(body), "p")
-    .filter((p) => !skipped(p))
-    .map((p) => {
-      let line = "";
-      for (const node of p.getElementsByTagNameNS("*", "*")) {
-        // Only the paragraph's own runs: a text box is paragraphs inside a
-        // paragraph, which are lines of their own - counted here as well, a
-        // text box came out four times, twice glued to the line around it.
-        if (paragraphOf(node) !== p || skipped(node)) continue;
-        if (node.localName === "t") line += node.textContent;
-        // A <w:tab/> in a run is a tab; one inside <w:pPr><w:tabs> is a tab
-        // STOP the paragraph defines, and counted as text it put a tab in
-        // front of every paragraph with custom stops.
-        else if (node.localName === "tab" && node.parentNode?.localName !== "tabs") line += "\t";
-        else if (node.localName === "br" || node.localName === "cr") line += "\n";
-        else if (node.localName === "noBreakHyphen") line += "-";
-      }
-      return line;
-    })
-    .join("\n");
+  const doc = xml(body);
+  const lines = [];
+  // The table a paragraph is in, if any - its cells become one line per
+  // row, the cells tab-separated, so a specification's field table keeps
+  // its columns; a paragraph in no table is a line of its own.
+  const tableOf = (node) => {
+    for (let at = node.parentNode; at; at = at.parentNode) if (at.localName === "tbl") return at;
+    return null;
+  };
+  const rowsDone = new Set();
+  for (const p of all(doc, "p")) {
+    if (skipped(p)) continue;
+    const table = tableOf(p);
+    if (!table) {
+      lines.push(paragraphText(p));
+      continue;
+    }
+    // The outermost table's row this paragraph is in, once.
+    let row = null;
+    for (let at = p.parentNode; at; at = at.parentNode) if (at.localName === "tr" && tableOf(at.parentNode) === null) row = at;
+    if (!row || rowsDone.has(row)) continue;
+    rowsDone.add(row);
+    const cells = [...row.children].filter((c) => c.localName === "tc").map((cell) =>
+      all(cell, "p").filter((q) => !skipped(q)).map(paragraphText).join(" ").trim());
+    lines.push(cells.join("\t"));
+  }
+  return lines.join("\n");
+}
+
+// A paragraph's own text: its runs, a tab a tab, a break a line break.
+function paragraphText(p) {
+  let line = "";
+  for (const node of p.getElementsByTagNameNS("*", "*")) {
+    // Only the paragraph's own runs: a text box is paragraphs inside a
+    // paragraph, which are lines of their own - counted here as well, a
+    // text box came out four times, twice glued to the line around it.
+    if (paragraphOf(node) !== p || skipped(node)) continue;
+    if (node.localName === "t") line += node.textContent;
+    // A <w:tab/> in a run is a tab; one inside <w:pPr><w:tabs> is a tab
+    // STOP the paragraph defines, and counted as text it put a tab in
+    // front of every paragraph with custom stops.
+    else if (node.localName === "tab" && node.parentNode?.localName !== "tabs") line += "\t";
+    else if (node.localName === "br" || node.localName === "cr") line += "\n";
+    else if (node.localName === "noBreakHyphen") line += "-";
+  }
+  return line;
+}
+
+// ---------------------------------------------------------------- slides
+
+/* The text of a .pptx, slide by slide in the deck's order (presentation.xml
+ * lists the slides, its relationships name their parts): each <a:p> a line,
+ * its <a:t> runs joined, under a "--- slide N ---" heading. Notes are left
+ * out; a table on a slide comes out row by row, cells tab-separated. */
+export async function slidesText(buffer) {
+  const zip = readZip(buffer);
+  const presentation = await zip.text("ppt/presentation.xml");
+  if (!presentation) throw new Error("it has no presentation - is it really a .pptx?");
+  const rels = xml((await zip.text("ppt/_rels/presentation.xml.rels")) ?? "<Relationships/>");
+  const targets = new Map(all(rels, "Relationship").map((r) => [r.getAttribute("Id"), r.getAttribute("Target")]));
+  const out = [];
+  let n = 0;
+  for (const slide of all(xml(presentation), "sldId")) {
+    const id = slide.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id") ?? slide.getAttribute("r:id");
+    const target = (targets.get(id) ?? "").replace(/^\/?ppt\//, "").replace(/^\//, "");
+    const part = await zip.text(`ppt/${target}`);
+    if (!part) continue;
+    n += 1;
+    const doc = xml(part);
+    const lines = [];
+    const inTable = (node) => {
+      for (let at = node.parentNode; at; at = at.parentNode) if (at.localName === "tbl") return true;
+      return false;
+    };
+    for (const p of all(doc, "p")) {
+      if (inTable(p)) continue;
+      const text = all(p, "t").map((t) => t.textContent).join("");
+      if (text.trim() !== "") lines.push(text);
+    }
+    for (const tr of all(doc, "tr")) {
+      lines.push([...tr.children].filter((c) => c.localName === "tc").map((c) => all(c, "t").map((t) => t.textContent).join("")).join("\t"));
+    }
+    out.push(`--- slide ${n} ---\n${lines.join("\n")}`);
+  }
+  if (n === 0) throw new Error("it has no slides");
+  return out.join("\n\n");
 }
 
 const paragraphOf = (node) => {

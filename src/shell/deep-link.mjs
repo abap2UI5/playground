@@ -14,19 +14,22 @@
 import { withoutComments } from "./chain-read.mjs";
 
 const ALLOWED_HOSTS = ["raw.githubusercontent.com", "gist.githubusercontent.com"];
+// The AI Pilot's page takes no gist: there a link's code runs beside the
+// reader's API key (src/shell/linked-code.mjs), and a gist is anybody's.
+export const REPOSITORY_HOSTS = ["raw.githubusercontent.com"];
 
 export const linkedSources = (params) => params.getAll("src").filter(Boolean);
 
-function checkAllowed(url) {
+function checkAllowed(url, hosts) {
   // fetch( ) refuses a URL with credentials in it, which used to surface as
   // "the host has to allow being read from a browser" - the wrong reason.
   if (url.username || url.password) {
     throw new Error("A link to ABAP carries no user name or password - this one does, so it is not followed.");
   }
   if (url.origin === window.location.origin) return;
-  if (url.protocol === "https:" && ALLOWED_HOSTS.includes(url.hostname)) return;
+  if (url.protocol === "https:" && hosts.includes(url.hostname)) return;
   throw new Error(
-    `The playground only opens ABAP from ${ALLOWED_HOSTS.join(" or ")}, or from its own site. ` +
+    `The playground only opens ABAP from ${hosts.join(" or ")}, or from its own site. ` +
       `This link points at ${url.hostname || url.protocol}.`,
   );
 }
@@ -178,7 +181,7 @@ export async function followNavigation(files) {
       await Promise.all(
         [...wanted].slice(0, MAX_FOLLOWED - found.length).map(async ([name, href]) => {
           try {
-            checkAllowed(new URL(href));
+            checkAllowed(new URL(href), ALLOWED_HOSTS);
             // A sibling that does not answer is a sibling that is not there:
             // optional, and it held the whole boot at "checking the
             // sources… 100%" for as long as the connection hung.
@@ -206,7 +209,7 @@ export async function followNavigation(files) {
   return found;
 }
 
-export async function fetchLinkedFiles(params) {
+export async function fetchLinkedFiles(params, { hosts = ALLOWED_HOSTS } = {}) {
   // Checked before anything is fetched: a link that is going to be refused for
   // its second file should not have cost a request for its first. The checks
   // are also what make the fetches safe to run together afterwards.
@@ -218,7 +221,7 @@ export async function fetchLinkedFiles(params) {
     } catch {
       throw new Error(`${raw} is not a URL.`);
     }
-    checkAllowed(url);
+    checkAllowed(url, hosts);
     const name = nameFrom(url);
     if (seen.has(name)) {
       throw new Error(`Two of the linked files are both called ${name}, and an ABAP object has one name.`);

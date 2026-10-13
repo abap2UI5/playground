@@ -39,6 +39,7 @@ import {
   followNavigation,
   humanUrl,
   linkedSources,
+  REPOSITORY_HOSTS,
   forgetOrigins,
   originOf,
 } from "./deep-link.mjs";
@@ -54,6 +55,7 @@ import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mj
 
 import { clearRoundtrips, recordRoundtrip, roundtripList } from "./roundtrips.mjs";
 import { AI_FILE, AI_STARTER, isUntouchedStarter } from "./ai-starter.mjs";
+import { confirmLinkedCode } from "./linked-code.mjs";
 import { state } from "./state.mjs";
 import { RUNAWAY, STALLED, startRuntime } from "./runtime-client.mjs";
 import { readStored, readStoredJson, removeStored, writeStored, writeStoredJson } from "./storage.mjs";
@@ -67,6 +69,8 @@ import { warmUpAppFrame } from "./warm-up.mjs";
 const asset = (p) => new URL(p, document.baseURI).href;
 
 const STORAGE_KEY = "abap2ui5-playground:files";
+// The AI Studio's last build (see the draft handler, and chat.mjs).
+const AI_STORAGE_KEY = "abap2ui5-playground:ai-files";
 
 const runButton = document.getElementById("run");
 const autorunButton = document.getElementById("autorun");
@@ -161,6 +165,8 @@ const appOnly = params.get("view") === "app" || params.get("view") === "full";
 // could not be read, so boot can say so once the page is far enough along to
 // have somewhere to say it.
 let linkFailure;
+// The Pilot's reader said no to a link's code (startingFiles).
+let linkDeclined = false;
 
 // Where the editor starts, in order of how deliberate the choice was: a link is
 // what somebody was sent, a stored draft is what they were last working on, and
@@ -168,9 +174,24 @@ let linkFailure;
 // it shows what the page that embedded it asked for.
 async function startingFiles() {
   if (aiPage) return { files: [{ name: AI_FILE, source: AI_STARTER }], from: "a minimal class" };
+  // On the Pilot's page a link's code runs beside the API key the reader
+  // types (src/shell/linked-code.mjs): opened only once they said so, and
+  // the sample otherwise - said in the status line, like a link that failed.
+  const trusted = async (what) => {
+    if (!pilotPage) return true;
+    if (await confirmLinkedCode(what)) return true;
+    linkDeclined = true;
+    return false;
+  };
   try {
     const shared = await filesFromLocation(MAIN_FILE);
-    if (shared) return { files: checkFileSet(shared), from: "a shared link" };
+    if (shared) {
+      const files = checkFileSet(shared);
+      if (await trusted(`A shared link with ${files.length === 1 ? files[0].name : `${files.length} files, ${files[0].name} first`}.`)) {
+        return { files, from: "a shared link" };
+      }
+      return { files: DEFAULT_FILES, from: "sample" };
+    }
   } catch (e) {
     // A fragment that will not decode is somebody else's link or a truncated
     // paste. Opening on the sample beats an error page nobody can act on -
@@ -186,7 +207,9 @@ async function startingFiles() {
   // followed a link expecting particular code and did not get it.
   if (linkedSources(params).length > 0) {
     try {
-      const linked = checkFileSet(await fetchLinkedFiles(params));
+      if (!(await trusted(`A link to ${linkedSources(params).join(", ")}.`))) return { files: DEFAULT_FILES, from: "sample" };
+      // No gist on the Pilot's page: a gist is anybody's (REPOSITORY_HOSTS).
+      const linked = checkFileSet(await fetchLinkedFiles(params, pilotPage ? { hosts: REPOSITORY_HOSTS } : {}));
       // An app that calls another app is only half an app on its own. The
       // classes it instantiates are looked for next to it and opened too, so a
       // link to a sample that navigates somewhere actually navigates.
@@ -443,6 +466,8 @@ async function boot() {
     // What the frontend in the app frame reaches for: the roundtrip it would
     // otherwise POST to a backend, and whether the shell has a dialog open -
     // see src/shell/frontend-bridge.js for what the frame does with that.
+    // The AI room of this page, if it has one, as the frame's other party.
+    const room = pilot ?? chat;
     window.__z2ui5Playground = {
       // Every roundtrip is kept for the Roundtrips tab on its way through -
       // see src/shell/roundtrips.mjs. Timed around the worker's answer, so
@@ -458,14 +483,15 @@ async function boot() {
           // A step of the AI Pilot parked for this frame goes with it: left
           // parked, it was handed to the new document's app start and sent
           // in its place - an event on a draft the fresh database never held.
-          pilot?.takePilotRequest(from)?.reject(new Error("the app was restarted before this step reached it - look again"));
+          room?.takePilotRequest(from)?.reject(new Error("the app was restarted before this step reached it - look again"));
           throw new Error("this app was replaced by a newer Run");
         }
-        // The AI Pilot's act (src/shell/pilot.mjs): the frame was made to send
-        // a roundtrip so that it renders the answer, and what goes to the
-        // framework is the Pilot's request in place of the frame's. Every
-        // answer, the reader's clicks included, is shown to the Pilot after.
-        let parked = pilot?.takePilotRequest(from) ?? null;
+        // The AI's act (src/shell/pilot.mjs, src/shell/chat.mjs - whichever
+        // room this page is): the frame was made to send a roundtrip so that
+        // it renders the answer, and what goes to the framework is the
+        // model's request in place of the frame's. Every answer, the
+        // reader's clicks included, is shown to the model after.
+        let parked = room?.takePilotRequest(from) ?? null;
         // Only ever in place of a request on a running app: an app start (no
         // draft id - the frame reloaded, or a Run) is the frame's own.
         if (parked && !draftOf(body)) {
@@ -477,7 +503,7 @@ async function boot() {
         try {
           const response = await state.runtime.roundtrip(body);
           recordRoundtrip({ request: body, response, ms: performance.now() - started });
-          pilot?.sawRoundtrip(body, response, from);
+          room?.sawRoundtrip(body, response, from);
           parked?.resolve(response);
           if (response.location) pointAtDump(response.location, firstLine(response.body), caretMayMove());
           return response;
@@ -493,7 +519,7 @@ async function boot() {
           recordRoundtrip({ request: body, response: failed, ms: performance.now() - started });
           // And to the AI Pilot's mirror of that tab, which otherwise never
           // heard of the start and waited half a minute for it.
-          pilot?.sawRoundtrip(body, failed, from);
+          room?.sawRoundtrip(body, failed, from);
           if (e?.location) pointAtDump(e.location, String(e.message ?? e), caretMayMove());
           // ABAP that did not finish, stopped by the runtime's watchdog: the
           // frame only sees a failed request, so the page says what happened.
@@ -581,6 +607,18 @@ async function boot() {
         setFiles: (files) => replaceWith(checkFileSet(files), { asOpened: false }),
         run: () => runForAgent(),
         show: (name) => openFile(name),
+        // The last build this browser stored, for the welcome's "open it
+        // again" - checked the way a draft is, so a set the editor cannot
+        // hold is no build to offer.
+        lastBuild: () => {
+          try {
+            const stored = readStoredJson(AI_STORAGE_KEY);
+            return stored ? checkFileSet(stored) : undefined;
+          } catch {
+            return undefined;
+          }
+        },
+        forgetLastBuild: () => removeStored(AI_STORAGE_KEY),
       },
       // The studio is the page: it opens at once, and there is no playground
       // under it to leave to.
@@ -715,6 +753,9 @@ async function boot() {
 
   // After the first run, not before: run() opens with a clear of the output
   // panel, so a message shown earlier would be wiped by the very next line.
+  if (linkDeclined) {
+    setStatus("the linked code was not opened - showing the sample instead");
+  }
   if (linkFailure) {
     // What is on screen instead is the stored draft when there is one, not
     // always the sample - the sentence used to say "the sample" regardless.
@@ -883,7 +924,17 @@ function remember(files) {
   // its page asked for, the other starts on the same minimal class every time and
   // must not write over the playground's own work. The AI Pilot neither: it
   // operates an app rather than editing one.
-  if (embedded || aiPage || pilotPage) return;
+  if (embedded || pilotPage) return;
+  // The AI Studio keeps a draft of its own, under its own key: what the model
+  // built is work, and a reload lost it (together with the chat). Kept apart
+  // from the playground's draft so the studio never writes over that, and
+  // never restored by itself - the studio starts on the minimal class every
+  // time, and the chat's welcome offers the last build back (chat.mjs).
+  if (aiPage) {
+    const built = files ?? getFiles();
+    if (!built.every(isUntouchedStarter)) writeStoredJson(AI_STORAGE_KEY, built);
+    return;
+  }
   // A sample that was picked and read is not a draft, and is forgotten rather
   // than stored - the rule the checker settings already follow. Kept, it pinned
   // the reader to a frozen copy: the sample was improved in a later deploy and
@@ -1688,15 +1739,31 @@ function draftOf(body) {
 async function runForAgent() {
   while (running) await new Promise((resolve) => setTimeout(resolve, 100));
   const started = await run();
+  // Up to thirty seconds, as the Pilot waits for a tab (pilot.mjs): the
+  // studio's first app is a whole UI5 boot after the placeholder, and ten
+  // seconds on a slow machine read as "none arrived" - an error that was
+  // none, and the model spent turns fixing it. Over once the frame has
+  // rendered (the bridge's busy( ) says so) or an answer is in.
+  let starting = false;
   if (started) {
-    const until = performance.now() + 10000;
+    const until = performance.now() + 30000;
+    const rendering = () => {
+      try {
+        return frame.contentWindow?.__z2ui5PlaygroundPilot?.busy() !== false;
+      } catch {
+        return true;
+      }
+    };
     while (roundtripList().length === 0 && performance.now() < until) {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
+    starting = roundtripList().length === 0 && rendering();
   }
   const status = document.getElementById("status");
   return {
     started: Boolean(started),
+    // Still booting when the wait ran out - not an app that answered nothing.
+    starting,
     status: status.textContent,
     // Waited for: a run that stopped before its own refreshNow( ) (a
     // structural problem) left refresh( ) answering for the text from before

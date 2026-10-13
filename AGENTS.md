@@ -837,14 +837,34 @@ talks to a model or needs a key.
   `replaceWith( )` in `main.mjs`, which is the path a sample takes (undoable,
   strip redrawn, draft stored by the change handler, `checkFileSet( )` refusing
   a name the editor cannot hold); `run_app` is `runForAgent( )`, which presses
-  the real `run( )` — waiting out a run autorun started — then waits up to ten
-  seconds for the app's first roundtrip and hands back the status line, the
-  problems, the tests, the roundtrips and the Log. `describeRun( )` turns that
-  into what the model reads - errors and warnings as problems to fix, the
-  linter's hints apart as optional advice, and a JavaScript error out of the
-  app's start as a failed first roundtrip (the bridge's `roundtrip` lists it
-  like an answer) rather than ten seconds of "none arrived". So what the model is told is what the reader
-  sees; keep it that way when adding a tool.
+  the real `run( )` — waiting out a run autorun started — then waits up to
+  thirty seconds for the app's first roundtrip (as the Pilot waits for a
+  tab; ten read as "none arrived" on a slow first boot) and hands back the
+  status line, the problems, the tests, the roundtrips, the Log and
+  `starting` (the frame still rendering, by the bridge's `busy( )`).
+  `describeRun( )` turns that into what the model reads - errors and warnings
+  as problems to fix, the linter's hints apart as optional advice, a frame
+  still booting as "not an error", and a JavaScript error out of the app's
+  start as a failed first roundtrip (the bridge's `roundtrip` lists it like
+  an answer). `read_files` takes `names` and cuts each file on its own
+  (`filesAsText( )`: two classes of 500 lines cut together at 24,000
+  characters left the second unseen and then edited blind); `edit_file`
+  matches exactly and once, else line by line with the whitespace at both
+  ends forgiven and the file's indentation kept (`locate( )`); the app must
+  be a class. So what the model is told is what the reader sees; keep it
+  that way when adding a tool.
+- **The studio tries what it built.** `look` and `act` are the Pilot's eyes
+  and hands on Run's own frame: the mirror and the operator moved to
+  `src/shell/ai-operator.mjs` and the frame transport to
+  `src/shell/frame-drive.mjs` (one driver per frame: the parked request the
+  bridge's `roundtrip( )` takes - `room.takePilotRequest( )`, the room being
+  the Pilot or the studio - and every answer it saw, kept until a mirror
+  listens), so both rooms share them. `chat.mjs` makes the mirror with the
+  agent's chunk and hands the agent `host.app`; a run that started ends its
+  report on the screen as the agent snapshot (`screenAfterRun( )`), and an
+  act with an event on a screen older than the one last told (`told`) is
+  refused. The rules ask for the main path ONCE after a clean run, never
+  before one. `tests/ai.spec.js` holds the act in the real app.
 - **The key is the reader's, the request is the browser's.** Held in the
   page's memory for the visit and **never stored**: the playground runs ABAP
   from any link in this same origin, and both a view's `core:HTML` in the app
@@ -862,6 +882,25 @@ link's ABAP runs. Sent by the
   `explainError( )` recognises the API's refusal and points at that field. No proxy,
   no server: the page stays a static file. Never in an embedded playground —
   the switch is hidden there (`shell.css`) and `setUpChat( )` is not called.
+  **Storage is not the only way at the key.** The app frame is the same
+  origin and has no sandbox, and its bridge reaches into this page
+  (`window.parent.__z2ui5Playground`): a view's `core:HTML` with a script can
+  read the key form's DOM or patch the page's `fetch`. So the one page where
+  a stranger's code and a key meet - the Pilot's, which opens share links
+  and `?src=` - opens a link's code only once the reader said so
+  (`src/shell/linked-code.mjs`, `#linked-dialog`; `startingFiles( )` in
+  `main.mjs`) and takes no gist there (`REPOSITORY_HOSTS` in
+  `deep-link.mjs`). The studio opens no links. The whole answer is a frame on
+  an opaque origin with a `postMessage` bridge, which is not built.
+- **The studio keeps its build, not its chat.** `AI_STORAGE_KEY`
+  (`abap2ui5-playground:ai-files`) in `main.mjs` holds the files whenever they
+  are not the untouched starter - a key of its own, so the playground's draft
+  is never written over - and the welcome offers them back
+  (`host.lastBuild( )`, `.chat-resume` in `chat.mjs`); the studio still
+  starts on the minimal class every time. The conversation is not kept, and
+  no `beforeunload` asks before the page goes: nothing on this site may keep
+  a page out of the back/forward cache (`tests/bfcache.spec.js`); Export is
+  the way to keep a conversation.
 - **Its instructions come from the pin.** `ai-agent.mjs` imports
   `deps/abap2ui5/docs/agents/building-apps.md` as text (the `.md` loader in
   `build-site.mjs`) under `PLAYGROUND_RULES`, which says what is different
@@ -880,11 +919,20 @@ link's ABAP runs. Sent by the
   rooms are chunks of their own since they left the shell) - because a
   shared chunk's name says nothing about who needs it. Once used, the worker keeps them like any
   chunk.
-- **The conversation is append-only.** `messages` in `createAgent( )` is only
-  ever pushed to — the model's thinking blocks are bound to the history they
-  were written in. Hand edits between two messages are told to the model as an
-  `<editor_files>` block on the next user message rather than by rewriting
-  anything earlier. Tool inputs stream (`eager_input_streaming`), so each is
+- **The conversation is append-only** - with one way back. `messages` in
+  `createAgent( )` is only ever pushed to — the model's thinking blocks are
+  bound to the history they were written in. Hand edits between two messages
+  are told to the model as an `<editor_files>` block on the next user message
+  rather than by rewriting anything earlier - only the files that changed
+  since it last saw them (`editorChanged( )`, against `seenFiles`), each cut
+  on its own. `rewind( )` takes the LAST exchange out whole (the reader's
+  message and what answered it, `turns`) for a message edited and sent again
+  (✎ on the latest message, `offerEdit( )` in `chat.mjs`): nothing before it
+  is touched, so what is left is still what the thinking blocks were written
+  against. The files are not put back by it; a step that changed them offers
+  them back under its answer (`addCheckpoint( )`), since Ctrl+Z is per file
+  and knows no turn. Export writes the conversation as markdown
+  (`transcript`, never the key). Tool inputs stream (`eager_input_streaming`), so each is
   validated before it touches the editor, a turn cut off at `max_tokens` never
   runs its tools, and all results of a turn go back in one message.
 - **Files in a message**, as in the AI Pilot: the paperclip, a paste, or a
@@ -897,6 +945,9 @@ link's ABAP runs. Sent by the
   added. The rules tell the model to build from them - a spreadsheet's rows
   as the internal tables' data rather than invented ones. `tests/ai.spec.js`
   holds the paperclip, a drop on the bar, a refused `.doc` and the blocks.
+  `submit( )` waits for `attaching.settled( )`: a file dropped a moment
+  before Enter was still being checked in and rode silently on the NEXT
+  message.
 - **Model and request shape.** `SPEEDS` in `ai-agent.mjs`, picked in the chat
   header and asked before every request (`abap2ui5-playground:ai-speed`, kept
   only while it is not the default): Balanced is `claude-opus-5-5` at effort
@@ -909,8 +960,9 @@ link's ABAP runs. Sent by the
 - **A long conversation clears its old tool results, server-side**
   (`CONTEXT_MANAGEMENT` in `ai-common.mjs`, beta
   `context-management-2025-06-27`, in both chats): `clear_tool_uses` from
-  200,000 input tokens, the last ten tool uses kept, at least 60,000 tokens
-  per clear. A Pilot working through a list read a screen per act and ended
+  100,000 input tokens, the last ten tool uses kept, at least 40,000 tokens
+  per clear, the tool INPUTS too (`clear_tool_inputs`: in the studio an input
+  is the whole class the model wrote, resent with every request). A Pilot working through a list read a screen per act and ended
   on "the conversation has filled the model's context". Server-side because
   the history must stay append-only - the thinking blocks are bound to it -
   and late and in large steps because every clear costs the cache from that
@@ -1079,16 +1131,21 @@ of them is capped at 400,000 characters together, not only per file. A paste
 that carries text as well as a picture of it (cells copied in Excel, a passage
 in Word) is the text, not an image chip. A PDF is a `document`
 block and an image an `image` block, as they are; an `.xlsx` is each sheet as
-CSV, a `.docx` its paragraphs, a text file its text - each a text
+CSV, a `.docx` its paragraphs and its tables as tab-separated rows, a `.pptx` the
+text of each slide, a text file its text - each a text
 `document` with the file's name as its title - a text file decoded by its
 BOM, else as UTF-8, else as Windows-1252 (an Excel CSV, a SAP GUI download),
 a sheet's CSV line N its row N (empty rows kept), a text box in a `.docx`
 once (not again from `mc:Fallback`). The two Office formats are zip
 files of XML, read here rather than with a library: `readZip( )` walks the
 central directory and inflates an entry with the browser's own
-`DecompressionStream("deflate-raw")`, DOMParser reads the XML. What CSV cannot
-carry (a date is Excel's serial number, a formula its last result) is said in
-the sheet's first line. The old binary formats are refused with what to save
+`DecompressionStream("deflate-raw")`, DOMParser reads the XML. A date cell
+comes as `YYYY-MM-DD` (with its time when it has one): `dateStyles( )` reads
+which `cellXfs` carry a date format off `styles.xml` - the built-in ids and a
+custom code with a day, month, year, hour or second outside quotes and
+brackets - and `serialToDate( )` counts from 1899-12-30, or 1904 when
+`workbookPr` says so. What CSV cannot carry (a formula is its last result) is
+said in the sheet's first line. The old binary formats are refused with what to save
 them as. The conversation is append-only, so the files are sent again with
 every request of the chat - the conversation's `cache_control` is what keeps
 that cheap. One exception to append-only: a message the API refuses as it
@@ -1105,9 +1162,11 @@ upload control).
 
 The tools are `look`, `act`, `restart_app`, `find_apps`, `open_app` (with
 `beside`), `show_app`, `close_app` and `read_source` - the apps, Run and the
-catalogue, and nothing else. `look` and `act` take `app` (a tab number or a
-class) and default to the app on screen; an act on another tab brings it on
-screen first, and every snapshot the model reads carries its `tab`. The
+catalogue, and nothing else. `look`, `act` and `restart_app` take `app` (a
+tab number or a class) and default to the app on screen; an act on another
+tab brings it on screen first - once its event is known to be on that
+screen, so a refused act switches no tab - and every snapshot the model
+reads carries its `tab`. The
 conversation is append-only and asks the same model at the same speeds as
 the studio (`ai-common.mjs`); the key follows the studio's rule word for word
 (memory only, never stored). `tests/pilot.spec.js` answers `api.anthropic.com`

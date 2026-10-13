@@ -19,6 +19,16 @@ export const SPEEDS = {
   balanced: { model: "claude-opus-5-5", effort: "medium", label: "Balanced · Opus 5.5" },
   fast: { model: "claude-sonnet-5-5", effort: "medium", label: "Fast · Sonnet 5.5" },
 };
+
+// What a token costs, in dollars per million, from Anthropic's price list
+// as of October 2026 - an estimate for the header, not a bill: a plan's
+// rates, a cache write (a quarter more than fresh input) and a cache read
+// (a tenth) are the parts that move. Kept here, in one place, so a price
+// change is one edit.
+export const PRICES = {
+  "claude-opus-5-5": { input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2 },
+  "claude-sonnet-5-5": { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2 },
+};
 export const DEFAULT_SPEED = "balanced";
 
 /*
@@ -32,12 +42,18 @@ export const DEFAULT_SPEED = "balanced";
  * as "removed" - a screen it needs again, it looks at again.
  */
 export const CONTEXT_BETA = "context-management-2025-06-27";
+// The inputs go too: in the studio a tool's INPUT is the whole class the
+// model wrote, resent with every request for the rest of the conversation -
+// ten rewrites of a 400-line class were 60,000 tokens of ballast that the
+// results-only clear never touched. From 100,000 rather than 200,000, since
+// the clear is what keeps a long build affordable, not only possible.
 export const CONTEXT_MANAGEMENT = {
   edits: [{
     type: "clear_tool_uses_20250919",
-    trigger: { type: "input_tokens", value: 200000 },
+    trigger: { type: "input_tokens", value: 100000 },
     keep: { type: "tool_uses", value: 10 },
-    clear_at_least: { type: "input_tokens", value: 60000 },
+    clear_at_least: { type: "input_tokens", value: 40000 },
+    clear_tool_inputs: true,
   }],
 };
 
@@ -75,6 +91,9 @@ export function explainError(err) {
       key: true,
       workspace: true,
     };
+  }
+  if (err instanceof Anthropic.APIError && err.status === 413) {
+    return { text: "The request is too large for the API - the files of this message, with the conversation, are more than one request carries. Send fewer or smaller files, or start a New chat." };
   }
   if (err instanceof Anthropic.BadRequestError) return { text: `The request was refused: ${err.message}` };
   if (err instanceof Anthropic.APIConnectionError) {
@@ -202,11 +221,38 @@ export function followStream(stream, ui, pendingText) {
   return started;
 }
 
-/** Adds one answer's usage to `total` ({ input, output, cached }). */
-export function addUsage(total, usage = {}) {
-  total.input += (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
-  total.cached += usage.cache_read_input_tokens ?? 0;
-  total.output += usage.output_tokens ?? 0;
+/** Adds one answer's usage to `total` ({ input, output, cached, written,
+ *  dollars }): `input` is what was read fresh plus what was written to the
+ *  cache, `written` that second part on its own, `cached` what was read from
+ *  the cache, `dollars` the estimate for all of it at `model`'s prices. */
+export function addUsage(total, usage = {}, model) {
+  const fresh = usage.input_tokens ?? 0;
+  const written = usage.cache_creation_input_tokens ?? 0;
+  const cached = usage.cache_read_input_tokens ?? 0;
+  const output = usage.output_tokens ?? 0;
+  total.input += fresh + written;
+  total.written = (total.written ?? 0) + written;
+  total.cached += cached;
+  total.output += output;
+  // `model` is the answer's own (a fallback model is billed as itself).
+  const price = PRICES[model];
+  if (price) {
+    total.dollars = (total.dollars ?? 0) +
+      (fresh * price.input + written * price.cacheWrite + cached * price.cacheRead + output * price.output) / 1e6;
+  }
+}
+
+/** The usage line and its tooltip, for both chats' headers. */
+export function usageText({ input, output, cached, written = 0, dollars }) {
+  const k = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+  const cost = dollars === undefined ? "" : ` · ≈ $${dollars < 0.01 && dollars > 0 ? "0.01" : dollars.toFixed(2)}`;
+  return {
+    text: `${k(input + cached)} in · ${k(output)} out${cost}`,
+    title:
+      `${input - written} input tokens read fresh, ${written} written to the cache, ${cached} read from the cache, ` +
+      `${output} output tokens${dollars === undefined ? "" : ` - about $${dollars.toFixed(3)} at the list prices of October 2026`}; ` +
+      "billed to your key at your plan's rates",
+  };
 }
 
 /*

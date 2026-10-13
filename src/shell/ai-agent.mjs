@@ -14,6 +14,11 @@
 //                                          the tests, the first roundtrip, a dump
 //   search_samples / read_sample           the sample catalogue this site
 //                                          already carries (samples/apps.json)
+//   look / act                             the running app's screen as the
+//                                          agent snapshot, and a step in it -
+//                                          the AI Pilot's eyes and hands
+//                                          (src/shell/ai-operator.mjs), so the
+//                                          model can try what it built
 //
 // So nothing here compiles, checks or renders anything itself: what the model
 // is told is what the reader sees, and a file it writes is a file in the editor
@@ -29,12 +34,20 @@ import { addUsage, catalogueEntries, CONTEXT_BETA, CONTEXT_MANAGEMENT, DEFAULT_S
 // tools/fetch-deps.mjs pins - the same commit the runtime in this page is
 // transpiled from, so the API the guide describes is the API that runs here.
 import GUIDE from "../../deps/abap2ui5/docs/agents/building-apps.md";
+import { linterSettings } from "../editor/abap2ui5-lint.mjs";
 import { parseName } from "../editor/files.mjs";
+import { UI5_LIBRARIES } from "./ui5-libraries.mjs";
+import { AgentError } from "../vendor/agent/appclient.mjs";
+import { createOperator, describeMirror, fitSnapshot, MAX_ERROR_TEXT } from "./ai-operator.mjs";
 import { isUntouchedStarter } from "./ai-starter.mjs";
 import { attachmentBlocks } from "./attachments.mjs";
 
+// The mirror of the running app's screen, made by chat.mjs with this chunk
+// (ai-operator.mjs, shared with the AI Pilot).
+export { createMirror } from "./ai-operator.mjs";
+
 // The speeds and the errors are the AI Pilot's as well (src/shell/ai-common.mjs).
-export { SPEEDS, DEFAULT_SPEED, explainError } from "./ai-common.mjs";
+export { SPEEDS, DEFAULT_SPEED, explainError, usageText } from "./ai-common.mjs";
 // What the chat checks a file against as it is added (attach-ui.mjs).
 export { kindOf, MAX_FILES, MAX_MESSAGE_BYTES } from "./attachments.mjs";
 
@@ -45,7 +58,7 @@ const FILE_TOOLS = new Set(["write_file", "edit_file", "delete_file"]);
 // What applies here and not in a real system - the guide is written for a
 // project with abapGit, the linter on the command line and an SAP system
 // behind it, and three of its four assumptions are not true in this page.
-const PLAYGROUND_RULES = `You are the AI assistant of the abap2UI5 playground, a web page where a
+const playgroundRules = ({ ui5, distribution }) => `You are the AI assistant of the abap2UI5 playground, a web page where a
 person describes an app in plain language and you build it as an abap2UI5
 app: one ABAP class implementing z2ui5_if_app. The page compiles the ABAP in
 the browser (abaplint transpiler + open-abap) and runs it against the real
@@ -65,7 +78,11 @@ How the playground works, and what that means for you:
 - Use the tools to change the editor. Never paste code into the chat
   instead - the person sees the editor and the running app, and the files
   are what they take home. Write a new app as one complete write_file;
-  use edit_file for later changes of a few lines.
+  use edit_file for later changes of a few lines. For example, after
+  write_file of zcl_order_app.clas.abap a fix of one method is ONE
+  edit_file whose old_text is the few lines around the change - never a
+  second write_file of the whole class: every write_file is the whole class
+  again in this conversation, and the person pays for it on every turn.
 - The person is watching and every turn costs them time, so make all the
   changes a step needs in ONE message - several tool calls side by side -
   rather than one change per turn.
@@ -81,10 +98,10 @@ How the playground works, and what that means for you:
   SELECT from business tables, no RFC, no files, no HTTP. When the app
   needs data, fill internal tables in the code (VALUE #( ... )) and say in
   one sentence where the real SELECT would go.
-- Only these UI5 libraries are loaded: sap.m, sap.f, sap.ui.core,
-  sap.ui.layout, sap.ui.table, sap.ui.unified, sap.tnt, sap.uxap,
-  sap.ui.integration, sap.ui.codeeditor. OpenUI5 only - no sap.ui.comp,
-  sap.suite, sap.viz. Hold the view to UI5 1.71.
+- Only these UI5 libraries are loaded: ${UI5_LIBRARIES.filter((l) => l.startsWith("sap.")).join(", ")}.
+  OpenUI5 only - no sap.ui.comp, sap.suite, sap.viz. The abap2UI5 linter
+  checks the view against ${distribution === "sapui5" ? "SAPUI5" : "OpenUI5"} ${ui5} (the person's setting) -
+  hold the view to what that release has.
 - Build views with z2ui5_cl_ui5_view_builder as the guide below shows,
   never with the frozen z2ui5_cl_xml_view.
 - The guide below covers the common patterns - write from it directly.
@@ -94,6 +111,17 @@ How the playground works, and what that means for you:
   If the person asks for something new, write a new app class, make it the
   app and delete the files it does not need. If they ask for a change,
   change what is there.
+
+Trying the app:
+- A run that started the app ends with the screen as an AGENT SNAPSHOT
+  (fields, actions, tables, messages - what look answers). Once a run is
+  clean, try the app's main path ONCE with act - type the values a person
+  would, press the button, read what the app answered (a toast, a message
+  box, a new row) - and fix what does not work. A few acts, not a tour:
+  act is for the step that proves the app works, not for every change.
+  Ids (f1, a1) are valid for one snapshot only; an act on a screen that
+  changed since is refused with the screen as it is. Never act before the
+  run is clean, and never on a screen you have not seen.
 
 Files the person attaches:
 - A message may carry files: a specification (PDF, Word), a screenshot or
@@ -114,10 +142,13 @@ The abap2UI5 guide to building apps follows. Its sections on validation
 tooling (npm scripts, the MCP server, screenshots) do not apply here: in
 this page, the run after your changes is your validation.`;
 
-const SYSTEM = [
+// The rules name the UI5 release the linter checks against, which the reader
+// can change in the Config tab - so the prompt is built per request, from the
+// settings as they are then. Same settings, same text, same cache.
+const systemFor = (settings) => [
   {
     type: "text",
-    text: `${PLAYGROUND_RULES}\n\n<guide>\n${GUIDE}\n</guide>`,
+    text: `${playgroundRules(settings)}\n\n<guide>\n${GUIDE}\n</guide>`,
     // The rules and the guide are the same on every request - about twelve
     // thousand tokens that are read from the cache after the first one.
     cache_control: { type: "ephemeral" },
@@ -148,8 +179,9 @@ const TOOLS = [
   {
     name: "edit_file",
     description:
-      "Replace one passage of a file in the editor. old_text must occur exactly once in the file, " +
-      "with its whitespace and line breaks as they are.",
+      "Replace one passage of a file in the editor. old_text must occur exactly once in the file; " +
+      "line breaks as they are, and a difference in indentation or trailing spaces is forgiven " +
+      "(the file's own indentation is kept).",
     eager_input_streaming: true,
     input_schema: {
       type: "object",
@@ -173,9 +205,16 @@ const TOOLS = [
   },
   {
     name: "read_files",
-    description: "The files in the editor as they are now, the app first. The person may have edited them by hand.",
+    description:
+      "The files in the editor as they are now, the app first - or only the ones in `names`. The person may " +
+      "have edited them by hand. A long file is cut at its end and says so; ask for one file at a time then.",
     eager_input_streaming: true,
-    input_schema: { type: "object", properties: {} },
+    input_schema: {
+      type: "object",
+      properties: {
+        names: { type: "array", items: { type: "string" }, description: "The file names to read; all files when left out" },
+      },
+    },
   },
   {
     name: "run_app",
@@ -201,6 +240,34 @@ const TOOLS = [
     },
   },
   {
+    name: "look",
+    description:
+      "The screen of the running app as it is now - the agent snapshot: fields (id, path, label, value, " +
+      "editable), actions (id, event, label, enabled), tables (rows), messages (what the app said). " +
+      "Pass max_rows for more table rows (default 20).",
+    eager_input_streaming: true,
+    input_schema: { type: "object", properties: { max_rows: { type: "number" } } },
+  },
+  {
+    name: "act",
+    description:
+      "Try the running app on the person's screen: type `values` into fields and fire `event`, then get the " +
+      "new snapshot. values: { \"<field id | path | name>\": value } (table cells \"<table path>/<row>/<COLUMN>\"); " +
+      "event: an action's event name or id; row: the 0-based row of a row action. Without event the values are " +
+      "typed but not sent. Strict: what is not on the screen is refused with the list of what is, and nothing is done.",
+    eager_input_streaming: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        values: { type: "object", description: "{ \"<field id, path or name>\": value }" },
+        event: { type: "string", description: "the action to fire: its event name (e.g. \"SAVE\") or its id (\"a3\")" },
+        row: { type: "number", description: "for a row action: the row index (0-based) in its table" },
+        args: { type: "array", description: "event arguments, positional to the action's args; null where the client fills the value" },
+        max_rows: { type: "number" },
+      },
+    },
+  },
+  {
     name: "read_sample",
     description: "The ABAP source of a sample class that search_samples found.",
     eager_input_streaming: true,
@@ -214,12 +281,34 @@ const TOOLS = [
 
 const str = (v) => (typeof v === "string" ? v : undefined);
 const MAX_TOOL_TEXT = 24000;
+// A file the model reads is cut on its own, not as part of one text: two
+// classes of 500 lines are 40,000 characters, and cut together at 24,000
+// the second was never seen - and then edited blind.
+const MAX_FILE_TEXT = 40000;
+const MAX_FILES_TEXT = 120000;
 const clip = (text, max = MAX_TOOL_TEXT) =>
   text.length <= max ? text : `${text.slice(0, max)}\n… (${text.length - max} more characters cut)`;
 
-// What the files are, as the model reads them.
-const filesAsText = (files) =>
-  files.map((f, i) => `=== ${f.name}${i === 0 ? " (the app)" : ""} ===\n${f.source}`).join("\n\n");
+const lineCount = (source) => source.split("\n").length;
+// What the files are, as the model reads them: a list first, then each file
+// cut on its own - under a ceiling for all of them together.
+export function filesAsText(files, { all = files } = {}) {
+  const list = all.map((f, i) => `${f.name} (${lineCount(f.source)} lines)${i === 0 ? " - the app" : ""}`).join(", ");
+  let room = MAX_FILES_TEXT;
+  const parts = [];
+  for (const f of files) {
+    const index = all.indexOf(f);
+    const head = `=== ${f.name}${index === 0 ? " (the app)" : ""} ===`;
+    if (room <= 0) {
+      parts.push(`${head}\n… (not shown - the files together are too long; read_files with names reads this one)`);
+      continue;
+    }
+    const text = clip(f.source, Math.min(MAX_FILE_TEXT, room));
+    room -= text.length;
+    parts.push(`${head}\n${text}`);
+  }
+  return `files in the editor: ${list}\n\n${parts.join("\n\n")}`;
+}
 
 /**
  * One conversation. `host` is the page (src/shell/main.mjs hands it over
@@ -253,8 +342,10 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
   // were written in, and an edited history invalidates them.
   const messages = [];
   // What the model last saw of the editor, so a hand edit between two
-  // messages is told to it rather than discovered by a failed edit_file.
+  // messages is told to it rather than discovered by a failed edit_file -
+  // as a snapshot to compare, and as the files, so only what changed goes.
   let seen;
+  let seenFiles = [];
   let stream;
   let stopped = false;
   // Resolved by stop( ): a tool still running (a run waiting on its app, a
@@ -264,14 +355,59 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
   let stopNow = () => {};
   const untilStopped = (work, what) =>
     Promise.race([work, stopping.then(() => ({ error: `Stopped by the person while ${what}.` }))]);
-  const total = { input: 0, output: 0, cached: 0 };
+  const total = { input: 0, output: 0, cached: 0, written: 0, dollars: 0 };
+  // Where each message of the reader's began in the history, and what the
+  // model had seen of the editor before it - so rewind( ) can take the last
+  // exchange out whole for a message edited and sent again.
+  const turns = [];
 
   const snapshot = () => JSON.stringify(host.files());
+
+  // The model's eyes and hands on the app (ai-operator.mjs), made the first
+  // time it reaches for them; `told` is the mirror's version the model was
+  // last shown a screen of - an act with an event on an older one is refused.
+  let operator;
+  let told = -1;
+  const mirror = () => host.app?.mirror?.();
+  const operatorOf = () => {
+    if (!operator) {
+      operator = createOperator({
+        app: host.app,
+        mirror: mirror(),
+        ui: { acting: (text) => ui.acting?.(text) },
+        halted: () => stopped,
+      });
+    }
+    return operator;
+  };
+  const MAX_SCREEN_TEXT = 16000;
+  // A snapshot as the model reads it, fitted whole (never cut mid-JSON), and
+  // the dump of the last answer after it, if there was one.
+  const screenText = (snap, budget = MAX_SCREEN_TEXT) => {
+    told = mirror()?.version ?? -1;
+    const error = mirror()?.error;
+    const fitted = fitSnapshot(snap, budget - (error ? error.length : 0) - 100);
+    return clip(JSON.stringify({ ...fitted, ...(error ? { lastAnswer: error } : {}) }), budget);
+  };
+  // The screen after a run, for the run's report: read off the mirror once
+  // the frame has settled, so a popup the first answer opens is on it.
+  async function screenAfterRun() {
+    const m = mirror();
+    if (!m || !m.state.id || !host.app) return "";
+    try {
+      await operatorOf().settled?.();
+      const snap = describeMirror(m);
+      return `\n\nscreen (agent snapshot, what look answers):\n${screenText(snap, 12000)}`;
+    } catch (e) {
+      return `\n\nscreen: could not be read - ${String(e?.message ?? e)}`;
+    }
+  }
 
   // `files` are the File objects the reader added to this message; they go in
   // front of its text, as the content blocks attachments.mjs makes of them.
   async function send(text, files = []) {
     const seenBefore = seen;
+    const seenFilesBefore = seenFiles;
     stopped = false;
     stopping = new Promise((resolve) => {
       stopNow = resolve;
@@ -279,11 +415,9 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
     const now = snapshot();
     const content = [];
     if (now !== seen) {
-      content.push({
-        type: "text",
-        text: `<editor_files>\nThe editor holds these files right now:\n\n${filesAsText(host.files())}\n</editor_files>`,
-      });
+      content.push({ type: "text", text: editorChanged(host.files(), seenFiles) });
       seen = now;
+      seenFiles = host.files();
     }
     if (files.length > 0) {
       const { blocks, errors } = await attachmentBlocks(files);
@@ -291,6 +425,7 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
       content.push(...blocks);
     }
     content.push({ type: "text", text });
+    turns.push({ at: messages.length, seen: seenBefore, seenFiles: seenFilesBefore });
     messages.push({ role: "user", content });
     const at = messages.length;
     try {
@@ -303,7 +438,9 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
       // message instead. A message the reader stopped stays.
       if (messages.length === at && !(err instanceof Anthropic.APIUserAbortError)) {
         messages.pop();
+        turns.pop();
         seen = seenBefore;
+        seenFiles = seenFilesBefore;
       }
       throw err;
     }
@@ -324,7 +461,7 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
       stream = client.beta.messages.stream({
         model: settings.model,
         max_tokens: 32000,
-        system: SYSTEM,
+        system: systemFor(linterSettings()),
         tools: TOOLS,
         messages,
         output_config: { effort: settings.effort },
@@ -357,7 +494,7 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         // billed) in the background, out of reach of Stop.
         stream.abort();
         // Billed all the same - the input from the moment it started.
-        addUsage(total, stream.currentMessage?.usage);
+        addUsage(total, stream.currentMessage?.usage, settings.model);
         ui.usage({ ...total });
         if (stopped) return;
         // A tool input that could not be parsed at all - the one failure that
@@ -379,7 +516,7 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         continue;
       }
 
-      addUsage(total, message.usage);
+      addUsage(total, message.usage, message.model ?? settings.model);
       ui.usage({ ...total });
 
       if (message.stop_reason === "refusal") {
@@ -479,12 +616,13 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         } catch (e) {
           result = { error: String(e?.message ?? e) };
         }
-        ui.tool({ id: use.id, summary: result.summary ?? result.error ?? "", error: Boolean(result.error || result.failed) });
+        ui.tool({ id: use.id, summary: result.summary ?? result.error ?? "", error: Boolean(result.error || result.failed), started: Boolean(result.started) && !result.failed });
         const entry = {
           type: "tool_result",
           tool_use_id: use.id,
           ...(result.error ? { is_error: true } : {}),
-          content: clip(result.error ?? result.text),
+          // A read is cut per file by filesAsText( ); everything else here.
+          content: use.name === "read_files" && !result.error ? result.text : clip(result.error ?? result.text),
         };
         results.push(entry);
         if (FILE_TOOLS.has(use.name) && !result.error) {
@@ -513,15 +651,19 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         try {
           const ran = await untilStopped(host.run(), "the app was running");
           report = ran.error ? { text: ran.error, summary: "run stopped" } : describeRun(ran);
+          if (report.started && !report.failed) report.text += await untilStopped(screenAfterRun(), "the screen was read").then((t) => (typeof t === "string" ? t : ""));
         } catch (e) {
           report = { text: `The automatic run failed: ${String(e?.message ?? e)}`, summary: "run failed" };
         }
-        ui.tool({ id, summary: report.summary, error: Boolean(report.failed) });
+        ui.tool({ id, summary: report.summary, error: Boolean(report.failed), started: Boolean(report.started) && !report.failed });
         lastChange.content = clip(`${lastChange.content}\n\nThe page ran the app after these changes:\n${report.text}`);
       }
       // Whatever the tools changed, the model has just been told - unless a
       // hand edit came in first, which the next user message has to carry.
-      if (!untold) seen = afterTools;
+      if (!untold) {
+        seen = afterTools;
+        seenFiles = JSON.parse(afterTools);
+      }
       // All results in one message - split across several, the model learns
       // to stop making parallel calls.
       messages.push({ role: "user", content: results });
@@ -534,13 +676,58 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
       case "edit_file": return editFile(input);
       case "delete_file": return deleteFile(input);
       case "read_files": {
-        const files = host.files();
-        return { text: filesAsText(files), summary: `read ${files.length} file${files.length === 1 ? "" : "s"}` };
+        const all = host.files();
+        const names = Array.isArray(input.names) ? input.names.map((n) => str(n)?.trim()).filter(Boolean) : [];
+        const missing = names.filter((n) => !all.some((f) => f.name === n));
+        if (missing.length) return { error: `There is no file ${missing.join(", ")} in the editor. Open files: ${all.map((f) => f.name).join(", ")}.` };
+        const files = names.length ? all.filter((f) => names.includes(f.name)) : all;
+        return { text: filesAsText(files, { all }), summary: `read ${names.length ? files.map((f) => f.name).join(", ") : `${files.length} file${files.length === 1 ? "" : "s"}`}` };
       }
-      case "run_app": return describeRun(await host.run());
+      case "run_app": {
+        const report = describeRun(await host.run());
+        if (report.started && !report.failed) report.text += await screenAfterRun();
+        return report;
+      }
+      case "look": {
+        const snap = await operatorOf().look(count(input.max_rows, "max_rows"));
+        return { text: screenText(snap), summary: `looked at ${snap.title || snap.app || "the app"}` };
+      }
+      case "act": return act(input);
       case "search_samples": return searchSamples(input);
       case "read_sample": return readSample(input);
       default: return { error: `There is no tool called ${name}.` };
+    }
+  }
+
+  async function act(input) {
+    const values = input.values && typeof input.values === "object" && !Array.isArray(input.values) ? input.values : undefined;
+    const event = str(input.event);
+    if (!values && !event) return { error: "act needs values, an event, or both." };
+    const m = mirror();
+    if (!m?.state.id) return { error: "No app is running on the stage - a run that starts the app comes first (write the app, or run_app)." };
+    try {
+      const row = count(input.row, "row");
+      const maxRows = count(input.max_rows, "max_rows");
+      if (event && told !== -1 && m.version !== told) {
+        throw new AgentError("the screen changed since you saw it (a run, or the person used the app) - nothing was typed or pressed; act on the screen below");
+      }
+      const snap = await operatorOf().act({ values, event, row, args: Array.isArray(input.args) ? input.args : undefined, maxRows });
+      const what = [
+        values ? `typed ${Object.keys(values).length} value${Object.keys(values).length === 1 ? "" : "s"}` : "",
+        event ? `pressed ${event.slice(0, 40)}` : "",
+      ].filter(Boolean).join(", ");
+      const said = (snap.messages ?? []).filter((x) => x.source !== "strip" && x.text).map((x) => x.text)[0];
+      return { text: screenText(snap), summary: `${what}${said ? ` → "${String(said).slice(0, 60)}"` : ""}` };
+    } catch (e) {
+      // A refusal names what is possible; the screen goes with it, so the
+      // next act needs no look first.
+      let screen = "";
+      try {
+        screen = `\n\nThe screen now:\n${screenText(await operatorOf().look())}`;
+      } catch {
+        screen = "";
+      }
+      return { error: `${clip(String(e?.message ?? e), MAX_ERROR_TEXT)}${screen}` };
     }
   }
 
@@ -550,6 +737,10 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
     if (!name || source === undefined) return { error: "write_file needs a name and a source (both strings)." };
     if (!parseName(name)) {
       return { error: `${name} is not a file name the playground takes: <name>.clas.abap, <name>.intf.abap or <class>.clas.testclasses.abap, lower case.` };
+    }
+    const parsed = parseName(name);
+    if (input.as_app === true && (parsed.kind !== "clas" || parsed.include)) {
+      return { error: `${name} cannot be the app - the app is a class (<name>.clas.abap) implementing z2ui5_if_app.` };
     }
     const files = host.files();
     const at = files.findIndex((f) => f.name === name);
@@ -562,7 +753,6 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
     // written first used to drop the starter and leave itself first - "the
     // first file is the app, so it has to be a class" - and a class written
     // after it was refused the same way.
-    const parsed = parseName(name);
     if (parsed.kind === "clas" && !parsed.include) {
       const appGoes = next[0].name !== name && isUntouchedStarter(next[0]);
       next = next.filter((f) => f.name === name || !isUntouchedStarter(f));
@@ -597,15 +787,13 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
     const eol = (t) => (crlf ? t.replace(/\r?\n/g, "\r\n") : t);
     const oldText = eol(rawOld);
     const newText = eol(rawNew);
-    const first = file.source.indexOf(oldText);
-    if (first === -1) return { error: `old_text does not occur in ${name}. Call read_files to see the file as it is.` };
-    if (file.source.indexOf(oldText, first + 1) !== -1) {
-      return { error: `old_text occurs more than once in ${name} - include more of the surrounding lines.` };
-    }
-    const source = file.source.slice(0, first) + newText + file.source.slice(first + oldText.length);
+    const found = locate(file.source, oldText, newText);
+    if (found.error) return { error: `${found.error} in ${name}${found.error.startsWith("old_text does not") ? ". Call read_files to see the file as it is" : " - include more of the surrounding lines"}.` };
+    const source = file.source.slice(0, found.start) + found.replacement + file.source.slice(found.end);
     host.setFiles(files.map((f) => (f.name === name ? { name, source } : f)));
     host.show?.(name);
-    return { text: `Edited ${name}.`, summary: `edited ${name}` };
+    const how = found.loose ? " (indentation and trailing spaces matched loosely; the file's own indentation is kept)" : "";
+    return { text: `Edited ${name}${how}.`, summary: `edited ${name}` };
   }
 
   function deleteFile(input) {
@@ -627,10 +815,93 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
       stopNow();
       stream?.abort();
     },
+    /*
+     * The last exchange taken out of the history - the reader's message and
+     * everything answered to it - for a message edited and sent again. The
+     * history stays valid: a thinking block is bound to what came BEFORE it,
+     * and nothing before the message is touched. The files in the editor
+     * are not put back (that is the checkpoint's job, chat.mjs); what the
+     * model had seen of them is, so the next message tells the difference.
+     */
+    rewind() {
+      const turn = turns.pop();
+      if (!turn) return false;
+      messages.length = turn.at;
+      seen = turn.seen;
+      seenFiles = turn.seenFiles;
+      return true;
+    },
     get usage() {
       return { ...total };
     },
   };
+}
+
+/*
+ * Where `oldText` is in `source`, and what goes in its place. Exactly, once;
+ * or - a model misreads an indentation or drops a trailing space more often
+ * than it misreads a word, and every miss was a whole billed turn - line by
+ * line with the whitespace at both ends of each line forgiven, still exactly
+ * once. On a loose match the file's indentation wins: each replacement line
+ * is shifted by the difference between the file's first matched line and
+ * old_text's, so a passage pasted at the wrong depth lands at the right one.
+ */
+export function locate(source, oldText, newText) {
+  const first = source.indexOf(oldText);
+  if (first !== -1) {
+    if (source.indexOf(oldText, first + 1) !== -1) return { error: "old_text occurs more than once" };
+    return { start: first, end: first + oldText.length, replacement: newText, loose: false };
+  }
+  const eol = source.includes("\r\n") ? "\r\n" : "\n";
+  const lines = source.split(eol);
+  const wanted = oldText.split(eol).map((l) => l.trim());
+  while (wanted.length > 1 && wanted[wanted.length - 1] === "") wanted.pop();
+  if (wanted.length === 0 || wanted.every((l) => l === "")) return { error: "old_text does not occur" };
+  const matches = [];
+  for (let i = 0; i + wanted.length <= lines.length; i++) {
+    if (wanted.every((w, k) => lines[i + k].trim() === w)) matches.push(i);
+  }
+  if (matches.length === 0) return { error: "old_text does not occur" };
+  if (matches.length > 1) return { error: "old_text occurs more than once" };
+  const at = matches[0];
+  const indentOf = (l) => /^[ \t]*/.exec(l)[0];
+  const fileIndent = indentOf(lines[at]);
+  const givenIndent = indentOf(oldText.split(eol)[0]);
+  const shift = (l) => {
+    if (l.trim() === "") return "";
+    const own = indentOf(l);
+    // The given depth and the file's: a line deeper than old_text's first
+    // line keeps its extra depth on top of the file's.
+    const extra = own.startsWith(givenIndent) ? own.slice(givenIndent.length) : own;
+    return fileIndent + extra + l.slice(own.length);
+  };
+  const replacement = newText.split(eol).map(shift).join(eol);
+  let start = 0;
+  for (let i = 0; i < at; i++) start += lines[i].length + eol.length;
+  let end = start;
+  for (let k = 0; k < wanted.length; k++) end += lines[at + k].length + (k < wanted.length - 1 ? eol.length : 0);
+  return { start, end, replacement, loose: true };
+}
+
+// What the editor holds now, told to the model as what changed since it last
+// looked: the list of all files, then only the files that are new or
+// different, each cut on its own, and the names of the ones that went.
+function editorChanged(files, before) {
+  const was = new Map(before.map((f) => [f.name, f.source]));
+  const changed = files.filter((f) => was.get(f.name) !== f.source);
+  const gone = before.filter((f) => !files.some((g) => g.name === f.name)).map((f) => f.name);
+  const what = before.length === 0
+    ? "The editor holds these files right now:"
+    : `The editor changed since you last saw it (the person edited by hand, or opened something) - ${changed.length ? `changed: ${changed.map((f) => f.name).join(", ")}` : "no file changed"}${gone.length ? `; removed: ${gone.join(", ")}` : ""}:`;
+  return `<editor_files>\n${what}\n\n${filesAsText(changed, { all: files })}\n</editor_files>`;
+}
+
+// row and max_rows: a whole number, or a string of digits.
+function count(v, name) {
+  if (v === undefined || v === null) return undefined;
+  const n = typeof v === "number" ? v : typeof v === "string" && /^\s*\d+\s*$/.test(v) ? Number(v) : NaN;
+  if (!Number.isInteger(n) || n < 0) throw new AgentError(`${name} is a whole number, not ${JSON.stringify(v).slice(0, 40)}`);
+  return n;
 }
 
 // What a tool call is doing while it is still under way - written while its
@@ -648,6 +919,14 @@ export function pendingText(name, input) {
     case "run_app": return "running the app…";
     case "search_samples": return `searching samples${str(input.query) ? ` for "${input.query}"` : ""}…`;
     case "read_sample": return `reading sample ${str(input.class) ?? ""}…`;
+    case "look": return "looking at the app…";
+    case "act": {
+      const event = str(input.event);
+      const keys = input.values && typeof input.values === "object" ? Object.keys(input.values) : [];
+      if (event && keys.length) return `trying the app: typing ${keys.length} value${keys.length === 1 ? "" : "s"}, then ${event.slice(0, 40)}…`;
+      if (event) return `trying the app: pressing ${event.slice(0, 40)}…`;
+      return keys.length ? `trying the app: typing ${keys.join(", ").slice(0, 60)}…` : "trying the app…";
+    }
     default: return `${name}…`;
   }
 }
@@ -699,8 +978,10 @@ export function describeRun(report) {
     for (const view of first.views ?? []) {
       lines.push(`view rendered into slot ${view.slot}:\n${clip(view.xml, 4000)}`);
     }
+  } else if (report.started && report.starting) {
+    lines.push("first roundtrip: none yet - the app frame is still starting (UI5 is booting); this is not an error. Go on, or call run_app in a moment to read the first screen.");
   } else if (report.started) {
-    lines.push("first roundtrip: none arrived within ten seconds");
+    lines.push("first roundtrip: none arrived within thirty seconds");
   }
 
   if (report.log?.body) lines.push(`log (${report.log.title}):\n${clip(report.log.body, 4000)}`);
@@ -709,7 +990,9 @@ export function describeRun(report) {
     : `run stopped: ${report.status}`;
   // `failed` draws the row as one that went wrong - a run that did not start
   // had the same ✓ as one that did.
-  return { text: lines.join("\n"), summary, failed: !report.started || (first?.status ?? 0) >= 400 };
+  // `started` is the page's own word for it, so the chat need not read it
+  // off the summary's text.
+  return { text: lines.join("\n"), summary, failed: !report.started || (first?.status ?? 0) >= 400, started: Boolean(report.started) };
 }
 
 // ------------------------------------------------------------------ samples

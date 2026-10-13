@@ -32,6 +32,7 @@
 // the same reason, as the AI Studio's (src/shell/chat.mjs).
 import { renderMarkdown } from "./chat.mjs";
 import { listenForFileDrops, listSentFiles, setUpAttaching } from "./attach-ui.mjs";
+import { createDriver } from "./frame-drive.mjs";
 import { highlightJson } from "./highlight.mjs";
 import { readStored, removeStored, writeStored } from "./storage.mjs";
 import { setStatus } from "./ui.mjs";
@@ -64,9 +65,8 @@ let mod;
 // the app the first file declares; the others are frames of their own, added
 // by openApp( ) with `beside`, which load their class from the same build of
 // classes in the same runtime - one database, so what one app writes the
-// others can read. Each tab keeps the screen of its app (`mirror`), the act
-// parked for its frame (`request`) and whatever the frame was answered before
-// the chunk arrived (`early`).
+// others can read. Each tab keeps the screen of its app (`mirror`) and its
+// frame as the model's transport (`driver`, src/shell/frame-drive.mjs).
 const MAX_APPS = 4;
 const tabs = [];
 let visible = "1";
@@ -111,19 +111,13 @@ function tabFrom(from) {
  *  the frame that is asking, if there is one - taken, so it goes out once. */
 export function takePilotRequest(from) {
   const tab = host && tabFrom(from);
-  const taken = tab?.request;
-  if (!taken) return null;
-  tab.request = null;
-  taken.settled();
-  return taken;
+  return tab?.driver.take() ?? null;
 }
 
 /** main.mjs, after every answer the framework gave a frame. */
 export function sawRoundtrip(body, response, from) {
   const tab = host && tabFrom(from);
-  if (!tab) return;
-  if (tab.mirror) tab.mirror.observe(body, response);
-  else tab.early.push([body, response]);
+  tab?.driver.saw(body, response);
 }
 
 /** main.mjs, after a Run: one fresh database for all of them, so every other
@@ -160,38 +154,14 @@ export async function pilotPicked(files) {
   }
 }
 
-/*
- * One request of the Pilot, sent by a tab's frame so that the frame renders
- * the answer. Answers what the framework answered ({ status, body }), or
- * rejects when the frame cannot send - no app in it, or a frontend that no
- * longer has what frontend-bridge.js reaches for.
- */
-function drive(tab, body) {
-  return new Promise((resolve, reject) => {
-    const gaveUp = setTimeout(() => {
-      if (tab.request?.body !== body) return;
-      tab.request = null;
-      reject(new Error("the app did not send the roundtrip - restart_app starts it again"));
-    }, 15000);
-    tab.request = { body, resolve, reject, settled: () => clearTimeout(gaveUp) };
-    let sent = false;
-    try {
-      sent = frameApi(tab)?.roundtrip() === true;
-    } catch {
-      sent = false;
-    }
-    if (!sent) {
-      clearTimeout(gaveUp);
-      tab.request = null;
-      reject(new Error("the app could not be updated - it is not running (restart_app starts it)"));
-    }
-  });
-}
+// One request of the Pilot, sent by a tab's frame so that the frame renders
+// the answer (src/shell/frame-drive.mjs).
+const drive = (tab, body) => tab.driver.drive(() => frameApi(tab), body);
 
 // --------------------------------------------------------------- the tabs
 
 function addTab(id, frame, cls) {
-  const tab = { id, frame, cls, mirror: null, early: [], request: null, known: "" };
+  const tab = { id, frame, cls, mirror: null, driver: createDriver(), known: "" };
   tabs.push(tab);
   if (mod) attachMirror(tab);
   return tab;
@@ -199,7 +169,8 @@ function addTab(id, frame, cls) {
 
 function attachMirror(tab) {
   tab.mirror = mod.createMirror({ onChange: () => screenChanged(tab) });
-  for (const [body, response] of tab.early.splice(0)) tab.mirror.observe(body, response);
+  // Told what the frame was answered before the chunk arrived, first.
+  tab.driver.observe((body, response) => tab.mirror.observe(body, response));
 }
 
 // (Re)loads a tab's frame on its class, at the current Run - Run's own frame
@@ -281,7 +252,7 @@ function closeTab(id) {
   const tab = tabById(id);
   if (!tab) return false;
   tabs.splice(tabs.indexOf(tab), 1);
-  tab.request?.reject(new Error("the app was closed"));
+  tab.driver.close();
   tab.frame.remove();
   if (visible === id) visible = "1";
   showTab(visible);
@@ -684,7 +655,9 @@ function setBusy(value) {
 
 async function submit() {
   const typed = el.input.value.trim();
-  if (typed === "" && attaching.count === 0) return;
+  // A file dropped a moment ago may still be being checked in.
+  await attaching.settled();
+  if (busy || (typed === "" && attaching.count === 0)) return;
   // Files alone are a message too: the model is told they are what it is about.
   const text = typed || "Here are the files.";
   if (sessionKey === null) {
@@ -757,10 +730,10 @@ async function submit() {
           row.textContent = summary;
           scrollDown();
         },
-        usage({ input, output, cached }) {
-          const k = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
-          el.usage.textContent = `${k(input + cached)} in · ${k(output)} out`;
-          el.usage.title = `${input} input tokens, ${cached} of them from the cache, ${output} output tokens - billed to your key`;
+        usage(total) {
+          const { text, title } = mod.usageText(total);
+          el.usage.textContent = text;
+          el.usage.title = title;
         },
         notice(t) {
           current = undefined;
