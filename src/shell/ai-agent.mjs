@@ -47,7 +47,7 @@ import { attachmentBlocks } from "./attachments.mjs";
 export { createMirror } from "./ai-operator.mjs";
 
 // The speeds and the errors are the AI Pilot's as well (src/shell/ai-common.mjs).
-export { SPEEDS, DEFAULT_SPEED, explainError } from "./ai-common.mjs";
+export { SPEEDS, DEFAULT_SPEED, explainError, usageText } from "./ai-common.mjs";
 // What the chat checks a file against as it is added (attach-ui.mjs).
 export { kindOf, MAX_FILES, MAX_MESSAGE_BYTES } from "./attachments.mjs";
 
@@ -355,7 +355,11 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
   let stopNow = () => {};
   const untilStopped = (work, what) =>
     Promise.race([work, stopping.then(() => ({ error: `Stopped by the person while ${what}.` }))]);
-  const total = { input: 0, output: 0, cached: 0 };
+  const total = { input: 0, output: 0, cached: 0, written: 0 };
+  // Where each message of the reader's began in the history, and what the
+  // model had seen of the editor before it - so rewind( ) can take the last
+  // exchange out whole for a message edited and sent again.
+  const turns = [];
 
   const snapshot = () => JSON.stringify(host.files());
 
@@ -421,6 +425,7 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
       content.push(...blocks);
     }
     content.push({ type: "text", text });
+    turns.push({ at: messages.length, seen: seenBefore, seenFiles: seenFilesBefore });
     messages.push({ role: "user", content });
     const at = messages.length;
     try {
@@ -433,6 +438,7 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
       // message instead. A message the reader stopped stays.
       if (messages.length === at && !(err instanceof Anthropic.APIUserAbortError)) {
         messages.pop();
+        turns.pop();
         seen = seenBefore;
         seenFiles = seenFilesBefore;
       }
@@ -808,6 +814,22 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
       stopped = true;
       stopNow();
       stream?.abort();
+    },
+    /*
+     * The last exchange taken out of the history - the reader's message and
+     * everything answered to it - for a message edited and sent again. The
+     * history stays valid: a thinking block is bound to what came BEFORE it,
+     * and nothing before the message is touched. The files in the editor
+     * are not put back (that is the checkpoint's job, chat.mjs); what the
+     * model had seen of them is, so the next message tells the difference.
+     */
+    rewind() {
+      const turn = turns.pop();
+      if (!turn) return false;
+      messages.length = turn.at;
+      seen = turn.seen;
+      seenFiles = turn.seenFiles;
+      return true;
     },
     get usage() {
       return { ...total };

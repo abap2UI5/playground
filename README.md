@@ -163,9 +163,9 @@ it back to the curated list of the day.
 
 ## Build an app by describing it
 
-**Still being built, and not linked from the playground:** the **AI Studio**
-has a page of its own, [`/playground/ai/`](https://abap2ui5.github.io/playground/ai/),
-reached by its address and kept out of search engines. It starts on a minimal
+The **AI Studio** has a page of its own,
+[`/playground/ai/`](https://abap2ui5.github.io/playground/ai/), in the bar's
+menu under Tools. It starts on a minimal
 class: `z2ui5_if_app` implemented, `main` still empty. The chat runs down the left, and the stage beside it shows the running
 app in a window of its own, the code, or both side by side (**Preview**,
 **Code**, **Split** in the studio's bar; a phone takes them in turns, the chat
@@ -203,6 +203,16 @@ with abapGit.
   specification (PDF, Word), a screenshot or mockup of the screen you want, an
   Excel sheet whose rows become the app's data, or a text file — the same
   formats and limits as in the AI Pilot below, read in your browser.
+- **It tries what it built.** Once a run is clean, the model can type into
+  the app's fields and press its buttons - the Pilot's eyes and hands, on
+  the same frame - and read the toast or the message box the app answered
+  with, so what it hands you is an app that worked once, not code that
+  compiled.
+- **Every step can be taken back, and the last message changed.** A step
+  that changed the files offers them back under its answer; ✎ on your
+  latest message takes the exchange out and puts the text back to send
+  again. **Export** writes the conversation as a markdown file, and the
+  files stay in this browser - the welcome offers the last build back.
 - **The limits are the playground's.** No tables of your own, no RFC, only the
   UI5 libraries built in (see *What it can and cannot do*) — the model is told
   so, and fills internal tables where a real app would `SELECT`.
@@ -220,8 +230,9 @@ somebody who sends a message.
 
 ## Let Claude operate an app
 
-**Still being built, and not linked from the playground either:** the **AI
-Pilot** has a page of its own, [`/playground/pilot/`](https://abap2ui5.github.io/playground/pilot/).
+The **AI Pilot** has a page of its own,
+[`/playground/pilot/`](https://abap2ui5.github.io/playground/pilot/), in the
+bar's menu under Tools.
 Where the AI Studio builds an app, the Pilot *uses* one: the app runs on the
 stage, the chat stands beside it, and you say what you want done — *"greet
 Carol"*, *"open the value help sample and pick the third colour"*. Claude reads
@@ -246,7 +257,8 @@ carries on from there.
 - **Any sample.** It opens on Basics II; *Change app* opens the samples
   browser, and Claude can look an app up in the catalogue and open it itself.
   A shared link or `?src=` opens your own class:
-  `/playground/pilot/?src=<raw url>`.
+  `/playground/pilot/?src=<raw url>` - after you said so, because that code
+  runs in the same page as your key.
 - **Several apps at once.** Up to four, one tab each over the stage — *+ App*
   opens one beside the others, and so does Claude when a task spans two apps
   (*"look the colour up in the value help app and greet it in the first"*).
@@ -254,9 +266,10 @@ carries on from there.
   as they are; *Restart* starts all of them again on a fresh database.
 - **Files in the chat.** 📎, a drop on the chat or a paste adds files to the
   next message — up to five, 10 MB each: a **PDF** and **images** go to the
-  model as they are, an **Excel** sheet (`.xlsx`) as CSV, a **Word** document
-  (`.docx`) as its text, and text files (CSV, JSON, XML, …) as text — *"enter
-  every order in this sheet"*. The Office files are read in your browser; the
+  model as they are, an **Excel** sheet (`.xlsx`) as CSV with its dates as
+  dates, a **Word** document (`.docx`) as its text with its tables as rows, a
+  **PowerPoint** deck (`.pptx`) as its slides' text, and text files (CSV,
+  JSON, XML, …) as text — *"enter every order in this sheet"*. The Office files are read in your browser; the
   old binary formats (`.xls`, `.doc`) are refused with what to save them as.
 - **Your own key, and no server** — exactly as in the AI Studio: held in
   memory for the visit, sent to `api.anthropic.com` and nowhere else.

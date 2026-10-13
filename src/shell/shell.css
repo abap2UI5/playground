@@ -2414,6 +2414,17 @@ body.is-studio .chat-welcome h2 {
 }
 body.is-studio .chat-suggestions { align-items: stretch; gap: .55rem; }
 .chat-resume { display: flex; align-items: center; gap: .6rem; margin-top: .9rem; }
+.chat-checkpoint { align-self: flex-start; margin-left: 2.1rem; }
+.chat-checkpoint-restore { font-size: 12px; color: var(--fg-dim); }
+.chat-user { position: relative; }
+.chat-edit {
+  position: absolute; left: -1.7rem; top: .35rem; width: 1.4rem; height: 1.4rem; padding: 0;
+  border: 0; background: transparent; color: var(--fg-dim); font-size: 13px; cursor: pointer; opacity: 0;
+}
+.chat-user:hover .chat-edit, .chat-edit:focus-visible { opacity: 1; }
+.chat-assistant table { border-collapse: collapse; margin: .4rem 0; font-size: .92em; }
+.chat-assistant th, .chat-assistant td { border: 1px solid var(--line); padding: .2rem .5rem; text-align: left; vertical-align: top; }
+.chat-assistant th { font-weight: 600; }
 .chat-resume-open { flex: 1; }
 .chat-resume-forget { font-size: .8rem; color: var(--fg-dim); }
 body.is-studio button.chat-suggestion {

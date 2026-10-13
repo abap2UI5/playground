@@ -774,9 +774,9 @@ function writeIndex() {
 function writeAiPage(html) {
   const page = html
     .replace(/<html([^>]*)>/, '<html$1 data-page="ai">')
-    .replace("<head>", `<head>\n<base href="../">\n<meta name="robots" content="noindex">${preloadsFor("src/shell/chat.mjs")}`)
+    .replace("<head>", `<head>\n<base href="../">${preloadsFor("src/shell/chat.mjs")}`)
     .replace(/<title>[^<]*<\/title>/, "<title>AI Studio · abap2UI5</title>")
-    .replace(/<link rel="canonical"[^>]*>\n?/, "");
+    .replace(/<link rel="canonical" href="([^"]*)">/, (_, href) => `<link rel="canonical" href="${href.replace(/\/?$/, "/")}ai/">`);
   for (const mark of ['data-page="ai"', '<base href="../">', "<title>AI Studio"]) {
     if (!page.includes(mark)) {
       console.error(`build-site: ERROR the AI page could not be written - ${mark} did not land in src/shell/index.html's copy`);
@@ -792,13 +792,13 @@ function writeAiPage(html) {
 // directory down, the way ai/index.html is - see writeAiPage( ). main.mjs
 // reads `data-page="pilot"` and src/shell/pilot.mjs turns the page into the
 // Pilot: the app on the stage, Claude operating it from the chat beside it.
-// Not linked and not indexed while it is being built.
+// Linked from the bar's menu, like the studio, with a canonical of its own.
 function writePilotPage(html) {
   const page = html
     .replace(/<html([^>]*)>/, '<html$1 data-page="pilot">')
-    .replace("<head>", `<head>\n<base href="../">\n<meta name="robots" content="noindex">${preloadsFor("src/shell/pilot.mjs")}`)
+    .replace("<head>", `<head>\n<base href="../">${preloadsFor("src/shell/pilot.mjs")}`)
     .replace(/<title>[^<]*<\/title>/, "<title>AI Pilot · abap2UI5</title>")
-    .replace(/<link rel="canonical"[^>]*>\n?/, "");
+    .replace(/<link rel="canonical" href="([^"]*)">/, (_, href) => `<link rel="canonical" href="${href.replace(/\/?$/, "/")}pilot/">`);
   for (const mark of ['data-page="pilot"', '<base href="../">', "<title>AI Pilot"]) {
     if (!page.includes(mark)) {
       console.error(`build-site: ERROR the Pilot page could not be written - ${mark} did not land in src/shell/index.html's copy`);

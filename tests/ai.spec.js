@@ -416,13 +416,15 @@ test("on a wide screen the studio opens on Split: chat, code and app side by sid
   expect(app.height).toBeGreaterThan(500);
 });
 
-test("the playground carries no way into the studio, embedded or not", async ({ page }) => {
+test("the playground links to the studio from its menu and carries no chat of its own, embedded or not", async ({ page }) => {
   for (const url of ["/", "/?embed=1"]) {
     await page.goto(url);
     await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
     await expect(page.locator("#ai")).toHaveCount(0);
     await expect(page.locator("#studio-bar")).toBeHidden();
     await expect(page.locator("#chat")).toBeHidden();
+    await expect(page.locator('#extra .menu a[href="ai/"]')).toHaveText("AI Studio");
+    await expect(page.locator('#extra .menu a[href="pilot/"]')).toHaveText("AI Pilot");
   }
 });
 
@@ -439,8 +441,9 @@ test("the studio's page starts on a minimal class: no run, no sample, and no way
   await expect(page.locator("#studio-url")).toHaveText("your app");
   await expect(page.locator("#studio-exit")).toBeHidden();
   await expect(page).toHaveTitle("AI Studio · abap2UI5");
-  // Kept out of search engines while it is being built.
-  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex");
+  // A page of its own, for search engines too.
+  await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", /\/ai\/$/);
 });
 
 function cors() {
@@ -792,4 +795,62 @@ test("after a clean run the model tries the app: the screen rides on the report,
   expect(refused[0].content).toContain("no action 'NOWHERE'");
   expect(refused[0].content).toContain("GREET");
   expect(refused[1].content).toContain('"value":"Carol"');
+});
+
+// Phase 5: a step's files can be put back, the last message edited and sent
+// again, the conversation exported, and a table or a link in the answer
+// rendered as one.
+test("a step's files can be put back, and the last message edited and sent again", async ({ page }) => {
+  const requests = await answerWith(page, [
+    { tools: [{ name: "write_file", input: { name: APP_FILE, source: APP, as_app: true } }] },
+    { text: "| Field | Type |\n| --- | --- |\n| NAME | string |\n\nSee [the docs](https://abap2ui5.github.io/docs/) and [no](http://x.y/)." },
+    { text: "Again, differently." },
+  ]);
+  await openStudio(page);
+  await saveKey(page);
+  await page.locator("#chat-input").fill("A page");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last().locator("table td").first()).toHaveText("NAME", { timeout: 90000 });
+  // A link only for https, opened beside; a plain http stays text.
+  const link = page.locator(".chat-assistant").last().locator("a");
+  await expect(link).toHaveCount(1);
+  await expect(link).toHaveAttribute("href", "https://abap2ui5.github.io/docs/");
+  await expect(link).toHaveAttribute("target", "_blank");
+  await expect(page.frameLocator("#app").getByText(MARK)).toBeVisible();
+
+  // The files changed in this step: offered back.
+  await page.locator(".chat-checkpoint-restore").click();
+  await expect(page.locator(".chat-checkpoint")).toHaveCount(0);
+  const files = await page.evaluate(() =>
+    window.monaco.editor.getModels().filter((m) => m.uri.scheme === "file").map((m) => m.uri.path.slice(1)));
+  expect(files).toEqual(["zcl_app.clas.abap"]);
+  await expect(page.locator("#studio-url")).toHaveText("your app");
+
+  // Edit the message: the exchange goes, the text is back in the box, and
+  // the next request's history starts over with the new message - which
+  // tells the model the editor as it is now (the starter again).
+  await page.locator(".chat-user").hover();
+  await page.locator(".chat-edit").click();
+  await expect(page.locator(".chat-assistant")).toHaveCount(0);
+  await expect(page.locator("#chat-input")).toHaveValue("A page");
+  await page.locator("#chat-input").fill("A page, but blue");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toHaveText("Again, differently.", { timeout: 90000 });
+  const history = requests.at(-1).messages;
+  expect(history).toHaveLength(1);
+  expect(history[0].content.at(-1).text).toBe("A page, but blue");
+  // Rewound to before the first message, the model has seen nothing of the
+  // editor yet - it is told the whole of it, the starter again.
+  expect(history[0].content[0].text).toContain("The editor holds these files right now:");
+  expect(history[0].content[0].text).toContain("METHOD z2ui5_if_app~main.");
+
+  // The conversation as a file.
+  const downloaded = page.waitForEvent("download");
+  await page.locator("#chat-export").click();
+  const file = await downloaded;
+  expect(file.suggestedFilename()).toMatch(/^abap2ui5-ai-studio-.*\.md$/);
+  const text = await new Response(await file.createReadStream()).text();
+  expect(text).toContain("## You\n\nA page, but blue");
+  expect(text).toContain("Again, differently.");
+  expect(text).not.toContain(KEY);
 });

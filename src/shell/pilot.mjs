@@ -730,10 +730,10 @@ async function submit() {
           row.textContent = summary;
           scrollDown();
         },
-        usage({ input, output, cached }) {
-          const k = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
-          el.usage.textContent = `${k(input + cached)} in · ${k(output)} out`;
-          el.usage.title = `${input} input tokens, ${cached} of them from the cache, ${output} output tokens - billed to your key`;
+        usage(total) {
+          const { text, title } = mod.usageText(total);
+          el.usage.textContent = text;
+          el.usage.title = title;
         },
         notice(t) {
           current = undefined;
