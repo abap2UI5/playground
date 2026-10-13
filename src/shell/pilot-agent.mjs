@@ -293,7 +293,7 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
   // ended on its own, up to half a minute later.
   let stopping;
   let stopNow = () => {};
-  const total = { input: 0, output: 0, cached: 0, written: 0 };
+  const total = { input: 0, output: 0, cached: 0, written: 0, dollars: 0 };
 
   // A snapshot as the model reads it, with the tab it belongs to - and a
   // failed last answer (a dump of the reader's click), which the snapshot
@@ -396,7 +396,7 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
       } catch (err) {
         stream.abort();
         // Billed all the same - the input from the moment it started.
-        addUsage(total, stream.currentMessage?.usage);
+        addUsage(total, stream.currentMessage?.usage, settings.model);
         ui.usage({ ...total });
         if (stopped) return;
         // Only a tool input that could not be parsed is asked for again, as
@@ -411,7 +411,7 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
         continue;
       }
 
-      addUsage(total, message.usage);
+      addUsage(total, message.usage, message.model ?? settings.model);
       ui.usage({ ...total });
 
       if (message.stop_reason === "refusal") {

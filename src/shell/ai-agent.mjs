@@ -355,7 +355,7 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
   let stopNow = () => {};
   const untilStopped = (work, what) =>
     Promise.race([work, stopping.then(() => ({ error: `Stopped by the person while ${what}.` }))]);
-  const total = { input: 0, output: 0, cached: 0, written: 0 };
+  const total = { input: 0, output: 0, cached: 0, written: 0, dollars: 0 };
   // Where each message of the reader's began in the history, and what the
   // model had seen of the editor before it - so rewind( ) can take the last
   // exchange out whole for a message edited and sent again.
@@ -494,7 +494,7 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         // billed) in the background, out of reach of Stop.
         stream.abort();
         // Billed all the same - the input from the moment it started.
-        addUsage(total, stream.currentMessage?.usage);
+        addUsage(total, stream.currentMessage?.usage, settings.model);
         ui.usage({ ...total });
         if (stopped) return;
         // A tool input that could not be parsed at all - the one failure that
@@ -516,7 +516,7 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         continue;
       }
 
-      addUsage(total, message.usage);
+      addUsage(total, message.usage, message.model ?? settings.model);
       ui.usage({ ...total });
 
       if (message.stop_reason === "refusal") {

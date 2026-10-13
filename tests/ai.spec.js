@@ -297,6 +297,9 @@ test("Fast in the header sends the next message to Sonnet 5.5, and is remembered
   await page.locator("#chat-send").click();
   await expect(page.locator(".chat-assistant").last()).toHaveText("Hi.");
   expect(models).toEqual(["claude-sonnet-5-5"]);
+  // The header counts the tokens and estimates the dollars at list prices.
+  await expect(page.locator("#chat-usage")).toContainText("1.2k in · 300 out · ≈ $0.01");
+  await expect(page.locator("#chat-usage")).toHaveAttribute("title", /October 2026/);
   // The key itself is in no storage the page's ABAP could read - only the
   // speed is remembered.
   const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }));
@@ -416,15 +419,13 @@ test("on a wide screen the studio opens on Split: chat, code and app side by sid
   expect(app.height).toBeGreaterThan(500);
 });
 
-test("the playground links to the studio from its menu and carries no chat of its own, embedded or not", async ({ page }) => {
+test("the playground carries no way into the studio, embedded or not", async ({ page }) => {
   for (const url of ["/", "/?embed=1"]) {
     await page.goto(url);
     await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
     await expect(page.locator("#ai")).toHaveCount(0);
     await expect(page.locator("#studio-bar")).toBeHidden();
     await expect(page.locator("#chat")).toBeHidden();
-    await expect(page.locator('#extra .menu a[href="ai/"]')).toHaveText("AI Studio");
-    await expect(page.locator('#extra .menu a[href="pilot/"]')).toHaveText("AI Pilot");
   }
 });
 
@@ -441,9 +442,8 @@ test("the studio's page starts on a minimal class: no run, no sample, and no way
   await expect(page.locator("#studio-url")).toHaveText("your app");
   await expect(page.locator("#studio-exit")).toBeHidden();
   await expect(page).toHaveTitle("AI Studio · abap2UI5");
-  // A page of its own, for search engines too.
-  await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
-  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", /\/ai\/$/);
+  // Kept out of search engines while it is being built.
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex");
 });
 
 function cors() {

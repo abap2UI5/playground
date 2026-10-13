@@ -163,9 +163,9 @@ it back to the curated list of the day.
 
 ## Build an app by describing it
 
-The **AI Studio** has a page of its own,
-[`/playground/ai/`](https://abap2ui5.github.io/playground/ai/), in the bar's
-menu under Tools. It starts on a minimal
+**Still being built, and not linked from the playground:** the **AI Studio**
+has a page of its own, [`/playground/ai/`](https://abap2ui5.github.io/playground/ai/),
+reached by its address and kept out of search engines. It starts on a minimal
 class: `z2ui5_if_app` implemented, `main` still empty. The chat runs down the left, and the stage beside it shows the running
 app in a window of its own, the code, or both side by side (**Preview**,
 **Code**, **Split** in the studio's bar; a phone takes them in turns, the chat
@@ -230,9 +230,8 @@ somebody who sends a message.
 
 ## Let Claude operate an app
 
-The **AI Pilot** has a page of its own,
-[`/playground/pilot/`](https://abap2ui5.github.io/playground/pilot/), in the
-bar's menu under Tools.
+**Still being built, and not linked from the playground either:** the **AI
+Pilot** has a page of its own, [`/playground/pilot/`](https://abap2ui5.github.io/playground/pilot/).
 Where the AI Studio builds an app, the Pilot *uses* one: the app runs on the
 stage, the chat stands beside it, and you say what you want done — *"greet
 Carol"*, *"open the value help sample and pick the third colour"*. Claude reads

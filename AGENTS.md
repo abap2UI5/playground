@@ -787,14 +787,13 @@ changing anything near it.
 
 ## The AI chat — `src/shell/chat.mjs`, `src/shell/ai-agent.mjs`
 
-**The studio has a page of its own**, linked from the bar's menu under Tools
-(in all three copies of the menu: `index.html`, `src/catalogue/index.html`,
-`tools/sample-pages.mjs`): `ai/index.html`, written by `writeAiPage( )` in
+**The studio has a page of its own and no door from the playground** while it
+is being built: `ai/index.html`, written by `writeAiPage( )` in
 `tools/build-site.mjs` from the playground's finished `index.html` - the same
 document one directory down, with `<base href="../">` (so the bundle, the
 workers the inline script starts, the app frame and the service worker's scope
 all resolve where the playground's do: one build, two doors), `data-page="ai"`
-on `<html>`, its own title and a canonical link of its own. `main.mjs` reads
+on `<html>`, its own title, no canonical link and `noindex`. `main.mjs` reads
 `data-page`: only there is `setUpChat( )` called (with `startOpen`), the editor
 starts on one minimal class (`AI_STARTER` in `ai-starter.mjs`: `z2ui5_if_app`
 implemented, `main( )` empty) without a run - the placeholder says
@@ -990,11 +989,11 @@ link's ABAP runs. Sent by the
 ## The AI Pilot — `src/shell/pilot.mjs`, `src/shell/pilot-agent.mjs`
 
 **Claude operates the running app; the reader steers in the chat.** A page of
-its own, linked from the bar's menu like the studio: `pilot/index.html`,
-written by `writePilotPage( )` in
+its own and, like the studio, no door from the playground while it is being
+built: `pilot/index.html`, written by `writePilotPage( )` in
 `tools/build-site.mjs` exactly as `writeAiPage( )` writes the studio's -
-`<base href="../">`, `data-page="pilot"`, its own title, its own canonical
-link. `main.mjs` reads `data-page`: the editor opens on what a link
+`<base href="../">`, `data-page="pilot"`, its own title, `noindex`, no
+canonical link. `main.mjs` reads `data-page`: the editor opens on what a link
 carries (`#` fragment or `?src=`) or on the default sample, never on the
 stored draft, and nothing is stored over it; `setUpPilot( )` gets a small host
 (Run as `runForAgent( )`, files in place of the open ones, a carried sample by
