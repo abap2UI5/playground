@@ -32,12 +32,18 @@ export const DEFAULT_SPEED = "balanced";
  * as "removed" - a screen it needs again, it looks at again.
  */
 export const CONTEXT_BETA = "context-management-2025-06-27";
+// The inputs go too: in the studio a tool's INPUT is the whole class the
+// model wrote, resent with every request for the rest of the conversation -
+// ten rewrites of a 400-line class were 60,000 tokens of ballast that the
+// results-only clear never touched. From 100,000 rather than 200,000, since
+// the clear is what keeps a long build affordable, not only possible.
 export const CONTEXT_MANAGEMENT = {
   edits: [{
     type: "clear_tool_uses_20250919",
-    trigger: { type: "input_tokens", value: 200000 },
+    trigger: { type: "input_tokens", value: 100000 },
     keep: { type: "tool_uses", value: 10 },
-    clear_at_least: { type: "input_tokens", value: 60000 },
+    clear_at_least: { type: "input_tokens", value: 40000 },
+    clear_tool_inputs: true,
   }],
 };
 
@@ -75,6 +81,9 @@ export function explainError(err) {
       key: true,
       workspace: true,
     };
+  }
+  if (err instanceof Anthropic.APIError && err.status === 413) {
+    return { text: "The request is too large for the API - the files of this message, with the conversation, are more than one request carries. Send fewer or smaller files, or start a New chat." };
   }
   if (err instanceof Anthropic.BadRequestError) return { text: `The request was refused: ${err.message}` };
   if (err instanceof Anthropic.APIConnectionError) {

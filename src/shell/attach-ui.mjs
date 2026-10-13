@@ -19,10 +19,15 @@ const sizeOf = (bytes) =>
  *   rules()    a promise of { kindOf, MAX_FILES, MAX_MESSAGE_BYTES } (attachments.mjs)
  *   refused(text)  says why a file was left out, in the chat
  *
- * Answers { add(files), take() } - take( ) empties the list and answers it.
+ * Answers { add(files), settled(), take() } - take( ) empties the list and
+ * answers it.
  */
 export function setUpAttaching({ prefix, button, input, list, textarea, rules, refused }) {
   let attached = [];
+  // The adds still being checked (the chunk with kindOf may be on its way):
+  // a Send in that moment used to go without the file, which then rode
+  // silently on the NEXT message. submit( ) waits for settled( ).
+  let adding = Promise.resolve();
 
   function render() {
     list.hidden = attached.length === 0;
@@ -47,7 +52,13 @@ export function setUpAttaching({ prefix, button, input, list, textarea, rules, r
     );
   }
 
-  async function add(files) {
+  function add(files) {
+    const work = addNow(files);
+    adding = adding.then(() => work, () => work);
+    return work;
+  }
+
+  async function addNow(files) {
     if (files.length === 0) return;
     let loaded;
     try {
@@ -104,6 +115,8 @@ export function setUpAttaching({ prefix, button, input, list, textarea, rules, r
 
   return {
     add,
+    /** Resolves once every add( ) so far has been checked in or refused. */
+    settled: () => adding.then(() => undefined, () => undefined),
     get count() {
       return attached.length;
     },

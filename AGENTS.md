@@ -862,6 +862,24 @@ link's ABAP runs. Sent by the
   `explainError( )` recognises the API's refusal and points at that field. No proxy,
   no server: the page stays a static file. Never in an embedded playground —
   the switch is hidden there (`shell.css`) and `setUpChat( )` is not called.
+  **Storage is not the only way at the key.** The app frame is the same
+  origin and has no sandbox, and its bridge reaches into this page
+  (`window.parent.__z2ui5Playground`): a view's `core:HTML` with a script can
+  read the key form's DOM or patch the page's `fetch`. So the one page where
+  a stranger's code and a key meet - the Pilot's, which opens share links
+  and `?src=` - opens a link's code only once the reader said so
+  (`src/shell/linked-code.mjs`, `#linked-dialog`; `startingFiles( )` in
+  `main.mjs`) and takes no gist there (`REPOSITORY_HOSTS` in
+  `deep-link.mjs`). The studio opens no links. The whole answer is a frame on
+  an opaque origin with a `postMessage` bridge, which is not built.
+- **The studio keeps its build, not its chat.** `AI_STORAGE_KEY`
+  (`abap2ui5-playground:ai-files`) in `main.mjs` holds the files whenever they
+  are not the untouched starter - a key of its own, so the playground's draft
+  is never written over - and the welcome offers them back
+  (`host.lastBuild( )`, `.chat-resume` in `chat.mjs`); the studio still
+  starts on the minimal class every time. The conversation is not kept, so
+  `beforeunload` asks before the page goes while something is built or a
+  turn is running.
 - **Its instructions come from the pin.** `ai-agent.mjs` imports
   `deps/abap2ui5/docs/agents/building-apps.md` as text (the `.md` loader in
   `build-site.mjs`) under `PLAYGROUND_RULES`, which says what is different

@@ -621,3 +621,77 @@ test("the vendored agent client is mcp-server's, unchanged", () => {
   // tools/vendor-agent.mjs --check: every copy still hashes to source.json.
   execFileSync(process.execPath, ["tools/vendor-agent.mjs", "--check"], { stdio: "pipe" });
 });
+
+// On this page a link's code runs beside the key the reader types, so it is
+// opened only once they said so (src/shell/linked-code.mjs), and a gist -
+// anybody's - not at all.
+async function fragmentFor(page, files) {
+  return page.evaluate(async (list) => {
+    const bytes = new TextEncoder().encode(JSON.stringify(list));
+    const deflated = new Uint8Array(
+      await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate-raw"))).arrayBuffer(),
+    );
+    let binary = "";
+    for (const b of deflated) binary += String.fromCharCode(b);
+    return "2" + btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+  }, files);
+}
+
+test("code a link carries is opened only after the reader said so, and a gist not at all", async ({ page }) => {
+  await page.goto("/");
+  const source = await page.request.get("/examples/zcl_linked_example.clas.abap").then((r) => r.text());
+  const fragment = await fragmentFor(page, [{ name: "zcl_linked_example.clas.abap", source }]);
+
+  // Declined: the sample, and the status line says so.
+  await page.goto("about:blank");
+  await page.goto(`/pilot/#${fragment}`);
+  await expect(page.locator("#linked-dialog")).toBeVisible();
+  await expect(page.locator("#linked-what")).toContainText("zcl_linked_example.clas.abap");
+  await page.locator('#linked-dialog button[value="cancel"]').last().click();
+  await expect(page.locator("#status")).toHaveText(/the linked code was not opened/, { timeout: 120000 });
+  await expect(page.locator("#pilot-app-name")).toContainText("Z2UI5_CL_SMP_APP_494", { timeout: 30000 });
+
+  // Opened: the linked class.
+  await page.goto("about:blank");
+  await page.goto(`/pilot/#${fragment}`);
+  await expect(page.locator("#linked-dialog")).toBeVisible();
+  await page.locator('#linked-dialog button[value="open"]').click();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await expect(page.locator("#pilot-app-name")).toContainText("ZCL_LINKED_EXAMPLE", { timeout: 30000 });
+
+  // A gist is refused on this page even when the reader said yes.
+  const gist = "https://gist.githubusercontent.com/somebody/abc/raw/zcl_gist_example.clas.abap";
+  let fetched = false;
+  await page.route("https://gist.githubusercontent.com/**", (route) => {
+    fetched = true;
+    return route.fulfill({ status: 200, contentType: "text/plain", body: source });
+  });
+  await page.goto("about:blank");
+  await page.goto(`/pilot/?src=${encodeURIComponent(gist)}`);
+  await page.locator('#linked-dialog button[value="open"]').click();
+  await expect(page.locator("#status")).toHaveText(/the link could not be followed/, { timeout: 120000 });
+  await expect(page.locator(".log-body")).toContainText("only opens ABAP from raw.githubusercontent.com");
+  expect(fetched).toBe(false);
+});
+
+test("a date cell comes as a date, a Word table as rows, and a deck as its slides", async ({ page }) => {
+  const requests = await answerWith(page, [{ text: "Read." }]);
+  await openPilot(page);
+  await useKey(page);
+  await page.locator("#pilot-file-input").setInputFiles(["tests/fixtures/dates.xlsx", "tests/fixtures/table.docx", "tests/fixtures/deck.pptx"]);
+  await expect(page.locator(".pilot-file")).toHaveCount(3);
+  await say(page, "Read these");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("Read.", { timeout: 60000 });
+  const documents = requests[0].body.messages[0].content.filter((b) => b.type === "document");
+  const sheet = documents.find((b) => b.title === "dates.xlsx - sheet Dates").source.data.split("\n");
+  // A date-formatted cell as a date (whatever the format's spelling), one
+  // with a time with its time, and a plain number left as the number.
+  expect(sheet[2]).toBe("1,2026-03-14,2026-03-20 14:30:00,12.5");
+  expect(sheet[3]).toBe("2,2026-04-01,45000,3");
+  expect(sheet[0]).toContain("a date cell as YYYY-MM-DD");
+  const table = documents.find((b) => b.title === "table.docx").source.data;
+  expect(table.split("\n")).toEqual(["Fields of the order", "Field\tType\tNote", "ORDER_ID\tCHAR 10\tkey", "After the table"]);
+  const deck = documents.find((b) => b.title === "deck.pptx").source.data;
+  expect(deck).toContain("--- slide 1 ---\nOrder app\nOne list\nOne form");
+  expect(deck).toContain("--- slide 2 ---\nFields\nField\tType\nORDER_ID\tCHAR 10");
+});

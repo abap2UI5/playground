@@ -25,6 +25,7 @@
 import { isUntouchedStarter } from "./ai-starter.mjs";
 import { listenForFileDrops, listSentFiles, setUpAttaching } from "./attach-ui.mjs";
 import { abapGitZip, download } from "./export.mjs";
+import { createDriver } from "./frame-drive.mjs";
 import { readStored, removeStored, writeStored } from "./storage.mjs";
 import { setStatus } from "./ui.mjs";
 
@@ -54,6 +55,14 @@ const SUGGESTIONS = [
 
 let host;
 let agent;
+// Run's frame as the model's transport, and the mirror of its screen - what
+// lets the model try the app it built (look and act in ai-agent.mjs, the
+// operator in ai-operator.mjs, as in the Pilot). The driver is here from the
+// start, so an answer from before the agent's chunk landed is kept for the
+// mirror; the mirror needs the chunk and is made with the agent.
+const driver = createDriver();
+let mirror;
+const frameApi = () => document.getElementById("app")?.contentWindow?.__z2ui5PlaygroundPilot;
 // The agent whose turn is running, which is not always `agent`: a new key or
 // New chat replaces `agent` while a turn may still be under way, and Stop has
 // to reach the turn that is actually running.
@@ -219,12 +228,32 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
     else writeStored(SPEED_STORAGE, el.speed.value);
   });
 
+  // A reload or a closed tab takes the conversation with it, and the app
+  // while a turn is still writing it: the browser asks first. The files
+  // themselves are kept (the studio's draft in main.mjs), the chat is not.
+  window.addEventListener("beforeunload", (e) => {
+    if (!busy && host.files().every(isUntouchedStarter)) return;
+    e.preventDefault();
+    e.returnValue = "";
+  });
+
   showWelcome();
   if (el.toggle) el.toggle.disabled = false;
   if (startOpen) setOpen(true);
 }
 
 export const chatOpen = () => open;
+
+/** main.mjs, in the bridge's roundtrip( ): the model's request parked for
+ *  Run's frame, taken - the one frame this page has (the Pilot has tabs). */
+export function takePilotRequest() {
+  return driver.take();
+}
+
+/** main.mjs, after every answer the framework gave the frame. */
+export function sawRoundtrip(body, response) {
+  driver.saw(body, response);
+}
 
 /** A file drop on the studio's page, or on the app in its frame (main.mjs,
  *  the bridge's dropFiles): to the chat, which a phone brings forward. */
@@ -376,6 +405,42 @@ function showWelcome() {
     list.append(b);
   }
   intro.append(title, lead, list);
+  // The last build this browser kept (main.mjs stores the studio's files
+  // under a key of its own): offered back, not opened by itself - the
+  // studio starts on the minimal class every time, and the model is told
+  // what the editor holds with the first message (<editor_files>).
+  const last = host.lastBuild?.();
+  if (last && host.files().every(isUntouchedStarter)) {
+    const resume = document.createElement("div");
+    resume.className = "chat-resume";
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "chat-suggestion chat-resume-open";
+    open.textContent = `Open the last build again · ${last[0].name.replace(/\.clas\.abap$/, "").toUpperCase()}${last.length > 1 ? ` · ${last.length} files` : ""}`;
+    open.addEventListener("click", () => {
+      try {
+        host.setFiles(last);
+      } catch (e) {
+        addLine("notice is-error", `The last build could not be opened: ${String(e?.message ?? e)}`);
+        return;
+      }
+      resume.remove();
+      showAppName();
+      addLine("notice", "The last build is back in the editor - ask for a change, or describe something new.");
+      // Run, so the stage shows it; the report goes nowhere.
+      host.run().catch(() => {});
+    });
+    const forget = document.createElement("button");
+    forget.type = "button";
+    forget.className = "ghost chat-resume-forget";
+    forget.textContent = "forget it";
+    forget.addEventListener("click", () => {
+      host.forgetLastBuild?.();
+      resume.remove();
+    });
+    resume.append(open, forget);
+    intro.append(resume);
+  }
   el.log.append(intro);
 }
 
@@ -412,7 +477,9 @@ function setBusy(value) {
 
 async function submit() {
   const typed = el.input.value.trim();
-  if (typed === "" && attaching.count === 0) return;
+  // A file dropped a moment ago may still be being checked in.
+  await attaching.settled();
+  if (busy || (typed === "" && attaching.count === 0)) return;
   // Files alone are a message too: the model is told they are what it is about.
   const text = typed || "Here are the files.";
   const key = storedKey();
@@ -484,7 +551,7 @@ async function submit() {
           renderMarkdown(current, raw);
           scrollDown();
         },
-        tool({ id, summary, error }) {
+        tool({ id, summary, error, started }) {
           current = undefined;
           note = undefined;
           const row = rows.get(id) ?? addLine("tool", "");
@@ -492,7 +559,7 @@ async function submit() {
           row.className = `chat-msg chat-tool${error ? " is-error" : ""}`;
           row.textContent = summary;
           scrollDown();
-          if (!error && /^ran: running/.test(summary)) appUpdated();
+          if (started) appUpdated();
         },
         usage({ input, output, cached }) {
           const k = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
@@ -503,15 +570,37 @@ async function submit() {
           current = undefined;
           addLine("notice", t);
         },
+        // The model is about to do something in the app: said in the bar,
+        // and on a phone the app comes forward so the reader sees it happen.
+        acting(t) {
+          setStatus(t);
+          if (narrow()) setStage("preview");
+        },
       };
       const agentGen = generation;
       const guarded = Object.fromEntries(
         Object.entries(ui).map(([k, f]) => [k, (...args) => (agentGen === generation ? f(...args) : undefined)]),
       );
+      if (!mirror) {
+        mirror = mod.createMirror();
+        driver.observe((body, response) => mirror.observe(body, response));
+      }
       agent = mod.createAgent({
         apiKey: key,
         workspace: readStored(WORKSPACE_STORAGE) ?? undefined,
-        host,
+        host: {
+          ...host,
+          // The running app, for look and act: its frame as the transport,
+          // its screen as the mirror, the class Run starts.
+          app: {
+            drive: (body) => driver.drive(frameApi, body),
+            frame: frameApi,
+            mirror: () => mirror,
+            get cls() {
+              return host.files()[0]?.name.replace(/\.clas\.abap$/, "") ?? "";
+            },
+          },
+        },
         speed: () => el.speed.value,
         ui: guarded,
       });

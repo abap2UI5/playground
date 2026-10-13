@@ -737,6 +737,8 @@ iframe {
 .about-body p, .about-body li { font-size: .92rem; line-height: 1.6; }
 .about-body ol, .about-body ul { margin: .4rem 0; padding-left: 1.2rem; }
 .about-body li { margin: .3rem 0; }
+.linked { max-width: 34rem; }
+.linked-actions { display: flex; justify-content: flex-end; gap: .6rem; margin-top: 1rem; }
 .about-credits li, .about-where li { margin: .45rem 0; }
 
 /* The thanks carries the weight here, so it is allowed to look like it means
@@ -2411,6 +2413,9 @@ body.is-studio .chat-welcome h2 {
   color: transparent;
 }
 body.is-studio .chat-suggestions { align-items: stretch; gap: .55rem; }
+.chat-resume { display: flex; align-items: center; gap: .6rem; margin-top: .9rem; }
+.chat-resume-open { flex: 1; }
+.chat-resume-forget { font-size: .8rem; color: var(--fg-dim); }
 body.is-studio button.chat-suggestion {
   border: 1px solid var(--st-border);
   background: var(--st-surface-strong);

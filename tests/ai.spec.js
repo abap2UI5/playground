@@ -499,3 +499,297 @@ test("files go with a studio message: the paperclip, a drop anywhere on the page
   // The studio's rules say what to do with them.
   expect(JSON.stringify(requests[0].system)).toContain("Files the person attaches");
 });
+
+// The studio keeps what the model built under a key of its own (main.mjs),
+// and the welcome offers it back; the playground's own draft is never
+// touched. The conversation is not kept, which is why leaving asks first.
+test("a built app comes back after a reload from the welcome, and leaving with one asks first", async ({ page }) => {
+  await page.route("https://api.anthropic.com/**", async (route) => {
+    if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    const first = route.request().postDataJSON().messages.length === 1;
+    const answer = first
+      ? sse({ tools: [{ name: "write_file", input: { name: APP_FILE, source: APP, as_app: true } }] })
+      : sse({ text: "Done." });
+    await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: answer });
+  });
+  await openStudio(page);
+  // Untouched, the studio asks nothing on the way out.
+  const quiet = page.waitForEvent("dialog", { timeout: 1500 }).then(() => true, () => false);
+  await page.reload();
+  expect(await quiet).toBe(false);
+  await expect(page.locator("#status")).toHaveText("ready - describe the app you want", { timeout: 120000 });
+  await expect(page.locator(".chat-resume")).toHaveCount(0);
+
+  await saveKey(page);
+  await page.locator("#chat-input").fill("A page");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toHaveText("Done.", { timeout: 90000 });
+  await expect(page.frameLocator("#app").getByText(MARK)).toBeVisible();
+
+  // Built: the browser asks before the page goes.
+  const asked = page.waitForEvent("dialog");
+  page.reload().catch(() => {});
+  const dialog = await asked;
+  expect(dialog.type()).toBe("beforeunload");
+  await dialog.accept();
+  await expect(page.locator("#status")).toHaveText("ready - describe the app you want", { timeout: 120000 });
+
+  // Back on the minimal class, the last build one click away.
+  await expect(page.locator("#studio-url")).toHaveText("your app");
+  await expect(page.locator(".chat-resume-open")).toContainText("ZCL_AI_APP");
+  await page.locator(".chat-resume-open").click();
+  await expect(page.locator(".chat-resume")).toHaveCount(0);
+  await expect(page.frameLocator("#app").getByText(MARK)).toBeVisible({ timeout: 60000 });
+  await expect(page.locator("#studio-url")).toContainText("ZCL_AI_APP");
+  expect(await page.evaluate(() => localStorage.getItem("abap2ui5-playground:files"))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem("abap2ui5-playground:ai-files"))).toContain(APP_FILE);
+});
+
+// A mocked API that answers each request from `answers` in turn (the last one
+// again when they run out) and records what was sent.
+async function answerWith(page, answers) {
+  const requests = [];
+  await page.route("https://api.anthropic.com/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    requests.push(request.postDataJSON());
+    const answer = answers[Math.min(requests.length, answers.length) - 1];
+    await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: sse(answer) });
+  });
+  return requests;
+}
+
+const resultsOf = (request) => request.messages.at(-1).content;
+
+test("read_files reads a file whole by its name, and edit_file forgives an indentation that is off", async ({ page }) => {
+  // The model's old_text: the right lines, indented two spaces too few and
+  // with a trailing space, as a model types them.
+  const sloppy = "  view->ele( `Page` \n    )->a( n = `title` v = `" + MARK + "` ).";
+  const typed = "  view->ele( `Page`\n    )->a( n = `title` v = `Fixed by edit` ).";
+  // What lands: the file's depth for the first line (six spaces), and the
+  // new text's own relative depth under it for the second.
+  const fixed = "      view->ele( `Page`\n        )->a( n = `title` v = `Fixed by edit` ).";
+  const requests = await answerWith(page, [
+    { tools: [{ name: "write_file", input: { name: APP_FILE, source: APP, as_app: true } }] },
+    { tools: [
+      { name: "read_files", input: { names: [APP_FILE] } },
+      { name: "edit_file", input: { name: APP_FILE, old_text: sloppy, new_text: typed } },
+      { name: "read_files", input: { names: ["zcl_nowhere.clas.abap"] } },
+    ] },
+    { text: "Done." },
+  ]);
+  await openStudio(page);
+  await saveKey(page);
+  await page.locator("#chat-input").fill("A page");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toHaveText("Done.", { timeout: 90000 });
+
+  const results = resultsOf(requests[2]);
+  // The read names every file with its length, then the file itself, whole.
+  expect(results[0].content).toMatch(new RegExp(`files in the editor: ${APP_FILE} \\(\\d+ lines\\) - the app`));
+  expect(results[0].content).toContain("INTERFACES z2ui5_if_app.");
+  expect(results[0].is_error).toBeUndefined();
+  // The loose edit landed, at the file's own indentation.
+  expect(results[1].content).toContain("matched loosely");
+  const source = await page.evaluate(() => window.monaco.editor.getModels().find((m) => m.uri.path.endsWith("zcl_ai_app.clas.abap")).getValue());
+  expect(source).toContain(fixed);
+  expect(source).not.toContain(MARK);
+  // A name that is not there is said, with what is.
+  expect(results[2].is_error).toBe(true);
+  expect(results[2].content).toContain("There is no file zcl_nowhere.clas.abap");
+  await expect(page.frameLocator("#app").getByText("Fixed by edit")).toBeVisible();
+});
+
+test("a file with CRLF line endings takes an edit typed with LF", async ({ page }) => {
+  const requests = await answerWith(page, [
+    { tools: [{ name: "write_file", input: { name: APP_FILE, source: APP.replace(/\n/g, "\r\n"), as_app: true } }] },
+    { tools: [{ name: "edit_file", input: { name: APP_FILE, old_text: "    IF client->check_on_init( ).\n      DATA(view)", new_text: "    IF client->check_on_init( ).\n      \" edited\n      DATA(view)" } }] },
+    { text: "Done." },
+  ]);
+  await openStudio(page);
+  await saveKey(page);
+  await page.locator("#chat-input").fill("A page");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toHaveText("Done.", { timeout: 90000 });
+  expect(resultsOf(requests[2])[0].is_error).toBeUndefined();
+  const source = await page.evaluate(() => window.monaco.editor.getModels().find((m) => m.uri.path.endsWith("zcl_ai_app.clas.abap")).getValue());
+  expect(source).toContain('\r\n      " edited\r\n');
+});
+
+test("a hand edit between two messages is told as the changed file, not as every file", async ({ page }) => {
+  const requests = await answerWith(page, [
+    { tools: [
+      { name: "write_file", input: { name: APP_FILE, source: APP, as_app: true } },
+      { name: "write_file", input: { name: "zif_ai_thing.intf.abap", source: "INTERFACE zif_ai_thing PUBLIC.\nENDINTERFACE.\n" } },
+    ] },
+    { text: "Built." },
+  ]);
+  await openStudio(page);
+  await saveKey(page);
+  await page.locator("#chat-input").fill("A page");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toHaveText("Built.", { timeout: 90000 });
+  // The first message carried the starting class as what the editor held.
+  expect(requests[0].messages[0].content[0].text).toContain("The editor holds these files right now:");
+
+  // By hand, in the interface only.
+  await page.evaluate(() => {
+    const model = window.monaco.editor.getModels().find((m) => m.uri.path.endsWith("zif_ai_thing.intf.abap"));
+    model.setValue(model.getValue().replace("PUBLIC.", "PUBLIC.\n  CONSTANTS c TYPE i VALUE 1."));
+  });
+  await page.locator("#chat-input").fill("and now?");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant")).toHaveCount(2, { timeout: 90000 });
+  await expect(page.locator("#chat-send")).toHaveText("Send");
+  const told = requests[2].messages.at(-1).content[0].text;
+  expect(told).toContain("changed: zif_ai_thing.intf.abap");
+  expect(told).toContain(`files in the editor: ${APP_FILE}`);
+  expect(told).toContain("CONSTANTS c TYPE i VALUE 1.");
+  // The app's class did not change and is not sent again.
+  expect(told).not.toContain("INTERFACES z2ui5_if_app.");
+});
+
+test("an answer cut off at max_tokens runs none of its tools, and the model is asked for smaller steps", async ({ page }) => {
+  const requests = await answerWith(page, [
+    { tools: [{ name: "write_file", input: { name: APP_FILE, source: APP, as_app: true } }], stop: "max_tokens" },
+    { text: "I will write less." },
+  ]);
+  await openStudio(page);
+  await saveKey(page);
+  await page.locator("#chat-input").fill("A page");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toHaveText("I will write less.", { timeout: 90000 });
+  await expect(page.locator(".chat-notice")).toContainText("ran out of room");
+  await expect(page.locator(".chat-tool.is-error")).toContainText("cut off");
+  const result = resultsOf(requests[1])[0];
+  expect(result.is_error).toBe(true);
+  expect(result.content).toContain("may be cut off");
+  // Nothing was written: the studio is still on its starting class.
+  const files = await page.evaluate(() =>
+    window.monaco.editor.getModels().filter((m) => m.uri.scheme === "file").map((m) => m.uri.path.slice(1)));
+  expect(files).toEqual(["zcl_app.clas.abap"]);
+});
+
+test("a declined answer keeps the conversation valid for the next message", async ({ page }) => {
+  const requests = await answerWith(page, [
+    { tools: [{ name: "write_file", input: { name: APP_FILE, source: APP, as_app: true } }], stop: "refusal" },
+    { text: "Something else, then." },
+  ]);
+  await openStudio(page);
+  await saveKey(page);
+  await page.locator("#chat-input").fill("A page");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-notice")).toContainText("declined");
+  await expect(page.locator("#chat-send")).toHaveText("Send");
+  await page.locator("#chat-input").fill("Another page");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toHaveText("Something else, then.", { timeout: 90000 });
+  // The declined turn stands in the history as a plain placeholder, no
+  // tool_use left unanswered.
+  const history = requests[1].messages;
+  expect(history[1]).toEqual({ role: "assistant", content: [{ type: "text", text: "(The request was declined.)" }] });
+  expect(JSON.stringify(history)).not.toContain("toolu_0");
+});
+
+test("Stop ends a turn whose answer is still on its way, and the next message goes out", async ({ page }) => {
+  let hung = 0;
+  const requests = [];
+  await page.route("https://api.anthropic.com/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    requests.push(request.postDataJSON());
+    if (requests.length === 1) {
+      // An answer that never arrives: left to Stop.
+      hung += 1;
+      await new Promise((resolve) => setTimeout(resolve, 60000));
+      return route.abort();
+    }
+    await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: sse({ text: "Here." }) });
+  });
+  await openStudio(page);
+  await saveKey(page);
+  await page.locator("#chat-input").fill("A page");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator("#chat-send")).toHaveText("Stop");
+  await expect.poll(() => hung).toBe(1);
+  await page.locator("#chat-send").click();
+  await expect(page.locator(".chat-notice").last()).toHaveText("Stopped.");
+  await expect(page.locator("#chat-send")).toHaveText("Send");
+  await expect(page.locator("#status")).toHaveText("stopped");
+
+  await page.locator("#chat-input").fill("again");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toHaveText("Here.", { timeout: 60000 });
+  // The stopped message stayed in the history, and the new one follows it.
+  expect(requests[1].messages.map((m) => m.role)).toEqual(["user", "user"]);
+});
+
+// Once the run is clean the model can try what it built: the screen comes
+// with the run's report as the agent snapshot, and act types into the app
+// on the stage and presses its button - the Pilot's eyes and hands
+// (src/shell/ai-operator.mjs), on Run's own frame.
+const GREETER = `CLASS zcl_ai_greet DEFINITION PUBLIC CREATE PUBLIC.
+  PUBLIC SECTION.
+    INTERFACES z2ui5_if_app.
+    DATA name     TYPE string.
+    DATA greeting TYPE string.
+ENDCLASS.
+CLASS zcl_ai_greet IMPLEMENTATION.
+  METHOD z2ui5_if_app~main.
+    IF client->check_on_navigated( ).
+      DATA(view) = z2ui5_cl_ui5_view_builder=>factory(
+          )->ele( n = \`View\` ns = \`mvc\`
+              )->a( n = \`xmlns\`     v = \`sap.m\`
+              )->a( n = \`xmlns:mvc\` v = \`sap.ui.core.mvc\` ).
+      DATA(page) = view->ele( \`Page\`
+          )->a( n = \`title\` v = \`Greeter\` ).
+      page->tag( \`Input\`
+          )->a( n = \`value\` v = client->_bind( name ) ).
+      page->tag( \`Button\`
+          )->a( n = \`text\`  v = \`Greet\`
+          )->a( n = \`press\` v = client->_event( \`GREET\` ) ).
+      page->tag( \`Text\`
+          )->a( n = \`text\` v = client->_bind( greeting ) ).
+      client->view_display( view->stringify( ) ).
+    ELSEIF client->check_on_event( \`GREET\` ).
+      greeting = |Hello { name }!|.
+      client->message_toast_display( greeting ).
+    ENDIF.
+  ENDMETHOD.
+ENDCLASS.`;
+
+test("after a clean run the model tries the app: the screen rides on the report, act types and presses on the stage", async ({ page }) => {
+  const requests = await answerWith(page, [
+    { tools: [{ name: "write_file", input: { name: "zcl_ai_greet.clas.abap", source: GREETER, as_app: true } }] },
+    { tools: [{ name: "act", input: { values: { NAME: "Carol" }, event: "GREET" } }] },
+    { tools: [{ name: "act", input: { event: "NOWHERE" } }, { name: "look", input: {} }] },
+    { text: "It greets." },
+  ]);
+  await openStudio(page);
+  await saveKey(page);
+  await page.locator("#chat-input").fill("A greeter");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toHaveText("It greets.", { timeout: 120000 });
+
+  // The run's report ends on the screen: the Input, the Greet action.
+  const report = resultsOf(requests[1])[0].content;
+  expect(report).toContain("screen (agent snapshot");
+  expect(report).toMatch(/"event":"GREET"/);
+  expect(report).toMatch(/"path":"\/NAME"/);
+
+  // The act happened in the real app: the ABAP ran, the toast came up, and
+  // the model read the answer.
+  const acted = resultsOf(requests[2])[0];
+  expect(acted.is_error).toBeUndefined();
+  expect(acted.content).toContain("Hello Carol!");
+  await expect(page.locator(".chat-tool").filter({ hasText: "pressed GREET" })).toContainText("Hello Carol!");
+  await expect(page.frameLocator("#app").getByText("Hello Carol!").first()).toBeVisible();
+
+  // An event the screen does not offer is refused with what it does, and
+  // nothing was pressed; look reads the screen again.
+  const refused = resultsOf(requests[3]);
+  expect(refused[0].is_error).toBe(true);
+  expect(refused[0].content).toContain("no action 'NOWHERE'");
+  expect(refused[0].content).toContain("GREET");
+  expect(refused[1].content).toContain('"value":"Carol"');
+});
