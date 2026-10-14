@@ -396,7 +396,7 @@
   // listener list, and with it the models propagated to it: the whole data
   // model of every roundtrip. Every sample puts a Shell at its root, and a
   // timer app with a 500-row list grew the page by about 80 KB a roundtrip
-  // until the next Run (OpenUI5 1.152, sap/m/Shell.js init/exit).
+  // until the next Run (OpenUI5 1.152, still so in 1.153, sap/m/Shell.js init/exit).
   //
   // The patch keeps the handler Shell.init attaches and detaches it in exit.
   // It is applied once the app itself has loaded sap/m/Shell - the one-argument
