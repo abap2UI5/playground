@@ -43,6 +43,7 @@ import {
   forgetOrigins,
   originOf,
 } from "./deep-link.mjs";
+import { readSession, writeDraft, writeOpenFile } from "./persistence.mjs";
 import { carriedSampleFiles, DEFAULT_FILES, isSample, loadSampleFiles } from "../editor/samples.mjs";
 import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
 import { setTestResults, setUpInsight, showInsight, updateInsight } from "./insight.mjs";
@@ -68,7 +69,7 @@ import { warmUpAppFrame } from "./warm-up.mjs";
 // project path as well as at a site root.
 const asset = (p) => new URL(p, document.baseURI).href;
 
-const STORAGE_KEY = "abap2ui5-playground:files";
+// The playground's own draft is persistence.mjs's (DRAFT_KEY).
 // The AI Studio's last build (see the draft handler, and chat.mjs).
 const AI_STORAGE_KEY = "abap2ui5-playground:ai-files";
 
@@ -224,8 +225,8 @@ async function startingFiles() {
       // A draft that will not parse, or a storage that will not answer, is a
       // draft that is gone - readStoredJson says so with undefined. What is
       // still worth catching here is checkFileSet( ) refusing what it read.
-      const stored = readStoredJson(STORAGE_KEY);
-      if (stored) return { files: checkFileSet(stored), from: "your last session" };
+      const stored = readSession();
+      if (stored) return { files: checkFileSet(stored.files), openFile: stored.openFile, from: "your last session" };
     } catch {
       // A stored draft the editor cannot hold - a name that stopped being
       // valid, a first file that is not a class. Opening on the sample beats
@@ -404,9 +405,11 @@ async function boot() {
     })(),
   );
 
-  const { files, from } = await startingReady;
+  const { files, from, openFile: shownBefore } = await startingReady;
   startedFrom = from;
   await createEditor(document.getElementById("editor"), files, { onChange: remember, dark: isDark(), editor: !appOnly });
+  // A restored draft opens on the file that was on screen (persistence.mjs).
+  if (shownBefore) openFile(shownBefore);
   // What a link or the default sample put in is not the reader's work until
   // they change it (see `opened`); a restored draft is.
   if (from !== "your last session") opened = JSON.stringify(getFiles());
@@ -850,6 +853,8 @@ function applyFrameTheme() {
 // A different file is now on screen: the outline is about that file, and so is
 // the link to where it came from, and so is what Undo has to take back.
 function fileOpened() {
+  // Which file is on screen is part of the draft, kept where the draft is.
+  if (!embedded && !pilotPage && !aiPage) writeOpenFile(currentFile(), getFiles());
   showSourceLink();
   reflectHistory();
   updateInsight(refresh());
@@ -955,7 +960,7 @@ function remember(files) {
   // before `opened` can be set to what it put there, and a catalogued sample
   // or a named draft was stored over the draft in that one call.
   const pristine = openingAsOpened || (opened !== undefined && JSON.stringify(current) === opened);
-  if (!isSample(current) && !pristine) writeStoredJson(STORAGE_KEY, current);
+  if (!isSample(current) && !pristine) writeDraft(current);
   // A fragment in the address bar is a claim about what the editor holds, and
   // it just stopped being true. Left there, it would also win over this draft
   // on the next reload (a link outranks stored code in startingFiles), quietly

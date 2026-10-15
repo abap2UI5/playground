@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { allowClipboard, clickEditor, getSource, MAIN_CLASS, MAIN_FILE, MAIN_MARK, open, runSample, SAMPLES, setSource } from "./helpers.mjs";
+import { addNamedFile, allowClipboard, clickEditor, getSource, MAIN_CLASS, MAIN_FILE, MAIN_MARK, open, runSample, SAMPLES, setSource } from "./helpers.mjs";
 
 // A sample other than the one the page opens on - it brings its own class name,
 // which is what makes replacing a draft with it interesting.
@@ -701,4 +701,26 @@ test("the Share dialog offers an embed block, a markdown fence and an abapGit zi
   // Every sidecar starts with the byte order mark abapGit writes, or a pull
   // into a system is a diff on line 1 of it.
   expect([...entries[3].bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+});
+
+test("the file that was on screen comes back with the draft, and a link still outranks both", async ({ page }) => {
+  await open(page);
+  const tests = `${MAIN_CLASS}.clas.testclasses.abap`;
+  await addNamedFile(page, tests);
+  await expect(page.locator(".file-tab.is-active")).toContainText(tests);
+  await page.waitForTimeout(400);
+  expect(await page.evaluate(() => localStorage.getItem("abap2ui5-playground:open-file"))).toBe(tests);
+
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await expect(page.locator(".file-tab", { hasText: tests })).toBeVisible();
+  await expect(page.locator(".file-tab.is-active")).toContainText(tests);
+
+  // A link is what somebody was sent: it opens over the draft, on its app,
+  // and the draft stays stored for the next plain visit.
+  const draft = await page.evaluate(() => localStorage.getItem("abap2ui5-playground:files"));
+  await page.goto("/?src=examples/zcl_linked_example.clas.abap");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await expect(page.locator(".file-tab", { hasText: tests })).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem("abap2ui5-playground:files"))).toBe(draft);
 });
