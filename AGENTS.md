@@ -18,7 +18,7 @@ them before touching `tools/` or `src/runtime`.
 
 | Path | Purpose |
 | --- | --- |
-| `src/shell/` | The page: boot and Run (`main.mjs`, which also owns the **Auto** switch beside Run - the debounce, the stored setting and the three reasons Run may be inactive), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), the samples browser over the sample catalogue (`examples.mjs`, reading the built index — a near-full-screen modal with the filters and the catalogue's three facets down its side), which UI5 library a control ships in (`ui5-libs.mjs`) beside the closed list of the ones this site carries (`ui5-libraries.mjs`), the bottom panel (`insight.mjs`), the syntax colour it prints XML and JSON in (`highlight.mjs`) and the View tab's edit mode - the builder chain read back out of the ABAP (`chain-read.mjs`), the edited document matched against the one that was shown (`view-edit.mjs`), the change put back as an edit to the ABAP that is there (`chain-patch.mjs`) and, when it cannot be, the chain written again in the house layout (`chain-write.mjs`), the AI chat (`chat.mjs` on screen, `ai-agent.mjs` the conversation and its tools, a chunk loaded on first use, `ai-starter.mjs` the class the AI Studio starts on - see "The AI chat" below), the AI Pilot (`pilot.mjs` on screen and the bridge's half, `pilot-agent.mjs` the mirror, the operator and the conversation, a chunk, with `attachments.mjs`, the files added to a message - see "The AI Pilot" below), what the two share (`ai-common.mjs`: the speeds and how a failed request is said; `attach-ui.mjs`: the files added to a message, on screen), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch in the menu behind the bar's last button, applied as `data-theme` on `<html>` and handed to the editor and the app frame; `extra.mjs` is the six lines that close that menu), where the reader was on each of the neighbouring sites (`site-memory.mjs` — see "One site in three places" below), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the search box in the bar and the matcher under it (`search-box.mjs`, `search-engine.mjs` — one box over the documentation AND every sample, see "One site in three places" below), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
+| `src/shell/` | The page: boot and Run (`main.mjs`, which also owns the **Auto** switch beside Run - the debounce, the stored setting and the three reasons Run may be inactive), layout and splitter, toolbar, share links (`share.mjs`; the Share dialog in `share-dialog.mjs`, with the embed block, the markdown fence and the abapGit zip that `export.mjs` lays out and `zip.mjs` writes - stored entries, by hand, forty lines rather than a dependency), `?src=` deep links (`deep-link.mjs`), gists - a gist written from the Share dialog and `?gist=<id>` read back (`gist.mjs`), the draft and the file on screen kept between visits (`persistence.mjs`), the samples browser over the sample catalogue (`examples.mjs`, reading the built index — a near-full-screen modal with the filters and the catalogue's three facets down its side), which UI5 library a control ships in (`ui5-libs.mjs`) beside the closed list of the ones this site carries (`ui5-libraries.mjs`), the bottom panel (`insight.mjs`), the syntax colour it prints XML and JSON in (`highlight.mjs`) and the View tab's edit mode - the builder chain read back out of the ABAP (`chain-read.mjs`), the edited document matched against the one that was shown (`view-edit.mjs`), the change put back as an edit to the ABAP that is there (`chain-patch.mjs`) and, when it cannot be, the chain written again in the house layout (`chain-write.mjs`), the AI chat (`chat.mjs` on screen, `ai-agent.mjs` the conversation and its tools, a chunk loaded on first use, `ai-starter.mjs` the class the AI Studio starts on - see "The AI chat" below), the AI Pilot (`pilot.mjs` on screen and the bridge's half, `pilot-agent.mjs` the mirror, the operator and the conversation, a chunk, with `attachments.mjs`, the files added to a message - see "The AI Pilot" below), what the two share (`ai-common.mjs`: the speeds and how a failed request is said; `llm-provider.mjs`: which API answers - the Anthropic SDK or an OpenAI-compatible server - and `llm-form.mjs`, the provider half of both key forms; `attach-ui.mjs`: the files added to a message, on screen), embed messaging (`embed.mjs`), light or dark (`theme.mjs` — the switch in the menu behind the bar's last button, applied as `data-theme` on `<html>` and handed to the editor and the app frame; `extra.mjs` is the six lines that close that menu), where the reader was on each of the neighbouring sites (`site-memory.mjs` — see "One site in three places" below), every `localStorage` touch (`storage.mjs` — bar one, the inline script at the top of `index.html` reading the stored theme before the first paint) and what is kept in it between visits (`checker-settings.mjs`), the page's handle on the ABAP runtime worker (`runtime-client.mjs`), the search box in the bar and the matcher under it (`search-box.mjs`, `search-engine.mjs` — one box over the documentation AND every sample, see "One site in three places" below), the warm-up of the app frame's first load (`warm-up.mjs`) and the favicon (`favicon.png`, `apple-touch-icon.png` — the docs' mark, rendered down) — `frontend-bridge.js`, the fetch interception injected into the app frame, and `sw.js`, the service worker that makes a second visit cheap |
 | `src/editor/` | The editor as the page sees it (`editor.mjs`, one set of functions answered by one of two halves: `monaco-editor.mjs`, Monaco itself, a chunk imported dynamically and only where an editor is shown, or `file-store.mjs`, a plain list of files for the app-only pages — see "What a visitor waits for" below) and the analysis both share (`analysis.mjs`, Monaco-free, reading its half through a host), plus the abaplint registry — in a worker: `registry-core.mjs` and `transpile-core.mjs` are abaplint and the single-object transpile as they run there, `registry-worker.mjs` the worker's entry, `registry.mjs` the page's client with a promise in front of everything, `providers.mjs` Monaco's language providers answered over it, `lint-core.mjs` the abap2UI5 linter as it runs in that same worker (its bundle, `lint-entry.mjs`, loaded by the worker at start) and `abap2ui5-lint.mjs` the page's half of it (the settings and the rule links) — the file set, and the samples the page carries - `sample-list.mjs`, which is nothing but the class names of a handful of apps in **abap2UI5/samples**, and `samples.mjs`, which pairs what the build resolved them into (`build/samples/`) with the ABAP itself - the default sample's in the bundle, every other sample's a chunk fetched when it is picked (`loadSampleFiles()`), which is also why `isSample()` answers from what has landed |
 | `src/runtime/` | The ABAP side of the page: the framework entry (`index.mjs`, `roundtrip()` and `defineClasses()`), `worker.mjs` around it, which is the bundle's entry and answers those over `postMessage` when it runs as the worker the page starts, the sql.js database (`db-setup.mjs`), and the browser shims for Node modules |
 | `src/vendor/agent/` | abap2UI5/mcp-server's agent client - `appclient.mjs`, `snapshot.mjs`, `viewxml.mjs` - copied **unchanged** at a recorded commit by `tools/vendor-agent.mjs`, which writes `source.json` (the commit and each copy's sha256); `--check` holds the copies to it, and `tests/pilot.spec.js` runs that check. Never edited here: a change goes upstream and is vendored again |
@@ -766,6 +766,15 @@ it — the sample was improved in a later deploy and they went on being opened o
 the old one, findings and all, labelled "from your last session". One keystroke
 makes it a draft again, and `tests/shell.spec.js` holds both halves.
 
+Beside the draft, which file was on screen (`OPEN_FILE_KEY` in
+`src/shell/persistence.mjs`, written by `fileOpened()`, the first file
+forgotten rather than stored), so a reload lands on the test include that was
+being written. The draft is written on the editor's own 150 ms debounce, so
+there is nothing to flush on `pagehide`; every read and write is through
+`storage.mjs`, and a stored value of the wrong shape is no draft at all
+(`tests/persistence.spec.js`). A link - a fragment, `?src=`, `?gist=` -
+outranks both and leaves them stored.
+
 What it does **not** do any more is delete the draft that was there. A sample
 used to go into the editor as an undoable edit — every sample the playground
 carried was called `zcl_playground.clas.abap`, so `setFiles()` reused the model
@@ -948,6 +957,30 @@ link's ABAP runs. Sent by the
   `submit( )` waits for `attaching.settled( )`: a file dropped a moment
   before Enter was still being checked in and rode silently on the NEXT
   message.
+- **Which API answers** (`src/shell/llm-provider.mjs`, both chats). The
+  conversation is the Messages API's shape whatever answers it; a provider
+  turns one request of it into a call and the answer back. `anthropic` is the
+  SDK request below, unchanged - `tests/llm-provider.spec.js` holds it field
+  for field. `openai` is any OpenAI-compatible server (OpenAI, Azure OpenAI,
+  Ollama at `http://localhost:11434/v1`, LM Studio) reached with `fetch` at
+  `{baseUrl}/chat/completions`, a bearer key when there is one: the system
+  prompt as the first message, the tools as functions, a `tool_use` a
+  `tool_call` with the same id and each `tool_result` a `tool` message
+  answering it (an error said as `Error: …`, since there is no `is_error`),
+  images as `image_url` parts, a PDF as a `file` part, a text document as
+  text. Streamed over SSE and told as the Messages API's events, so
+  `followStream( )` draws both the same. The key form picks it (a select, a
+  base URL with the examples in a datalist, a model name; the speeds step
+  aside, the usage shows no dollars); provider, base URL and model are
+  remembered under `abap2ui5-playground:llm`, the key never. **A key goes
+  only to the server it was typed for** (`keyTarget( )` in `llm-form.mjs`):
+  another provider or base URL asks for its own, or sends none to a local
+  server - an Anthropic key sent as some server's bearer is a key given away.
+  The help says what CORS asks: Anthropic answers a browser because of the
+  `anthropic-dangerous-direct-browser-access` header the SDK sends, Ollama
+  only with `OLLAMA_ORIGINS` set to this site, LM Studio with CORS on in its
+  server settings. `tests/ai.spec.js` holds a studio turn against a local
+  server answered by the test.
 - **Model and request shape.** `SPEEDS` in `ai-agent.mjs`, picked in the chat
   header and asked before every request (`abap2ui5-playground:ai-speed`, kept
   only while it is not the default): Balanced is `claude-opus-5-5` at effort
@@ -1199,6 +1232,17 @@ deploy — readers get the published playground, never your checkout.
   several files; **the first file is the
   app**. Classes the app needs are looked for beside it: siblings only, at most
   6 files, 2 levels deep, silent when a name is not found.
+- **`?gist=<id>`** (`src/shell/gist.mjs`): opens the ABAP files of a GitHub
+  gist, read from `api.github.com/gists/<id>` without a token - an id, not a
+  URL, so it widens nothing the allow list above keeps narrow. GitHub lists a
+  gist's files alphabetically, so the class implementing `z2ui5_if_app` is
+  put first (else the first class); a file GitHub truncated is refused rather
+  than opened half. A `src` beside it wins. Never on the Pilot's page. The
+  Share dialog's **Gist** section writes one (`POST /gists`, secret) with the
+  reader's token - held in `share-dialog.mjs`'s memory for the visit, never in
+  the field after a press and never stored, for the reason the AI key is not
+  - and answers the `?gist=` link. `tests/gist.spec.js` holds the id parsing,
+  the payload and the order; `tests/shell.spec.js` the page.
 - **`?embed=1`**: drops the chrome, and never reads or writes the stored
   draft — an embedding must not overwrite a reader's work.
 - **`?view=app`**: hides the editor too — the app on its own, for a paragraph
