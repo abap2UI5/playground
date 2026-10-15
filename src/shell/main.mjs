@@ -42,7 +42,9 @@ import {
   REPOSITORY_HOSTS,
   forgetOrigins,
   originOf,
+  setOrigin,
 } from "./deep-link.mjs";
+import { fetchGist, gistIdFrom } from "./gist.mjs";
 import { readSession, writeDraft, writeOpenFile } from "./persistence.mjs";
 import { carriedSampleFiles, DEFAULT_FILES, isSample, loadSampleFiles } from "../editor/samples.mjs";
 import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
@@ -216,6 +218,23 @@ async function startingFiles() {
       // link to a sample that navigates somewhere actually navigates.
       const alongside = await followNavigation(linked);
       return { files: checkFileSet([...linked, ...alongside]), from: "a link" };
+    } catch (e) {
+      linkFailure = e;
+    }
+  }
+  // ?gist=<id> - a gist the Share dialog wrote (src/shell/gist.mjs), read
+  // from api.github.com without a token. Beside ?src= and below it: a link
+  // that carries both is a documentation link first. Never on the Pilot's
+  // page, where a link's code runs beside the reader's key and a gist is
+  // anybody's (REPOSITORY_HOSTS).
+  if (params.has("gist") && linkedSources(params).length === 0) {
+    const id = gistIdFrom(params.get("gist"));
+    try {
+      if (pilotPage) throw new Error("The AI Pilot opens no gist - open it in the playground instead.");
+      if (!id) throw new Error(`${params.get("gist")} is not a gist id.`);
+      const files = checkFileSet(await fetchGist(id));
+      for (const f of files) setOrigin(f.name, `https://gist.github.com/${id}`);
+      return { files, from: "a gist" };
     } catch (e) {
       linkFailure = e;
     }
@@ -971,8 +990,9 @@ function remember(files) {
   // hid the edits made since, until the next keystroke overwrote them in
   // storage too. The rest of the query (from, back, view) still holds.
   const query = new URLSearchParams(window.location.search);
-  const linked = query.has("src");
+  const linked = query.has("src") || query.has("gist");
   query.delete("src");
+  query.delete("gist");
   if (window.location.hash || linked) {
     const rest = query.toString();
     history.replaceState(null, "", window.location.pathname + (rest ? `?${rest}` : ""));

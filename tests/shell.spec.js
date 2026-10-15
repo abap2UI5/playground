@@ -724,3 +724,61 @@ test("the file that was on screen comes back with the draft, and a link still ou
   await expect(page.locator(".file-tab", { hasText: tests })).toHaveCount(0);
   expect(await page.evaluate(() => localStorage.getItem("abap2ui5-playground:files"))).toBe(draft);
 });
+
+test("?gist= opens a gist's ABAP with the app first, and the Share dialog writes one with a token it never stores", async ({ page, context, browserName }) => {
+  await allowClipboard(context, browserName);
+  await open(page);
+  const source = await getSource(page);
+  const id = "0123456789abcdef0123456789abcdef";
+  const intf = "INTERFACE zif_gist_helper PUBLIC.\nENDINTERFACE.\n";
+  await page.route(`https://api.github.com/gists/${id}`, (route) =>
+    route.fulfill({
+      status: 200,
+      headers: { "access-control-allow-origin": "*", "content-type": "application/json" },
+      body: JSON.stringify({
+        id,
+        files: {
+          "README.md": { filename: "README.md", content: "# not ABAP" },
+          "zif_gist_helper.intf.abap": { filename: "zif_gist_helper.intf.abap", content: intf },
+          [MAIN_FILE]: { filename: MAIN_FILE, content: source.replace(MAIN_MARK, "opened from a gist") },
+        },
+      }),
+    }));
+  await page.goto(`/?gist=${id}`);
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await expect(page.locator(".file-tab").first()).toContainText(MAIN_FILE);
+  await expect(page.locator(".file-tab", { hasText: "zif_gist_helper.intf.abap" })).toBeVisible();
+  await expect(page.locator(".file-tab", { hasText: "README.md" })).toHaveCount(0);
+  expect(await getSource(page)).toContain("opened from a gist");
+  // The way back goes to the gist.
+  await expect(page.locator("#source-link")).toHaveAttribute("href", `https://gist.github.com/${id}`);
+
+  // Export: the token goes to GitHub as a bearer and nowhere else.
+  const posted = [];
+  await page.route("https://api.github.com/gists", async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") {
+      return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "POST" } });
+    }
+    posted.push({ headers: request.headers(), body: request.postDataJSON() });
+    return route.fulfill({
+      status: 201,
+      headers: { "access-control-allow-origin": "*", "content-type": "application/json" },
+      body: JSON.stringify({ id: "fedcba9876543210fedc", html_url: "https://gist.github.com/fedcba9876543210fedc" }),
+    });
+  });
+  await page.locator("#share").click();
+  await expect(page.locator("#share-dialog")).toBeVisible();
+  await page.locator("#share-gist").click();
+  await expect(page.locator("#share-gist-said")).toHaveText("a GitHub token is needed");
+  await page.locator("#share-gist-token").fill("github_pat_test");
+  await page.locator("#share-gist").click();
+  await expect(page.locator("#share-gist-link")).toBeVisible();
+  await expect(page.locator("#share-gist-link")).toHaveValue(/\?gist=fedcba9876543210fedc$/);
+  await expect(page.locator("#share-gist-token")).toHaveValue("");
+  expect(posted[0].headers.authorization).toBe("Bearer github_pat_test");
+  expect(posted[0].body.public).toBe(false);
+  expect(Object.keys(posted[0].body.files)).toEqual([MAIN_FILE, "zif_gist_helper.intf.abap"]);
+  const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }));
+  expect(stored).not.toContain("github_pat_test");
+});

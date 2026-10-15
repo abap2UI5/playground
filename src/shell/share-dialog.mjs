@@ -8,8 +8,11 @@
 // code on a system, which is a zip for abapGit.
 //
 // Everything shown is derived from the open files at the moment of the
-// click. Nothing is stored, and the dialog is rebuilt on every open.
+// click. Nothing is stored, and the dialog is rebuilt on every open. The one
+// thing it holds between opens is the GitHub token of the Gist section, in
+// this module's memory for the visit (gist.mjs says why never in storage).
 import { abapGitZip, download, endingInOneNewline } from "./export.mjs";
+import { createGist } from "./gist.mjs";
 import { copyToClipboard } from "./share.mjs";
 import { closeOnBackdrop, setStatus } from "./ui.mjs";
 
@@ -178,10 +181,89 @@ export function openShare(files, url, copied = false) {
   row.append(button);
   git.append(head, blurb, row);
   frag.append(git);
+  frag.append(gistSection(files));
 
   body.replaceChildren(frag);
   // Share awaits the link and the clipboard before it gets here, so a second
   // press can arrive while the dialog is open - and showModal( ) on an open
   // dialog is an InvalidStateError in older engines.
   if (!dialog.open) dialog.showModal();
+}
+
+// The token for the Gist section: typed once per visit, never stored and
+// never left in the field (gist.mjs).
+let gistToken = "";
+
+// A GitHub gist of the open files - written with the reader's token, opened
+// again with ?gist=<id>.
+function gistSection(files) {
+  const wrap = document.createElement("section");
+  wrap.className = "share-section";
+  const head = document.createElement("h3");
+  head.id = "share-gist-title";
+  head.textContent = "Gist";
+  const blurb = document.createElement("p");
+  blurb.className = "config-blurb";
+  blurb.textContent =
+    "A secret GitHub gist of these files, written with your token (a fine-grained one with the gist permission is " +
+    "enough) - held for this visit only and never stored. The gist opens here again with ?gist=<id>.";
+
+  const row = document.createElement("div");
+  row.className = "config-row";
+  const token = document.createElement("input");
+  token.type = "password";
+  token.id = "share-gist-token";
+  token.className = "config-text share-token";
+  token.autocomplete = "off";
+  token.spellcheck = false;
+  token.placeholder = gistToken ? "token held for this visit" : "GitHub token (github_pat_… or ghp_…)";
+  token.setAttribute("aria-label", "GitHub token for the gist");
+  const button = document.createElement("button");
+  button.type = "button";
+  button.id = "share-gist";
+  button.textContent = "Create gist";
+  const status = document.createElement("span");
+  status.className = "config-said";
+  status.id = "share-gist-said";
+  status.setAttribute("role", "status");
+  row.append(token, button, status);
+
+  const link = document.createElement("textarea");
+  link.className = "config-text share-text";
+  link.id = "share-gist-link";
+  link.readOnly = true;
+  link.rows = 2;
+  link.hidden = true;
+  link.setAttribute("aria-labelledby", head.id);
+  link.addEventListener("focus", () => link.select());
+
+  button.addEventListener("click", async () => {
+    const typed = token.value.trim();
+    if (typed) gistToken = typed;
+    token.value = "";
+    if (!gistToken) {
+      status.textContent = "a GitHub token is needed";
+      token.focus();
+      return;
+    }
+    button.disabled = true;
+    status.textContent = "writing the gist…";
+    try {
+      const gist = await createGist(files, { token: gistToken });
+      link.value = gist.playgroundUrl;
+      link.hidden = false;
+      const copied = await copyToClipboard(gist.playgroundUrl);
+      status.textContent = copied ? "created - the link is in your clipboard" : "created";
+      token.placeholder = "token held for this visit";
+    } catch (e) {
+      // A refused token is forgotten, so the next try asks for another.
+      if (/token/.test(String(e?.message))) gistToken = "";
+      status.textContent = String(e?.message ?? e);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  wrap.append(head, blurb, row, link);
+  return wrap;
 }
