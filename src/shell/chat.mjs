@@ -26,13 +26,22 @@ import { isUntouchedStarter } from "./ai-starter.mjs";
 import { listenForFileDrops, listSentFiles, setUpAttaching } from "./attach-ui.mjs";
 import { abapGitZip, download } from "./export.mjs";
 import { createDriver } from "./frame-drive.mjs";
+import { keyTarget, setUpProviderForm } from "./llm-form.mjs";
+import { readProviderSettings } from "./llm-provider.mjs";
 import { readStored, removeStored, writeStored } from "./storage.mjs";
 import { setStatus } from "./ui.mjs";
 
 const KEY_STORAGE = "abap2ui5-playground:anthropic-key";
-// The key, for this page's lifetime only (see above).
+// The key, for this page's lifetime only (see above). An empty string is a
+// key too: an OpenAI-compatible server on this machine takes none, and the
+// form was submitted without one on purpose. null is "not asked yet".
 let sessionKey = null;
 const storedKey = () => sessionKey;
+// The provider half of the key form (llm-form.mjs): Anthropic, or an
+// OpenAI-compatible server with its base URL and model.
+let providerForm;
+// Which server the key in memory was typed for (keyTarget in llm-form.mjs).
+let keyFor;
 // The workspace a key that is not tied to one sends its requests to - the
 // API refuses such a key without the anthropic-workspace-id header. Empty
 // for the ordinary key, which belongs to a workspace already.
@@ -154,15 +163,32 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
     if (open) setStage(document.body.dataset.stage);
   });
 
+  providerForm = setUpProviderForm("chat");
+  reflectProvider(readProviderSettings());
   el.keyForm.addEventListener("submit", (e) => {
     e.preventDefault();
     const key = el.keyInput.value.trim();
-    // The workspace can be added later on its own, to a key already stored.
-    if (key === "" && storedKey() === null) return;
-    if (key !== "") sessionKey = key;
+    // A key goes only to the server it was typed for: another provider or
+    // base URL asks for its own (an Anthropic key sent as the bearer of
+    // somebody's OpenAI-compatible server is a key given away). The
+    // workspace can be added later on its own, to a key already held - and
+    // a local server needs no key at all.
+    const target = keyTarget(providerForm.read());
+    if (key === "" && keyFor !== target && providerForm.keyRequired()) {
+      sessionKey = null;
+      keyFor = undefined;
+      el.keyRemove.hidden = true;
+      el.keyInput.focus();
+      return;
+    }
+    if (key !== "" || keyFor !== target) {
+      sessionKey = key;
+      keyFor = target;
+    }
     const workspace = el.workspaceInput.value.trim();
     if (workspace === "") removeStored(WORKSPACE_STORAGE);
     else writeStored(WORKSPACE_STORAGE, workspace);
+    reflectProvider(providerForm.save());
     el.keyInput.value = "";
     // A new key is a new client; the conversation so far went with the old one,
     // and so does a turn still running on the old key.
@@ -172,6 +198,7 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
   });
   el.keyRemove.addEventListener("click", () => {
     sessionKey = null;
+    keyFor = undefined;
     removeStored(WORKSPACE_STORAGE);
     el.workspaceInput.value = "";
     startOver();
@@ -467,7 +494,19 @@ function flashStage() {
 function showKeyForm(show) {
   el.keyForm.hidden = !show;
   el.keyRemove.hidden = storedKey() === null;
-  if (show) el.workspaceInput.value = readStored(WORKSPACE_STORAGE) ?? "";
+  if (show) {
+    el.workspaceInput.value = readStored(WORKSPACE_STORAGE) ?? "";
+    providerForm.fill();
+  }
+}
+
+// The header follows the provider: the speeds are Anthropic's models, so an
+// OpenAI-compatible server - one model, named in the form - has no select.
+function reflectProvider(settings) {
+  el.speed.hidden = settings.provider !== "anthropic";
+  el.keyButton.title = settings.provider === "openai"
+    ? `${settings.model} at ${settings.baseUrl} - your API key, and which model API answers`
+    : "Your API key, and which model API answers";
 }
 
 function showWelcome() {
@@ -691,6 +730,7 @@ async function submit() {
       agent = mod.createAgent({
         apiKey: key,
         workspace: readStored(WORKSPACE_STORAGE) ?? undefined,
+        provider: readProviderSettings(),
         host: {
           ...host,
           // The running app, for look and act: its frame as the transport,

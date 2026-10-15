@@ -28,8 +28,7 @@
 // this page to api.anthropic.com and nowhere else, which is the only reason a
 // static page can have a chat at all. `dangerouslyAllowBrowser` is the SDK's
 // name for exactly that choice.
-import Anthropic from "@anthropic-ai/sdk";
-import { addUsage, catalogueEntries, CONTEXT_BETA, CONTEXT_MANAGEMENT, DEFAULT_SPEED, followStream, rankEntries, SPEEDS } from "./ai-common.mjs";
+import { addUsage, catalogueEntries, DEFAULT_SPEED, followStream, isAbort, providerFor, rankEntries, SPEEDS } from "./ai-common.mjs";
 // The framework's own guide to building an app, from the abap2UI5 commit
 // tools/fetch-deps.mjs pins - the same commit the runtime in this page is
 // transpiled from, so the API the guide describes is the API that runs here.
@@ -326,17 +325,13 @@ export function filesAsText(files, { all = files } = {}) {
  *   ui.usage({ input, output, cached })
  *
  * `speed` answers which of SPEEDS to use, asked before every request, so a
- * change in the header applies from the next turn on.
+ * change in the header applies from the next turn on (the Anthropic
+ * provider's models; an OpenAI-compatible server answers with the one model
+ * the key form named). `provider` is what the key form saved - see
+ * llm-provider.mjs - and defaults to Anthropic.
  */
-export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT_SPEED }) {
-  const client = new Anthropic({
-    apiKey,
-    dangerouslyAllowBrowser: true,
-    // A key that is not tied to a workspace is refused without this header
-    // ("This API key is not scoped to a workspace..."); the ordinary key
-    // belongs to one already and sends nothing extra.
-    ...(workspace ? { defaultHeaders: { "anthropic-workspace-id": workspace } } : {}),
-  });
+export function createAgent({ apiKey, workspace, provider: settings, host, ui, speed = () => DEFAULT_SPEED }) {
+  const provider = providerFor({ ...settings, apiKey, workspace });
   // The conversation exactly as it was sent and answered - only ever
   // appended to: the model's thinking blocks are bound to the history they
   // were written in, and an edited history invalidates them.
@@ -355,7 +350,8 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
   let stopNow = () => {};
   const untilStopped = (work, what) =>
     Promise.race([work, stopping.then(() => ({ error: `Stopped by the person while ${what}.` }))]);
-  const total = { input: 0, output: 0, cached: 0, written: 0, dollars: 0 };
+  // No dollars for a model this page has no price list for (a local one costs nothing).
+  const total = { input: 0, output: 0, cached: 0, written: 0, dollars: provider.priced ? 0 : undefined };
   // Where each message of the reader's began in the history, and what the
   // model had seen of the editor before it - so rewind( ) can take the last
   // exchange out whole for a message edited and sent again.
@@ -436,7 +432,7 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
       // with every later message until New chat; failed otherwise, "send
       // again" sent it twice. The editor's files it carried go with the next
       // message instead. A message the reader stopped stays.
-      if (messages.length === at && !(err instanceof Anthropic.APIUserAbortError)) {
+      if (messages.length === at && !isAbort(err)) {
         messages.pop();
         turns.pop();
         seen = seenBefore;
@@ -458,26 +454,10 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
     while (!stopped) {
       ui.assistantStart();
       const settings = SPEEDS[speed()] ?? SPEEDS[DEFAULT_SPEED];
-      stream = client.beta.messages.stream({
-        model: settings.model,
-        max_tokens: 32000,
-        system: systemFor(linterSettings()),
-        tools: TOOLS,
-        messages,
-        output_config: { effort: settings.effort },
-        // The reasoning stays hidden; the short notes the model writes between
-        // tool calls ("the table is there, now the search") come back as text,
-        // so a long turn is not minutes of silence.
-        thinking: { type: "adaptive", display: "updates" },
-        betas: ["server-side-fallback-2026-07-01", "thinking-display-updates-2026-08-18", CONTEXT_BETA],
-        context_management: CONTEXT_MANAGEMENT,
-        // A request a safety classifier declines is answered by the model
-        // the API picks for that category instead of stopping the turn.
-        fallbacks: "default",
-        // The conversation so far, cached up to its last block: every turn of
-        // a tool loop resends all of it.
-        cache_control: { type: "ephemeral" },
-      });
+      const model = provider.modelFor(settings);
+      // The request's shape - the thinking display, the fallback, the cache
+      // breakpoint, the betas - is the provider's (llm-provider.mjs).
+      stream = provider.stream({ system: systemFor(linterSettings()), tools: TOOLS, messages, maxTokens: 32000, speed: settings });
       // What arrives before the turn is complete, shown as it arrives: a
       // progress note, and a tool call whose input is still streaming - a
       // class being written is the longest wait of all, and it counts its
@@ -494,7 +474,7 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         // billed) in the background, out of reach of Stop.
         stream.abort();
         // Billed all the same - the input from the moment it started.
-        addUsage(total, stream.currentMessage?.usage, settings.model);
+        addUsage(total, stream.currentMessage?.usage, model);
         ui.usage({ ...total });
         if (stopped) return;
         // A tool input that could not be parsed at all - the one failure that
@@ -506,7 +486,7 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         // three billed requests, three half answers in the chat, then a bare
         // "network error". Recognised by the SDK's own message for it.
         const unparsable = /Unable to parse tool parameter JSON/.test(String(err?.message ?? ""));
-        if (!unparsable || err instanceof Anthropic.APIError || jsonRetries++ >= 2) {
+        if (!unparsable || provider.isApiError(err) || jsonRetries++ >= 2) {
           throw err;
         }
         // The calls of the attempt thrown away are not going to run: asked
@@ -516,7 +496,7 @@ export function createAgent({ apiKey, workspace, host, ui, speed = () => DEFAULT
         continue;
       }
 
-      addUsage(total, message.usage, message.model ?? settings.model);
+      addUsage(total, message.usage, message.model ?? model);
       ui.usage({ ...total });
 
       if (message.stop_reason === "refusal") {

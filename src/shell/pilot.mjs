@@ -34,6 +34,8 @@ import { renderMarkdown } from "./chat.mjs";
 import { listenForFileDrops, listSentFiles, setUpAttaching } from "./attach-ui.mjs";
 import { createDriver } from "./frame-drive.mjs";
 import { highlightJson } from "./highlight.mjs";
+import { keyTarget, setUpProviderForm } from "./llm-form.mjs";
+import { readProviderSettings } from "./llm-provider.mjs";
 import { readStored, removeStored, writeStored } from "./storage.mjs";
 import { setStatus } from "./ui.mjs";
 
@@ -55,6 +57,10 @@ const SUGGESTIONS = [
 let host;
 let el;
 let sessionKey = null;
+// The provider half of the key form (llm-form.mjs).
+let providerForm;
+// Which server the key in memory was typed for (keyTarget in llm-form.mjs).
+let keyFor;
 // The chunk: the vendored client, the mirrors, the conversation and the SDK.
 // Asked for when the page starts, not on the first message - the mirrors
 // have to see each app's first roundtrip, and this page is the chat.
@@ -399,14 +405,34 @@ export function setUpPilot(pilotHost) {
     else document.documentElement.requestFullscreen?.().catch(() => {});
   });
 
+  // The provider half of the form (llm-form.mjs), shared with the studio:
+  // Anthropic, or an OpenAI-compatible server with its base URL and model.
+  providerForm = setUpProviderForm("pilot");
+  reflectProvider(readProviderSettings());
   el.keyForm.addEventListener("submit", (e) => {
     e.preventDefault();
     const key = el.keyInput.value.trim();
-    if (key === "" && sessionKey === null) return;
-    if (key !== "") sessionKey = key;
+    // A key goes only to the server it was typed for: another provider or
+    // base URL asks for its own (an Anthropic key sent as the bearer of
+    // somebody's OpenAI-compatible server is a key given away). The
+    // workspace can be added later on its own, to a key already held - and
+    // a local server needs no key at all.
+    const target = keyTarget(providerForm.read());
+    if (key === "" && keyFor !== target && providerForm.keyRequired()) {
+      sessionKey = null;
+      keyFor = undefined;
+      el.keyRemove.hidden = true;
+      el.keyInput.focus();
+      return;
+    }
+    if (key !== "" || keyFor !== target) {
+      sessionKey = key;
+      keyFor = target;
+    }
     const workspace = el.workspaceInput.value.trim();
     if (workspace === "") removeStored(WORKSPACE_STORAGE);
     else writeStored(WORKSPACE_STORAGE, workspace);
+    reflectProvider(providerForm.save());
     el.keyInput.value = "";
     startOver();
     showKeyForm(false);
@@ -414,6 +440,7 @@ export function setUpPilot(pilotHost) {
   });
   el.keyRemove.addEventListener("click", () => {
     sessionKey = null;
+    keyFor = undefined;
     removeStored(WORKSPACE_STORAGE);
     el.workspaceInput.value = "";
     startOver();
@@ -553,7 +580,19 @@ function flashStage() {
 function showKeyForm(show) {
   el.keyForm.hidden = !show;
   el.keyRemove.hidden = sessionKey === null;
-  if (show) el.workspaceInput.value = readStored(WORKSPACE_STORAGE) ?? "";
+  if (show) {
+    el.workspaceInput.value = readStored(WORKSPACE_STORAGE) ?? "";
+    providerForm.fill();
+  }
+}
+
+// The speeds are Anthropic's models; an OpenAI-compatible server answers
+// with the one model the form named, so the select steps aside.
+function reflectProvider(settings) {
+  el.speed.hidden = settings.provider !== "anthropic";
+  el.keyButton.title = settings.provider === "openai"
+    ? `${settings.model} at ${settings.baseUrl} - your API key, and which model API answers`
+    : "Your API key, and which model API answers";
 }
 
 function stopTurn() {
@@ -753,6 +792,7 @@ async function submit() {
       agent = mod.createPilot({
         apiKey: sessionKey,
         workspace: readStored(WORKSPACE_STORAGE) ?? undefined,
+        provider: readProviderSettings(),
         host: {
           files: host.files,
           // Run, and then every other tab started again on the new Run as

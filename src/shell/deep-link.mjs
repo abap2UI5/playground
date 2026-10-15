@@ -73,6 +73,9 @@ const origins = new Map();
 
 export const originOf = (fileName) => origins.get(fileName);
 
+/** Where a file that arrived another way came from - a gist (gist.mjs). */
+export const setOrigin = (fileName, url) => origins.set(fileName, url);
+
 /** Forgets where linked files came from - for code that replaces them, so a
  *  draft or a sample opened under a name that was once linked does not offer
  *  a way back to a file it is not. */
