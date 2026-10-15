@@ -846,3 +846,84 @@ test("a step's files can be put back, and the last message edited and sent again
   expect(text).toContain("Again, differently.");
   expect(text).not.toContain(KEY);
 });
+
+// One streamed Chat Completions answer, as an OpenAI-compatible server sends
+// it: text deltas, then each tool call's arguments in two pieces under its
+// index, then the finish reason and the usage.
+function openaiSse({ text = "", tools = [] }) {
+  const chunks = [];
+  const send = (choice, extra = {}) => chunks.push(`data: ${JSON.stringify({ id: "chatcmpl-test", model: "local-test", choices: choice ? [choice] : [], ...extra })}\n\n`);
+  if (text) send({ index: 0, delta: { role: "assistant", content: text } });
+  for (const [i, tool] of tools.entries()) {
+    const json = JSON.stringify(tool.input);
+    const half = Math.floor(json.length / 2);
+    send({ index: 0, delta: { tool_calls: [{ index: i, id: `call_${i}`, type: "function", function: { name: tool.name, arguments: json.slice(0, half) } }] } });
+    send({ index: 0, delta: { tool_calls: [{ index: i, function: { arguments: json.slice(half) } }] } });
+  }
+  send({ index: 0, delta: {}, finish_reason: tools.length ? "tool_calls" : "stop" });
+  send(null, { usage: { prompt_tokens: 900, completion_tokens: 120 } });
+  chunks.push("data: [DONE]\n\n");
+  return chunks.join("");
+}
+
+test("an OpenAI-compatible server answers the studio: tools as function calls, results as tool messages, no key it was not given", async ({ page }) => {
+  const requests = [];
+  // Anthropic is not to be asked at all once the provider is switched.
+  await page.route("https://api.anthropic.com/**", (route) => route.abort());
+  await page.route("http://localhost:11434/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    requests.push({ url: request.url(), headers: request.headers(), body: request.postDataJSON() });
+    const answer = requests.length === 1
+      ? openaiSse({ text: "Building it.", tools: [{ name: "write_file", input: { name: APP_FILE, source: APP, as_app: true } }] })
+      : openaiSse({ text: "**Done** - it runs." });
+    await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: answer });
+  });
+
+  await openStudio(page);
+  // An Anthropic key first - and then a local server, with no key typed:
+  // the Anthropic key must not go along as its bearer.
+  await saveKey(page);
+  await page.locator("#chat-key-button").click();
+  await page.locator("#chat-provider").selectOption("openai");
+  await expect(page.locator("#chat-openai")).toBeVisible();
+  await expect(page.locator("#chat-workspace")).toBeHidden();
+  await expect(page.locator("#chat-key-note-openai")).toContainText("OLLAMA_ORIGINS");
+  await page.locator("#chat-base-url").fill("http://localhost:11434/v1/");
+  await page.locator("#chat-model").fill("local-test");
+  await page.locator("#chat-key button[type=submit]").click();
+  await expect(page.locator("#chat-key")).toBeHidden();
+  // The speeds are Anthropic's models; this server has one.
+  await expect(page.locator("#chat-speed")).toBeHidden();
+
+  await page.locator("#chat-input").fill("A page that says it was built by the model");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toContainText("Done - it runs.", { timeout: 90000 });
+  await expect(page.frameLocator("#app").getByText(MARK)).toBeVisible();
+
+  // Chat Completions at the base URL, the trailing slash gone, no bearer.
+  expect(requests[0].url).toBe("http://localhost:11434/v1/chat/completions");
+  expect(requests[0].headers.authorization).toBeUndefined();
+  expect(requests[0].headers["x-api-key"]).toBeUndefined();
+  const first = requests[0].body;
+  expect(first.model).toBe("local-test");
+  expect(first.stream).toBe(true);
+  expect(first.messages[0].role).toBe("system");
+  expect(first.messages[1].role).toBe("user");
+  expect(first.tools.map((t) => t.type)).toContain("function");
+  expect(first.tools.map((t) => t.function.name)).toContain("write_file");
+  // The call went back as the assistant's tool_calls and its result as a
+  // tool message answering it - with the run's report in it.
+  const second = requests[1].body.messages;
+  const call = second.find((m) => m.role === "assistant" && m.tool_calls);
+  expect(call.tool_calls[0]).toMatchObject({ id: "call_0", type: "function", function: { name: "write_file" } });
+  expect(JSON.parse(call.tool_calls[0].function.arguments).name).toBe(APP_FILE);
+  const result = second.find((m) => m.role === "tool");
+  expect(result.tool_call_id).toBe("call_0");
+  expect(result.content).toContain("status: running");
+
+  // The provider, the base URL and the model are remembered; no key is.
+  const stored = await page.evaluate(() => ({ ...localStorage }));
+  expect(JSON.parse(stored["abap2ui5-playground:llm"])).toEqual({ provider: "openai", baseUrl: "http://localhost:11434/v1", model: "local-test" });
+  expect(JSON.stringify(stored)).not.toContain(KEY);
+});

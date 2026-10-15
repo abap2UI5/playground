@@ -20,10 +20,9 @@
 // How the model sees and moves the app - the mirror of the screen and the
 // operator over the vendored client - is src/shell/ai-operator.mjs, shared
 // with the AI Studio; what is here is the conversation and its tools.
-import Anthropic from "@anthropic-ai/sdk";
 import { AgentError } from "../vendor/agent/appclient.mjs";
 import { createOperator, fitSnapshot, MAX_ERROR_TEXT } from "./ai-operator.mjs";
-import { addUsage, catalogueEntries, CONTEXT_BETA, CONTEXT_MANAGEMENT, DEFAULT_SPEED, followStream, rankEntries, SPEEDS } from "./ai-common.mjs";
+import { addUsage, catalogueEntries, DEFAULT_SPEED, followStream, isAbort, providerFor, rankEntries, SPEEDS } from "./ai-common.mjs";
 import { attachmentBlocks } from "./attachments.mjs";
 
 export { explainError, usageText } from "./ai-common.mjs";
@@ -226,12 +225,10 @@ const TOOLS = [
  *   host.run()                        Run: every app again, on a fresh database
  *   host.carried(cls), host.fetchLinked(url), host.files()
  */
-export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT_SPEED }) {
-  const client = new Anthropic({
-    apiKey,
-    dangerouslyAllowBrowser: true,
-    ...(workspace ? { defaultHeaders: { "anthropic-workspace-id": workspace } } : {}),
-  });
+export function createPilot({ apiKey, workspace, provider: settings, host, ui, speed = () => DEFAULT_SPEED }) {
+  // Which API answers - the key form's choice (llm-provider.mjs), Anthropic
+  // unless it said otherwise.
+  const provider = providerFor({ ...settings, apiKey, workspace });
   // One operator per app, made the first time the model reaches for it. A
   // closed tab's number never comes back (pilot.mjs counts up), so an
   // operator is only ever let go, never replaced.
@@ -293,7 +290,7 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
   // ended on its own, up to half a minute later.
   let stopping;
   let stopNow = () => {};
-  const total = { input: 0, output: 0, cached: 0, written: 0, dollars: 0 };
+  const total = { input: 0, output: 0, cached: 0, written: 0, dollars: provider.priced ? 0 : undefined };
 
   // A snapshot as the model reads it, with the tab it belongs to - and a
   // failed last answer (a dump of the reader's click), which the snapshot
@@ -358,7 +355,7 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
       // message, "hello" included, the same 400 until New chat; failed
       // otherwise (a refused key, a dropped connection), "send again" sent
       // it twice, attachments and all. A message the reader stopped stays.
-      if (messages.length === at && !(err instanceof Anthropic.APIUserAbortError)) {
+      if (messages.length === at && !isAbort(err)) {
         messages.pop();
         told.clear();
         for (const [id, version] of toldBefore) told.set(id, version);
@@ -374,19 +371,8 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
     while (!stopped) {
       ui.assistantStart();
       const settings = SPEEDS[speed()] ?? SPEEDS[DEFAULT_SPEED];
-      stream = client.beta.messages.stream({
-        model: settings.model,
-        max_tokens: 16000,
-        system: SYSTEM,
-        tools: TOOLS,
-        messages,
-        output_config: { effort: settings.effort },
-        thinking: { type: "adaptive", display: "updates" },
-        betas: ["server-side-fallback-2026-07-01", "thinking-display-updates-2026-08-18", CONTEXT_BETA],
-        context_management: CONTEXT_MANAGEMENT,
-        fallbacks: "default",
-        cache_control: { type: "ephemeral" },
-      });
+      const model = provider.modelFor(settings);
+      stream = provider.stream({ system: SYSTEM, tools: TOOLS, messages, maxTokens: 16000, speed: settings });
       const started = followStream(stream, ui, pendingText);
 
       let message;
@@ -396,7 +382,7 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
       } catch (err) {
         stream.abort();
         // Billed all the same - the input from the moment it started.
-        addUsage(total, stream.currentMessage?.usage, settings.model);
+        addUsage(total, stream.currentMessage?.usage, model);
         ui.usage({ ...total });
         if (stopped) return;
         // Only a tool input that could not be parsed is asked for again, as
@@ -404,14 +390,14 @@ export function createPilot({ apiKey, workspace, host, ui, speed = () => DEFAULT
         // way is a plain AnthropicError too, and was sent again twice - three
         // billed requests, attachments and all, and three half answers.
         const unparsable = /Unable to parse tool parameter JSON/.test(String(err?.message ?? ""));
-        if (!unparsable || err instanceof Anthropic.APIError || jsonRetries++ >= 2) throw err;
+        if (!unparsable || provider.isApiError(err) || jsonRetries++ >= 2) throw err;
         // The rows of the attempt thrown away - asked again, the calls come
         // back under new ids (as in the studio).
         for (const s of started) ui.tool({ id: s.id, summary: `${s.name}: the input was unreadable - asked again`, error: true });
         continue;
       }
 
-      addUsage(total, message.usage, message.model ?? settings.model);
+      addUsage(total, message.usage, message.model ?? model);
       ui.usage({ ...total });
 
       if (message.stop_reason === "refusal") {

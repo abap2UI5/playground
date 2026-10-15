@@ -6,6 +6,7 @@
 // precache, read off the module graph.
 import Anthropic from "@anthropic-ai/sdk";
 import { rawUrlOf } from "./catalogue-urls.mjs";
+import { createProvider, explainOpenAIError, LLMAbortError, OpenAIError } from "./llm-provider.mjs";
 // The SDK's own parser for a tool input that is still arriving - the one it
 // runs itself on every delta while an `inputJson` listener is registered.
 import { partialParse } from "@anthropic-ai/sdk/_vendor/partial-json-parser/parser.mjs";
@@ -57,10 +58,33 @@ export const CONTEXT_MANAGEMENT = {
   }],
 };
 
+// What every request of both chats to the Messages API carries beyond the
+// conversation: the betas (the fallback, the thinking display, the context
+// management above) and the clears. Handed to the Anthropic provider
+// (llm-provider.mjs) with the SDK.
+export const ANTHROPIC_REQUEST = {
+  betas: ["server-side-fallback-2026-07-01", "thinking-display-updates-2026-08-18", CONTEXT_BETA],
+  context_management: CONTEXT_MANAGEMENT,
+};
+
+/**
+ * The provider a conversation talks to (llm-provider.mjs): the Anthropic
+ * Messages API through the SDK, or any OpenAI-compatible server - which one,
+ * the base URL and the model name are what the key form saved, the key is
+ * the one held in memory. The SDK is handed over here so that llm-provider.mjs,
+ * which the key forms import into the shell, carries none of it.
+ */
+export const providerFor = (settings) => createProvider(settings, { Anthropic, request: ANTHROPIC_REQUEST });
+
+/** The reader pressed Stop - whichever provider the request was on. */
+export const isAbort = (err) => err instanceof Anthropic.APIUserAbortError || err instanceof LLMAbortError;
+
 // A failed request, as the chat says it. `key` marks the one failure the
 // reader answers by entering another key; everything else is said and the
 // conversation stays where it was.
 export function explainError(err) {
+  if (err instanceof LLMAbortError) return { text: "Stopped.", stopped: true };
+  if (err instanceof OpenAIError) return explainOpenAIError(err);
   if (err instanceof Anthropic.APIUserAbortError) return { text: "Stopped.", stopped: true };
   // A stream that broke off: the SDK says so in a plain AnthropicError (no
   // status), which fell through to its raw text.

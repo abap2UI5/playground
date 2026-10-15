@@ -1890,7 +1890,19 @@ button.insight-row {
   background: var(--bg);
   color: var(--fg);
 }
+.chat-key-row select {
+  font: 13px var(--font-ui);
+  padding: .35rem .5rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+}
+/* The OpenAI-compatible server's fields (llm-form.mjs), shown for that provider alone. */
+.chat-key-openai { display: flex; flex-direction: column; gap: .4rem; }
+.chat-key-openai[hidden], #chat-workspace[hidden], .chat-key-note[hidden] { display: none; }
 .chat-key-note { margin: 0; color: var(--fg-dim); line-height: 1.45; }
+.chat-key-note code { font: 12px var(--font-mono); }
 .chat-key-note a { color: var(--accent); }
 
 .chat-log {
@@ -2923,7 +2935,18 @@ body.is-pilot .pilot-head button,
   background: var(--pl-panel);
   color: var(--pl-ink);
 }
+.pilot-key-row select {
+  font: 13px var(--font-ui);
+  padding: .35rem .5rem;
+  border: 1px solid var(--pl-line);
+  border-radius: 8px;
+  background: var(--pl-panel);
+  color: var(--pl-ink);
+}
+.pilot-key-openai { display: flex; flex-direction: column; gap: .4rem; }
+.pilot-key-openai[hidden], #pilot-workspace[hidden], .pilot-key-note[hidden] { display: none; }
 .pilot-key-note { margin: 0; color: var(--pl-dim); line-height: 1.45; font-size: 12px; }
+.pilot-key-note code { font: 11px var(--font-mono); }
 .pilot-key-note a { color: var(--pl-signal-2); }
 body.is-pilot .pilot-key button.primary,
 body.is-pilot #pilot-send.primary {

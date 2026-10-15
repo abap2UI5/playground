@@ -708,22 +708,52 @@
         <button type="button" id="chat-download" title="The files in the editor as an abapGit repository">Download for abapGit</button>
         <button type="button" id="chat-export" class="ghost" title="The conversation as a markdown file">Export</button>
         <button type="button" id="chat-new" class="ghost" title="Start a new conversation - the files stay in the editor">New chat</button>
-        <button type="button" id="chat-key-button" class="ghost" title="Your Anthropic API key">Key</button>
+        <button type="button" id="chat-key-button" class="ghost" title="Your API key, and which model API answers">Key</button>
       </div>
       <form class="chat-key" id="chat-key" hidden>
-        <label for="chat-key-input">Your Anthropic API key</label>
+        <label for="chat-provider">Provider</label>
+        <div class="chat-key-row">
+          <select id="chat-provider" class="chat-provider" aria-label="Which model API answers">
+            <option value="anthropic" selected>Anthropic</option>
+            <option value="openai">OpenAI-compatible</option>
+          </select>
+        </div>
+        <!-- Base URL and model, for an OpenAI-compatible server (src/shell/llm-provider.mjs);
+             remembered between visits, unlike the key. -->
+        <div class="chat-key-openai" id="chat-openai" hidden>
+          <label for="chat-base-url">Base URL</label>
+          <div class="chat-key-row">
+            <input id="chat-base-url" type="text" autocomplete="off" spellcheck="false" list="chat-base-urls"
+                   placeholder="https://api.openai.com/v1">
+            <datalist id="chat-base-urls"></datalist>
+          </div>
+          <label for="chat-model">Model</label>
+          <div class="chat-key-row">
+            <input id="chat-model" type="text" autocomplete="off" spellcheck="false" placeholder="the model's name on that server">
+          </div>
+        </div>
+        <label for="chat-key-input" id="chat-key-label">Your Anthropic API key</label>
         <div class="chat-key-row">
           <input id="chat-key-input" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
           <button type="submit" class="primary">Save</button>
           <button type="button" id="chat-key-remove" class="ghost" hidden>Remove</button>
         </div>
-        <label for="chat-workspace-input">Workspace ID <span class="chat-key-optional">- only for a key that is not tied to a workspace</span></label>
-        <div class="chat-key-row">
-          <input id="chat-workspace-input" type="text" autocomplete="off" spellcheck="false" placeholder="wrkspc_… (optional)">
+        <div id="chat-workspace">
+          <label for="chat-workspace-input">Workspace ID <span class="chat-key-optional">- only for a key that is not tied to a workspace</span></label>
+          <div class="chat-key-row">
+            <input id="chat-workspace-input" type="text" autocomplete="off" spellcheck="false" placeholder="wrkspc_… (optional)">
+          </div>
         </div>
-        <p class="chat-key-note">Held for this visit only, never stored, and sent to api.anthropic.com and nowhere
-          else - there is no server behind this page. Usage is billed to your key. Get one at
+        <p class="chat-key-note" id="chat-key-note" data-anthropic>Held for this visit only, never stored, and sent to api.anthropic.com and nowhere
+          else - there is no server behind this page. The request carries the
+          <code>anthropic-dangerous-direct-browser-access</code> header, which is what lets the API answer a browser.
+          Usage is billed to your key. Get one at
           <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.</p>
+        <p class="chat-key-note" id="chat-key-note-openai" hidden>The key is held for this visit only and never stored;
+          the base URL and the model name are remembered. Requests go from your browser straight to the base URL - OpenAI's
+          API answers a browser with a bearer key; <strong>Ollama</strong> needs <code>OLLAMA_ORIGINS</code> set to this site
+          (or <code>*</code>) before it starts, <strong>LM Studio</strong> has CORS in its server settings; a local server
+          needs no key. Tool calling must be supported by the model; images and PDFs only where it reads them.</p>
       </form>
       <div class="chat-log" id="chat-log" role="log" aria-live="polite" aria-label="Conversation"></div>
       <form class="chat-compose" id="chat-compose">
@@ -800,22 +830,52 @@
         <option value="fast">Fast · Sonnet 5.5</option>
       </select>
       <button type="button" id="pilot-new" class="ghost" title="Start a new conversation - the app stays as it is">New chat</button>
-      <button type="button" id="pilot-key-button" class="ghost" title="Your Anthropic API key">Key</button>
+      <button type="button" id="pilot-key-button" class="ghost" title="Your API key, and which model API answers">Key</button>
     </div>
     <form class="pilot-key" id="pilot-key" hidden>
-      <label for="pilot-key-input">Your Anthropic API key</label>
+      <label for="pilot-provider">Provider</label>
+      <div class="pilot-key-row">
+        <select id="pilot-provider" class="pilot-provider" aria-label="Which model API answers">
+          <option value="anthropic" selected>Anthropic</option>
+          <option value="openai">OpenAI-compatible</option>
+        </select>
+      </div>
+      <!-- Base URL and model, for an OpenAI-compatible server (src/shell/llm-provider.mjs);
+           remembered between visits, unlike the key. -->
+      <div class="pilot-key-openai" id="pilot-openai" hidden>
+        <label for="pilot-base-url">Base URL</label>
+        <div class="pilot-key-row">
+          <input id="pilot-base-url" type="text" autocomplete="off" spellcheck="false" list="pilot-base-urls"
+                 placeholder="https://api.openai.com/v1">
+          <datalist id="pilot-base-urls"></datalist>
+        </div>
+        <label for="pilot-model">Model</label>
+        <div class="pilot-key-row">
+          <input id="pilot-model" type="text" autocomplete="off" spellcheck="false" placeholder="the model's name on that server">
+        </div>
+      </div>
+      <label for="pilot-key-input" id="pilot-key-label">Your Anthropic API key</label>
       <div class="pilot-key-row">
         <input id="pilot-key-input" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
         <button type="submit" class="primary">Use key</button>
         <button type="button" id="pilot-key-remove" class="ghost" hidden>Remove</button>
       </div>
-      <label for="pilot-workspace-input">Workspace ID <span class="pilot-key-optional">- only for a key that is not tied to a workspace</span></label>
-      <div class="pilot-key-row">
-        <input id="pilot-workspace-input" type="text" autocomplete="off" spellcheck="false" placeholder="wrkspc_… (optional)">
+      <div id="pilot-workspace">
+        <label for="pilot-workspace-input">Workspace ID <span class="pilot-key-optional">- only for a key that is not tied to a workspace</span></label>
+        <div class="pilot-key-row">
+          <input id="pilot-workspace-input" type="text" autocomplete="off" spellcheck="false" placeholder="wrkspc_… (optional)">
+        </div>
       </div>
-      <p class="pilot-key-note">Held for this visit only, never stored, and sent to api.anthropic.com and nowhere
-        else - there is no server behind this page. Usage is billed to your key.
-        <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Get a key</a></p>
+      <p class="pilot-key-note" id="pilot-key-note" data-anthropic>Held for this visit only, never stored, and sent to api.anthropic.com and nowhere
+        else - there is no server behind this page. The request carries the
+        <code>anthropic-dangerous-direct-browser-access</code> header, which is what lets the API answer a browser.
+        Usage is billed to your key. Get one at
+        <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.</p>
+      <p class="pilot-key-note" id="pilot-key-note-openai" hidden>The key is held for this visit only and never stored;
+        the base URL and the model name are remembered. Requests go from your browser straight to the base URL - OpenAI's
+        API answers a browser with a bearer key; <strong>Ollama</strong> needs <code>OLLAMA_ORIGINS</code> set to this site
+        (or <code>*</code>) before it starts, <strong>LM Studio</strong> has CORS in its server settings; a local server
+        needs no key. Tool calling must be supported by the model; images and PDFs only where it reads them.</p>
     </form>
     <div class="pilot-log" id="pilot-log" role="log" aria-live="polite" aria-label="Conversation"></div>
     <form class="pilot-compose" id="pilot-compose">
