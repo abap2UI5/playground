@@ -10,16 +10,23 @@
 // Everything shown is derived from the open files at the moment of the
 // click. Nothing is stored, and the dialog is rebuilt on every open. The one
 // thing it holds between opens is the GitHub token of the Gist section, in
-// this module's memory for the visit (gist.mjs says why never in storage).
+// this module's memory for the visit (gist.mjs says why never in storage),
+// and whether the reader said they know code from a link ran in this page.
 import { abapGitZip, download, endingInOneNewline } from "./export.mjs";
 import { createGist } from "./gist.mjs";
+import { layoutEditorSection } from "./layout-editor.mjs";
+import { linkedCodeRan } from "./linked-code.mjs";
 import { copyToClipboard } from "./share.mjs";
 import { closeOnBackdrop, setStatus } from "./ui.mjs";
 
 let dialog;
 let body;
+// What the shell knows about where a file came from (unchangedRawUrl( ) in
+// original.mjs), for the Layout editor section.
+let rawUrlOf = () => undefined;
 
-export function setUpShareDialog() {
+export function setUpShareDialog(hooks = {}) {
+  if (hooks.unchangedRawUrl) rawUrlOf = hooks.unchangedRawUrl;
   dialog = document.getElementById("share-dialog");
   body = document.getElementById("share-body");
   // A click on the backdrop closes it, the way a modal is expected to.
@@ -182,6 +189,7 @@ export function openShare(files, url, copied = false) {
   git.append(head, blurb, row);
   frag.append(git);
   frag.append(gistSection(files));
+  frag.append(layoutEditorSection(files, rawUrlOf(files[0])));
 
   body.replaceChildren(frag);
   // Share awaits the link and the clipboard before it gets here, so a second
@@ -228,6 +236,14 @@ function gistSection(files) {
   status.setAttribute("role", "status");
   row.append(token, button, status);
 
+  // Code from a link has run in this page (linked-code.mjs): it could read a
+  // token typed here as easily as the reader can. Not refused - the reader
+  // may know the link is their own - but not taken silently either: the
+  // field and the button wait for a tick under a sentence saying why, and
+  // where the safe place is. Once per visit. Code the reader wrote, a draft
+  // or a sample never see this.
+  const caution = gistCaution([token, button]);
+
   const link = document.createElement("textarea");
   link.className = "config-text share-text";
   link.id = "share-gist-link";
@@ -264,6 +280,35 @@ function gistSection(files) {
     }
   });
 
-  wrap.append(head, blurb, row, link);
+  wrap.append(head, blurb, ...(caution ? [caution] : []), row, link);
   return wrap;
+}
+
+// Set once the reader ticked the box below - for the visit, like the token.
+let linkedAcknowledged = false;
+
+// The warning and its box, with `controls` disabled until the box is ticked;
+// nothing when no link's code has run here or the reader already said yes.
+function gistCaution(controls) {
+  if (!linkedCodeRan() || linkedAcknowledged) return undefined;
+  const box = document.createElement("div");
+  box.className = "share-caution";
+  box.id = "share-gist-caution";
+  const said = document.createElement("p");
+  said.textContent =
+    "Code from a link ran in this page. It runs with the page's own rights and could read a token typed here. " +
+    "The safe place for a token is the playground opened without the link - your changes come back there as " +
+    "your last session.";
+  const label = document.createElement("label");
+  const tick = document.createElement("input");
+  tick.type = "checkbox";
+  tick.id = "share-gist-trust";
+  label.append(tick, " I trust where this link came from - use my token here");
+  for (const control of controls) control.disabled = true;
+  tick.addEventListener("change", () => {
+    linkedAcknowledged = tick.checked;
+    for (const control of controls) control.disabled = !tick.checked;
+  });
+  box.append(said, label);
+  return box;
 }

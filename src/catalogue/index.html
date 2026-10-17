@@ -56,16 +56,11 @@
      the italic is a few words on this page. -->
 <link rel="preload" href="../fonts/inter-roman-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="catalogue.css">
-<!-- The stored theme, before the first paint. Same key and same rule as the
-     playground's own inline script (src/shell/theme.mjs): a choice is applied,
-     no choice follows the system. Kept in step by hand - two lines of script
-     that must not wait for a module. -->
-<script>
-  try {
-    var t = localStorage.getItem("abap2ui5-playground:theme");
-    if (t === "dark" || t === "light") document.documentElement.dataset.theme = t;
-  } catch (e) { /* a browser that refuses storage still gets the system theme */ }
-</script>
+<!-- The stored theme, before the first paint: a choice is applied, no choice
+     follows the system. The script is written in here by tools/build-site.mjs
+     from src/shell/theme-boot.mjs - the same text the playground and every
+     sample page carry, so the three cannot drift. -->
+<!-- __THEME_BOOT__ -->
 </head>
 <body>
 
@@ -277,6 +272,12 @@
   </p>
 </footer>
 
+<!-- The bar's menu and the theme switch in it, wired - inline, from
+     src/shell/theme-boot.mjs, the very lines every sample page carries, so the
+     catalogue's bar and theirs behave alike by construction rather than by
+     two copies kept in step. Before the bundle, so the switch answers while
+     the list is still loading. -->
+<!-- __THEME_MENU__ -->
 <script type="module" src="catalogue.mjs"></script>
 <!-- The search in the bar: its own module, not part of the catalogue's bundle,
      because every per-sample page loads the same file and the browser should

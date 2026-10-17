@@ -1,3 +1,4 @@
+// @ts-check
 // Where a catalogued sample's ABAP is, from the facts the index carries.
 //
 // An entry of samples/apps.json names its class's FILE - the path inside its

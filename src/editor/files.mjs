@@ -1,3 +1,4 @@
+// @ts-check
 // What "the code" is, now that it can be more than one class.
 //
 // A playground holds a small set of ABAP source files, exactly as abapGit names
@@ -10,6 +11,11 @@
 // it declares. That is the whole rule - it needs no fixed name, so a class
 // linked in from somewhere else runs under the name it already has. The first
 // file cannot be closed, because closing it would silently change what runs.
+//
+// Beside the ABAP, a database table: its definition, `ztab.tabl.xml`, and the
+// rows it starts with, `ztab.tabu.json` - see tables.mjs, which says why
+// those two names.
+import { tableXml } from "./tables.mjs";
 
 // What the first file is called in a playground that starts empty.
 export const MAIN_FILE = "zcl_playground.clas.abap";
@@ -18,17 +24,46 @@ const NAME_PATTERN = /^([a-z][a-z0-9_]*)\.(clas|intf)\.abap$/;
 // The test include of a class: the local test classes abapGit keeps in a
 // file of their own beside the class, and ABAP Unit runs.
 const TEST_PATTERN = /^([a-z][a-z0-9_]*)\.clas\.testclasses\.abap$/;
+// A table's definition, and the rows it starts with - which are a second file
+// of the table the way a test include is a second file of its class.
+const TABLE_PATTERN = /^([a-z][a-z0-9_]*)\.tabl\.xml$/;
+const SEED_PATTERN = /^([a-z][a-z0-9_]*)\.tabu\.json$/;
 
 export function parseName(fileName) {
   const test = TEST_PATTERN.exec(fileName);
   if (test) return { object: test[1].toUpperCase(), kind: "clas", include: "testclasses" };
+  const table = TABLE_PATTERN.exec(fileName);
+  if (table) return { object: table[1].toUpperCase(), kind: "tabl" };
+  const seed = SEED_PATTERN.exec(fileName);
+  if (seed) return { object: seed[1].toUpperCase(), kind: "tabl", include: "tabu" };
   const match = NAME_PATTERN.exec(fileName);
   if (!match) return undefined;
   return { object: match[1].toUpperCase(), kind: match[2] };
 }
 
+// Whether a file is ABAP source - what the checkers and the outline read -
+// rather than one of a table's two files.
+export const isAbapFile = (fileName) => /\.abap$/.test(String(fileName));
+
 // The class file a test include belongs to.
 export const classFileOf = (fileName) => fileName.replace(/\.clas\.testclasses\.abap$/, ".clas.abap");
+
+// The file a second file belongs to - a test include's class, a seed file's
+// table - or undefined for a file that belongs to nothing.
+export function ownerFileOf(fileName) {
+  if (TEST_PATTERN.test(fileName)) return classFileOf(fileName);
+  if (SEED_PATTERN.test(fileName)) return fileName.replace(/\.tabu\.json$/, ".tabl.xml");
+  return undefined;
+}
+
+// The files that go when this one is closed: the second files that belong to it.
+export function dependentsOf(fileName) {
+  if (NAME_PATTERN.test(fileName) && fileName.endsWith(".clas.abap")) {
+    return [fileName.replace(/\.clas\.abap$/, ".clas.testclasses.abap")];
+  }
+  if (TABLE_PATTERN.test(fileName)) return [fileName.replace(/\.tabl\.xml$/, ".tabu.json")];
+  return [];
+}
 
 // Why a name is not usable, in a sentence somebody can act on, or undefined
 // when it is fine. `existing` is what is open already; `all` the whole set a
@@ -40,13 +75,17 @@ export function nameProblem(fileName, existing = [], all = existing) {
     return (
       `A file is named like it is in abapGit: a lower-case object name, then ` +
       `.clas.abap for a class or .intf.abap for an interface - or ` +
-      `.clas.testclasses.abap for a class's unit tests. For example ` +
+      `.clas.testclasses.abap for a class's unit tests, .tabl.xml for a ` +
+      `database table and .tabu.json for its rows. For example ` +
       `zcl_detail.clas.abap.`
     );
   }
   if (existing.includes(fileName)) return `There is already a file called ${fileName}.`;
-  if (parsed.include && !all.includes(classFileOf(fileName))) {
-    return `${fileName} holds the tests of ${classFileOf(fileName)}, which is not open - add the class first.`;
+  const owner = ownerFileOf(fileName);
+  if (owner && !all.includes(owner)) {
+    return parsed.include === "tabu"
+      ? `${fileName} holds the rows of ${owner}, which is not open - add the table first.`
+      : `${fileName} holds the tests of ${owner}, which is not open - add the class first.`;
   }
   return undefined;
 }
@@ -56,8 +95,9 @@ export function nameProblem(fileName, existing = [], all = existing) {
 // is not an object at all and nothing in it resolves.
 export function sidecarFor(fileName) {
   const parsed = parseName(fileName);
-  // A test include is a second file of its class, which has the sidecar.
-  if (!parsed || parsed.include) return undefined;
+  // A test include is a second file of its class, which has the sidecar; a
+  // table's definition IS its XML, and its rows are no object of their own.
+  if (!parsed || parsed.include || parsed.kind === "tabl") return undefined;
   const xmlName = fileName.replace(/\.abap$/, ".xml");
   // Named after the object: one constant description on every sidecar failed
   // abaplint's identical_descriptions (on in app-template's config) as soon
@@ -108,9 +148,12 @@ export function sidecarFor(fileName) {
 
 // A skeleton for a file that was just added, so it is a valid object from the
 // moment it exists rather than a page of red underlines.
+// The name has passed nameProblem( ) by then, so parseName( ) answers.
 export function skeletonFor(fileName) {
-  const { object, kind, include } = parseName(fileName);
+  const { object, kind, include } = /** @type {NonNullable<ReturnType<typeof parseName>>} */ (parseName(fileName));
   const name = object.toLowerCase();
+
+  if (kind === "tabl") return include === "tabu" ? "[\n]\n" : tableXml(name);
 
   if (include === "testclasses") {
     return (

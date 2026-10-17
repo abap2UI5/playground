@@ -1,5 +1,6 @@
-// The two things the page does with its own shape: a draggable split at desk
-// width, and tabs when there is not enough of it.
+// The things the page does with its own shape: a draggable split at desk
+// width, and tabs when there is not enough of it - and the toolbar's menu,
+// which holds what its one row on a phone has no room for.
 import { readStored, writeStored } from "./storage.mjs";
 
 const STORAGE_KEY = "abap2ui5-playground:split";
@@ -120,4 +121,74 @@ export function setUpTabs(appOnly = false) {
   reset();
 
   return { show };
+}
+
+// The toolbar on a phone: one row, and the rest one tap away.
+//
+// At desk width the workbench is one row with room to spare. On a 390px phone
+// it wrapped to two, with the About button alone on the second - together
+// with the project's bar and the tab strip, more than a third of the screen
+// was chrome before the editor or the app had any of it. So below the same
+// 820px at which the split turns into tabs, the controls marked
+// `data-overflow` in index.html - Format, Auto, and everything right of the
+// status line - move into a menu behind the row's last button, and the row
+// keeps Undo, Redo, Samples, Run and the status line. MOVED, not copied: the
+// same elements with the same ids and listeners, so nothing else on the page
+// knows where they are, and the order a keyboard meets them in is the order
+// on screen at either width. Until this runs the stylesheet keeps them off
+// the phone's row, so the row does not first wrap and then snap back.
+export function setUpToolbarMenu() {
+  const toggle = document.getElementById("toolbar-more");
+  const menu = document.getElementById("toolbar-menu");
+  if (!toggle || !menu) return;
+  const narrow = window.matchMedia("(max-width: 820px)");
+  // Each control's place in the row, held by an empty comment before it, so
+  // it goes back exactly where it was.
+  const places = [...document.querySelectorAll(".toolbar > [data-overflow]")].map((control) => {
+    const mark = document.createComment("");
+    control.before(mark);
+    return { control, mark };
+  });
+
+  const close = ({ focus = false } = {}) => {
+    if (menu.hidden) return;
+    menu.hidden = true;
+    toggle.setAttribute("aria-expanded", "false");
+    if (focus) toggle.focus();
+  };
+  const place = () => {
+    close();
+    for (const { control, mark } of places) {
+      if (narrow.matches) menu.append(control);
+      else mark.after(control);
+    }
+  };
+  narrow.addEventListener("change", place);
+  place();
+
+  toggle.addEventListener("click", () => {
+    const opening = menu.hidden;
+    menu.hidden = !opening;
+    toggle.setAttribute("aria-expanded", String(opening));
+  });
+  // Closed the ways a menu is expected to close: a click anywhere else, a
+  // click into the app frame (no click in this document - the window losing
+  // the focus to a frame of its own is what it looks like from here), and
+  // Escape, which hands the focus back to the button.
+  document.addEventListener("click", (e) => {
+    if (!toggle.contains(e.target) && !menu.contains(e.target)) close();
+  });
+  addEventListener("blur", () => {
+    if (document.activeElement?.tagName === "IFRAME") close();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") close({ focus: menu.contains(document.activeElement) });
+  });
+  // And once something in it is chosen - a dialog, a new tab, the status line
+  // saying what Format did, which the open menu would cover. Not after Auto:
+  // a switch whose new state is the thing worth seeing.
+  menu.addEventListener("click", (e) => {
+    const chosen = e.target instanceof Element ? e.target.closest("button, a") : null;
+    if (chosen && chosen.id !== "autorun") close();
+  });
 }

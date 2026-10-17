@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { addNamedFile, clickEditor, getSource, MAIN_CLASS, MAIN_FILE, MAIN_MARK, open, openFiles, runSample, sampleFiles, setSource } from "./helpers.mjs";
+import { addNamedFile, clickEditor, getSource, MAIN_FILE, MAIN_MARK, open, openFiles, runSample, sampleFiles, setSource } from "./helpers.mjs";
 
 // The two-class sample, and its files in the order the strip shows them: the
 // app first, the one it calls second.

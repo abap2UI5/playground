@@ -20,7 +20,10 @@
 // ordinary module when imported into a page - tests/runtime.spec.js drives
 // the framework that way, without UI5 or an iframe between it and the ABAP.
 // Only in a worker does the message handling below switch on.
-// First: says the script has arrived, before index.mjs starts its own work.
+// First: the worker gives up the origin's storage, before anything of the
+// reader's can run in it (lockdown.mjs).
+import "./lockdown.mjs";
+// Then: says the script has arrived, before index.mjs starts its own work.
 import "./loaded.mjs";
 import * as runtime from "./index.mjs";
 
@@ -76,6 +79,8 @@ async function handle(event) {
         // A JavaScript error out of the user's own code - a TypeError the
         // transpiled ABAP ran into - traced to its ABAP line when it can be.
         location: runtime.locate(e?.stack),
+        // What the app WRITEs before it crashed (roundtrip( ) in index.mjs).
+        console: typeof e?.console === "string" ? e.console : undefined,
       },
     });
   }

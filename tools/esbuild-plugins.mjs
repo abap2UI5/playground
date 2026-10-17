@@ -47,6 +47,8 @@ export function nodeStubPlugin(root) {
           // string work, so they can be answered honestly rather than stubbed -
           // and the paths they produce are what the fs shim below recognizes.
           "export function fileURLToPath(u) { return String(u).replace(/^file:\\/\\//, \"\"); }\n" +
+          // The ${p} is the stub's own template literal, written out as source.
+          // eslint-disable-next-line no-template-curly-in-string
           "export function pathToFileURL(p) { return new globalThis.URL(`file://${p}`); }\n" +
           "export default { URL, URLSearchParams, fileURLToPath, pathToFileURL };\n",
       }));

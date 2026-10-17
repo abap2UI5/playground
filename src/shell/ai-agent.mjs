@@ -28,7 +28,7 @@
 // this page to api.anthropic.com and nowhere else, which is the only reason a
 // static page can have a chat at all. `dangerouslyAllowBrowser` is the SDK's
 // name for exactly that choice.
-import { addUsage, catalogueEntries, DEFAULT_SPEED, followStream, isAbort, providerFor, rankEntries, SPEEDS } from "./ai-common.mjs";
+import { catalogueEntries, clip as clipTo, count, DEFAULT_SPEED, isAbort, providerFor, rankEntries, runTurnLoop, str } from "./ai-common.mjs";
 // The framework's own guide to building an app, from the abap2UI5 commit
 // tools/fetch-deps.mjs pins - the same commit the runtime in this page is
 // transpiled from, so the API the guide describes is the API that runs here.
@@ -93,10 +93,12 @@ How the playground works, and what that means for you:
   cheap, never spend a turn on them alone; a dump names the line. Iterate
   until it runs without errors and warnings, then stop calling tools. run_app is only for
   running again without changing anything.
-- There is no database of the person's own here: no custom tables, no
-  SELECT from business tables, no RFC, no files, no HTTP. When the app
-  needs data, fill internal tables in the code (VALUE #( ... )) and say in
-  one sentence where the real SELECT would go.
+- There are no business tables here, no RFC, no files, no HTTP. The person
+  can add tables of their own in the editor (<name>.tabl.xml with its rows
+  in <name>.tabu.json, created afresh at every run); when such a table is
+  among the files, SELECT from it. You write class files only, so otherwise,
+  when the app needs data, fill internal tables in the code (VALUE #( ... ))
+  and say in one sentence where the real SELECT would go.
 - Only these UI5 libraries are loaded: ${UI5_LIBRARIES.filter((l) => l.startsWith("sap.")).join(", ")}.
   OpenUI5 only - no sap.ui.comp, sap.suite, sap.viz. The abap2UI5 linter
   checks the view against ${distribution === "sapui5" ? "SAPUI5" : "OpenUI5"} ${ui5} (the person's setting) -
@@ -278,15 +280,13 @@ const TOOLS = [
   },
 ];
 
-const str = (v) => (typeof v === "string" ? v : undefined);
 const MAX_TOOL_TEXT = 24000;
 // A file the model reads is cut on its own, not as part of one text: two
 // classes of 500 lines are 40,000 characters, and cut together at 24,000
 // the second was never seen - and then edited blind.
 const MAX_FILE_TEXT = 40000;
 const MAX_FILES_TEXT = 120000;
-const clip = (text, max = MAX_TOOL_TEXT) =>
-  text.length <= max ? text : `${text.slice(0, max)}\n… (${text.length - max} more characters cut)`;
+const clip = (text, max = MAX_TOOL_TEXT) => clipTo(text, max);
 
 const lineCount = (source) => source.split("\n").length;
 // What the files are, as the model reads them: a list first, then each file
@@ -310,8 +310,8 @@ export function filesAsText(files, { all = files } = {}) {
 }
 
 /**
- * One conversation. `host` is the page (src/shell/main.mjs hands it over
- * through chat.mjs); `ui` is what the chat draws.
+ * One conversation. `host` is the page (setUpStudio( ) in
+ * src/shell/agent-hooks.mjs hands it over through chat.mjs); `ui` is what the chat draws.
  *
  *   host.files()           -> [{ name, source }], the app first
  *   host.setFiles(files)   -> puts a whole file set into the editor (throws on a bad name)
@@ -444,210 +444,107 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
     return { stopped };
   }
 
-  async function loop() {
-    let jsonRetries = 0;
-    // Answers in a row cut off at max_tokens with a tool call in them. Each
-    // one is a full, billed request, and thinking counts towards the limit:
-    // a long think before a large write could be cut on every attempt, and
-    // the loop asked again without end until Stop was pressed.
-    let cuts = 0;
-    while (!stopped) {
-      ui.assistantStart();
-      const settings = SPEEDS[speed()] ?? SPEEDS[DEFAULT_SPEED];
-      const model = provider.modelFor(settings);
-      // The request's shape - the thinking display, the fallback, the cache
-      // breakpoint, the betas - is the provider's (llm-provider.mjs).
-      stream = provider.stream({ system: systemFor(linterSettings()), tools: TOOLS, messages, maxTokens: 32000, speed: settings });
-      // What arrives before the turn is complete, shown as it arrives: a
-      // progress note, and a tool call whose input is still streaming - a
-      // class being written is the longest wait of all, and it counts its
-      // lines on screen rather than sitting still.
-      const started = followStream(stream, ui, pendingText);
+  // The turn loop is ai-common.mjs's, the Pilot's as well; what is the
+  // studio's is the request and what its tool calls do.
+  const loop = () =>
+    runTurnLoop({
+      provider,
+      messages,
+      total,
+      ui,
+      speed,
+      request: () => ({ system: systemFor(linterSettings()), tools: TOOLS, maxTokens: 32000 }),
+      pendingText,
+      halted: () => stopped,
+      onStream: (s) => {
+        stream = s;
+      },
+      runTools,
+      // A file cut off half way would parse as a shorter, valid file. Never
+      // written; the turn says why.
+      cutText: "Not run: the answer hit max_tokens and this input may be cut off. Write smaller pieces (edit_file).",
+      fullText: "Not run: the context window is full.",
+      askSmaller: "The answer ran out of room before a tool call was complete - asking for smaller steps.",
+    });
 
-      let message;
+  // One answer's tool calls, run in order - and the app run after them when
+  // they changed a file.
+  async function runTools(uses) {
+    // Whether the reader changed the editor by hand while the model was
+    // thinking - something the model has not been told yet, and must still
+    // be told on the next message rather than absorbed into what its own
+    // tools did.
+    // Checked before every tool as well, not just once here: a change by
+    // hand between two tools is as untold as one made before them.
+    let untold = snapshot() !== seen;
+    let expected = snapshot();
+    const results = [];
+    // The last successful change, and whether a run_app came after it.
+    let lastChange;
+    let ranSince = false;
+    for (const use of uses) {
+      if (stopped) {
+        ui.tool({ id: use.id, summary: `not run: ${use.name} (stopped)`, error: true });
+        results.push({ type: "tool_result", tool_use_id: use.id, is_error: true, content: "Stopped by the user." });
+        continue;
+      }
+      if (snapshot() !== expected) untold = true;
+      if (use.name === "run_app") ui.toolPending({ id: use.id, text: pendingText("run_app", {}) });
+      let result;
       try {
-        message = await stream.finalMessage();
-        jsonRetries = 0;
-      } catch (err) {
-        // The stream reports a failure without ending its request: left
-        // alone, a retry below would leave the first one generating (and
-        // billed) in the background, out of reach of Stop.
-        stream.abort();
-        // Billed all the same - the input from the moment it started.
-        addUsage(total, stream.currentMessage?.usage, model);
-        ui.usage({ ...total });
-        if (stopped) return;
-        // A tool input that could not be parsed at all - the one failure that
-        // is worth re-asking for. Everything the API itself refused (a key,
-        // a rate limit, an overload) goes to the chat as it is.
-        //
-        // Only that: a stream whose connection dropped half way is a plain
-        // AnthropicError as well, and every such drop was sent again twice -
-        // three billed requests, three half answers in the chat, then a bare
-        // "network error". Recognised by the SDK's own message for it.
-        const unparsable = /Unable to parse tool parameter JSON/.test(String(err?.message ?? ""));
-        if (!unparsable || provider.isApiError(err) || jsonRetries++ >= 2) {
-          throw err;
-        }
-        // The calls of the attempt thrown away are not going to run: asked
-        // again, they come back under new ids, and the old rows went on
-        // shimmering until the turn ended and then said "not finished".
-        for (const s of started) ui.tool({ id: s.id, summary: `${s.name}: the input was unreadable - asked again`, error: true });
-        continue;
+        result = await untilStopped(execute(use.name, use.input ?? {}), `${use.name} was running`);
+      } catch (e) {
+        result = { error: String(e?.message ?? e) };
       }
-
-      addUsage(total, message.usage, message.model ?? model);
-      ui.usage({ ...total });
-
-      if (message.stop_reason === "refusal") {
-        // Not the refused content itself: a classifier that stops a turn mid
-        // stream can leave a tool_use that is never answered, or a thinking
-        // block without its signature, and either one makes every later
-        // request of this conversation a 400. A plain placeholder keeps the
-        // history valid and append-only.
-        for (const u of message.content.filter((b) => b.type === "tool_use")) {
-          ui.tool({ id: u.id, summary: `not run: ${u.name}`, error: true });
-        }
-        messages.push({ role: "assistant", content: [{ type: "text", text: "(The request was declined.)" }] });
-        ui.notice("The model declined this request.");
-        return;
+      ui.tool({ id: use.id, summary: result.summary ?? result.error ?? "", error: Boolean(result.error || result.failed), started: Boolean(result.started) && !result.failed });
+      const entry = {
+        type: "tool_result",
+        tool_use_id: use.id,
+        ...(result.error ? { is_error: true } : {}),
+        // A read is cut per file by filesAsText( ); everything else here.
+        content: use.name === "read_files" && !result.error ? result.text : clip(result.error ?? result.text),
+      };
+      results.push(entry);
+      if (FILE_TOOLS.has(use.name) && !result.error) {
+        lastChange = entry;
+        ranSince = false;
+      } else if (use.name === "run_app") {
+        ranSince = true;
       }
-      if (message.stop_reason === "pause_turn") {
-        messages.push({ role: "assistant", content: message.content });
-        continue;
-      }
-      const uses = message.content.filter((b) => b.type === "tool_use");
-      // Cut off, either way: the answer's own budget, or the conversation
-      // having filled the model's context window. Both leave the last block
-      // half written, and a tool input that is cut off parses as a shorter,
-      // valid one.
-      const full = message.stop_reason === "model_context_window_exceeded";
-      const cut = message.stop_reason === "max_tokens" || full;
-      if (uses.length === 0) {
-        messages.push({ role: "assistant", content: message.content });
-        if (full) ui.notice("The conversation has filled the model's context - New chat starts a fresh one.");
-        else if (cut) ui.notice("The answer was cut off - it ran out of room.");
-        return;
-      }
-      if (full) {
-        // Asking again would only overflow again; nothing is run.
-        messages.push({ role: "assistant", content: message.content });
-        messages.push({
-          role: "user",
-          content: uses.map((u) => {
-            ui.tool({ id: u.id, summary: `not run: ${u.name}`, error: true });
-            return { type: "tool_result", tool_use_id: u.id, is_error: true, content: "Not run: the context window is full." };
-          }),
-        });
-        ui.notice("The conversation has filled the model's context - New chat starts a fresh one.");
-        return;
-      }
-      if (cut) {
-        // A file cut off half way would parse as a shorter, valid file. Never
-        // write it; the turn ends and says why.
-        messages.push({ role: "assistant", content: message.content });
-        messages.push({
-          role: "user",
-          content: uses.map((u) => {
-            // The row drawn while the input streamed is finished here, or it
-            // would go on shimmering as if the call were still running.
-            ui.tool({ id: u.id, summary: `not run: ${u.name} (cut off)`, error: true });
-            return {
-              type: "tool_result",
-              tool_use_id: u.id,
-              is_error: true,
-              content: "Not run: the answer hit max_tokens and this input may be cut off. Write smaller pieces (edit_file).",
-            };
-          }),
-        });
-        if (++cuts >= 2) {
-          ui.notice("The answer ran out of room twice in a row - ask for a smaller step, or New chat.");
-          return;
-        }
-        ui.notice("The answer ran out of room before a tool call was complete - asking for smaller steps.");
-        continue;
-      }
-      cuts = 0;
-
-      messages.push({ role: "assistant", content: message.content });
-      // Whether the reader changed the editor by hand while the model was
-      // thinking - something the model has not been told yet, and must still
-      // be told on the next message rather than absorbed into what its own
-      // tools did.
-      // Checked before every tool as well, not just once here: a change by
-      // hand between two tools is as untold as one made before them.
-      let untold = snapshot() !== seen;
-      let expected = snapshot();
-      const results = [];
-      // The last successful change, and whether a run_app came after it.
-      let lastChange;
-      let ranSince = false;
-      for (const use of uses) {
-        if (stopped) {
-          ui.tool({ id: use.id, summary: `not run: ${use.name} (stopped)`, error: true });
-          results.push({ type: "tool_result", tool_use_id: use.id, is_error: true, content: "Stopped by the user." });
-          continue;
-        }
-        if (snapshot() !== expected) untold = true;
-        if (use.name === "run_app") ui.toolPending({ id: use.id, text: pendingText("run_app", {}) });
-        let result;
-        try {
-          result = await untilStopped(execute(use.name, use.input ?? {}), `${use.name} was running`);
-        } catch (e) {
-          result = { error: String(e?.message ?? e) };
-        }
-        ui.tool({ id: use.id, summary: result.summary ?? result.error ?? "", error: Boolean(result.error || result.failed), started: Boolean(result.started) && !result.failed });
-        const entry = {
-          type: "tool_result",
-          tool_use_id: use.id,
-          ...(result.error ? { is_error: true } : {}),
-          // A read is cut per file by filesAsText( ); everything else here.
-          content: use.name === "read_files" && !result.error ? result.text : clip(result.error ?? result.text),
-        };
-        results.push(entry);
-        if (FILE_TOOLS.has(use.name) && !result.error) {
-          lastChange = entry;
-          ranSince = false;
-        } else if (use.name === "run_app") {
-          ranSince = true;
-        }
-        expected = snapshot();
-      }
-      // What the tools left, taken BEFORE the automatic run: the run takes
-      // seconds, and what the reader typed meanwhile was recorded as seen by a
-      // snapshot taken after it - the model was never told, and rewrote the
-      // file from its own copy, the typing with it. Typed during the run, it
-      // now differs from this at the next send( ) and goes with that message.
-      const afterTools = snapshot();
-      // The run every change is followed by, done here rather than asked
-      // for: a model that has to call run_app after writing spends a whole
-      // turn - the request, the thinking, the answer - on pressing a button.
-      // The report rides on the result of the last change, in the same
-      // message, so the next turn already knows how the code ran.
-      if (lastChange && !ranSince && !stopped) {
-        const id = `auto-run-${results.length}-${messages.length}`;
-        ui.toolPending({ id, text: pendingText("run_app", {}) });
-        let report;
-        try {
-          const ran = await untilStopped(host.run(), "the app was running");
-          report = ran.error ? { text: ran.error, summary: "run stopped" } : describeRun(ran);
-          if (report.started && !report.failed) report.text += await untilStopped(screenAfterRun(), "the screen was read").then((t) => (typeof t === "string" ? t : ""));
-        } catch (e) {
-          report = { text: `The automatic run failed: ${String(e?.message ?? e)}`, summary: "run failed" };
-        }
-        ui.tool({ id, summary: report.summary, error: Boolean(report.failed), started: Boolean(report.started) && !report.failed });
-        lastChange.content = clip(`${lastChange.content}\n\nThe page ran the app after these changes:\n${report.text}`);
-      }
-      // Whatever the tools changed, the model has just been told - unless a
-      // hand edit came in first, which the next user message has to carry.
-      if (!untold) {
-        seen = afterTools;
-        seenFiles = JSON.parse(afterTools);
-      }
-      // All results in one message - split across several, the model learns
-      // to stop making parallel calls.
-      messages.push({ role: "user", content: results });
+      expected = snapshot();
     }
+    // What the tools left, taken BEFORE the automatic run: the run takes
+    // seconds, and what the reader typed meanwhile was recorded as seen by a
+    // snapshot taken after it - the model was never told, and rewrote the
+    // file from its own copy, the typing with it. Typed during the run, it
+    // now differs from this at the next send( ) and goes with that message.
+    const afterTools = snapshot();
+    // The run every change is followed by, done here rather than asked
+    // for: a model that has to call run_app after writing spends a whole
+    // turn - the request, the thinking, the answer - on pressing a button.
+    // The report rides on the result of the last change, in the same
+    // message, so the next turn already knows how the code ran.
+    if (lastChange && !ranSince && !stopped) {
+      const id = `auto-run-${results.length}-${messages.length}`;
+      ui.toolPending({ id, text: pendingText("run_app", {}) });
+      let report;
+      try {
+        const ran = await untilStopped(host.run(), "the app was running");
+        report = ran.error ? { text: ran.error, summary: "run stopped" } : describeRun(ran);
+        if (report.started && !report.failed) report.text += await untilStopped(screenAfterRun(), "the screen was read").then((t) => (typeof t === "string" ? t : ""));
+      } catch (e) {
+        report = { text: `The automatic run failed: ${String(e?.message ?? e)}`, summary: "run failed" };
+      }
+      ui.tool({ id, summary: report.summary, error: Boolean(report.failed), started: Boolean(report.started) && !report.failed });
+      lastChange.content = clip(`${lastChange.content}\n\nThe page ran the app after these changes:\n${report.text}`);
+    }
+    // Whatever the tools changed, the model has just been told - unless a
+    // hand edit came in first, which the next user message has to carry.
+    if (!untold) {
+      seen = afterTools;
+      seenFiles = JSON.parse(afterTools);
+    }
+    return results;
   }
 
   async function execute(name, input) {
@@ -701,7 +598,7 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
     } catch (e) {
       // A refusal names what is possible; the screen goes with it, so the
       // next act needs no look first.
-      let screen = "";
+      let screen;
       try {
         screen = `\n\nThe screen now:\n${screenText(await operatorOf().look())}`;
       } catch {
@@ -874,14 +771,6 @@ function editorChanged(files, before) {
     ? "The editor holds these files right now:"
     : `The editor changed since you last saw it (the person edited by hand, or opened something) - ${changed.length ? `changed: ${changed.map((f) => f.name).join(", ")}` : "no file changed"}${gone.length ? `; removed: ${gone.join(", ")}` : ""}:`;
   return `<editor_files>\n${what}\n\n${filesAsText(changed, { all: files })}\n</editor_files>`;
-}
-
-// row and max_rows: a whole number, or a string of digits.
-function count(v, name) {
-  if (v === undefined || v === null) return undefined;
-  const n = typeof v === "number" ? v : typeof v === "string" && /^\s*\d+\s*$/.test(v) ? Number(v) : NaN;
-  if (!Number.isInteger(n) || n < 0) throw new AgentError(`${name} is a whole number, not ${JSON.stringify(v).slice(0, 40)}`);
-  return n;
 }
 
 // What a tool call is doing while it is still under way - written while its

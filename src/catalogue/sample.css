@@ -1,0 +1,314 @@
+/* The per-sample pages, beside catalogue.css - copied to dist/samples/ by tools/sample-pages.mjs. */
+/* ---- the keyboard's way past the header ------------------------------
+   Off-screen until it takes focus, then the first thing on the page. A sample
+   page puts a link on every line of the printed class, so the header was a
+   long way to tab past. Same shape and wording as the manual's, because a
+   reader moving between the two deployments should meet the same control. */
+.skip {
+  position: absolute; left: 8px; top: -60px; z-index: 60;
+  padding: 8px 14px;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); color: var(--fg);
+  font-size: 13px; font-weight: 600; text-decoration: none;
+  transition: top .12s ease;
+}
+.skip:focus { top: 8px; }
+main:focus { outline: none; }
+@media (prefers-reduced-motion: reduce) { .skip { transition: none; } }
+/* The one colour these pages add to the catalogue's palette: the line a link
+ * points at. Declared in all three of the palette's blocks, because
+ * catalogue.css switches scheme two ways - the media query for a reader who
+ * has expressed no choice, [data-theme] for one who has - and a value written
+ * in only one of them is a highlight that is missing on half the site. Opaque
+ * on purpose: the sticky gutter sits on it, and a translucent tint would show
+ * the code sliding along underneath the numbers. */
+:root { --mark: #e6f0fb; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --mark: #1d2836; } }
+:root[data-theme="dark"] { --mark: #1d2836; }
+/* The first line of text starts where the documentation's does, and so does
+   "On this page": 48px under the bar, which is the number the VPDoc padding
+   sets over there. It was 22 here - the crumb line began 26px higher than a
+   manual page's title, and the outline began 10px lower than the manual's, so
+   two pages a reader steps between started in three different places. Raising
+   the documentation to meet THIS page instead would leave 22px between a
+   sticky bar and a heading, which is not air, it is a collision waiting for a
+   scroll. */
+main { padding-top: 26px; padding-bottom: 40px; }
+
+/* ---- the page and its outline ----
+ *
+ * Two columns from 1100px up: the sample, and "On this page" beside it. Below
+ * that the outline goes, rather than stacking above the content - a list of
+ * links between the title and the first section is a wall in front of the
+ * page, and everything it names is one scroll away on a phone anyway.
+ *
+ * The right-hand column was empty at desk width, and the documentation puts
+ * its own outline exactly there; a reader crossing between the two documents
+ * meets the same thing in the same place. The column is 200px, which is what
+ * the longest heading here ("Controls it builds") needs at 13px. */
+.sample { display: block; }
+
+@media (min-width: 1100px) {
+  .sample {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 225px;
+    gap: 0 40px;
+    align-items: start;
+  }
+}
+
+.outline { display: none; }
+
+@media (min-width: 1100px) {
+  .outline {
+    display: block;
+    position: sticky;
+    /* The bar is 46px and sticky; 24px of air under it. */
+    top: 70px;
+    /* Level with the crumb line, which is the page's first text - the
+       documentation's outline is level with its own first line the same way. */
+    padding-top: 22px;
+    /* The hairline the documentation draws down the left of its outline. The
+       column grows by the 24px the rule needs, so the words keep their width. */
+    border-left: 1px solid var(--line);
+    padding-left: 24px;
+    font-size: 13px;
+  }
+}
+
+.outline-head {
+  margin-bottom: 8px;
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.outline nav { display: flex; flex-direction: column; gap: 2px; }
+
+.outline nav a {
+  padding: 4px 0;
+  color: var(--fg-dim);
+  text-decoration: none;
+  line-height: 1.4;
+}
+
+.outline nav a:hover { color: var(--accent); }
+
+/* The section you are in, marked the way the documentation marks it: the
+   entry at full strength instead of dimmed, and a 2px bar in the accent
+   standing on the hairline beside it. src/catalogue/outline.mjs sets the class.
+
+   The bar is a pseudo-element on the row rather than one element that slides
+   between rows, which is what the documentation does - the slide needs a
+   measured offset per row and buys a quarter-second of animation. -25px is
+   the 24px of padding plus the 1px rule, so it lands ON the hairline. */
+.outline nav a { position: relative; }
+
+.outline nav a::before {
+  content: "";
+  position: absolute;
+  left: -25px;
+  top: 50%;
+  margin-top: -9px;
+  width: 2px;
+  height: 18px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity .2s;
+}
+
+.outline nav a.here { color: var(--fg); }
+.outline nav a.here::before { opacity: 1; }
+.crumbs { margin: 22px 0 6px; font-size: 12px; color: var(--fg-dim); }
+.crumbs a { color: var(--fg-dim); }
+/* A UI5 NAME IS ONE WORD, AND SOME OF THEM ARE 28 CHARACTERS LONG. The titles
+ * on these pages come from three sample repositories and carry the control
+ * they are about - "Object Page with ObjectPageHeaderActionButtons", and the
+ * chips under them are whole names like
+ * sap.suite.ui.microchart.InteractiveDonutChart. A word that does not fit is
+ * not wrapped, it is overflowed: that h1 was 406px wide in a 296px column and
+ * the page slid sideways with it, by 98px at 320 and still by 5 at 414. It is
+ * inherited, so one declaration covers the title, the sentence, the chips and
+ * the neighbours; the printed class is pre-formatted and unaffected, which is
+ * right - that one scrolls in its own box. */
+.sample, .all-groups { overflow-wrap: break-word; }
+.sample h1 { font-size: 26px; margin: 0 0 8px; line-height: 1.25; }
+.sample .lede { margin: 0 0 4px; font-size: 15px; color: var(--fg); max-width: 74ch; }
+.sample .who { font-family: var(--font-mono); font-size: 12px; color: var(--fg-dim); }
+.sample .badges { margin: 12px 0 24px; }
+/* "Run it here", under the title: the one action a reader came for, where
+   the reader is looking (tools/sample-pages.mjs says why), drawn as the one
+   button on the page so it is not read as one more link in the facts. */
+.head-run { margin: 12px 0 0; }
+.run-jump {
+  display: inline-block; padding: 6px 14px; border-radius: 6px;
+  background: var(--accent); color: var(--accent-fg); font-size: 14px; font-weight: 600;
+  text-decoration: none;
+}
+.run-jump:hover { filter: brightness(1.08); }
+.run-jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.warns {
+  background: var(--warn-bg); color: var(--warn); border-radius: 8px;
+  padding: 10px 14px; margin: 0 0 22px; max-width: 74ch; font-size: 13px;
+}
+.warns b { font-weight: 600; }
+h2 { font-size: 15px; margin: 26px 0 8px; }
+/* THE VALUE COLUMN HAS TO BE ALLOWED TO BE NARROW, and 1fr does not allow it:
+ * 1fr is minmax(auto, 1fr), and auto there is the column's MIN-CONTENT width -
+ * the longest thing in it that cannot be broken. One of these rows is a
+ * documentation link printed as its address, up to 60 characters of
+ * unbreakable url, so the column refused to be narrower than 384px and the
+ * whole page went with it: at 390px it scrolled sideways by 6, at 360 by 36,
+ * at 320 by 77. On every one of the 771 sample pages, on every phone.
+ * minmax(0, 1fr) lets the column shrink, and overflow-wrap gives the url
+ * somewhere to break - a class name or an address wrapped over two lines
+ * reads; a page that slides under the thumb does not. */
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 18px; margin: 0; max-width: 74ch; font-size: 13px; }
+.facts dt { color: var(--fg-dim); }
+.facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.facts code { font-family: var(--font-mono); font-size: 12px; }
+.chips { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; }
+.chips li { margin: 0; }
+.chips a, .chips span {
+  display: inline-block; font-family: var(--font-mono); font-size: 12px;
+  border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; text-decoration: none;
+  /* A flex item is as wide as its content unless it is told otherwise, and a
+   * wrapping row gives an over-wide pill a line of its own at that width
+   * rather than a narrower pill. Both halves are needed: the cap, and
+   * somewhere for a dotted name with no spaces in it to break. */
+  max-width: 100%; overflow-wrap: anywhere;
+}
+.chips a:hover { border-color: var(--accent); }
+/* The demo. Same card as the class below it - one shape for the sample
+ * running and the sample written, because they are the same sample - and the
+ * button inside it is the loader's own (src/embed/abap2ui5-embed.js), which
+ * ships no stylesheet: an embedding page dresses it, and this one dresses it
+ * as the catalogue. Unpressed it is a band and not the frame's full 420
+ * pixels: a demo nobody asked for should cost the page one line of its
+ * scroll, not a screen of empty box on the way past. */
+/* THE APP IS READ AS A WINDOW, NOT AS A STRIP. The demo used to be 420px tall
+ * in this column - 2.8:1, a letterbox, in which a UI5 page with a header and a
+ * list had room for about four rows before it started scrolling inside a box
+ * the reader could not resize. 620 is the height that makes it a window
+ * instead, which is the shape of the thing inside it.
+ *
+ * AND IT IS THE WIDTH OF THE CLASS UNDER IT. The height was once paired with a
+ * cap of 820px, for a 5:4 frame - but the two cards on this page are the same
+ * sample, running and written, and a card that stops 35px short of the one
+ * below it does not read as a narrower frame on purpose. It reads as a box
+ * that failed to finish. Both take the column: same left edge, same right
+ * edge, 620 in the column's width, which is still a window and not a strip. */
+.demo {
+  border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+  margin: 0; background: var(--bg);
+}
+.demo-head {
+  display: flex; flex-wrap: wrap; gap: 2px 16px; justify-content: space-between; align-items: baseline;
+  padding: 7px 13px; font-size: 12px; color: var(--fg-dim);
+  background: var(--bg-sunken); border-bottom: 1px solid var(--line);
+}
+.abap2ui5-demo { min-height: 132px; display: flex; }
+.abap2ui5-demo-start {
+  display: block; width: 100%; padding: 44px 16px; border: 0; cursor: pointer;
+  background: transparent; color: var(--accent); font: inherit; font-size: 14px; font-weight: 600;
+}
+.abap2ui5-demo-start::after {
+  content: " — nothing loads until you press it";
+  color: var(--fg-dim); font-weight: 400;
+}
+.abap2ui5-demo-start:hover { background: var(--bg-sunken); }
+.demo-note { margin: 8px 0 0; }
+/* The class itself. The frame is a card the width of the text column plus
+ * whatever the code needs: ABAP is written in lines that do not wrap, so the
+ * block scrolls sideways rather than folding a chain into a paragraph, and it
+ * is the only thing on these pages allowed to be wider than the prose. The
+ * token colours are the ones the playground's bottom panel prints XML and
+ * JSON in (src/shell/shell.css) - one scheme for the whole site. */
+.source { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 0; }
+.source-head {
+  display: flex; flex-wrap: wrap; gap: 2px 16px; justify-content: space-between; align-items: baseline;
+  padding: 7px 13px; font-size: 12px; color: var(--fg-dim);
+  background: var(--bg-sunken); border-bottom: 1px solid var(--line);
+}
+.source-head b { font-family: var(--font-mono); font-weight: 400; color: var(--fg); }
+.source-body {
+  margin: 0; padding: 12px 0; overflow-x: auto; background: var(--bg);
+  font-family: var(--font-mono); font-size: 12.5px; line-height: 1.55; tab-size: 2;
+}
+.source-body code { font: inherit; background: inherit; counter-reset: line; }
+/* A line of the class, and its number - GitHub's line links on a page that has
+ * no editor: every line carries an id, so #L42 and #L42-L58 address a PASSAGE
+ * of a sample the way a heading addresses a section. "Look at line 40 to 55"
+ * is most of what one person tells another about a sample, and until this it
+ * could only be said about the copy on GitHub.
+ *
+ * Three properties this had to keep:
+ *
+ *  - The numbers are not in the text. They are a CSS counter, drawn by
+ *    ::before, so selecting the block and copying it gives the class as
+ *    committed and not nine hundred numbers down its left edge - which is the
+ *    whole reason the class is printed here rather than linked.
+ *  - The gutter stays where it is when the block scrolls sideways. An abap2UI5
+ *    view is a chain written wide, and a number that has scrolled out of the
+ *    box is a number nobody can read a link off: sticky inside the scroller,
+ *    over an OPAQUE background - which is why the line carries the background
+ *    and the number inherits it, so a marked line is not a white column with a
+ *    coloured line beside it.
+ *  - One line needs no JavaScript at all: :target is the browser's own answer
+ *    to #L42, and it is what a page with its script blocked still does. The
+ *    script beside it takes that case over (it adds the live class, and the
+ *    rule below then stops matching) because it also has to answer #L42-L58,
+ *    which is a fragment no element has an id for. */
+/* scroll-margin clears the bar, which is sticky at 46px and would otherwise
+ * be standing on the line a link just jumped to. */
+.ln { display: inline-block; min-width: 100%; padding-right: 14px; background: inherit; counter-increment: line; scroll-margin: 60px 0; }
+.ln > a {
+  position: sticky; left: 0; z-index: 1; display: inline-block;
+  min-width: 3ch; padding: 0 14px; text-align: right; background: inherit;
+  color: var(--fg-dim); text-decoration: none; user-select: none; -webkit-user-select: none;
+}
+.ln > a::before { content: counter(line); }
+.ln > a:hover { color: var(--accent); }
+/* A THUMB CANNOT PICK A LINE, and should not have to try. Each of these is
+   36x19 with the next one 19px below it - half the size a target is asked to
+   be, at a third of the spacing - so on a touch screen every tap near the
+   gutter was a coin toss between two lines. It is a POINTER affordance: the
+   number is drawn by this stylesheet and the link under it is how a mouse
+   picks a line up. On a coarse pointer the number stays and the link stops
+   answering, which also gives the listing back the 50 taps it was swallowing
+   at its left edge while somebody tried to scroll it. */
+@media (pointer: coarse) {
+  .ln > a { pointer-events: none; }
+}
+.source-body:not(.live) .ln:target, .ln.is-marked { background: var(--mark); }
+.source-tools { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; }
+/* 19px of link is a line of text, which is right for a mouse and under half
+   what a thumb is asked to be given. The height comes from padding rather than
+   from a size, so nothing moves for a reader with a pointer. */
+@media (pointer: coarse) {
+  .source-tools a, .source-copy, .run { padding-top: 4px; padding-bottom: 4px; }
+  /* And the crumbs above the title, 12px of text each: a row to land on. */
+  .crumbs a { display: inline-block; padding: 4px 0; }
+}
+.source-copy {
+  padding: 0; border: 0; background: none; font: inherit; color: var(--accent);
+  cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+}
+.code-key { color: var(--code-name); }
+.code-string { color: var(--code-string); }
+.code-number { color: var(--code-atom); }
+.code-comment { color: var(--fg-dim); font-style: italic; }
+.source-note { margin: 8px 0 0; }
+.nearby { list-style: none; margin: 0; padding: 0; max-width: 74ch; }
+.nearby li { margin: 0 0 5px; font-size: 13px; }
+.nearby span { color: var(--fg-dim); }
+.note { color: var(--fg-dim); font-size: 13px; max-width: 74ch; }
+.all-groups h2 { margin-top: 28px; }
+.all-groups ul { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 32px; }
+.all-groups li { margin: 0 0 4px; font-size: 13px; break-inside: avoid; }
+@media (max-width: 620px) {
+  .all-groups ul { columns: 1; }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px 0; }
+  .facts dd { margin-bottom: 8px; }
+}

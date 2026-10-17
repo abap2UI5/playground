@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { clickEditor, getSource, MAIN_CLASS, open, setSource } from "./helpers.mjs";
+import { clickEditor, getSource, MAIN_CLASS, MAIN_FILE, MAIN_MARK, open, setSource } from "./helpers.mjs";
 
 // Autofix, and the way back to code that came from a link.
 
@@ -82,13 +82,24 @@ test("the fix bar stays away when there is nothing it could do", async ({ page }
   await expect(page.locator(".insight-fixbar")).toHaveCount(0);
 });
 
-test("linked code offers the way back to GitHub, and only linked code does", async ({ page }) => {
+test("linked code offers the way back to GitHub, and only code from somewhere does", async ({ page }) => {
   await open(page);
-  // Over a sample the link is there but inactive: no page to go to, and the
-  // bar does not rearrange itself when one appears.
+  // A sample the page carries is a file in abap2UI5/samples, and the link
+  // goes there - it used to sit inactive over the very first app a visitor
+  // sees, looking broken.
+  const source = page.locator("#source-link");
+  await expect(source).not.toHaveAttribute("aria-disabled", "true");
+  await expect(source).toHaveAttribute("href", `https://github.com/abap2UI5/samples/blob/main/src/${MAIN_FILE}`);
+
+  // Over a draft the link is there but inactive: no page to go to, and the
+  // bar does not rearrange itself when one appears. Its title says why.
+  await setSource(page, (await getSource(page)).replace(MAIN_MARK, "a draft of my own"));
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
   const inactive = page.locator("#source-link");
-  await expect(inactive, "a sample was not linked from anywhere").toHaveAttribute("aria-disabled", "true");
+  await expect(inactive, "a draft was not linked from anywhere").toHaveAttribute("aria-disabled", "true");
   await expect(inactive).not.toHaveAttribute("href", /./);
+  await expect(inactive).toHaveAttribute("title", /No source to open/);
 
   await page.goto("/?src=examples/zcl_linked_example.clas.abap");
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
@@ -101,4 +112,30 @@ test("linked code offers the way back to GitHub, and only linked code does", asy
   // the translation from raw.githubusercontent to the page a human wants,
   // which the unit-level check below covers.
   await expect(link).toHaveAttribute("href", /zcl_linked_example\.clas\.abap$/);
+});
+
+// "1 of these can be fixed automatically" over a list of errors read as one
+// of the errors - and the one was a warning, with every error still there
+// after the press. The bar says what it would repair, and what it would not.
+test("the fix bar says what it can fix, and which errors it leaves", async ({ page }) => {
+  await open(page);
+
+  await page.locator('[data-insight="abaplint"]').click();
+  const box = page.locator(".config-text");
+  const config = JSON.parse(await box.inputValue());
+  config.rules.sequential_blank = { severity: "Warning", lines: 4 };
+  await box.fill(JSON.stringify(config));
+  await page.locator(".config-row .primary").click();
+  await expect(page.locator(".config-said")).toContainText("applied", { timeout: 30000 });
+
+  const source = (await getSource(page))
+    .replace(/ENDCLASS\.\n+CLASS/, "ENDCLASS.\n\n\n\n\n\n\nCLASS")
+    .replace("PUBLIC SECTION.", "PUBLIC SECTION.\n    DATA broken TYPE zcl_does_not_exist.");
+  await setSource(page, source);
+
+  await page.locator('[data-insight="problems"]').click();
+  const bar = page.locator(".insight-fixbar");
+  await expect(bar).toBeVisible({ timeout: 30000 });
+  await expect(page.locator(".insight-row.is-error").first()).toBeVisible();
+  await expect(bar.locator("span")).toHaveText(/^1 warning can be fixed automatically - the \d+ errors? cannot$/);
 });

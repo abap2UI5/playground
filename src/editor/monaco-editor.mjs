@@ -18,6 +18,11 @@
 // abaplint has no API for - see abapNameCompletion below.
 import * as monaco from "monaco-editor/editor/editor.api.js";
 import "monaco-editor/languages/definitions/abap/register.js";
+// A table's two files (tables.mjs): the definition is XML, the rows JSON -
+// coloured as JavaScript, which JSON is a part of; Monaco's own JSON is a
+// language service with a worker of its own, for a file of a few rows.
+import "monaco-editor/languages/definitions/xml/register.js";
+import "monaco-editor/languages/definitions/javascript/register.js";
 import "monaco-editor/editor/contrib/hover/browser/hoverContribution.js";
 import "monaco-editor/editor/contrib/find/browser/findController.js";
 import "monaco-editor/editor/contrib/format/browser/formatActions.js";
@@ -31,7 +36,15 @@ import "monaco-editor/editor/contrib/contextmenu/browser/contextmenu.js";
 import "monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching.js";
 // Ctrl+M (Ctrl+Shift+M on a Mac): Tab moves the focus instead of indenting.
 import "monaco-editor/editor/contrib/toggleTabFocusMode/browser/toggleTabFocusMode.js";
-import { uriFor } from "./files.mjs";
+// The diff editor's arithmetic, on this thread - see showDiff( ) below. All
+// three are already in this chunk: the standalone editor carries the diff
+// editor, and the editor-worker service carries the diff computer for the
+// fallback it runs when there is no worker.
+import { StandaloneServices } from "monaco-editor/editor/standalone/browser/standaloneServices.js";
+import { IEditorWorkerService } from "monaco-editor/editor/common/services/editorWorker.js";
+import { linesDiffComputers } from "monaco-editor/editor/common/diff/linesDiffComputers.js";
+import { dependentsOf, uriFor } from "./files.mjs";
+import { isSeedFile, isTableFile } from "./tables.mjs";
 import { registerProviders } from "./providers.mjs";
 import { applyAbaplintFixes, applyLinterFixes, formatFiles, knownObjectNames } from "./registry.mjs";
 import * as analysis from "./analysis.mjs";
@@ -226,22 +239,84 @@ export function setEditorTheme(dark) {
 // source back and takes the caret away, the way a disabled control reads.
 // Typing was already refused; this is so nobody has to try it to find out.
 export function setEditorReadOnly(readOnly) {
-  editor?.updateOptions({ readOnly });
+  editor?.updateOptions({ readOnly: readOnly || locked });
   editorContainer?.classList.toggle("is-readonly", readOnly);
+}
+
+// Read-only for good: an embedded example whose page asked for it
+// (`data-readonly` on the loader's element, `?readonly=1` on the playground -
+// src/shell/embed.mjs). A floor under setEditorReadOnly( ) above rather than a
+// call of it, because the View tab's edit mode hands typing back when it
+// closes, and must not hand back what the embedding page took away.
+//
+// Not greyed like the View tab's lock: there the source is momentarily not the
+// thing being written, here it is the example a page is printing, and it reads
+// at full strength. Monaco says so itself when somebody types anyway (the
+// message below). Format and Fix them go with it - both rewrite the source -
+// so they answer "nothing done" here, and the shell hides their buttons.
+let locked = false;
+export function lockEditor() {
+  locked = true;
+  editor?.updateOptions({
+    readOnly: true,
+    readOnlyMessage: { value: "This example is read-only - open it in the playground to change it." },
+  });
+}
+
+// Lines an embedding page points at (`data-lines`, `?lines=` - the same
+// addresses a sample page takes in #L42-L58): marked in the file they belong
+// to, which is the app, the first file, and the first of them scrolled to.
+//
+// On the model rather than through the editor's decorations collection, which
+// clears itself whenever the editor shows another model - a reader clicking
+// into a second file and back would have found the marks gone. Whole-line
+// decorations move with the text, so a reader typing above them keeps them on
+// the lines they were put on. Called again with the same ranges after a Reset,
+// which writes the file back and with it the lines.
+let markedOn;
+let marked = [];
+export function markLines(ranges) {
+  const name = orderedModels()[0] && nameOf(orderedModels()[0]);
+  const model = name && modelFor(name);
+  if (!model) return;
+  if (markedOn && !markedOn.isDisposed()) markedOn.deltaDecorations(marked, []);
+  const last = model.getLineCount();
+  const decorations = [];
+  for (const { from, to } of ranges) {
+    if (from > last) continue;
+    decorations.push({
+      range: new monaco.Range(from, 1, Math.min(to, last), 1),
+      options: {
+        isWholeLine: true,
+        className: "line-marked",
+        linesDecorationsClassName: "line-marked-gutter",
+        overviewRuler: { color: "rgba(10, 110, 209, .6)", position: monaco.editor.OverviewRulerLane.Full },
+      },
+    });
+  }
+  markedOn = model;
+  marked = model.deltaDecorations([], decorations);
+  const first = decorations[0]?.range.startLineNumber;
+  if (!first) return;
+  if (currentFile() !== name) openFile(name);
+  editor.revealLineNearTop(first);
 }
 
 // Replaces one file's text as an edit somebody can undo, which is what makes
 // a view rewritten out of the View tab a Ctrl+Z away from what it replaced.
 // Same door the fixers use; see writeSource( ) at the bottom of this file.
 export function setSourceOf(name, source) {
+  if (locked) return;
   writeSource(name, source);
   closeUndoSteps();
   refresh();
 }
 
+const languageOf = (name) => (isTableFile(name) ? "xml" : isSeedFile(name) ? "javascript" : "abap");
+
 function createModel(file) {
   modelGeneration += 1;
-  const model = monaco.editor.createModel(file.source, "abap", monaco.Uri.parse(uriFor(file.name)));
+  const model = monaco.editor.createModel(file.source, languageOf(file.name), monaco.Uri.parse(uriFor(file.name)));
   let pending;
   model.onDidChangeContent(() => {
     // A keystroke is cheap to react to (a few milliseconds), but reacting to
@@ -351,14 +426,15 @@ export function closeFile(name) {
   if (files[0]?.name === name) return;
   // A class's test include goes with it: left open alone it was a file set
   // nothing could hold - the reload, the share link and the named draft all
-  // refused it, and the stored draft was lost behind the refusal.
-  const tests = name.endsWith(".clas.abap") ? name.replace(/\.clas\.abap$/, ".clas.testclasses.abap") : undefined;
-  const gone = (n) => n === name || n === tests;
+  // refused it, and the stored draft was lost behind the refusal. A table's
+  // rows go with the table the same way.
+  const dependents = dependentsOf(name);
+  const gone = (n) => n === name || dependents.includes(n);
   const remaining = files.filter((f) => !gone(f.name));
   if (remaining.length === 0) return;
   if (gone(currentFile())) openFile(remaining[0].name);
   fileOrder = fileOrder.filter((n) => !gone(n));
-  if (tests) modelFor(tests)?.dispose();
+  for (const dependent of dependents) modelFor(dependent)?.dispose();
   model.dispose();
   modelGeneration += 1;
   if (connected) refresh();
@@ -419,7 +495,7 @@ export function focusProblem(file, line, column = 1) {
 // through pushEditOperations, one edit per file, so Ctrl+Z takes the whole
 // thing back the way it takes an autofix back.
 export async function format() {
-  if (!connected) return { formatted: 0, files: [] };
+  if (!connected || locked) return { formatted: 0, files: [] };
   const unchanged = versionGuard();
   const result = await formatFiles(getFiles());
   const files = result.files.filter((file) => unchanged(file.name));
@@ -558,7 +634,7 @@ function abapNameCompletion() {
 // the wrong place) and the abap2UI5 linter reads the builder chain, which is
 // easier to read correctly once the ABAP around it parses.
 export async function applyFixes() {
-  if (!connected) return 0;
+  if (!connected || locked) return 0;
   let fixed = 0;
 
   const unchanged = versionGuard();
@@ -610,4 +686,85 @@ function writeSource(name, source, { sameStep = false } = {}) {
 
 function closeUndoSteps() {
   for (const model of orderedModels()) model.pushStackElement();
+}
+
+// ---------------------------------------------------------------- compare
+
+// Compare with the original (src/shell/original.mjs): Monaco's own diff
+// editor, read-only, the text as it was opened on the left and the open
+// model on the right - the live one, so the markers are there too.
+//
+// The diff editor asks the editor-worker service for its diff, and this
+// page gives Monaco no worker (MonacoEnvironment above): the request waited
+// for an answer that never came, and the editor showed two panes and no
+// difference. Rather than give the whole service a worker - or let it fall
+// back to its main-thread copy, which would also switch on word-based
+// suggestions in the ABAP editor - the one method the diff editor needs is
+// answered here, with the same diff computer the worker would have run. Two
+// files of a few hundred lines take milliseconds.
+let diffPatched = false;
+function diffOnThisThread() {
+  if (diffPatched) return;
+  diffPatched = true;
+  const service = StandaloneServices.get(IEditorWorkerService);
+  service.computeDiff = async (originalUri, modifiedUri, options, algorithm) => {
+    const original = monaco.editor.getModel(originalUri);
+    const modified = monaco.editor.getModel(modifiedUri);
+    if (!original || !modified) return null;
+    const computer = algorithm === "legacy" ? linesDiffComputers.getLegacy() : linesDiffComputers.getDefault();
+    const result = computer.computeDiff(original.getLinesContent(), modified.getLinesContent(), options);
+    return {
+      identical: result.changes.length === 0 && original.getValue() === modified.getValue(),
+      quitEarly: result.hitTimeout,
+      changes: result.changes,
+      moves: result.moves,
+    };
+  };
+}
+
+let diffEditor;
+// Models the diff made for itself - the original's text, and an empty one
+// for a file that is no longer open - disposed with it. Not file: URIs, so
+// the analysis, the strip and getFiles( ) never see them.
+let diffModels = [];
+
+export function showDiff(container, name, originalSource) {
+  closeDiff();
+  diffOnThisThread();
+  const language = languageOf(name);
+  const scratch = (scheme, text) => {
+    const model = monaco.editor.createModel(text, language, monaco.Uri.parse(`${scheme}:/${name}`));
+    diffModels.push(model);
+    return model;
+  };
+  const original = scratch("original", originalSource ?? "");
+  const modified = modelFor(name) ?? scratch("removed", "");
+  diffEditor = monaco.editor.createDiffEditor(container, {
+    readOnly: true,
+    originalEditable: false,
+    automaticLayout: true,
+    minimap: { enabled: false },
+    scrollBeyondLastLine: false,
+    renderOverviewRuler: false,
+    // Side by side where there is room, one column on a phone.
+    useInlineViewWhenSpaceIsLimited: true,
+    renderSideBySideInlineBreakpoint: 700,
+    fontSize: 13,
+    tabSize: 2,
+  });
+  diffEditor.setModel({ original, modified });
+  // Opened on the first change rather than on line 1: the edit is what was
+  // asked about, and a class is longer than the dialog.
+  const first = diffEditor.onDidUpdateDiff(() => {
+    first.dispose();
+    diffEditor?.revealFirstDiff();
+  });
+  return diffEditor;
+}
+
+export function closeDiff() {
+  diffEditor?.dispose();
+  diffEditor = undefined;
+  for (const model of diffModels) model.dispose();
+  diffModels = [];
 }

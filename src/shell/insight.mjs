@@ -1,48 +1,35 @@
 // The panel under the editor: what is wrong, and what is in the file.
 //
-// Two views of the same source, sharing one strip because they answer the two
-// questions a reader has while looking at a class - "is anything broken" and
-// "where is the method I want". Both are derived, never stored: they are
-// rebuilt from the editor on every change, so there is no second copy of the
-// truth to go stale.
-import {
-  applyFixes,
-  currentFile,
-  fileVersion,
-  fixableNow,
-  focusProblem,
-  getFiles,
-  getSource,
-  invalidateAnalysis,
-  lintViewsFor,
-  onFileShown,
-  refresh,
-  refreshNow,
-  setEditorReadOnly,
-  setSourceOf,
-} from "../editor/editor.mjs";
-import {
-  abaplintDefaults,
-  abaplintSettings,
-  allRuleNames,
-  applyAbaplintSettings,
-  documentSymbols,
-} from "../editor/registry.mjs";
-import { applyLinterSettings, linterDefaults, linterSettings } from "../editor/abap2ui5-lint.mjs";
-import { copyToClipboard } from "./share.mjs";
-import { onRoundtrip, roundtripList } from "./roundtrips.mjs";
-import { prettyXml } from "./xml-pretty.mjs";
-import { highlighted } from "./highlight.mjs";
-import { sourceWithView, viewEditable } from "./view-edit.mjs";
-import { keepAbaplintSettings, keepLinterSettings } from "./checker-settings.mjs";
+// Several views of the same source, sharing one strip because they answer the
+// questions a reader has while looking at a class - "is anything broken",
+// "where is the method I want", "what did the app just do". All of them are
+// derived, never stored: they are rebuilt from the editor and the runtime on
+// every change, so there is no second copy of the truth to go stale.
+//
+// This module is the panel itself - the strip, folding it away, the drag that
+// sizes it, and the redraw that keeps the reader's place. Every tab is a
+// module of its own that draws one view (the VIEWS table below names them),
+// and insight-common.mjs is what a tab may ask of the panel in return.
+import { currentFile, focusProblem, onFileShown } from "../editor/editor.mjs";
 import { readStored, writeStored } from "./storage.mjs";
-import { currentLog, hideOutput, onLogChange, setStatus, showOutput } from "./ui.mjs";
+import { onLogChange } from "./ui.mjs";
+import { connectPanel } from "./insight-common.mjs";
+import { problemsTab, setProblems } from "./insight-problems.mjs";
+import { outlineTab } from "./insight-outline.mjs";
+import { fileShown, viewTab } from "./insight-view.mjs";
+import { testsTab } from "./insight-tests.mjs";
+import { followRoundtrips, roundtripsTab } from "./insight-roundtrips.mjs";
+import { consoleTab } from "./insight-console.mjs";
+import { stateTab } from "./insight-state.mjs";
+import { logTab, paintLogDot } from "./insight-log.mjs";
+import { abaplintTab, linterTab } from "./insight-config.mjs";
+
+export { setTestResults } from "./insight-tests.mjs";
 
 let panel;
 let body;
 let tabs;
 let view = "problems";
-let lastProblems = [];
 
 // Collapsing has to put the dragged height aside, not fight it: a height set
 // by the drag lives in the element's style attribute, and an inline style beats
@@ -103,15 +90,13 @@ export function setUpInsight() {
   tabs = [...panel.querySelectorAll("[data-insight]")];
 
   setUpResize();
+  setUpStrip();
 
-  // The View tab's edit is about one file's chain, and it makes the ABAP
-  // editor read-only while it is open. Showing another file ends it - here,
-  // on the switch itself, and not only when the View tab next renders:
-  // with Problems in front, the other file arrived read-only with nothing on
-  // screen to say why.
-  onFileShown(() => {
-    if (editing && editing.file !== currentFile()) stopEditing();
-  });
+  connectPanel({ view: () => view, render, update: updateInsight });
+
+  // The View tab's edit is about one file's chain; showing another file ends
+  // it, on the switch itself (insight-view.mjs says why).
+  onFileShown(() => fileShown(currentFile()));
 
   const toggle = document.getElementById("insight-toggle");
   toggle?.addEventListener("click", () => {
@@ -137,6 +122,7 @@ export function setUpInsight() {
       }
       expand();
       remember(false);
+      if (tab.dataset.insight !== view) sized = false;
       view = tab.dataset.insight;
       render();
     });
@@ -170,28 +156,9 @@ export function setUpInsight() {
     focusProblem(row.dataset.file, Number(row.dataset.line), Number(row.dataset.column));
   });
 
-  // A roundtrip landing while its tab is open is listed as it lands; the
-  // badge counts them whichever tab is open.
-  onRoundtrip(() => {
-    // A cleared list is a new Run, whose numbering starts over at #1 - so the
-    // row that was open would otherwise reopen as the new run's #1.
-    if (roundtripList().length === 0) openedRoundtrip = undefined;
-    paintRoundtripCount();
-    if (view !== "roundtrips") return;
-    // Not under a selection somebody is making in a request or a response:
-    // the redraw replaced the text they were selecting. The list catches up
-    // once the selection is let go.
-    if (selectingInBody()) {
-      roundtripsBehind = true;
-      return;
-    }
-    render();
-  });
-  document.addEventListener("selectionchange", () => {
-    if (!roundtripsBehind || selectingInBody()) return;
-    roundtripsBehind = false;
-    if (view === "roundtrips") render();
-  });
+  // A roundtrip landing while the Roundtrips or the Console tab is open is
+  // drawn as it lands; the badges count them whichever tab is open.
+  followRoundtrips(body);
 
   render();
 }
@@ -241,6 +208,7 @@ function setUpResize() {
     // Opened by hand is a request to have it open, as the toggle's is.
     if (panel.classList.contains("is-collapsed")) remember(false);
     expand();
+    unfit();
     grip.classList.add("is-dragging");
     e.preventDefault();
   });
@@ -271,6 +239,7 @@ function setUpResize() {
     e.preventDefault();
     if (panel.classList.contains("is-collapsed")) remember(false);
     expand();
+    unfit();
     writeStored(HEIGHT_KEY, String(apply(panel.getBoundingClientRect().height + step)));
   });
 }
@@ -280,6 +249,7 @@ function setUpResize() {
 export function showInsight(which) {
   if (!panel || !VIEWS[which]) return;
   expand();
+  if (which !== view) sized = false;
   view = which;
   render();
 }
@@ -287,59 +257,45 @@ export function showInsight(which) {
 // Called whenever the editor changed. `problems` is what refresh() returned, so
 // the panel never runs a checker itself - one analysis, two readers.
 export function updateInsight(problems) {
-  lastProblems = problems ?? [];
-  paintCount();
+  setProblems(problems);
   // The config views hold half-typed text somebody is in the middle of - a
   // rerender under their hands would throw it away on every keystroke.
-  if (view === "problems" || view === "outline" || view === "view") render();
+  if (view === "problems" || view === "outline" || view === "view") render({ settle: true });
 }
 
-// A dot on the Log tab while there is something unread in it, so switching
-// away does not hide that something went wrong.
-function paintLogDot(entry = currentLog()) {
-  const dot = document.getElementById("log-dot");
-  if (!dot) return;
-  const has = entry.body !== "";
-  dot.textContent = has ? "!" : "";
-  dot.className = `insight-badge${has ? " is-error" : ""}`;
-}
-
-function paintCount() {
-  const errors = lastProblems.filter((p) => p.severity === 1).length;
-  const rest = lastProblems.length - errors;
-  const badge = document.getElementById("problem-count");
-  if (!badge) return;
-  badge.textContent = lastProblems.length === 0 ? "" : errors > 0 ? String(errors) : String(rest);
-  badge.className = `insight-badge${errors > 0 ? " is-error" : lastProblems.length > 0 ? " is-warning" : ""}`;
-}
-
+// Each tab, by its data-insight name, and the function that draws it.
 const VIEWS = {
-  problems: problemList,
-  outline: outlineList,
-  view: viewPreview,
-  tests: testView,
-  roundtrips: roundtripView,
-  log: logView,
-  abaplint: abaplintConfig,
-  abap2ui5: linterConfig,
+  problems: problemsTab,
+  outline: outlineTab,
+  view: viewTab,
+  tests: testsTab,
+  roundtrips: roundtripsTab,
+  state: stateTab,
+  console: consoleTab,
+  log: logTab,
+  abaplint: abaplintTab,
+  abap2ui5: linterTab,
 };
 
 // Which view the body last drew, so a redraw of the SAME view - every edit
 // redraws Problems, Outline and View, twice - keeps the reader's place.
 let rendered;
 
-let roundtripsBehind = false;
-function selectingInBody() {
-  const sel = document.getSelection();
-  return !!sel && !sel.isCollapsed && sel.rangeCount > 0 && body.contains(sel.getRangeAt(0).commonAncestorContainer);
-}
-
-function render() {
+// `settle` is for a redraw the editor caused (updateInsight( )): see fit( ).
+function render({ settle = false } = {}) {
   if (!panel) return;
   for (const tab of tabs) {
     const active = tab.dataset.insight === view;
     tab.classList.toggle("is-active", active);
     tab.setAttribute("aria-selected", String(active));
+  }
+  showActiveTab();
+  const node = (VIEWS[view] ?? problemsTab)();
+  const nothing = node.classList?.contains("insight-empty") ?? false;
+  clearTimeout(growing);
+  if (settle && !nothing && panel.classList.contains("is-empty") && !panel.classList.contains("is-collapsed")) {
+    growing = setTimeout(() => render(), SETTLE_MS);
+    return;
   }
   // A reader working down a long problem list or outline was thrown back
   // up it and lost the focused row on every keystroke in the editor. The
@@ -363,8 +319,9 @@ function render() {
   const caret = kept instanceof HTMLTextAreaElement
     ? { start: kept.selectionStart, end: kept.selectionEnd, direction: kept.selectionDirection, top: kept.scrollTop }
     : undefined;
-  body.replaceChildren((VIEWS[view] ?? problemList)());
+  body.replaceChildren(node);
   rendered = view;
+  fit(nothing);
   if (kept && kept !== document.activeElement && body.contains(kept)) {
     kept.focus({ preventScroll: true });
     if (caret) {
@@ -383,820 +340,89 @@ function render() {
   }
 }
 
-const SEVERITY_LABEL = { 1: "error", 2: "warning", 3: "info", 4: "hint" };
+// ---------------------------------------------------------------- fitting
 
-function problemList() {
-  const wrap = document.createElement("div");
-  wrap.className = "insight-problems";
-
-  const fixable = fixableNow();
-  if (fixable > 0) wrap.append(fixBar(fixable));
-
-  const list = document.createElement("ul");
-  list.className = "insight-list";
-  wrap.append(list);
-
-  if (lastProblems.length === 0) {
-    if (fixable === 0) return empty("Nothing to report.");
-    return wrap;
-  }
-
-  // Errors first, then by file and line: the order somebody would work through
-  // them in, rather than the order the two checkers happened to run.
-  const sorted = [...lastProblems].sort(
-    (a, b) =>
-      a.severity - b.severity ||
-      a.file.localeCompare(b.file) ||
-      (a.range?.start?.line ?? 0) - (b.range?.start?.line ?? 0),
-  );
-
-  // Asked once for the list rather than once per row: getFiles( ) reads every
-  // open model's full text out of Monaco, and the answer cannot change halfway
-  // down a list that is being built in one go.
-  const several = getFiles().length > 1;
-
-  for (const problem of sorted) {
-    const line = (problem.range?.start?.line ?? 0) + 1;
-    const column = (problem.range?.start?.character ?? 0) + 1;
-
-    const item = document.createElement("li");
-    // The row is a button in the item rather than the item itself: going to a
-    // problem is the whole purpose of this list, and a <li> cannot be tabbed
-    // to or pressed. The click handler is delegated on [data-file] either way.
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = `insight-row is-${SEVERITY_LABEL[problem.severity] ?? "info"}`;
-    row.dataset.file = problem.file;
-    row.dataset.line = String(line);
-    row.dataset.column = String(column);
-
-    const where = document.createElement("span");
-    where.className = "insight-where";
-    // The file name only earns its space when there is more than one.
-    where.textContent = several ? `${problem.file}:${line}` : `line ${line}`;
-
-    const what = document.createElement("span");
-    what.className = "insight-what";
-    what.textContent = problem.message;
-
-    const who = document.createElement("span");
-    who.className = "insight-who";
-    // Which checker said it, because the two mean different things: abaplint
-    // says this will not compile, abap2UI5 says it will compile and be wrong.
-    who.textContent = problem.source === "abap2UI5" ? `abap2UI5 · ${problem.rule ?? ""}` : (problem.source ?? "abaplint");
-
-    row.append(where, what, who);
-    item.append(row);
-
-    // Where the rule is explained - the linter's rules page for an abap2UI5
-    // finding, rules.abaplint.org for abaplint's (its diagnostics carry the
-    // link as codeDescription). Outside the button, because a link cannot
-    // live inside one; the row still goes to the problem, this goes to the
-    // page that says what the problem means and shows the same code fixed.
-    const url = problem.url ?? problem.codeDescription?.href;
-    if (url) {
-      const doc = document.createElement("a");
-      doc.className = "insight-doc";
-      doc.href = url;
-      doc.target = "_blank";
-      doc.rel = "noopener";
-      doc.title = `What ${problem.rule ?? problem.code ?? "this rule"} means, and the same code fixed`;
-      doc.textContent = "rule ↗";
-      item.append(doc);
-    }
-    list.append(item);
-  }
-  return wrap;
-}
-
-// The autofix offer. Shown only when something is actually repairable, and it
-// says how many - a button that turns out to do nothing is worse than no
-// button, and "Fix" alone does not tell anybody whether it is worth pressing.
-function fixBar(count) {
-  const bar = document.createElement("div");
-  bar.className = "insight-fixbar";
-
-  const said = document.createElement("span");
-  said.textContent = `${count} of these can be fixed automatically`;
-
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "primary";
-  button.textContent = "Fix them";
-  button.addEventListener("click", async () => {
-    button.disabled = true;
-    // Both checkers rewrite the source, so this is somebody's code being
-    // changed under them. It goes in as one edit per file, which is what makes
-    // Ctrl+Z take the whole thing back rather than unpicking it fix by fix.
-    let fixed;
-    try {
-      fixed = await applyFixes();
-    } catch (e) {
-      // A fixer that threw in the worker: said, and the button handed back,
-      // rather than an unhandled rejection under a button left disabled.
-      button.disabled = false;
-      setStatus("the fixes could not be applied", true);
-      showOutput("Fix them", String(e?.message ?? e));
-      return;
-    }
-    updateInsight(refresh());
-    // The outcome goes to the status line, not into this bar: the line above
-    // was written by a render that the updateInsight( ) on the line before just
-    // replaced, so anything set here would be wiped by its own success.
-    setStatus(
-      fixed === 0
-        ? "nothing could be fixed after all"
-        : `fixed ${fixed} problem${fixed === 1 ? "" : "s"} - Ctrl+Z takes it back`,
-    );
-  });
-
-  bar.append(said, button);
-  return bar;
-}
-
-// The classes, interfaces, methods and attributes of the file on screen, read
-// out of the same registry the editor checks against - abaplint answers
-// documentSymbol, so this is a view of an existing analysis rather than a
-// second parser that could disagree with the first.
-function outlineList() {
-  const file = currentFile();
-  const symbols = outlineOf(file);
-  if (symbols.length === 0) return empty("Nothing to show yet.");
-
-  const list = document.createElement("ul");
-  list.className = "insight-list is-outline";
-  for (const symbol of symbols) {
-    const item = document.createElement("li");
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = `insight-row is-symbol depth-${symbol.depth}`;
-    row.dataset.file = file;
-    row.dataset.line = String(symbol.line);
-    row.dataset.column = "1";
-
-    const kind = document.createElement("span");
-    kind.className = "insight-kind";
-    kind.textContent = symbol.kind;
-
-    const name = document.createElement("span");
-    name.className = "insight-what";
-    name.textContent = symbol.name;
-
-    row.append(kind, name);
-    item.append(row);
-    list.append(item);
-  }
-  return list;
-}
-
-// abaplint's symbol kinds are LSP numbers; only the handful ABAP produces are
-// named here, and anything else keeps its distance rather than claiming a name.
-const KIND = {
-  5: "class",
-  6: "method",
-  7: "field",
-  8: "field",
-  11: "interface",
-  12: "function",
-  14: "const",
-};
-
-// The outline comes from the registry worker, so it is a round trip: what is
-// rendered is the last answer for this file at this version, and a newer one
-// is asked for and rendered when it lands. A file mid-edit can be
-// unparseable, and an outline is not worth an exception - the underlines
-// already say what is wrong - so a failed answer is an empty one.
-let outline = { key: undefined, symbols: [] };
-let outlineAsked;
-
-function outlineOf(file) {
-  if (!file) return [];
-  const key = `${file}@${fileVersion(file)}`;
-  if (outline.key === key) return outline.symbols;
-  if (outlineAsked !== key) {
-    outlineAsked = key;
-    documentSymbols(file)
-      .then((symbols) => flatten(symbols, 0))
-      .catch(() => [])
-      .then((symbols) => {
-        outline = { key, symbols };
-        if (view === "outline" && `${currentFile()}@${fileVersion(currentFile())}` === key) render();
-      });
-  }
-  // Until the answer for this file arrives, the last answer only if it was
-  // about THIS file (an older version of it is near enough). Another file's
-  // symbols were drawn with this file's name on them, and a click went to
-  // that file's line numbers in this one.
-  return outline.key?.startsWith(`${file}@`) ? outline.symbols : [];
-}
-
-function flatten(symbols, depth) {
-  const out = [];
-  for (const symbol of symbols ?? []) {
-    out.push({
-      name: symbol.name,
-      kind: KIND[symbol.kind] ?? "",
-      line: (symbol.range?.start?.line ?? symbol.selectionRange?.start?.line ?? 0) + 1,
-      depth: Math.min(depth, 2),
-    });
-    out.push(...flatten(symbol.children, depth + 1));
-  }
-  return out;
-}
-
-function empty(text) {
-  const p = document.createElement("p");
-  p.className = "insight-empty";
-  p.textContent = text;
-  return p;
-}
-
-// ------------------------------------------------------------------- view
-
-// The XML the builder chain in the open file produces, as the abap2UI5
-// linter reconstructs it - without running a line of ABAP, so it follows
-// the typing. Not the view the app rendered: that one is in the Roundtrips
-// tab, where it arrived. This is the answer to "what does this chain make",
-// one element per line, which is the fastest way to learn the builder.
+// A panel with nothing to say says it in one line, and gives the editor the
+// rest: "Nothing to report." used to sit at the top of 176 pixels, which at
+// 900 pixels of window was a fifth of what the editor could have had.
+// `is-empty` lets go of the panel's height (shell.css), and the height it had
+// - stored, dragged, or the default - comes back with the first thing to
+// show, because it was never touched: the class only outranks it.
 //
-// And, with Edit, the other direction: change the XML and the chain is
-// written again to build it (src/shell/view-edit.mjs). It is the shortest way
-// there is to learn the builder - move a control, see the ABAP that moves it -
-// and the fastest way to try a property on a control without looking up which
-// call sets it.
-function viewPreview() {
-  const file = currentFile();
-  const source = file ? getSource(file) : undefined;
-  if (source === undefined) return empty("Nothing to show yet.");
-  // The edit is about one file's chain. Switching to another one ends it
-  // rather than writing this XML into that file.
-  if (editing && editing.file !== file) stopEditing();
+// Growing again is held back while the editor is the cause. Typing a
+// statement is an abaplint error until its full stop, and a panel that grew
+// at every pause and shrank at every full stop took the last lines of the
+// editor - the ones being typed in - away and back. So a change from the
+// editor that turns nothing into something waits until the typing has
+// settled (the badge on the tab says it at once), and anything else - a tab
+// opened, a Run that failed, a roundtrip - draws at once.
+const SETTLE_MS = 1200;
+let growing;
 
-  // Off the kept analysis - the worker reconstructed it for the findings, and
-  // this tab is drawn again whenever a fresh one lands.
-  const { docs, notes, loaded } = lintViewsFor(file);
-  if (!loaded) return empty("The abap2UI5 linter has not looked at this file yet - the view appears when it has.");
-  if (docs.length === 0) {
-    return empty("This file builds no view with z2ui5_cl_ui5_view_builder - nothing to reconstruct.");
+// Set by a hand on the grip: dragging or stepping the panel's height is
+// asking for that height, so it is not taken away again for having nothing
+// in it - until another tab is opened, which is a new question.
+let sized = false;
+
+function fit(nothing) {
+  const was = panel.classList.contains("is-empty");
+  panel.classList.toggle("is-empty", nothing && !sized);
+  if (was && !panel.classList.contains("is-empty")) refit();
+}
+
+// The panel at its own height again, for a hand about to change it - so the
+// drag starts from what the reader sees once it is open, and the keyboard's
+// step is taken from the real height rather than from the one line.
+function unfit() {
+  sized = true;
+  clearTimeout(growing);
+  if (panel.classList.contains("is-empty")) {
+    panel.classList.remove("is-empty");
+    refit();
   }
-  // The same element, kept across a re-render: half-typed XML and where the
-  // caret is in it are not things to rebuild from the source, which is exactly
-  // what everything else in this panel is.
-  if (editing) return editing.element;
+}
 
-  const wrap = document.createElement("div");
-  wrap.className = "view-preview";
-  docs.forEach((doc, i) => {
-    const pretty = prettyXml(doc);
-    const head = document.createElement("div");
-    head.className = "log-head";
-    const title = document.createElement("span");
-    title.className = "log-title";
-    title.textContent = docs.length === 1 ? "The view this file builds" : `View ${i + 1} of ${docs.length}`;
-    const actions = document.createElement("span");
-    actions.className = "log-actions";
-    // One view per file is what can be edited: with two, which chain a change
-    // belongs to is a guess, and the reader is one click from the ABAP anyway.
-    if (docs.length === 1) actions.append(editButton(source, doc, pretty));
-    const copy = document.createElement("button");
-    copy.type = "button";
-    copy.className = "ghost";
-    copy.textContent = "Copy";
-    copy.addEventListener("click", async () => {
-      copy.textContent = (await copyToClipboard(pretty)) ? "copied" : "Copy";
-    });
-    actions.append(copy);
-    head.append(title, actions);
-    const body = document.createElement("pre");
-    body.className = "log-body view-xml";
-    body.append(highlighted(pretty, "xml"));
-    wrap.append(head, body);
-  });
-  if (notes.length > 0) {
-    const said = document.createElement("p");
-    said.className = "config-blurb view-notes";
-    said.textContent = notes.join(" · ");
-    wrap.append(said);
+// ------------------------------------------------------------------ strip
+
+// On a phone the strip holds about three of its tabs, and the rest scroll
+// under the toggle. Two things say so: the active tab is scrolled into view
+// whenever it changes (a failure that opens the Log, a Run that brings the
+// Tests forward - the reader is not left looking at a strip with nothing lit
+// in it), and a fade at whichever edge has more beyond it - the tab cut off
+// at "Roundtr" with nothing to say the strip scrolled was taken for its end.
+let shownTab;
+
+function showActiveTab() {
+  const list = panel.querySelector(".insight-tablist");
+  const active = tabs.find((t) => t.dataset.insight === view);
+  if (!list || !active || shownTab === view) return;
+  shownTab = view;
+  // By hand rather than scrollIntoView( ), which scrolls every ancestor that
+  // can - the page included, on a phone with the address bar sliding away.
+  const left = active.offsetLeft - list.offsetLeft;
+  const right = left + active.offsetWidth;
+  const edge = 24; // the width of the fade, so the tab is not left under it
+  if (left - edge < list.scrollLeft) list.scrollLeft = Math.max(0, left - edge);
+  else if (right + edge > list.scrollLeft + list.clientWidth) list.scrollLeft = right + edge - list.clientWidth;
+  paintEdges(list);
+}
+
+function paintEdges(list) {
+  const more = list.scrollWidth - list.clientWidth;
+  list.classList.toggle("has-more-before", list.scrollLeft > 1);
+  list.classList.toggle("has-more-after", more > 1 && list.scrollLeft < more - 1);
+}
+
+function setUpStrip() {
+  const list = panel.querySelector(".insight-tablist");
+  if (!list) return;
+  list.addEventListener("scroll", () => paintEdges(list), { passive: true });
+  // The strip changes width with the window and the splitter, and its tabs
+  // with their badges; either can start or end an overflow.
+  if (typeof ResizeObserver === "function") {
+    const observer = new ResizeObserver(() => paintEdges(list));
+    observer.observe(list);
+    for (const tab of tabs) observer.observe(tab);
   }
-  return wrap;
-}
-
-// Edit, or the reason it is off. A chain this cannot rewrite is the normal
-// case rather than the exceptional one - a view filled from a LOOP, a control
-// name held in a variable, a second view in the same method - and the button
-// says which of those it is instead of being missing.
-function editButton(source, doc, pretty) {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "ghost";
-  button.id = "view-edit";
-  button.textContent = "Edit";
-  const can = viewEditable(source, doc);
-  if (can.ok) {
-    button.title = "Change the view here; the builder chain is written again from it";
-    button.addEventListener("click", () => startEditing(currentFile(), doc, pretty));
-  } else {
-    button.disabled = true;
-    button.title = can.why;
-  }
-  return button;
-}
-
-// What is open in the View tab's editor, or nothing. The draft lives here
-// rather than in the textarea alone so that a re-render - a roundtrip
-// landing, a tab going away and coming back - cannot lose what was typed.
-let editing;
-
-function startEditing(file, xml, pretty) {
-  editing = { file, xml, draft: pretty };
-  editing.element = buildViewEditor();
-  // The ABAP is derived from this XML while it is open, so it stops being
-  // typed into: two editable copies of one view means deciding which of them
-  // is the truth on every keystroke, and neither answer is a good one.
-  setEditorReadOnly(true);
-  render();
-  // The render took the Edit button away with the focus on it; the focus goes
-  // to what replaced it rather than to <body>.
-  document.getElementById("view-editor")?.focus();
-}
-
-function stopEditing() {
-  editing = undefined;
-  setEditorReadOnly(false);
-}
-
-function buildViewEditor() {
-  const wrap = document.createElement("div");
-  wrap.className = "view-preview is-editing";
-
-  const head = document.createElement("div");
-  head.className = "log-head";
-  const title = document.createElement("span");
-  title.className = "log-title";
-  title.textContent = "Editing the view";
-  const actions = document.createElement("span");
-  actions.className = "log-actions";
-  const save = document.createElement("button");
-  save.type = "button";
-  save.className = "primary";
-  save.id = "view-save";
-  save.textContent = "Save";
-  const cancel = document.createElement("button");
-  cancel.type = "button";
-  cancel.className = "ghost";
-  cancel.id = "view-cancel";
-  cancel.textContent = "Cancel";
-  actions.append(save, cancel);
-  head.append(title, actions);
-
-  const area = document.createElement("textarea");
-  area.className = "config-text view-editor";
-  area.id = "view-editor";
-  area.setAttribute("aria-label", "Editing the view: XML");
-  area.spellcheck = false;
-  area.value = editing.draft;
-  area.addEventListener("input", () => {
-    editing.draft = area.value;
-  });
-
-  const said = document.createElement("p");
-  said.className = "config-said view-said";
-  said.id = "view-said";
-  // Said aloud when it changes - a refused Save is the one thing here a
-  // screen reader user must not miss.
-  said.setAttribute("role", "status");
-  const explain = () => {
-    said.classList.remove("is-error");
-    said.textContent =
-      "The ABAP editor is read-only until this is saved or cancelled. A value you leave alone keeps the " +
-      "ABAP that produced it, so a bind stays a bind.";
-  };
-  explain();
-
-  save.addEventListener("click", () => {
-    const file = editing.file;
-    const written = sourceWithView(getSource(file), editing.xml, editing.draft);
-    if (!written.ok) {
-      said.classList.add("is-error");
-      said.textContent = written.why;
-      return;
-    }
-    stopEditing();
-    setSourceOf(file, written.source);
-    setStatus("the builder chain was written again from the view");
-    render();
-    document.getElementById("view-edit")?.focus();
-  });
-
-  cancel.addEventListener("click", () => {
-    stopEditing();
-    render();
-    // Back to Edit, which the render put where Cancel was - not to <body>.
-    document.getElementById("view-edit")?.focus();
-  });
-
-  wrap.append(head, area, said);
-  return wrap;
-}
-
-// ------------------------------------------------------------------ config
-
-// The two checkers' settings, as text you can edit. JSON rather than a wall of
-// switches: abaplint has 188 rules and the playground runs nine of them, so a
-// checkbox per rule would be a screen nobody reads to reach a setting nobody
-// wanted. What a reader actually asks is "why is it not warning here" - and
-// the answer is to add the rule name and press Apply.
-function configEditor({ title, blurb, value, onApply, onKeep, onReset, extra }) {
-  const wrap = document.createElement("div");
-  wrap.className = "config";
-
-  const head = document.createElement("p");
-  head.className = "config-blurb";
-  head.append(blurb);
-  wrap.append(head);
-
-  const area = document.createElement("textarea");
-  area.className = "config-text";
-  area.spellcheck = false;
-  area.setAttribute("aria-label", `${title} settings, as JSON`);
-  area.value = JSON.stringify(value, null, 2);
-  wrap.append(area);
-
-  const row = document.createElement("div");
-  row.className = "config-row";
-
-  const apply = document.createElement("button");
-  apply.type = "button";
-  apply.className = "primary";
-  apply.textContent = "Apply";
-
-  const reset = document.createElement("button");
-  reset.type = "button";
-  reset.textContent = "Reset";
-
-  const said = document.createElement("span");
-  said.className = "config-said";
-  // "applying… / applied / no rule called" were never announced.
-  said.setAttribute("role", "status");
-
-  row.append(apply, reset, said);
-  wrap.append(row);
-
-  if (extra) wrap.append(extra);
-
-  apply.addEventListener("click", async () => {
-    // Changing abaplint's rules dirties every object in the corpus, so applying
-    // them is the startup parse over again - seconds, during which the button
-    // must not be pressable a second time and the panel should say what is
-    // going on rather than appear to have ignored the click.
-    if (apply.disabled) return;
-    apply.disabled = true;
-    reset.disabled = true;
-    said.className = "config-said";
-    said.textContent = "applying…";
-    try {
-      const parsed = JSON.parse(area.value);
-      // Whether this is asynchronous is the checker's business, not this
-      // function's: abaplint's half yields while it reparses, the linter's is
-      // a field assignment. Awaiting covers both.
-      await onApply(parsed, (done, total) => {
-        said.textContent = `applying… ${Math.round((done / total) * 100)}%`;
-      });
-      // Kept only once the checker accepted it, so a rejected edit is not
-      // what greets somebody on their next visit.
-      onKeep(parsed);
-      // The text did not change, the rules did - and the editor keys its kept
-      // analysis on the text alone. Without this the count below would be the
-      // one from before the change, which is precisely the number this tab
-      // exists to move.
-      invalidateAnalysis();
-      // The panel says what changed rather than only that something did: the
-      // whole point of the tab is understanding why a message is or is not
-      // there, so the count is the answer.
-      // Waited for: right after invalidateAnalysis( ) the kept answer is
-      // empty, and refresh( ) handed that back - "applied - 0 problems now"
-      // whatever the rules said, with the panel flashing empty under it.
-      const problems = await refreshNow();
-      updateInsight(problems);
-      said.textContent = `applied - ${problems.length} problem${problems.length === 1 ? "" : "s"} now`;
-    } catch (e) {
-      said.className = "config-said is-error";
-      said.textContent = String(e.message || e);
-    } finally {
-      apply.disabled = false;
-      reset.disabled = false;
-    }
-  });
-
-  reset.addEventListener("click", () => {
-    area.value = JSON.stringify(onReset(), null, 2);
-    apply.click();
-  });
-
-  return wrap;
-}
-
-// Where the rules come from, for a reader who wants the whole list rather than
-// the nine the playground runs.
-function docsLink(href, text) {
-  const p = document.createElement("p");
-  p.className = "config-link";
-  const a = document.createElement("a");
-  a.href = href;
-  a.target = "_blank";
-  a.rel = "noopener";
-  a.textContent = text;
-  p.append(a);
-  return p;
-}
-
-function abaplintConfig() {
-  const note = document.createElement("details");
-  note.className = "config-more";
-  const summary = document.createElement("summary");
-  summary.textContent = "Every rule abaplint has";
-  note.append(summary);
-  const list = document.createElement("p");
-  list.className = "config-rules";
-  list.textContent = allRuleNames().join(", ");
-  note.append(list);
-
-  const links = document.createElement("div");
-  links.append(
-    docsLink("https://rules.abaplint.org", "Every rule, with what it does and why — rules.abaplint.org"),
-    docsLink("https://github.com/abaplint/abaplint", "abaplint on GitHub"),
-  );
-
-  return configEditor({
-    title: "abaplint",
-    blurb:
-      "What the editor checks. The playground runs the rules that answer " +
-      "“would this work”, not the ones that answer “is this the house style” - " +
-      "but any of abaplint's rules can be added here. version is the ABAP release the " +
-      "syntax check holds you to.",
-    value: abaplintSettings(),
-    onApply: applyAbaplintSettings,
-    onKeep: keepAbaplintSettings,
-    onReset: abaplintDefaults,
-    extra: appended(links, note),
-  });
-}
-
-function linterConfig() {
-  return configEditor({
-    title: "abap2UI5 linter",
-    blurb:
-      "What the abap2UI5 linter checks the view against. ui5 is the oldest release " +
-      "your app has to work on - lowering it finds controls and properties that a " +
-      "newer system would render and an older one would not.",
-    value: linterSettings(),
-    onApply: applyLinterSettings,
-    onKeep: keepLinterSettings,
-    onReset: linterDefaults,
-    extra: appended(
-      docsLink("https://github.com/abap2UI5/linter", "The abap2UI5 linter, its rules and its config file"),
-      docsLink("https://www.npmjs.com/package/@abap2ui5/linter", "@abap2ui5/linter on npm"),
-    ),
-  });
-}
-
-// Several bits of trailing matter as one node, because configEditor takes one.
-function appended(...nodes) {
-  const box = document.createElement("div");
-  box.append(...nodes);
-  return box;
-}
-
-// ------------------------------------------------------------------ tests
-
-// What the last Run's unit tests said - set by run( ) in main.mjs from the
-// runtime's answer (runUnitTests( ) in src/runtime/index.mjs); a run with
-// no test include sets an empty list, which the tab explains.
-let testResults = [];
-
-export function setTestResults(results) {
-  testResults = results ?? [];
-  paintTestCount();
-  if (view === "tests") render();
-}
-
-function paintTestCount() {
-  const badge = document.getElementById("test-count");
-  if (!badge) return;
-  const failed = testResults.filter((r) => !r.passed).length;
-  badge.textContent = testResults.length === 0 ? "" : failed > 0 ? String(failed) : "✓";
-  badge.className = `insight-badge${failed > 0 ? " is-error" : testResults.length > 0 ? " is-ok" : ""}`;
-}
-
-// One row per test method: passed or failed, the class and the method, how
-// long it took, and for a failure the assertion's message with what was
-// expected and what was there. A row goes to the assertion's line - the
-// runtime traces the JavaScript frame the assertion was raised from back to
-// the test include - and, for a test that passed, nowhere.
-function testView() {
-  if (testResults.length === 0) {
-    return empty(
-      "No tests ran. Add a file called <class>.clas.testclasses.abap beside your class - the + in the file strip " +
-        "offers it - with local classes FOR TESTING, and Run runs them before starting the app.",
-    );
-  }
-  const wrap = document.createElement("div");
-  wrap.className = "tests";
-
-  const passed = testResults.filter((r) => r.passed).length;
-  const failed = testResults.length - passed;
-  const head = document.createElement("p");
-  head.className = `tests-summary${failed > 0 ? " is-error" : ""}`;
-  head.textContent =
-    failed === 0
-      ? `${passed} test${passed === 1 ? "" : "s"} passed`
-      : `${failed} of ${testResults.length} test${testResults.length === 1 ? "" : "s"} failed`;
-  wrap.append(head);
-
-  const list = document.createElement("ul");
-  list.className = "insight-list";
-  for (const result of testResults) {
-    const item = document.createElement("li");
-    const row = document.createElement(result.location ? "button" : "div");
-    if (result.location) row.type = "button";
-    row.className = `insight-row test-row is-${result.passed ? "ok" : "error"}`;
-    if (result.location) {
-      row.dataset.file = result.location.file;
-      row.dataset.line = String(result.location.line);
-      row.dataset.column = "1";
-    }
-
-    const mark = document.createElement("span");
-    mark.className = "test-mark";
-    mark.textContent = result.passed ? "✓" : "✗";
-
-    const name = document.createElement("span");
-    name.className = "insight-what test-name";
-    name.textContent = `${result.testclass.toLowerCase()}->${result.method.toLowerCase()}`;
-
-    const took = document.createElement("span");
-    took.className = "insight-who";
-    took.textContent = `${Math.max(1, Math.round(result.microseconds / 1000))} ms`;
-
-    row.append(mark, name, took);
-    item.append(row);
-
-    if (!result.passed) {
-      const detail = document.createElement("div");
-      detail.className = "test-detail";
-      const lines = [];
-      if (result.message) lines.push(result.message);
-      if (result.expected !== "" || result.actual !== "") {
-        lines.push(`expected: ${result.expected}`, `actual:   ${result.actual}`);
-      }
-      if (lines.length === 0) lines.push(result.status.toLowerCase());
-      detail.textContent = lines.join("\n");
-      item.append(detail);
-    }
-    list.append(item);
-  }
-  wrap.append(list);
-  return wrap;
-}
-
-// ------------------------------------------------------------- roundtrips
-
-function paintRoundtripCount() {
-  const badge = document.getElementById("roundtrip-count");
-  if (!badge) return;
-  const list = roundtripList();
-  const failed = list.some((r) => r.status >= 400);
-  badge.textContent = list.length === 0 ? "" : String(list.length);
-  badge.className = `insight-badge${failed ? " is-error" : ""}`;
-}
-
-// Which roundtrip is opened up in the list, by its number; a new Run starts
-// the numbering over and clears this (the onRoundtrip listener above).
-let openedRoundtrip;
-
-// The conversation between the frontend and the app, one row per roundtrip:
-// the event, how long the ABAP took, and what the answer did - a view, a
-// popup, a model update, a dump. A row opens up into the request and the
-// response as they travelled, and the view XML the answer carried, one
-// element per line.
-function roundtripView() {
-  const list = roundtripList();
-  if (list.length === 0) {
-    return empty("Nothing yet. Every request the app sends and every answer it gets lands here, with the time the ABAP took.");
-  }
-
-  const wrap = document.createElement("div");
-  wrap.className = "roundtrips";
-
-  const rows = document.createElement("ul");
-  rows.className = "insight-list";
-  for (const entry of list) {
-    const item = document.createElement("li");
-    item.className = "roundtrip-item";
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = `insight-row roundtrip-row${entry.status >= 400 ? " is-error" : ""}${entry.n === openedRoundtrip ? " is-open" : ""}`;
-    row.setAttribute("aria-expanded", String(entry.n === openedRoundtrip));
-    row.dataset.focus = `roundtrip ${entry.n}`;
-
-    const n = document.createElement("span");
-    n.className = "insight-where";
-    n.textContent = `#${entry.n}`;
-
-    const what = document.createElement("span");
-    what.className = "insight-what";
-    what.textContent = entry.args.length > 0 ? `${entry.event} (${entry.args.join(", ")})` : entry.event;
-
-    const did = document.createElement("span");
-    did.className = "roundtrip-did";
-    did.textContent = entry.did.join(" · ");
-
-    const ms = document.createElement("span");
-    ms.className = "insight-who";
-    ms.textContent = `${entry.ms} ms`;
-
-    row.append(n, what, did, ms);
-    row.addEventListener("click", () => {
-      openedRoundtrip = openedRoundtrip === entry.n ? undefined : entry.n;
-      render();
-    });
-    item.append(row);
-    if (entry.n === openedRoundtrip) item.append(roundtripDetail(entry));
-    rows.append(item);
-  }
-  wrap.append(rows);
-  return wrap;
-}
-
-function roundtripDetail(entry) {
-  const detail = document.createElement("div");
-  detail.className = "roundtrip-detail";
-  const block = (title, text, kind) => {
-    const head = document.createElement("div");
-    head.className = "log-head";
-    const label = document.createElement("span");
-    label.className = "log-title";
-    label.textContent = title;
-    const copy = document.createElement("button");
-    copy.type = "button";
-    copy.className = "ghost";
-    copy.textContent = "Copy";
-    copy.dataset.focus = `roundtrip ${entry.n} ${title}`;
-    copy.addEventListener("click", async () => {
-      copy.textContent = (await copyToClipboard(text)) ? "copied" : "Copy";
-    });
-    head.append(label, copy);
-    const pre = document.createElement("pre");
-    pre.className = "log-body roundtrip-body";
-    pre.append(highlighted(text, kind));
-    detail.append(head, pre);
-  };
-  for (const view of entry.views) block(`View for slot ${view.slot}`, prettyXml(view.xml), "xml");
-  // A request and a response are objects the runtime hands over, so they are
-  // JSON here - `asText` only stringifies what is not already a string, and a
-  // body that came as a string (a dump) is not JSON and is left grey.
-  block("Request", asText(entry.request), kindOf(entry.request));
-  block(
-    entry.status >= 400 ? `Response (${entry.status})` : "Response",
-    asText(entry.response),
-    kindOf(entry.response),
-  );
-  return detail;
-}
-
-const asText = (value) => (typeof value === "string" ? value : JSON.stringify(value, null, 2));
-const kindOf = (value) => (typeof value === "string" ? "text" : "json");
-
-// ------------------------------------------------------------------- log
-
-function logView() {
-  const entry = currentLog();
-  if (entry.body === "") {
-    return empty("Nothing has gone wrong yet. Startup notes, ABAP errors and dumps land here.");
-  }
-
-  const wrap = document.createElement("div");
-  wrap.className = "log";
-
-  const head = document.createElement("div");
-  head.className = "log-head";
-
-  const title = document.createElement("span");
-  title.className = "log-title";
-  title.textContent = entry.title;
-
-  const clear = document.createElement("button");
-  clear.type = "button";
-  clear.className = "ghost";
-  clear.textContent = "Clear";
-  clear.addEventListener("click", () => hideOutput());
-
-  head.append(title, clear);
-
-  const body = document.createElement("pre");
-  body.className = "log-body";
-  body.textContent = entry.body;
-
-  wrap.append(head, body);
-  return wrap;
+  paintEdges(list);
 }

@@ -1,3 +1,4 @@
+// @ts-check
 // The abap2UI5 linter, as it runs in the registry worker.
 //
 // It used to run on the page's thread: checkAbapSource( ) over every open file

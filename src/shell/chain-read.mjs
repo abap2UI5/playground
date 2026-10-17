@@ -1,3 +1,4 @@
+// @ts-check
 // Reading a z2ui5_cl_ui5_view_builder chain back out of ABAP.
 //
 // The View tab shows the XML a chain produces; editing that XML and writing
@@ -242,8 +243,11 @@ export function readViewChain(source) {
   const vars = new Map();
   let cursor;
   let assignment;
-  let regionStart;
-  let regionEnd;
+  // Both are set by the loop's first pass, which always runs (`first` is an
+  // index into `statements`); the zeros are for the type checker, which
+  // cannot see that.
+  let regionStart = 0;
+  let regionEnd = 0;
 
   for (let i = first; i < statements.length; i++) {
     const statement = statements[i];

@@ -16,6 +16,7 @@
 // is hidden on the pages this serves, and a page that had them would have
 // created the real editor instead.
 import * as analysis from "./analysis.mjs";
+import { dependentsOf } from "./files.mjs";
 import { refresh } from "./analysis.mjs";
 
 let files = [];
@@ -23,7 +24,7 @@ let versions = new Map();
 let generation = 0;
 let shown;
 let onChange;
-let onShown = [];
+const onShown = [];
 let connected = false;
 
 const indexOf = (name) => files.findIndex((f) => f.name === name);
@@ -53,6 +54,9 @@ export function createEditor(container, starting, options = {}) {
 
 export function setEditorTheme() {}
 export function setEditorReadOnly() {}
+// Nothing to lock and no line to mark on a page that draws no editor.
+export function lockEditor() {}
+export function markLines() {}
 
 export function connectRegistry() {
   connected = true;
@@ -102,8 +106,8 @@ export function closeFile(name) {
   const i = indexOf(name);
   // The first file is the app; see monaco-editor.mjs for the rest of the rule.
   if (i <= 0) return;
-  const tests = name.endsWith(".clas.abap") ? name.replace(/\.clas\.abap$/, ".clas.testclasses.abap") : undefined;
-  const gone = (n) => n === name || n === tests;
+  const dependents = dependentsOf(name);
+  const gone = (n) => n === name || dependents.includes(n);
   const remaining = files.filter((f) => !gone(f.name));
   if (remaining.length === 0) return;
   files = remaining;
@@ -126,6 +130,9 @@ export function setFiles(next) {
 }
 
 export function focusProblem() {}
+// No editor on screen, so no Compare either.
+export function showDiff() {}
+export function closeDiff() {}
 export async function format() {
   return { formatted: 0, files: [] };
 }

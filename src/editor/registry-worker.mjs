@@ -18,6 +18,7 @@
 import * as core from "./registry-core.mjs";
 import { compile } from "./transpile-core.mjs";
 import * as lint from "./lint-core.mjs";
+import { isAbapFile } from "./files.mjs";
 
 const post = (message) => self.postMessage(message);
 
@@ -74,7 +75,8 @@ const OPS = {
     core.updateFiles(files);
     const told = core.analyseFiles(files);
     told.lint = {};
-    for (const file of files) told.lint[file.name] = lint.lintFor(file.source);
+    // ABAP only: a table's XML and its rows hold no view to lint.
+    for (const file of files) if (isAbapFile(file.name)) told.lint[file.name] = lint.lintFor(file.source);
     return told;
   },
   loadLinter() {

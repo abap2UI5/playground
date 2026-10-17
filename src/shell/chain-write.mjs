@@ -1,3 +1,4 @@
+// @ts-check
 // Writing a z2ui5_cl_ui5_view_builder chain, in the layout the repositories
 // hold their chains in.
 //

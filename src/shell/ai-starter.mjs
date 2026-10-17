@@ -1,3 +1,4 @@
+// @ts-check
 // The class the AI Studio starts on: the smallest abap2UI5 app there is, the
 // interface implemented and main( ) empty - the shape the reader and Claude
 // build on. Untouched it is nothing to run yet (main.mjs skips the first run,

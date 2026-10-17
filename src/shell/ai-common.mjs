@@ -1,10 +1,12 @@
 // What the site's two AI chats share - the AI Studio (src/shell/ai-agent.mjs)
 // and the AI Pilot (src/shell/pilot-agent.mjs): which model answers at which
-// speed, and how a failed request is said. Both chunks import the Anthropic
+// speed, how a failed request is said, the turn loop around their tools
+// (runTurnLoop) and the helpers both read a tool's input with. Both chunks import the Anthropic
 // SDK, which esbuild therefore splits into a chunk of its own, and this goes
 // with it; tools/build-site.mjs keeps all of it out of the service worker's
 // precache, read off the module graph.
 import Anthropic from "@anthropic-ai/sdk";
+import { AgentError } from "../vendor/agent/appclient.mjs";
 import { rawUrlOf } from "./catalogue-urls.mjs";
 import { createProvider, explainOpenAIError, LLMAbortError, OpenAIError } from "./llm-provider.mjs";
 // The SDK's own parser for a tool input that is still arriving - the one it
@@ -127,12 +129,37 @@ export function explainError(err) {
   return { text: String(err?.message ?? err) };
 }
 
+// ------------------------------------------------------------ the helpers
+//
+// What both conversations do to a tool's input and to what it answers -
+// written out once in each of them before, and once more in this file.
+
+/** A string argument, or undefined for anything else the model sent. */
+export const str = (v) => (typeof v === "string" ? v : undefined);
+
+/** `text` cut at `max` characters, saying how much went. */
+export const clip = (text, max) =>
+  text.length <= max ? text : `${text.slice(0, max)}\n… (${text.length - max} more characters cut)`;
+
+/** An argument as an error or a chat row repeats it: at most 80 characters. */
+export const echo = (v) => {
+  const t = String(v);
+  return t.length > 80 ? `${t.slice(0, 80)}...` : t;
+};
+
+/* row and max_rows: a whole number, or a string of digits - dropped without
+ * a word, "2" left the client asking for the row that was sent. */
+export function count(v, name) {
+  if (v === undefined || v === null) return undefined;
+  const n = typeof v === "number" ? v : typeof v === "string" && /^\s*\d+\s*$/.test(v) ? Number(v) : NaN;
+  if (!Number.isInteger(n) || n < 0) throw new AgentError(`${name} is a whole number, not ${echo(JSON.stringify(v))}`);
+  return n;
+}
+
 // The catalogue this site already publishes for its samples page and the
 // samples browser - same origin, so the service worker has it after a first
 // visit. The source of a sample comes from raw.githubusercontent.com, the
 // host ?src= links already read from.
-
-const str = (v) => (typeof v === "string" ? v : undefined);
 
 let index;
 async function loadIndex() {
@@ -243,6 +270,153 @@ export function followStream(stream, ui, pendingText) {
     }
   });
   return started;
+}
+
+// ------------------------------------------------------------- the turn
+
+const CONTEXT_FULL = "The conversation has filled the model's context - New chat starts a fresh one.";
+
+/*
+ * One turn of a conversation, for both chats: a request, its answer drawn as
+ * it streams, the tool calls of the answer run - and again, until the model
+ * answers without a tool call, declines, runs out of room, or Stop is
+ * pressed. What the two do with the tool calls is theirs (`runTools`); what
+ * happens around them is the same, and was written twice:
+ *
+ *   provider, messages, total, ui, speed    the conversation's own (`messages`
+ *                                           is only ever appended to)
+ *   request()       { system, tools, maxTokens } for the next request
+ *   pendingText     a tool call's row while its input streams (followStream)
+ *   halted()        whether Stop was pressed
+ *   onStream(s)     the request under way, for stop( ) to abort
+ *   runTools(uses)  the answer's tool calls run, answering their tool_results
+ *   cutText         what a call cut off at max_tokens is answered
+ *   fullText        when given, a full context window is said apart: every
+ *                   call "not run" with this, rather than as a cut one
+ *   askSmaller      when given, said after the first cut before asking again
+ */
+export async function runTurnLoop({ provider, messages, total, ui, speed, request, pendingText, halted, onStream, runTools, cutText, fullText, askSmaller }) {
+  let jsonRetries = 0;
+  // Answers in a row cut off at max_tokens with a tool call in them. Each
+  // one is a full, billed request, and thinking counts towards the limit:
+  // a long think before a large write could be cut on every attempt, and
+  // the loop asked again without end until Stop was pressed.
+  let cuts = 0;
+  while (!halted()) {
+    ui.assistantStart();
+    const settings = SPEEDS[speed()] ?? SPEEDS[DEFAULT_SPEED];
+    const model = provider.modelFor(settings);
+    const { system, tools, maxTokens } = request();
+    // The request's shape - the thinking display, the fallback, the cache
+    // breakpoint, the betas - is the provider's (llm-provider.mjs).
+    const stream = provider.stream({ system, tools, messages, maxTokens, speed: settings });
+    onStream(stream);
+    // What arrives before the turn is complete, shown as it arrives: a
+    // progress note, and a tool call whose input is still streaming - a
+    // class being written is the longest wait of all, and it counts its
+    // lines on screen rather than sitting still.
+    const started = followStream(stream, ui, pendingText);
+
+    let message;
+    try {
+      message = await stream.finalMessage();
+      jsonRetries = 0;
+    } catch (err) {
+      // The stream reports a failure without ending its request: left
+      // alone, a retry below would leave the first one generating (and
+      // billed) in the background, out of reach of Stop.
+      stream.abort();
+      // Billed all the same - the input from the moment it started.
+      addUsage(total, stream.currentMessage?.usage, model);
+      ui.usage({ ...total });
+      if (halted()) return;
+      // A tool input that could not be parsed at all - the one failure that
+      // is worth re-asking for. Everything the API itself refused (a key,
+      // a rate limit, an overload) goes to the chat as it is.
+      //
+      // Only that: a stream whose connection dropped half way is a plain
+      // AnthropicError as well, and every such drop was sent again twice -
+      // three billed requests, attachments and all, three half answers in
+      // the chat, then a bare "network error". Recognised by the SDK's own
+      // message for it.
+      const unparsable = /Unable to parse tool parameter JSON/.test(String(err?.message ?? ""));
+      if (!unparsable || provider.isApiError(err) || jsonRetries++ >= 2) throw err;
+      // The calls of the attempt thrown away are not going to run: asked
+      // again, they come back under new ids, and the old rows went on
+      // shimmering until the turn ended and then said "not finished".
+      for (const s of started) ui.tool({ id: s.id, summary: `${s.name}: the input was unreadable - asked again`, error: true });
+      continue;
+    }
+
+    addUsage(total, message.usage, message.model ?? model);
+    ui.usage({ ...total });
+
+    if (message.stop_reason === "refusal") {
+      // Not the refused content itself: a classifier that stops a turn mid
+      // stream can leave a tool_use that is never answered, or a thinking
+      // block without its signature, and either one makes every later
+      // request of this conversation a 400. A plain placeholder keeps the
+      // history valid and append-only.
+      for (const u of message.content.filter((b) => b.type === "tool_use")) {
+        ui.tool({ id: u.id, summary: `not run: ${u.name}`, error: true });
+      }
+      messages.push({ role: "assistant", content: [{ type: "text", text: "(The request was declined.)" }] });
+      ui.notice("The model declined this request.");
+      return;
+    }
+    if (message.stop_reason === "pause_turn") {
+      messages.push({ role: "assistant", content: message.content });
+      continue;
+    }
+    const uses = message.content.filter((b) => b.type === "tool_use");
+    // Cut off, either way: the answer's own budget, or the conversation
+    // having filled the model's context window. Both leave the last block
+    // half written, and a tool input that is cut off parses as a shorter,
+    // valid one - a file one method short, an act one value fewer.
+    const full = message.stop_reason === "model_context_window_exceeded";
+    const cut = message.stop_reason === "max_tokens" || full;
+    messages.push({ role: "assistant", content: message.content });
+    if (uses.length === 0) {
+      if (full) ui.notice(CONTEXT_FULL);
+      else if (cut) ui.notice("The answer was cut off - it ran out of room.");
+      return;
+    }
+    if (full && fullText) {
+      // Asking again would only overflow again; nothing is run.
+      messages.push({
+        role: "user",
+        content: uses.map((u) => {
+          ui.tool({ id: u.id, summary: `not run: ${u.name}`, error: true });
+          return { type: "tool_result", tool_use_id: u.id, is_error: true, content: fullText };
+        }),
+      });
+      ui.notice(CONTEXT_FULL);
+      return;
+    }
+    if (cut) {
+      // Never run: the turn says why, and the model is asked for less.
+      messages.push({
+        role: "user",
+        content: uses.map((u) => {
+          // The row drawn while the input streamed is finished here, or it
+          // would go on shimmering as if the call were still running.
+          ui.tool({ id: u.id, summary: `not run: ${u.name} (cut off)`, error: true });
+          return { type: "tool_result", tool_use_id: u.id, is_error: true, content: cutText };
+        }),
+      });
+      if (full || ++cuts >= 2) {
+        ui.notice(full ? CONTEXT_FULL : "The answer ran out of room twice in a row - ask for a smaller step, or New chat.");
+        return;
+      }
+      if (askSmaller) ui.notice(askSmaller);
+      continue;
+    }
+    cuts = 0;
+
+    // All results in one message - split across several, the model learns
+    // to stop making parallel calls.
+    messages.push({ role: "user", content: await runTools(uses) });
+  }
 }
 
 /** Adds one answer's usage to `total` ({ input, output, cached, written,

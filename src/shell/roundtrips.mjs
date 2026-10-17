@@ -2,7 +2,7 @@
 //
 // Every request the app frame would have POSTed to a backend passes through
 // this page on its way to the transpiled framework (see frontend-bridge.js
-// and the bridge in main.mjs), which makes the playground the one place
+// and offerFrameBridge( ) in agent-hooks.mjs), which makes the playground the one place
 // where the whole conversation between an abap2UI5 frontend and its app can
 // be watched without a proxy: the event the frontend named, the model delta
 // it sent, the view the app answered with, how long the ABAP took. A binding
@@ -59,10 +59,18 @@ export function recordRoundtrip({ request, response, ms }) {
     status: response.status,
     request: req ?? request,
     response: res ?? response.body,
+    // What the app WRITEs during this roundtrip (roundtrip( ) in
+    // src/runtime/index.mjs), for the Console tab; "" when it wrote nothing.
+    console: typeof response.console === "string" ? response.console : "",
+    // The app's attributes as this roundtrip left them (src/runtime/
+    // app-state.mjs), for the State tab; undefined when it never got that far.
+    state: response.state && typeof response.state === "object" ? response.state : undefined,
     ...summarise(req, res, response.status),
   };
   entry.size = (typeof request === "string" ? request.length : 0)
-    + (typeof response.body === "string" ? response.body.length : 0);
+    + (typeof response.body === "string" ? response.body.length : 0)
+    + entry.console.length
+    + (entry.state ? JSON.stringify(entry.state).length : 0);
   entries.push(entry);
   size += entry.size;
   while (entries.length > LIMIT || (size > BUDGET && entries.length > 1)) size -= entries.shift().size;

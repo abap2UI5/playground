@@ -1,3 +1,4 @@
+// @ts-check
 // Colour for the XML and the JSON the bottom panel shows.
 //
 // The panel prints three kinds of text a reader scans rather than reads: the

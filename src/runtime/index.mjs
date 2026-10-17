@@ -9,9 +9,16 @@
 // less of the ABAP object model leaks into the page, the less of it can break
 // when the framework moves.
 import "../../build/output/init.mjs";
-import { resetDatabase } from "./db-setup.mjs";
+import { resetDatabase as reopenEmpty } from "./db-setup.mjs";
+import { snapshot } from "./app-state.mjs";
 
-export { resetDatabase };
+// A fresh database: the empty image again (db-setup.mjs), and in it the
+// user's own tables with the rows they start with (createUserTables( ) below).
+export async function resetDatabase() {
+  await reopenEmpty();
+  created.clear();
+  await createUserTables();
+}
 
 // One roundtrip. Takes and returns exactly what travels over HTTP on a real
 // system, so the caller does not have to know that ABAP is involved at all.
@@ -25,15 +32,32 @@ export { resetDatabase };
 // A 500 carries, beside the dump, the ABAP line the exception was raised at
 // when it can be found (locate( ) above) - which is the line the editor
 // then points at.
+//
+// And what the app WRITEs while it runs - `console`, beside the answer, when
+// there is any. WRITE goes to abap.context.console (db-setup.mjs), which on a
+// system would be a list screen and here was a buffer nobody read: an app
+// written the way ABAP is learnt, with a WRITE to see a value, showed
+// nothing. Taken out after every roundtrip, so each answer carries what that
+// step wrote and the buffer never grows; the Console tab in the panel lists
+// it (src/shell/insight.mjs). A JavaScript error out of the app carries it
+// too, on the error - what was written before the crash is the clue to it.
 export async function roundtrip(body) {
   lastDump = undefined;
+  lastState = undefined;
   // A dialog step starts with the current time in SY, as it does on a system.
   // The runtime sets sy-datum and sy-uzeit only when it starts and as a side
   // effect of GET TIME (STAMP) - which the framework calls while saving the
   // draft at the END of a roundtrip - so an app's main( ) saw the time the
   // previous roundtrip ended, and a click after UTC midnight got yesterday.
   globalThis.abap.statements.getTime();
-  const res = await globalThis.abap.Classes["ZCL_PG_BRIDGE"].post({ iv_body: body });
+  let res;
+  try {
+    res = await globalThis.abap.Classes["ZCL_PG_BRIDGE"].post({ iv_body: body });
+  } catch (e) {
+    const written = takeConsole();
+    if (written && e && typeof e === "object") e.console = written;
+    throw e;
+  }
   const fields = res.get();
   const status = fields.status_code.get();
   const answer = {
@@ -45,7 +69,50 @@ export async function roundtrip(body) {
     const location = locate(lastDump.stack);
     if (location) answer.location = { ...location, exception: lastDump.name };
   }
+  const written = takeConsole();
+  if (written) answer.console = written;
+  // The app's attributes as this roundtrip left them, for the State tab
+  // (watchAppState( ) below) - none when the roundtrip never got that far.
+  if (lastState) answer.state = lastState;
   return answer;
+}
+
+// The app as the last roundtrip left it (app-state.mjs), taken by the hook
+// below and handed out with the answer.
+let lastState;
+
+// The handler's last step of a roundtrip saves the app it ran into a draft
+// (main_end_save, which every successful roundtrip reaches - a sticky app's
+// included, where the save itself is skipped). That is the moment the app's
+// attributes are what the reader just caused, and the handler holds the app,
+// so the step is wrapped to read them first-hand: the same move as
+// keepDumpsLocatable( ) below, and the same answer when the framework
+// moves the method - no State tab, never a broken roundtrip.
+function watchAppState() {
+  const handler = globalThis.abap?.Classes?.["Z2UI5_CL_UI5_HANDLER"];
+  const original = handler?.prototype?.main_end_save;
+  if (typeof original !== "function") return;
+  handler.prototype.main_end_save = async function (...args) {
+    const result = await original.apply(this, args);
+    try {
+      lastState = snapshot(this.mo_action?.get?.()?.mo_app?.get?.()?.mo_app?.get?.());
+    } catch {
+      lastState = undefined;
+    }
+    return result;
+  };
+}
+watchAppState();
+
+// What WRITE has put into the console since it was last emptied, and empty
+// it. Trailing blanks per line go: WRITE pads a field to its length, and a
+// CHAR 30 written alone is a word and twenty-odd spaces.
+function takeConsole() {
+  const out = globalThis.abap?.context?.console;
+  if (!out || out.isEmpty?.() === true) return "";
+  const text = typeof out.getTrimmed === "function" ? out.getTrimmed() : String(out.get?.() ?? "");
+  out.clear?.();
+  return text.replace(/^\n+/, "");
 }
 
 // Runs unit tests, through the runner open-abap ships for exactly this:
@@ -198,6 +265,15 @@ export async function defineClasses(chunks) {
     else classes[name] = original;
   }
   shadowed.clear();
+  // The same for the DDIC: a table's chunk registers its type there, and a
+  // table taken out of the file set must not stay known by name.
+  const ddic = globalThis.abap.DDIC;
+  for (const [name, original] of shadowedDdic) {
+    if (original === undefined) delete ddic[name];
+    else ddic[name] = original;
+  }
+  shadowedDdic.clear();
+  const ddicBefore = { ...ddic };
   const before = { ...classes };
   // Only the chunks of THIS set keep a line table: every class name ever
   // defined used to keep one for the session, and locate( ) builds its
@@ -216,10 +292,86 @@ export async function defineClasses(chunks) {
     for (const name of Object.keys(classes)) {
       if (classes[name] !== before[name]) shadowed.set(name, before[name]);
     }
+    for (const name of Object.keys(ddic)) {
+      if (ddic[name] !== ddicBefore[name]) shadowedDdic.set(name, ddicBefore[name]);
+    }
     // Even when a chunk threw: the ones before it are already redefined, and
     // the app still in the frame must not go on reading type caches built
     // from their previous versions.
     forgetCachedTypeInformation();
+  }
+  // The tables this set brought, created in the database that is open now -
+  // the unit tests run against it before the Run resets it, and a set the
+  // AI Pilot defines is not followed by a reset at all.
+  userTables = [...shadowedDdic.keys()]
+    .filter((name) => ddic[name]?.playground)
+    .map((name) => ({ name, ...ddic[name].playground }));
+  await createUserTables();
+}
+
+// ------------------------------------------------------------------ tables
+
+// What the previous set put into abap.DDIC over the bundle's own entries,
+// like `shadowed` above for abap.Classes.
+const shadowedDdic = new Map();
+
+// The tables of the user's own (src/editor/tables.mjs): name, CREATE TABLE,
+// the rows it starts with - from the DDIC entries the last set defined
+// (tableSetup( ) in src/editor/transpile-core.mjs puts them there).
+let userTables = [];
+
+// The ones created in the database that is open now, to drop before the
+// next set's are created - a set defined without a reset in between (a Run
+// after the tests, the AI Pilot's) would otherwise find its table there.
+const created = new Set();
+
+// The framework's own tables, by name, which a table of the user's may not
+// replace: the drafts are in one of them, and the system tables are what
+// open-abap reads.
+const frameworkTables = new Set(Object.keys(globalThis.abap?.DDIC ?? {}));
+
+// Creates the user's tables in the open database and inserts their rows,
+// each row through the same INSERT an ABAP `INSERT ztab FROM @row` makes: the
+// row is built as the table's own structure, so every value is converted
+// into its column's type under ABAP's rules, and a client field the rows
+// leave out is the client the app runs in. Fresh at every Run - after the
+// reset, on the empty image (resetDatabase( ) below) - and never kept: what
+// an app writes to its tables goes with the Run, like its drafts.
+async function createUserTables() {
+  const abap = globalThis.abap;
+  const db = abap.context.databaseConnections["DEFAULT"];
+  for (const name of created) await db.execute(`DROP TABLE IF EXISTS '${name.toLowerCase()}'`);
+  created.clear();
+  for (const table of userTables) {
+    if (frameworkTables.has(table.name)) {
+      throw new Error(`${table.name} is already a DDIC object of the framework or of open-abap - give your table a name of its own.`);
+    }
+    await db.execute(table.create);
+    created.add(table.name);
+    const type = abap.DDIC[table.name].type();
+    const fields = type.get();
+    const mandt = abap.builtin.sy.get().mandt.get();
+    for (const [i, row] of table.rows.entries()) {
+      const line = type.clone();
+      const columns = line.get();
+      for (const [field, value] of Object.entries(row)) {
+        const column = columns[field.toLowerCase()];
+        if (column === undefined || fields[field.toLowerCase()] === undefined) {
+          throw new Error(`${table.name.toLowerCase()}.tabu.json, row ${i + 1}: ${table.name} has no field ${field}.`);
+        }
+        try {
+          column.set(value);
+        } catch (e) {
+          const why = e?.constructor?.INTERNAL_NAME ?? e?.message ?? String(e);
+          throw new Error(`${table.name.toLowerCase()}.tabu.json, row ${i + 1}: ${JSON.stringify(value)} does not fit ${field} (${why}).`, { cause: e });
+        }
+      }
+      if (columns.mandt !== undefined && !Object.keys(row).some((f) => f.toLowerCase() === "mandt")) columns.mandt.set(mandt);
+      const subrc = await abap.statements.insertDatabase(table.name, { values: line });
+      if (subrc !== 0) {
+        throw new Error(`${table.name.toLowerCase()}.tabu.json, row ${i + 1}: a row with the same key is already in ${table.name}.`);
+      }
+    }
   }
 }
 

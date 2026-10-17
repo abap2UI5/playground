@@ -15,15 +15,15 @@
 // keys its palette on beside the media query. The inline script at the top of
 // index.html applies a stored choice before the first paint - a bar that
 // paints light and turns dark a second later, once this bundle has been
-// evaluated, is a flash on every visit - so that script repeats the read with
-// the key below written into it. Keep the two in step.
+// evaluated, is a flash on every visit - so that script repeats the read. It
+// is THEME_BOOT in theme-boot.mjs, written into the document by the build,
+// and the key read here is the one that file exports: the two cannot drift.
 //
 // An embedded playground never restores a choice: a demo in somebody's
 // documentation page follows that page's reader's system, the same as it
 // never restores a draft or a checker setting.
 import { readStored, removeStored, writeStored } from "./storage.mjs";
-
-export const THEME_KEY = "abap2ui5-playground:theme";
+import { THEME_KEY } from "./theme-boot.mjs";
 
 const media = window.matchMedia("(prefers-color-scheme: dark)");
 const listeners = new Set();

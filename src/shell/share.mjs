@@ -1,3 +1,4 @@
+// @ts-check
 // Putting the code in the URL, so a playground can be linked.
 //
 // The source travels in the fragment rather than the query, which keeps it out

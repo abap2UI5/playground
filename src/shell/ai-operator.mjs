@@ -14,13 +14,12 @@
 // they took the controls.
 import { AgentError, createAppClient } from "../vendor/agent/appclient.mjs";
 import { analyzeScreen, applyResponse, emptyState, FRONTEND_EVENTS, getAt, modelKeyOf } from "../vendor/agent/snapshot.mjs";
+import { clip } from "./ai-common.mjs";
 
 const SLOTS = ["MAIN", "NEST", "NEST2", "POPUP", "POPOVER"];
 export const MAX_ROWS = 20;
 // A dump of the reader's click as the model is told it.
 export const MAX_ERROR_TEXT = 2000;
-export const clip = (text, max) =>
-  text.length <= max ? text : `${text.slice(0, max)}\n… (${text.length - max} more characters cut)`;
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const VALUE_CAP = 2000;
 
@@ -203,7 +202,9 @@ function replayOf(state) {
  * transport. One operator per app on the stage; `app` is that app's tab
  * (pilot.mjs, the apps( ) of its host):
  *   app.drive(body)   one request, sent by the app's frame -> { status, body }
- *   app.frame()       the frame's __z2ui5PlaygroundPilot
+ *   app.frame()       the frame's handle (frameApi( ) in frame-link.mjs): busy,
+ *                     slots and pending as the frame last reported them,
+ *                     refresh( ) for a fresh report, the rest asked of it
  *   app.cls           the class the tab was opened on
  */
 export function createOperator({ app, mirror, ui = {}, halted = () => false }) {
@@ -238,7 +239,7 @@ export function createOperator({ app, mirror, ui = {}, halted = () => false }) {
   async function settled() {
     const until = performance.now() + 5000;
     while (performance.now() < until) {
-      let busy = false;
+      let busy;
       try {
         busy = host.frame()?.busy() === true;
       } catch {
@@ -255,6 +256,13 @@ export function createOperator({ app, mirror, ui = {}, halted = () => false }) {
   // has settled, or a popup still being built reads as one that was closed.
   async function catchUpWithFrame() {
     if (!(await settled())) return;
+    // The frame reports on its own ten times a second; this waits for one
+    // made after everything before it, the reader's last keystroke included.
+    try {
+      await host.frame()?.refresh?.();
+    } catch {
+      // the last report stands
+    }
     let open;
     try {
       open = host.frame()?.slots();
@@ -273,7 +281,7 @@ export function createOperator({ app, mirror, ui = {}, halted = () => false }) {
   // its event went out without the value while the frame went on showing it.
   async function current() {
     await catchUpWithFrame();
-    let typed = {};
+    let typed;
     try {
       typed = host.frame()?.pending?.() ?? {};
     } catch {
@@ -383,8 +391,10 @@ export function createOperator({ app, mirror, ui = {}, halted = () => false }) {
       const typed = await client.act(id, { values, maxRows });
       typeIntoFrame(typed, values);
       // What is pending now is what the frame holds: the next current( )
-      // is not to take the Pilot's own typing for the reader's.
+      // is not to take the Pilot's own typing for the reader's. Read from a
+      // report made after the fills above (the frame answers in order).
       try {
+        await host.frame()?.refresh?.();
         typedKey = JSON.stringify(host.frame()?.pending?.() ?? {});
       } catch {
         typedKey = "{}";

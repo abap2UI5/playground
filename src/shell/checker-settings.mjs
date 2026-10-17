@@ -1,3 +1,4 @@
+// @ts-check
 // What the two Config tabs were last set to.
 //
 // The checkers themselves know nothing about this. registry.mjs and

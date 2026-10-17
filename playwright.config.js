@@ -1,11 +1,22 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// PORT moves the server and the tests together, so two checkouts can test at
+// once without one reusing the other's server (reuseExistingServer below).
+const PORT = Number(process.env.PORT || 8080);
+
 // Everything is tested through a real browser against the built dist/ - the
 // playground has no meaningful behaviour outside one, and the pieces that
 // could be tested under Node (the transpile, the shim) behave differently
 // there than they do on a page. So: one target, the thing that ships.
+//
+// Bar tests/node/: `node --test` over the pure modules (the chain reader and
+// writer, share links, the zip, the search matcher), which need no build and
+// no browser - `npm run test:unit`. Their names match Playwright's default
+// pattern, and node:test runs a file's tests as it is imported, so they are
+// kept out of here by name.
 export default defineConfig({
   testDir: "tests",
+  testIgnore: "node/**",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
@@ -23,7 +34,7 @@ export default defineConfig({
   // and the registry's are idle for most of a test.
   workers: process.env.CI ? 2 : undefined,
   use: {
-    baseURL: "http://localhost:8080",
+    baseURL: `http://localhost:${PORT}`,
     // In CI only for a retried test: a trace on every attempt recorded a
     // screencast and every network body for 300 tests that passed. A failure
     // that reproduces is retried (retries: 1) and gets its trace there.
@@ -33,6 +44,20 @@ export default defineConfig({
     // while the test is acting, and a reload was answered by the network or
     // the worker depending on whether that install had finished.
     serviceWorkers: "block",
+    // Every test starts as somebody who has closed the first steps already
+    // (src/shell/first-steps.mjs): almost every test opens the playground on
+    // a fresh profile, which is a first visit, and a strip over the editor's
+    // last lines is not what any of them is about. Here rather than in
+    // tests/helpers.mjs because most specs open the page with page.goto( )
+    // and not through a helper. tests/onboarding.spec.js empties it again;
+    // a context a test makes for itself (browser.newContext( )) starts empty.
+    storageState: {
+      cookies: [],
+      origins: [{
+        origin: `http://localhost:${PORT}`,
+        localStorage: [{ name: "abap2ui5-playground:first-steps", value: "closed" }],
+      }],
+    },
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
@@ -62,7 +87,7 @@ export default defineConfig({
   ],
   webServer: {
     command: "node tools/serve.mjs",
-    url: "http://localhost:8080/index.html",
+    url: `http://localhost:${PORT}/index.html`,
     reuseExistingServer: !process.env.CI,
     timeout: 30000,
   },

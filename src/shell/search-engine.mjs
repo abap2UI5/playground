@@ -32,8 +32,13 @@ export const INDEX_URL = "https://abap2ui5.github.io/docs/search-index.json";
 /* Lower-cased without changing the length. "İ" (the Turkish capital I, which
  * a Turkish keyboard types for Shift+i) lower-cases to "i" plus a combining
  * dot - two code units - so "İNPUT" split into "i" and "nput", matched the
- * wrong entries, and every highlight after it landed one character late. */
-const normalise = (s) => (s || "").replace(/\u0130/g, "I").toLowerCase().replace(/\u0131/g, "i");
+ * wrong entries, and every highlight after it landed one character late.
+ *
+ * Exported - the one line where this copy differs from the documentation's:
+ * search-terms.mjs, the filter under the catalogue page and the samples
+ * browser, folds with this very function rather than a second copy of it,
+ * so the box and the two filters cannot come to disagree on a letter. */
+export const normalise = (s) => (s || "").replace(/\u0130/g, "I").toLowerCase().replace(/\u0131/g, "i");
 /* A query is split the way the index was built (scripts/lib/pages.mjs): the
  * dot and the underscore stay inside a word, everything else is a boundary. So
  * `client->view_display( )` pasted out of a page is two terms, both of which
@@ -456,7 +461,7 @@ export function forgetQuery() {
 /** What to open the box with, or `""` — which is every case that is not a
  *  recent query written by this box. */
 export function recallQuery() {
-  let record = null;
+  let record;
   try {
     record = JSON.parse(globalThis.localStorage?.getItem(QUERY_KEY) || "null");
   } catch {
