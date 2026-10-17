@@ -312,3 +312,168 @@ test("the app frame lets itself be framed from another origin", async ({ page })
   const html = await page.evaluate(async () => (await fetch("index.html")).text());
   expect(html).toContain('data-sap-ui-frameOptions="allow"');
 });
+
+// ----------------------------------------------- read-only, lines and reset
+//
+// Three additions to the public surface (README "Live demos", AGENTS.md "The
+// public surfaces"): `data-readonly` / `?readonly=1`, `data-lines` /
+// `?lines=`, and the `edited` message with the loader's `abap2ui5-edited`
+// event and its `data-reset` button.
+
+const LINKED = "examples/zcl_linked_example.clas.abap";
+const LINKED_FILE = "zcl_linked_example.clas.abap";
+
+// The playground inside the showcase's frame, as a Frame Playwright can
+// evaluate in - frameLocator( ) finds elements but runs no script.
+async function demoFrame(page) {
+  await expect.poll(() => page.frames().some((f) => /[?&]embed=1/.test(f.url())), { timeout: 30000 }).toBe(true);
+  return page.frames().find((f) => /[?&]embed=1/.test(f.url()));
+}
+
+const modelValue = (where, file) =>
+  where.evaluate((f) => window.monaco.editor.getModel(window.monaco.Uri.parse(`file:///${f}`)).getValue(), file);
+
+const readOnlyOption = (where) =>
+  where.evaluate(() => window.monaco.editor.getEditors()[0].getOption(window.monaco.editor.EditorOption.readOnly));
+
+test("?readonly=1 takes the typing away and leaves Run", async ({ page }) => {
+  await page.goto(`/?embed=1&readonly=1&src=${LINKED}`);
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  expect(await readOnlyOption(page)).toBe(true);
+
+  // Typed at, and nothing changes.
+  const before = await modelValue(page, LINKED_FILE);
+  await page.locator(".monaco-editor .view-lines").click();
+  await page.keyboard.type("garbage");
+  await page.keyboard.press("Enter");
+  expect(await modelValue(page, LINKED_FILE)).toBe(before);
+
+  // Nothing on screen that would rewrite the source, and the formatter's key
+  // does nothing either.
+  await expect(page.locator("#format")).toBeHidden();
+  await expect(page.locator("#undo")).toBeHidden();
+  await expect(page.locator("#redo")).toBeHidden();
+  await page.keyboard.press("Shift+Alt+F");
+  await page.waitForTimeout(500);
+  expect(await modelValue(page, LINKED_FILE)).toBe(before);
+
+  // Run still runs: a new frame, the same app.
+  const src = await page.locator("#app").getAttribute("data-src");
+  await page.locator("#run").click();
+  await expect(page.locator("#app")).not.toHaveAttribute("data-src", src ?? "", { timeout: 60000 });
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+  await expect(page.frameLocator("#app").locator('[id$="--txtNote"]')).toContainText("fetched from a URL");
+});
+
+test("without ?readonly the embedded editor stays editable and unmarked", async ({ page }) => {
+  await page.goto(`/?embed=1&src=${LINKED}`);
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  expect(await readOnlyOption(page)).toBe(false);
+  await expect(page.locator("#format")).toBeVisible();
+  await expect(page.locator(".monaco-editor .line-marked")).toHaveCount(0);
+});
+
+test("?lines= marks the lines a page points at and scrolls the first into view", async ({ page }) => {
+  // A short editor, so the marked lines are not on screen until scrolled to -
+  // and the address in the form a sample page's line links write.
+  await page.setViewportSize({ width: 1200, height: 360 });
+  await page.goto(`/?embed=1&lines=L37-L43,%23L47&src=${LINKED}`);
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+
+  const marked = await page.evaluate((f) => {
+    const model = window.monaco.editor.getModel(window.monaco.Uri.parse(`file:///${f}`));
+    const lines = new Set();
+    for (const d of model.getAllDecorations()) {
+      if (d.options.className !== "line-marked") continue;
+      for (let n = d.range.startLineNumber; n <= d.range.endLineNumber; n++) lines.add(n);
+    }
+    return [...lines].sort((a, b) => a - b);
+  }, LINKED_FILE);
+  expect(marked).toEqual([37, 38, 39, 40, 41, 42, 43, 47]);
+
+  // Scrolled to: the first marked line is on screen, and painted.
+  const visible = await page.evaluate(() => window.monaco.editor.getEditors()[0].getVisibleRanges()[0]);
+  expect(visible.startLineNumber).toBeGreaterThan(1);
+  expect(visible.startLineNumber).toBeLessThanOrEqual(37);
+  expect(visible.endLineNumber).toBeGreaterThanOrEqual(37);
+  await expect(page.locator(".monaco-editor .line-marked").first()).toBeVisible();
+});
+
+test("the loader passes data-readonly and data-lines through to the playground", async ({ page }) => {
+  await page.goto("/embed/");
+  // Built the way the loader builds it, so a page that links instead of
+  // framing gets the same.
+  const url = await page.evaluate(() =>
+    window.abap2ui5Embed.url({ src: "../examples/x.clas.abap", readonly: true, lines: "12-18,25" }));
+  const params = new URL(url).searchParams;
+  expect(params.get("readonly")).toBe("1");
+  expect(params.get("lines")).toBe("12-18,25");
+
+  await page.locator(".abap2ui5-demo-start", { hasText: "Read the example" }).click();
+  const frame = await demoFrame(page);
+  expect(new URL(frame.url()).searchParams.get("readonly")).toBe("1");
+  expect(new URL(frame.url()).searchParams.get("lines")).toBe("37-43");
+  const demo = page.frameLocator(".abap2ui5-demo iframe").first();
+  await expect(demo.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await expect(demo.locator(".monaco-editor .line-marked").first()).toBeVisible();
+  expect(await readOnlyOption(frame)).toBe(true);
+  // No Reset under a read-only demo: there is nothing to reset.
+  await expect(page.locator(".abap2ui5-demo-reset")).toHaveCount(0);
+});
+
+test("an edit is reported once, and data-reset puts the page's code back", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__edited = [];
+    window.__messages = [];
+    document.addEventListener("abap2ui5-edited", (e) => window.__edited.push(e.detail.edited));
+    window.addEventListener("message", (e) => {
+      if (e.data?.source === "abap2ui5-playground" && e.data.type === "edited") window.__messages.push(e.data);
+    });
+  });
+  await page.goto("/embed/");
+  await page.locator(".abap2ui5-demo-start", { hasText: "Try changing the example" }).click();
+  const frame = await demoFrame(page);
+  const demo = page.frameLocator(".abap2ui5-demo iframe").first();
+  await expect(demo.locator("#status")).toHaveText("running", { timeout: 120000 });
+  const reset = page.locator(".abap2ui5-demo-reset");
+  await expect(reset).toBeHidden();
+  expect(await page.evaluate(() => window.__edited)).toEqual([]);
+
+  const original = await modelValue(frame, LINKED_FILE);
+
+  // Typed into, a word at a time: one message, not one per pause.
+  await demo.locator(".monaco-editor .view-lines").click();
+  await frame.evaluate(() => {
+    const editor = window.monaco.editor.getEditors()[0];
+    editor.setPosition({ lineNumber: 28, column: 5 });
+    editor.focus();
+  });
+  for (const word of ["\" one", " two", " three"]) {
+    await page.keyboard.type(word);
+    await page.waitForTimeout(300);
+  }
+  await expect.poll(() => page.evaluate(() => window.__edited), { timeout: 10000 }).toEqual([true]);
+  expect(await page.evaluate(() => window.__messages.length)).toBe(1);
+  await expect(reset).toBeVisible();
+  await expect(reset).toHaveText("Reset example");
+
+  // A reset that does not come from the page that framed the playground, or
+  // not under the loader's name, is not one.
+  await frame.evaluate(() => window.postMessage({ source: "abap2ui5-embed", type: "reset" }, "*"));
+  await page.evaluate(() =>
+    document.querySelector(".abap2ui5-demo iframe").contentWindow.postMessage({ source: "somebody", type: "reset" }, "*"));
+  await page.waitForTimeout(500);
+  expect(await modelValue(frame, LINKED_FILE)).not.toBe(original);
+
+  const src = await demo.locator("#app").getAttribute("data-src");
+  await reset.click();
+  await expect.poll(() => modelValue(frame, LINKED_FILE), { timeout: 10000 }).toBe(original);
+  await expect.poll(() => page.evaluate(() => window.__edited), { timeout: 10000 }).toEqual([true, false]);
+  await expect(reset).toBeHidden();
+  // And run again, so what is on screen is the page's app.
+  await expect(demo.locator("#app")).not.toHaveAttribute("data-src", src ?? "", { timeout: 60000 });
+  await expect(demo.locator("#status")).toHaveText("running", { timeout: 60000 });
+  // The reader's version is one Ctrl+Z away.
+  await frame.evaluate(() => window.monaco.editor.getEditors()[0].trigger("test", "undo", null));
+  expect(await modelValue(frame, LINKED_FILE)).toContain("three");
+});
