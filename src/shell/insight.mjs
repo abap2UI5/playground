@@ -177,7 +177,8 @@ export function setUpInsight() {
     // row that was open would otherwise reopen as the new run's #1.
     if (roundtripList().length === 0) openedRoundtrip = undefined;
     paintRoundtripCount();
-    if (view !== "roundtrips") return;
+    paintConsoleCount();
+    if (view !== "roundtrips" && view !== "console") return;
     // Not under a selection somebody is making in a request or a response:
     // the redraw replaced the text they were selecting. The list catches up
     // once the selection is let go.
@@ -190,7 +191,7 @@ export function setUpInsight() {
   document.addEventListener("selectionchange", () => {
     if (!roundtripsBehind || selectingInBody()) return;
     roundtripsBehind = false;
-    if (view === "roundtrips") render();
+    if (view === "roundtrips" || view === "console") render();
   });
 
   render();
@@ -319,6 +320,7 @@ const VIEWS = {
   view: viewPreview,
   tests: testView,
   roundtrips: roundtripView,
+  console: consoleView,
   log: logView,
   abaplint: abaplintConfig,
   abap2ui5: linterConfig,
@@ -1152,6 +1154,7 @@ function roundtripDetail(entry) {
     detail.append(head, pre);
   };
   for (const view of entry.views) block(`View for slot ${view.slot}`, prettyXml(view.xml), "xml");
+  if (entry.console !== "") block("Console", entry.console, "text");
   // A request and a response are objects the runtime hands over, so they are
   // JSON here - `asText` only stringifies what is not already a string, and a
   // body that came as a string (a dump) is not JSON and is left grey.
@@ -1166,6 +1169,47 @@ function roundtripDetail(entry) {
 
 const asText = (value) => (typeof value === "string" ? value : JSON.stringify(value, null, 2));
 const kindOf = (value) => (typeof value === "string" ? "text" : "json");
+
+// ---------------------------------------------------------------- console
+
+// The roundtrips that WRITE something, by how many: a count, not a dot - the
+// output is the app talking, not something gone wrong, and it never takes the
+// panel the way a Log entry does.
+function paintConsoleCount() {
+  const badge = document.getElementById("console-count");
+  if (!badge) return;
+  const written = roundtripList().filter((r) => r.console !== "").length;
+  badge.textContent = written === 0 ? "" : String(written);
+  badge.className = "insight-badge";
+}
+
+// What the app WRITEs, one block per roundtrip that wrote anything, headed by
+// the roundtrip it came with - the same number and event the Roundtrips tab
+// lists it under. On a system a WRITE in an abap2UI5 app goes to a list
+// screen nobody sees; here it is the quickest way to look at a value, so it
+// is kept where it can be read. It lives on the roundtrips (roundtrips.mjs),
+// so it is bounded with them and a Run starts it afresh.
+function consoleView() {
+  const written = roundtripList().filter((r) => r.console !== "");
+  if (written.length === 0) {
+    return empty("Nothing written yet. What the app WRITEs lands here, under the roundtrip that wrote it - a Run starts it afresh.");
+  }
+  const wrap = document.createElement("div");
+  wrap.className = "console";
+  for (const entry of written) {
+    const head = document.createElement("div");
+    head.className = "log-head";
+    const title = document.createElement("span");
+    title.className = "log-title";
+    title.textContent = `#${entry.n} ${entry.args.length > 0 ? `${entry.event} (${entry.args.join(", ")})` : entry.event}`;
+    head.append(title);
+    const pre = document.createElement("pre");
+    pre.className = "log-body console-body";
+    pre.textContent = entry.console;
+    wrap.append(head, pre);
+  }
+  return wrap;
+}
 
 // ------------------------------------------------------------------- log
 

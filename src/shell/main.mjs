@@ -538,6 +538,7 @@ async function boot() {
           // first roundtrip and read "none arrived within ten seconds",
           // with nothing in the status or the Log to say why.
           const failed = { status: 500, body: `${e?.name === RUNAWAY ? "" : "JavaScript error in the app: "}${String(e?.message ?? e)}` };
+          if (e?.console) failed.console = e.console;
           recordRoundtrip({ request: body, response: failed, ms: performance.now() - started });
           // And to the AI Pilot's mirror of that tab, which otherwise never
           // heard of the start and waited half a minute for it.

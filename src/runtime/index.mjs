@@ -25,6 +25,15 @@ export { resetDatabase };
 // A 500 carries, beside the dump, the ABAP line the exception was raised at
 // when it can be found (locate( ) above) - which is the line the editor
 // then points at.
+//
+// And what the app WRITEs while it runs - `console`, beside the answer, when
+// there is any. WRITE goes to abap.context.console (db-setup.mjs), which on a
+// system would be a list screen and here was a buffer nobody read: an app
+// written the way ABAP is learnt, with a WRITE to see a value, showed
+// nothing. Taken out after every roundtrip, so each answer carries what that
+// step wrote and the buffer never grows; the Console tab in the panel lists
+// it (src/shell/insight.mjs). A JavaScript error out of the app carries it
+// too, on the error - what was written before the crash is the clue to it.
 export async function roundtrip(body) {
   lastDump = undefined;
   // A dialog step starts with the current time in SY, as it does on a system.
@@ -33,7 +42,14 @@ export async function roundtrip(body) {
   // draft at the END of a roundtrip - so an app's main( ) saw the time the
   // previous roundtrip ended, and a click after UTC midnight got yesterday.
   globalThis.abap.statements.getTime();
-  const res = await globalThis.abap.Classes["ZCL_PG_BRIDGE"].post({ iv_body: body });
+  let res;
+  try {
+    res = await globalThis.abap.Classes["ZCL_PG_BRIDGE"].post({ iv_body: body });
+  } catch (e) {
+    const written = takeConsole();
+    if (written && e && typeof e === "object") e.console = written;
+    throw e;
+  }
   const fields = res.get();
   const status = fields.status_code.get();
   const answer = {
@@ -45,7 +61,20 @@ export async function roundtrip(body) {
     const location = locate(lastDump.stack);
     if (location) answer.location = { ...location, exception: lastDump.name };
   }
+  const written = takeConsole();
+  if (written) answer.console = written;
   return answer;
+}
+
+// What WRITE has put into the console since it was last emptied, and empty
+// it. Trailing blanks per line go: WRITE pads a field to its length, and a
+// CHAR 30 written alone is a word and twenty-odd spaces.
+function takeConsole() {
+  const out = globalThis.abap?.context?.console;
+  if (!out || out.isEmpty?.() === true) return "";
+  const text = typeof out.getTrimmed === "function" ? out.getTrimmed() : String(out.get?.() ?? "");
+  out.clear?.();
+  return text.replace(/^\n+/, "");
 }
 
 // Runs unit tests, through the runner open-abap ships for exactly this:

@@ -641,3 +641,66 @@ test("a control from a library this site does not carry is reported, and the app
   await setSource(page, withLibrary("sap.ui.layout", "l"));
   await expect(page.locator(".insight-row", { hasText: "is not one of the UI5 libraries" })).toHaveCount(0, { timeout: 20000 });
 });
+
+// An app that WRITEs, on its start and on every press of its button.
+const writer = `CLASS ${MAIN_CLASS} DEFINITION PUBLIC CREATE PUBLIC.
+  PUBLIC SECTION.
+    INTERFACES z2ui5_if_app.
+ENDCLASS.
+CLASS ${MAIN_CLASS} IMPLEMENTATION.
+  METHOD z2ui5_if_app~main.
+    IF client->check_on_init( ).
+      WRITE 'started'.
+      DATA(view) = z2ui5_cl_ui5_view_builder=>factory(
+          )->ele( n = \`View\` ns = \`mvc\`
+              )->a( n = \`xmlns\`     v = \`sap.m\`
+              )->a( n = \`xmlns:mvc\` v = \`sap.ui.core.mvc\` ).
+      view->ele( \`Page\`
+          )->a( n = \`title\` v = \`Writer\`
+          )->tag( \`Button\`
+              )->a( n = \`id\`    v = \`btnWrite\`
+              )->a( n = \`text\`  v = \`Write\`
+              )->a( n = \`press\` v = client->_event( \`WRITE\` ) ).
+      client->view_display( view->stringify( ) ).
+    ELSEIF client->check_on_event( \`WRITE\` ).
+      WRITE 'hello'.
+      WRITE / 'second line'.
+    ENDIF.
+  ENDMETHOD.
+ENDCLASS.
+`;
+
+test("what the app WRITEs is listed in the Console tab under the roundtrip that wrote it, and a Run starts it afresh", async ({ page }) => {
+  await open(page);
+  await setSource(page, writer);
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+
+  const tab = page.locator('[data-insight="console"]');
+  // The start wrote; the badge counts the roundtrips that did.
+  await expect(page.locator("#console-count")).toHaveText("1");
+  await page.frameLocator("#app").locator('[id$="--btnWrite"]').click();
+  await expect(page.locator("#console-count")).toHaveText("2");
+
+  await tab.click();
+  const blocks = page.locator(".console .console-body");
+  await expect(blocks).toHaveCount(2);
+  await expect(blocks.nth(0)).toHaveText("started");
+  await expect(blocks.nth(1)).toHaveText("hello\nsecond line");
+  await expect(page.locator(".console .log-title").nth(1)).toContainText("WRITE");
+  // Not a failure: nothing is said in the Log, and the panel was not taken.
+  await expect(page.locator("#log-dot")).toHaveText("");
+
+  // The roundtrip's own detail carries it too.
+  await page.locator('[data-insight="roundtrips"]').click();
+  await page.locator(".roundtrip-row").nth(1).click();
+  await expect(page.locator(".roundtrip-detail")).toContainText("hello");
+
+  // A Run is a fresh app: only its start's output is left.
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+  await expect(page.locator("#console-count")).toHaveText("1");
+  await tab.click();
+  await expect(page.locator(".console .console-body")).toHaveCount(1);
+  await expect(page.locator(".console .console-body")).toHaveText("started");
+});
