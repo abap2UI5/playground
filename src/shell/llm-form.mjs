@@ -5,7 +5,7 @@
 // module's: the rooms hold it in memory (see chat.mjs for why it is never
 // stored), and only the provider, the base URL and the model are kept
 // between visits (llm-provider.mjs).
-import { BASE_URL_EXAMPLES, PROVIDERS, readProviderSettings, writeProviderSettings } from "./llm-provider.mjs";
+import { BASE_URL_EXAMPLES, PROVIDERS, keyHost, readProviderSettings, writeProviderSettings } from "./llm-provider.mjs";
 
 /** The server a key belongs to: Anthropic, or one base URL. A key held in
  *  memory is sent to that server and no other (chat.mjs, pilot.mjs). */
@@ -24,6 +24,7 @@ export function setUpProviderForm(prefix) {
     workspace: document.getElementById(`${prefix}-workspace`),
     noteAnthropic: document.getElementById(`${prefix}-key-note`),
     noteOpenai: document.getElementById(`${prefix}-key-note-openai`),
+    target: document.getElementById(`${prefix}-key-target`),
   };
   for (const { url, label } of BASE_URL_EXAMPLES) {
     const option = document.createElement("option");
@@ -42,8 +43,31 @@ export function setUpProviderForm(prefix) {
     el.noteOpenai.hidden = !openai;
     el.keyLabel.textContent = PROVIDERS[provider].keyLabel;
     el.keyInput.placeholder = PROVIDERS[provider].keyPlaceholder;
+    sayWhereTheKeyGoes();
   }
   el.provider.addEventListener("change", reflect);
+
+  // Where the key goes, said beside the key field before it is typed,
+  // whenever that is not the provider's own server. The base URL is
+  // remembered (llm-provider.mjs) and a link's ABAP can write what is
+  // remembered (linked-code.mjs): a base URL put there by somebody else was
+  // the next key typed here, sent to their server with nothing on the form
+  // to say so. Said from the fields as they stand, so a URL being typed is
+  // said as it is typed - and over plain http to another machine, said too.
+  function sayWhereTheKeyGoes() {
+    if (!el.target) return;
+    const where = keyHost(read());
+    el.target.hidden = !where;
+    if (!where) return;
+    const host = document.createElement("strong");
+    host.textContent = where.host;
+    el.target.replaceChildren(
+      "Your key will be sent to ",
+      host,
+      where.plain ? " - over plain http, readable on the way." : ".",
+    );
+  }
+  el.baseUrl.addEventListener("input", sayWhereTheKeyGoes);
 
   /** The fields as they stand, completed with the defaults. */
   const read = () =>

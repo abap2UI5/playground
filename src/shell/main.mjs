@@ -58,7 +58,7 @@ import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mj
 
 import { clearRoundtrips, recordRoundtrip, roundtripList } from "./roundtrips.mjs";
 import { AI_FILE, AI_STARTER, isUntouchedStarter } from "./ai-starter.mjs";
-import { confirmLinkedCode } from "./linked-code.mjs";
+import { confirmLinkedCode, markLinkedCodeRan } from "./linked-code.mjs";
 import { state } from "./state.mjs";
 import { RUNAWAY, STALLED, startRuntime } from "./runtime-client.mjs";
 import { readStored, readStoredJson, removeStored, writeStored, writeStoredJson } from "./storage.mjs";
@@ -538,6 +538,7 @@ async function boot() {
           // first roundtrip and read "none arrived within ten seconds",
           // with nothing in the status or the Log to say why.
           const failed = { status: 500, body: `${e?.name === RUNAWAY ? "" : "JavaScript error in the app: "}${String(e?.message ?? e)}` };
+          if (e?.console) failed.console = e.console;
           recordRoundtrip({ request: body, response: failed, ms: performance.now() - started });
           // And to the AI Pilot's mirror of that tab, which otherwise never
           // heard of the start and waited half a minute for it.
@@ -1089,6 +1090,8 @@ let opened;
 let openingAsOpened = false;
 // Where the editor's starting files came from (startingFiles( )).
 let startedFrom;
+// The answers of startingFiles( ) that are somebody else's code.
+const FROM_A_LINK = new Set(["a shared link", "a link", "a gist"]);
 
 // Run, once the run under way (if any) has finished. A sample opened while
 // another one was still starting went into the editor, and its run returned
@@ -1570,6 +1573,11 @@ export async function run({ quiet = false } = {}) {
     // after compile, so code that does not compile leaves the old app working.
     state.runCounter += 1;
     quietRun = quiet ? state.runCounter : undefined;
+    // The page started on code a link brought, and this is where it starts
+    // to run: from here on the page is not a safe place for a secret
+    // (src/shell/linked-code.mjs). For the visit - a script it started
+    // outlives the files being replaced.
+    if (FROM_A_LINK.has(startedFrom)) markLinkedCodeRan();
     await state.runtime.defineClasses(chunks.map(({ name, js, lines }) => ({ name, js, lines })));
 
     // The unit tests in the test includes, before the app: a run is compile,

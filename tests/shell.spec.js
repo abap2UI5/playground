@@ -650,6 +650,9 @@ test("the Share dialog offers an embed block, a markdown fence and an abapGit zi
   await page.locator("#share").click();
   const dialog = page.locator("#share-dialog");
   await expect(dialog).toBeVisible();
+  // The sample ran, not a link's code: the Gist section asks nothing first.
+  await expect(page.locator("#share-gist-caution")).toHaveCount(0);
+  await expect(page.locator("#share-gist-token")).toBeEnabled();
 
   // The link is the first box and is what the address bar now shows.
   const boxes = dialog.locator("textarea");
@@ -769,6 +772,13 @@ test("?gist= opens a gist's ABAP with the app first, and the Share dialog writes
   });
   await page.locator("#share").click();
   await expect(page.locator("#share-dialog")).toBeVisible();
+  // The gist's code ran in this page, so it could read a token typed here:
+  // the field waits for the reader to say they trust the link.
+  await expect(page.locator("#share-gist-caution")).toContainText("Code from a link ran in this page");
+  await expect(page.locator("#share-gist-token")).toBeDisabled();
+  await expect(page.locator("#share-gist")).toBeDisabled();
+  await page.locator("#share-gist-trust").check();
+  await expect(page.locator("#share-gist-token")).toBeEnabled();
   await page.locator("#share-gist").click();
   await expect(page.locator("#share-gist-said")).toHaveText("a GitHub token is needed");
   await page.locator("#share-gist-token").fill("github_pat_test");
@@ -781,4 +791,11 @@ test("?gist= opens a gist's ABAP with the app first, and the Share dialog writes
   expect(Object.keys(posted[0].body.files)).toEqual([MAIN_FILE, "zif_gist_helper.intf.abap"]);
   const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }));
   expect(stored).not.toContain("github_pat_test");
+
+  // Said once per visit: the next open asks nothing again.
+  await page.keyboard.press("Escape");
+  await page.locator("#share").click();
+  await expect(page.locator("#share-dialog")).toBeVisible();
+  await expect(page.locator("#share-gist-caution")).toHaveCount(0);
+  await expect(page.locator("#share-gist-token")).toBeEnabled();
 });

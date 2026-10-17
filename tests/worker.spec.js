@@ -461,3 +461,32 @@ test("the catalogue's index is answered from the network first, and a cached cop
     return hit ? (await hit.json()).stale === true : "missing";
   })).toBe(false);
 });
+
+test("a document the network answers with an error is answered from the cache instead", async ({ page, context }) => {
+  // Several playground boots in one test: three times the time budget.
+  test.slow();
+  await open(page);
+  expect(await workerReady(page)).toBe(true);
+  await networkSettled(page);
+
+  // A host having a bad minute: every document request the worker makes
+  // answers 503. The worker's own fetch, which a context route sees in
+  // Chromium. With a good copy kept, the copy is the page - an error page
+  // served over it was the playground gone for as long as the outage lasted.
+  let refused = 0;
+  await context.route(
+    (url) => url.pathname === "/" || url.pathname === "/index.html",
+    (route) => {
+      refused += 1;
+      return route.fulfill({ status: 503, contentType: "text/html", body: "<title>down</title><p>Service Unavailable</p>" });
+    },
+  );
+  try {
+    await open(page);
+    await expect(page).not.toHaveTitle("down");
+    await expect(page.frameLocator("#app").getByText(MAIN_MARK)).toBeVisible();
+    expect(refused, "the network was asked, and refused").toBeGreaterThan(0);
+  } finally {
+    await context.unrouteAll();
+  }
+});

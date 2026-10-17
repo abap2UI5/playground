@@ -59,10 +59,14 @@ export function recordRoundtrip({ request, response, ms }) {
     status: response.status,
     request: req ?? request,
     response: res ?? response.body,
+    // What the app WRITEs during this roundtrip (roundtrip( ) in
+    // src/runtime/index.mjs), for the Console tab; "" when it wrote nothing.
+    console: typeof response.console === "string" ? response.console : "",
     ...summarise(req, res, response.status),
   };
   entry.size = (typeof request === "string" ? request.length : 0)
-    + (typeof response.body === "string" ? response.body.length : 0);
+    + (typeof response.body === "string" ? response.body.length : 0)
+    + entry.console.length;
   entries.push(entry);
   size += entry.size;
   while (entries.length > LIMIT || (size > BUDGET && entries.length > 1)) size -= entries.shift().size;

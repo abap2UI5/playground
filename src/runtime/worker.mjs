@@ -76,6 +76,8 @@ async function handle(event) {
         // A JavaScript error out of the user's own code - a TypeError the
         // transpiled ABAP ran into - traced to its ABAP line when it can be.
         location: runtime.locate(e?.stack),
+        // What the app WRITEs before it crashed (roundtrip( ) in index.mjs).
+        console: typeof e?.console === "string" ? e.console : undefined,
       },
     });
   }

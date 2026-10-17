@@ -889,7 +889,10 @@ test("an OpenAI-compatible server answers the studio: tools as function calls, r
   await expect(page.locator("#chat-openai")).toBeVisible();
   await expect(page.locator("#chat-workspace")).toBeHidden();
   await expect(page.locator("#chat-key-note-openai")).toContainText("OLLAMA_ORIGINS");
+  // OpenAI's own server needs no word; any other is named before a key is typed.
+  await expect(page.locator("#chat-key-target")).toBeHidden();
   await page.locator("#chat-base-url").fill("http://localhost:11434/v1/");
+  await expect(page.locator("#chat-key-target")).toHaveText("Your key will be sent to localhost:11434.");
   await page.locator("#chat-model").fill("local-test");
   await page.locator("#chat-key button[type=submit]").click();
   await expect(page.locator("#chat-key")).toBeHidden();
@@ -926,4 +929,28 @@ test("an OpenAI-compatible server answers the studio: tools as function calls, r
   const stored = await page.evaluate(() => ({ ...localStorage }));
   expect(JSON.parse(stored["abap2ui5-playground:llm"])).toEqual({ provider: "openai", baseUrl: "http://localhost:11434/v1", model: "local-test" });
   expect(JSON.stringify(stored)).not.toContain(KEY);
+});
+
+test("a base URL somebody else stored is said on the key form, and one that is not http(s) is not followed", async ({ page }) => {
+  // localStorage is where a link's ABAP can write (src/shell/linked-code.mjs):
+  // a base URL put there sends the next key typed to that server.
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem("seeded")) return;
+    sessionStorage.setItem("seeded", "1");
+    localStorage.setItem("abap2ui5-playground:llm", JSON.stringify({ provider: "openai", baseUrl: "https://collector.example/v1", model: "m" }));
+  });
+  await openStudio(page);
+  await expect(page.locator("#chat-key")).toBeVisible();
+  await expect(page.locator("#chat-key-target")).toHaveText("Your key will be sent to collector.example.");
+  // Plain http to another machine is said as well.
+  await page.locator("#chat-base-url").fill("http://192.168.1.20:8000/v1");
+  await expect(page.locator("#chat-key-target")).toContainText("192.168.1.20:8000 - over plain http");
+
+  // A stored URL that is no web server is read back as the default.
+  await page.evaluate(() =>
+    localStorage.setItem("abap2ui5-playground:llm", JSON.stringify({ provider: "openai", baseUrl: "javascript:alert(1)" })));
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText("ready - describe the app you want", { timeout: 120000 });
+  await expect(page.locator("#chat-base-url")).toHaveValue("https://api.openai.com/v1");
+  await expect(page.locator("#chat-key-target")).toBeHidden();
 });

@@ -270,11 +270,13 @@ const limit = () => window.__abap2ui5RunLimit ?? 30000;
 const patience = () => window.__abap2ui5RuntimePatience ?? 60000;
 
 // An error as the worker described it, as an Error again - name, message and
-// stack, which is what describeError( ) in ui.mjs reads.
+// stack, which is what describeError( ) in ui.mjs reads, and what the app
+// WRITEs before it (the Console tab).
 function revive(described) {
   const error = new Error(described?.message ?? "the ABAP runtime failed");
   if (described?.name) error.name = described.name;
   if (described?.stack) error.stack = described.stack;
   if (described?.location) error.location = described.location;
+  if (described?.console) error.console = described.console;
   return error;
 }
