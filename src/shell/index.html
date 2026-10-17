@@ -181,23 +181,16 @@
     } catch (e) {
       // An old fetch that refuses the option, or no fetch at all.
     }
-
-    // The theme the switch in the bar chose last time, applied before the
-    // first paint - src/shell/theme.mjs owns the key and the rule, and reads
-    // it again through storage.mjs; this repeats the read only so the bar does
-    // not paint light and turn dark once the bundle has been evaluated. Not
-    // when embedded, where theme.mjs never restores it either. localStorage
-    // throws where it is refused (see storage.mjs), hence the try.
-    try {
-      if (!/[?&]embed=1(&|$)/.test(location.search)) {
-        var theme = localStorage.getItem("abap2ui5-playground:theme");
-        if (theme === "dark" || theme === "light") document.documentElement.dataset.theme = theme;
-      }
-    } catch (e) {
-      // No preference stored, then.
-    }
   })();
 </script>
+<!-- The theme the switch in the bar chose last time, applied before the
+     first paint - src/shell/theme.mjs owns the switch, and reads the choice
+     again through storage.mjs; this repeats the read only so the bar does
+     not paint light and turn dark once the bundle has been evaluated. Not
+     when embedded, where theme.mjs never restores it either. Written in by
+     tools/build-site.mjs from src/shell/theme-boot.mjs, the one copy the
+     catalogue and every sample page carry as well. -->
+<!-- __THEME_BOOT__ -->
 
 <!-- The chunks assets/shell.mjs imports at its top, preloaded so they travel
      beside it rather than after it. Written by tools/build-site.mjs, which

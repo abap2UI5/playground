@@ -43,6 +43,9 @@
 // No error, no console noise of this module's making.
 import { SAMPLES } from "../editor/samples.mjs";
 import { githubUrlOf, rawUrlOf } from "./catalogue-urls.mjs";
+/* The one version comparison, shared with the catalogue page - a second copy
+ * here was the same twelve lines, ready to disagree on "1.9" against "1.71". */
+import { cmpVersion } from "./ui5-libs.mjs";
 import { foldCase, termsOf, matchesTerms } from "./search-terms.mjs";
 import { deleteDraft, draftNameProblem, listDrafts, saveDraft } from "./drafts.mjs";
 import { readStoredJson, writeStoredJson } from "./storage.mjs";
@@ -70,17 +73,6 @@ let picks = { control: "", library: "", release: "" };
 let floor = "1.71";
 
 const str = (v) => (typeof v === "string" ? v : "");
-
-/** Compare two dotted UI5 versions numerically ("1.9" < "1.71" < "1.120"). */
-function cmpVersion(a, b) {
-  const pa = str(a).split(".").map(Number);
-  const pb = str(b).split(".").map(Number);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const d = (pa[i] || 0) - (pb[i] || 0);
-    if (d) return d;
-  }
-  return 0;
-}
 
 // Which entries the boxes and the facets let through.
 //

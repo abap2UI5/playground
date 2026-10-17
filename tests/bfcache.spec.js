@@ -34,6 +34,8 @@ const SOURCES = [
   ...walk(path.join(ROOT, "src", "catalogue")),
   ...walk(path.join(ROOT, "src", "embed")),
   path.join(ROOT, "tools", "sample-pages.mjs"),
+  path.join(ROOT, "tools", "sample-frame.mjs"),
+  path.join(ROOT, "tools", "not-found-page.mjs"),
   path.join(ROOT, "tools", "serve.mjs"),
 ];
 
