@@ -1319,8 +1319,8 @@ function structuralProblem(files) {
   for (const file of files) {
     const parsed = parseName(file.name);
     // A test include declares local test classes, not the object; abaplint
-    // checks what is in it.
-    if (parsed?.include) continue;
+    // checks what is in it. A table's two files are no ABAP at all.
+    if (parsed?.include || parsed?.kind === "tabl") continue;
     const expected = parsed?.object;
     const declared = declaredObjectName(file.source);
     if (declared === undefined) {

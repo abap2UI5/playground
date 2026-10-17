@@ -5,6 +5,7 @@
 // the markup only so nothing flashes before boot puts real tabs into it.
 import { addFile, closeFile, currentFile, getFiles, onFileShown, openFile } from "../editor/editor.mjs";
 import { nameProblem, skeletonFor } from "../editor/files.mjs";
+import { STARTER_TABLE, starterTable } from "../editor/tables.mjs";
 import { setStatus } from "./ui.mjs";
 
 let strip;
@@ -34,6 +35,10 @@ export function setUpFiles(options = {}) {
     const add = e.target.closest("[data-add]");
     if (add) {
       askForNewFile();
+      return;
+    }
+    if (e.target.closest("[data-add-table]")) {
+      addStarterTable();
       return;
     }
     const tab = e.target.closest("[data-file]");
@@ -76,7 +81,7 @@ export function render() {
      beside the file names, and a tablist may hold nothing but tabs - a screen
      reader made no sense of it. The file that is open says so itself. */
   strip.setAttribute("role", "group");
-  strip.replaceChildren(...files.map((file, index) => fileTab(file, index, open)), addButton());
+  strip.replaceChildren(...files.map((file, index) => fileTab(file, index, open)), addButton(), addTableButton());
 }
 
 // One tab: the name, and for every file but the first a control to remove it.
@@ -123,6 +128,35 @@ function addButton() {
   add.setAttribute("aria-label", "Add a class or an interface");
   add.append("+");
   return add;
+}
+
+// A database table, with rows: the definition and its seed file as a pair
+// (src/editor/tables.mjs), under a name the set does not hold yet. A button
+// of its own rather than a name typed into "+": the two files only make sense
+// together, and what goes into a TABL's XML is not something to guess at -
+// the example is what somebody edits into their own table.
+function addTableButton() {
+  const add = document.createElement("button");
+  add.className = "file-add-table";
+  add.dataset.addTable = "";
+  add.type = "button";
+  add.title = "Add a database table with a few rows to SELECT from";
+  add.setAttribute("aria-label", "Add a database table");
+  add.append("+ table");
+  return add;
+}
+
+function addStarterTable() {
+  const names = new Set(getFiles().map((f) => f.name));
+  let name = STARTER_TABLE;
+  for (let n = 2; names.has(`${name}.tabl.xml`) || names.has(`${name}.tabu.json`); n++) name = `${STARTER_TABLE}${n}`;
+  const { table, seed } = starterTable(name);
+  // The rows first and the table last, so the table is the file on screen;
+  // each is reported through the editor's change handler, like "+".
+  addFile(table);
+  addFile(seed);
+  openFile(table.name);
+  setStatus(`${table.name} added, with its rows in ${seed.name} - SELECT * FROM ${name} INTO TABLE @DATA(rows).`);
 }
 
 // Asking for the name, in the strip itself.

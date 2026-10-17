@@ -445,7 +445,8 @@ select:disabled { opacity: .5; }
   border-radius: 3px;
 }
 
-.file-add {
+.file-add,
+.file-add-table {
   border: none;
   border-radius: 0;
   background: none;
@@ -454,6 +455,8 @@ select:disabled { opacity: .5; }
   font-size: 15px;
   line-height: 1;
 }
+/* "+ table" beside the bare "+": a word, so a size that reads as one. */
+.file-add-table { font-size: 12px; white-space: nowrap; }
 
 .editor { flex: 1; min-height: 0; }
 /* On a phone every line of a class is wider than the editor, so Monaco's

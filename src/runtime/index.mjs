@@ -9,9 +9,15 @@
 // less of the ABAP object model leaks into the page, the less of it can break
 // when the framework moves.
 import "../../build/output/init.mjs";
-import { resetDatabase } from "./db-setup.mjs";
+import { resetDatabase as reopenEmpty } from "./db-setup.mjs";
 
-export { resetDatabase };
+// A fresh database: the empty image again (db-setup.mjs), and in it the
+// user's own tables with the rows they start with (createUserTables( ) below).
+export async function resetDatabase() {
+  await reopenEmpty();
+  created.clear();
+  await createUserTables();
+}
 
 // One roundtrip. Takes and returns exactly what travels over HTTP on a real
 // system, so the caller does not have to know that ABAP is involved at all.
@@ -227,6 +233,15 @@ export async function defineClasses(chunks) {
     else classes[name] = original;
   }
   shadowed.clear();
+  // The same for the DDIC: a table's chunk registers its type there, and a
+  // table taken out of the file set must not stay known by name.
+  const ddic = globalThis.abap.DDIC;
+  for (const [name, original] of shadowedDdic) {
+    if (original === undefined) delete ddic[name];
+    else ddic[name] = original;
+  }
+  shadowedDdic.clear();
+  const ddicBefore = { ...ddic };
   const before = { ...classes };
   // Only the chunks of THIS set keep a line table: every class name ever
   // defined used to keep one for the session, and locate( ) builds its
@@ -245,10 +260,86 @@ export async function defineClasses(chunks) {
     for (const name of Object.keys(classes)) {
       if (classes[name] !== before[name]) shadowed.set(name, before[name]);
     }
+    for (const name of Object.keys(ddic)) {
+      if (ddic[name] !== ddicBefore[name]) shadowedDdic.set(name, ddicBefore[name]);
+    }
     // Even when a chunk threw: the ones before it are already redefined, and
     // the app still in the frame must not go on reading type caches built
     // from their previous versions.
     forgetCachedTypeInformation();
+  }
+  // The tables this set brought, created in the database that is open now -
+  // the unit tests run against it before the Run resets it, and a set the
+  // AI Pilot defines is not followed by a reset at all.
+  userTables = [...shadowedDdic.keys()]
+    .filter((name) => ddic[name]?.playground)
+    .map((name) => ({ name, ...ddic[name].playground }));
+  await createUserTables();
+}
+
+// ------------------------------------------------------------------ tables
+
+// What the previous set put into abap.DDIC over the bundle's own entries,
+// like `shadowed` above for abap.Classes.
+const shadowedDdic = new Map();
+
+// The tables of the user's own (src/editor/tables.mjs): name, CREATE TABLE,
+// the rows it starts with - from the DDIC entries the last set defined
+// (tableSetup( ) in src/editor/transpile-core.mjs puts them there).
+let userTables = [];
+
+// The ones created in the database that is open now, to drop before the
+// next set's are created - a set defined without a reset in between (a Run
+// after the tests, the AI Pilot's) would otherwise find its table there.
+const created = new Set();
+
+// The framework's own tables, by name, which a table of the user's may not
+// replace: the drafts are in one of them, and the system tables are what
+// open-abap reads.
+const frameworkTables = new Set(Object.keys(globalThis.abap?.DDIC ?? {}));
+
+// Creates the user's tables in the open database and inserts their rows,
+// each row through the same INSERT an ABAP `INSERT ztab FROM @row` makes: the
+// row is built as the table's own structure, so every value is converted
+// into its column's type under ABAP's rules, and a client field the rows
+// leave out is the client the app runs in. Fresh at every Run - after the
+// reset, on the empty image (resetDatabase( ) below) - and never kept: what
+// an app writes to its tables goes with the Run, like its drafts.
+async function createUserTables() {
+  const abap = globalThis.abap;
+  const db = abap.context.databaseConnections["DEFAULT"];
+  for (const name of created) await db.execute(`DROP TABLE IF EXISTS '${name.toLowerCase()}'`);
+  created.clear();
+  for (const table of userTables) {
+    if (frameworkTables.has(table.name)) {
+      throw new Error(`${table.name} is already a DDIC object of the framework or of open-abap - give your table a name of its own.`);
+    }
+    await db.execute(table.create);
+    created.add(table.name);
+    const type = abap.DDIC[table.name].type();
+    const fields = type.get();
+    const mandt = abap.builtin.sy.get().mandt.get();
+    for (const [i, row] of table.rows.entries()) {
+      const line = type.clone();
+      const columns = line.get();
+      for (const [field, value] of Object.entries(row)) {
+        const column = columns[field.toLowerCase()];
+        if (column === undefined || fields[field.toLowerCase()] === undefined) {
+          throw new Error(`${table.name.toLowerCase()}.tabu.json, row ${i + 1}: ${table.name} has no field ${field}.`);
+        }
+        try {
+          column.set(value);
+        } catch (e) {
+          const why = e?.constructor?.INTERNAL_NAME ?? e?.message ?? String(e);
+          throw new Error(`${table.name.toLowerCase()}.tabu.json, row ${i + 1}: ${JSON.stringify(value)} does not fit ${field} (${why}).`, { cause: e });
+        }
+      }
+      if (columns.mandt !== undefined && !Object.keys(row).some((f) => f.toLowerCase() === "mandt")) columns.mandt.set(mandt);
+      const subrc = await abap.statements.insertDatabase(table.name, { values: line });
+      if (subrc !== 0) {
+        throw new Error(`${table.name.toLowerCase()}.tabu.json, row ${i + 1}: a row with the same key is already in ${table.name}.`);
+      }
+    }
   }
 }
 
