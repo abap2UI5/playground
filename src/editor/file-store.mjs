@@ -53,6 +53,9 @@ export function createEditor(container, starting, options = {}) {
 
 export function setEditorTheme() {}
 export function setEditorReadOnly() {}
+// Nothing to lock and no line to mark on a page that draws no editor.
+export function lockEditor() {}
+export function markLines() {}
 
 export function connectRegistry() {
   connected = true;
