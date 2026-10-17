@@ -158,6 +158,47 @@ test("a run is refused while the ABAP has an error, and the line is named", asyn
   await expect(page.frameLocator("#app").getByText(MAIN_MARK)).toBeVisible();
 });
 
+// The app on the right is the last code that RAN, and between an edit and the
+// next Run that is not the code on screen. Both places said nothing about it:
+// the status line went on saying "running" over a statement that no longer
+// compiled, and a Run that stopped on it left the old app fully alive with
+// nothing on it to say it was not the editor's.
+test("the status line and the frame say when the app is not the code on screen", async ({ page }) => {
+  await open(page);
+  const status = page.locator("#status");
+  const stale = page.locator("#app-stale");
+
+  // Broken by an edit, not yet run: the app runs on, the line says why it is
+  // not the code in the editor - and the same line comes back once it is fixed.
+  await setSource(page, app("Broken", "out = = `no`."));
+  await expect(status).toHaveText(/^running - the code on screen has \d+ errors?$/);
+  await expect(status).not.toHaveClass(/error/);
+  await setSource(page, app("Fixed", "out = `fixed`."));
+  await expect(status).toHaveText("running");
+
+  // Run on broken code: refused, and the app left in the frame is marked as
+  // the last one that ran - dimmed and labelled, and still the old app, still
+  // answering a click.
+  await setSource(page, app("Broken", "out = = `no`."));
+  await page.locator("#run").click();
+  await expect(status).toContainText("fix them and run again");
+  await expect(page.locator(".app-frame")).toHaveClass(/is-stale/);
+  await expect(stale).toBeVisible();
+  await expect(stale).toContainText("This is the last app that ran - the code on screen has errors");
+  await expect(page.frameLocator("#app").getByText(MAIN_MARK)).toBeVisible();
+  const box = await page.locator("#app").boundingBox();
+  const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.id, [box.x + box.width / 2, box.y + 20]);
+  expect(hit, "the label lets the pointer through to the app").toBe("app");
+
+  // The next run that starts an app takes the mark away.
+  await setSource(page, app("Fixed", "out = `fixed`."));
+  await page.locator("#run").click();
+  await expect(control(page, "txtOut")).toContainText("fixed", { timeout: 60000 });
+  await expect(status).toHaveText("running");
+  await expect(page.locator(".app-frame")).not.toHaveClass(/is-stale/);
+  await expect(stale).toBeHidden();
+});
+
 test("a class under the wrong name is explained rather than silently ignored", async ({ page }) => {
   await open(page);
 

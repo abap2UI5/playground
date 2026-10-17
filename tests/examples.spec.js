@@ -269,7 +269,7 @@ test("a catalogued entry opened over a draft leaves the stored draft for the rel
   const before = await page.locator("#app").getAttribute("data-src");
   await page.locator(".example-row", { hasText: "z2ui5_cl_smp_app_493" }).click();
   await expect(page.locator("#app")).not.toHaveAttribute("data-src", before ?? "", { timeout: 60000 });
-  await expect(page.locator("#status")).toHaveText("running - your draft comes back if you reload", { timeout: 60000 });
+  await expect(page.locator("#status")).toHaveText('running - your draft is kept in Samples, as "Before the last pick"', { timeout: 60000 });
   // The editor reported the new files before the page had marked them as
   // opened, and that one report stored the catalogued class over the draft.
   expect(await stored()).toContain("work of my own");

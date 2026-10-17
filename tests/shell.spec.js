@@ -331,9 +331,15 @@ test("picking a sample replaces the draft, and says how to get it back", async (
   expect(await getSource(page, OTHER.files[0])).not.toContain("about to be replaced");
   // Waited for by its whole text: the sentence from the replacement before it
   // also begins with "running", so a substring match would pass on the old one.
-  await expect(page.locator("#status")).toHaveText("running - your draft comes back if you reload", {
+  // Kept in the Drafts list as well, which is where the sentence points: it
+  // used to say the draft "comes back if you reload", which read as advice to
+  // reload the page.
+  await expect(page.locator("#status")).toHaveText('running - your draft is kept in Samples, as "Before the last pick"', {
     timeout: 60000,
   });
+  await page.locator("#examples").click();
+  await expect(page.locator('.example-row[data-draft="Before the last pick"]')).toBeVisible();
+  await page.keyboard.press("Escape");
   await page.reload();
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
   expect(await getSource(page)).toContain("about to be replaced");
@@ -473,6 +479,30 @@ test("the bar begins and ends as the sample catalogue's bar does", async ({ page
   await expect(theme).toBeHidden();
 });
 
+// The workbench is a landmark, so nothing in it is content outside every
+// landmark - axe's "region" rule found the Auto switch and the Source link
+// there, and a screen reader's list of landmarks could not reach the bar.
+test("the toolbar's controls sit inside a landmark", async ({ page }) => {
+  await open(page);
+  await expect(page.getByRole("region", { name: "Workbench" })).toBeVisible();
+  for (const id of ["#undo", "#examples", "#run", "#autorun", "#status", "#share", "#source-link", "#fullscreen", "#about"]) {
+    const inside = await page.locator(id).evaluate((el) => el.closest('[role="region"][aria-label], header, nav, main, aside') !== null);
+    expect(inside, `${id} is inside a landmark`).toBe(true);
+  }
+});
+
+// Share copies the link the moment it is pressed, and says so - for a
+// moment. The sentence used to stand in the line until the next action,
+// where it read as the state of the page.
+test("the word that the link was copied goes again", async ({ page, context, browserName }) => {
+  await allowClipboard(context, browserName);
+  await open(page);
+  await page.locator("#share").click();
+  await expect(page.locator("#status")).toContainText("link", { timeout: 15000 });
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 10000 });
+});
+
 test("the header keeps to a few rows on a phone", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 760 });
   await open(page);
@@ -486,11 +516,39 @@ test("the header keeps to a few rows on a phone", async ({ page }) => {
   const bar = await page.locator(".bar").boundingBox();
   const toolbar = await page.locator(".toolbar").boundingBox();
   expect(bar.height + toolbar.height, "the header is not a fifth of the phone").toBeLessThan(152);
+  // And the toolbar is ONE row: it was two, with the About button alone on
+  // the second.
+  expect(toolbar.height, "the toolbar is one row").toBeLessThanOrEqual(47);
 
-  // And nothing that has to be reachable was compacted away with the rows.
-  for (const id of ["#undo", "#redo", "#format", "#examples", "#run", "#autorun", "#share", "#source-link", "#status", "#about", ".bar .extra summary"]) {
+  // And nothing that has to be reachable was compacted away with the rows:
+  // what the row has no room for is one tap away, in its menu.
+  for (const id of ["#undo", "#redo", "#examples", "#run", "#status", "#toolbar-more", ".bar .extra summary"]) {
     await expect(page.locator(id)).toBeVisible();
   }
+  await page.locator("#toolbar-more").click();
+  await expect(page.locator("#toolbar-more")).toHaveAttribute("aria-expanded", "true");
+  for (const id of ["#format", "#autorun", "#share", "#source-link", "#fullscreen", "#about"]) {
+    await expect(page.locator(`#toolbar-menu ${id}`)).toBeVisible();
+  }
+  // Each says what it is in words there - the About button is not a stray "i".
+  await expect(page.locator("#about")).toHaveText("About", { useInnerText: true });
+  await expect(page.locator("#format")).toHaveText("Format", { useInnerText: true });
+  // Escape closes it, and so does a choice.
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#toolbar-menu")).toBeHidden();
+  await page.locator("#toolbar-more").click();
+  await page.locator("#about").click();
+  await expect(page.locator("#about-dialog")).toBeVisible();
+  await expect(page.locator("#toolbar-menu")).toBeHidden();
+  await page.keyboard.press("Escape");
+
+  // Back at desk width the controls are in the row again, in their order.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(page.locator("#toolbar-more")).toBeHidden();
+  const order = await page.locator(".toolbar > [id]").evaluateAll((all) => all.map((c) => c.id));
+  expect(order.slice(0, 7)).toEqual(["undo", "redo", "format", "examples", "run", "autorun", "status"]);
+  await expect(page.locator("#about")).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 760 });
   // The theme switch is one press further, in the menu - reachable, not gone.
   await page.locator(".bar .extra summary").click();
   await expect(page.locator("#theme")).toBeVisible();

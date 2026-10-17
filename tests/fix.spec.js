@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { clickEditor, getSource, MAIN_CLASS, open, setSource } from "./helpers.mjs";
+import { clickEditor, getSource, MAIN_CLASS, MAIN_FILE, MAIN_MARK, open, setSource } from "./helpers.mjs";
 
 // Autofix, and the way back to code that came from a link.
 
@@ -82,13 +82,24 @@ test("the fix bar stays away when there is nothing it could do", async ({ page }
   await expect(page.locator(".insight-fixbar")).toHaveCount(0);
 });
 
-test("linked code offers the way back to GitHub, and only linked code does", async ({ page }) => {
+test("linked code offers the way back to GitHub, and only code from somewhere does", async ({ page }) => {
   await open(page);
-  // Over a sample the link is there but inactive: no page to go to, and the
-  // bar does not rearrange itself when one appears.
+  // A sample the page carries is a file in abap2UI5/samples, and the link
+  // goes there - it used to sit inactive over the very first app a visitor
+  // sees, looking broken.
+  const source = page.locator("#source-link");
+  await expect(source).not.toHaveAttribute("aria-disabled", "true");
+  await expect(source).toHaveAttribute("href", `https://github.com/abap2UI5/samples/blob/main/src/${MAIN_FILE}`);
+
+  // Over a draft the link is there but inactive: no page to go to, and the
+  // bar does not rearrange itself when one appears. Its title says why.
+  await setSource(page, (await getSource(page)).replace(MAIN_MARK, "a draft of my own"));
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
   const inactive = page.locator("#source-link");
-  await expect(inactive, "a sample was not linked from anywhere").toHaveAttribute("aria-disabled", "true");
+  await expect(inactive, "a draft was not linked from anywhere").toHaveAttribute("aria-disabled", "true");
   await expect(inactive).not.toHaveAttribute("href", /./);
+  await expect(inactive).toHaveAttribute("title", /No source to open/);
 
   await page.goto("/?src=examples/zcl_linked_example.clas.abap");
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
