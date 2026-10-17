@@ -461,7 +461,7 @@ export function forgetQuery() {
 /** What to open the box with, or `""` — which is every case that is not a
  *  recent query written by this box. */
 export function recallQuery() {
-  let record = null;
+  let record;
   try {
     record = JSON.parse(globalThis.localStorage?.getItem(QUERY_KEY) || "null");
   } catch {

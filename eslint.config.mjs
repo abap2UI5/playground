@@ -17,6 +17,7 @@ export default [
     // build's output, and src/vendor/ is abap2UI5/mcp-server's agent client
     // held to a recorded commit by tools/vendor-agent.mjs - a fix goes upstream.
     ignores: [
+      ".claude/**",
       "deps/**",
       "build/**",
       "dist/**",
@@ -146,26 +147,5 @@ export default [
   {
     files: ["tests/node/**/*.mjs"],
     languageOptions: { globals: { ...globals.node } },
-  },
-
-  // PENDING CLEANUP - temporary. These files were being changed elsewhere when
-  // the linter arrived, so their existing findings are switched off here, file
-  // by file and rule by rule, rather than fixed underneath that work. Remove
-  // each entry once its file is clean; nothing new belongs in this block.
-  //   main.mjs:56 announceStatus imported, never used; :72 asset never read
-  //   ai-agent.mjs:704, pilot-agent.mjs:274/592, pilot.mjs:105/207/543,
-  //   search-engine.mjs:459 - an initial value every path overwrites
-  //   sample-pages.mjs:1410 - `\/` escaped where it need not be
-  {
-    files: ["src/shell/main.mjs"],
-    rules: { "no-unused-vars": "off" },
-  },
-  {
-    files: ["src/shell/ai-agent.mjs", "src/shell/pilot-agent.mjs", "src/shell/pilot.mjs", "src/shell/search-engine.mjs"],
-    rules: { "no-useless-assignment": "off" },
-  },
-  {
-    files: ["tools/sample-pages.mjs"],
-    rules: { "no-useless-escape": "off" },
   },
 ];

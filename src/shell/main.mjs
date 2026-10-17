@@ -53,7 +53,7 @@ import { restoreCheckerSettings } from "./checker-settings.mjs";
 import { setUpSplitter, setUpTabs } from "./layout.mjs";
 import { keepSiteLinksCurrent, rememberHere } from "./site-memory.mjs";
 import { setUpSearch } from "./search-box.mjs";
-import { announceAppHeight, announceReady, announceStatus, startEmbedMessages } from "./embed.mjs";
+import { announceAppHeight, announceReady, startEmbedMessages } from "./embed.mjs";
 import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
 
 import { clearRoundtrips, recordRoundtrip, roundtripList } from "./roundtrips.mjs";
@@ -66,10 +66,6 @@ import { isDark, onThemeChange, setUpTheme } from "./theme.mjs";
 import { setUpExtra } from "./extra.mjs";
 import { closeOnBackdrop, currentLog, describeError, hideOutput, setStatus, showOutput } from "./ui.mjs";
 import { warmUpAppFrame } from "./warm-up.mjs";
-
-// Built rather than written as a literal, so it resolves under a GitHub Pages
-// project path as well as at a site root.
-const asset = (p) => new URL(p, document.baseURI).href;
 
 // The playground's own draft is persistence.mjs's (DRAFT_KEY).
 // The AI Studio's last build (see the draft handler, and chat.mjs).

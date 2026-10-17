@@ -153,7 +153,7 @@ ${foot(BASE)}
   /* A segment that IS a class name is the answer, whatever else the address
      says - /samples/z2ui5_cl_smp_app_004.clas.abap, or a page asked for with
      something after it. */
-  var segsAll = here.toLowerCase().split(/[\/.]+/);
+  var segsAll = here.toLowerCase().split(/[/.]+/);
   for (var e = 0; e < rows.length; e++) {
     if (segsAll.indexOf(rows[e][0]) >= 0) scored.push([1e9, "samples/" + rows[e][0] + "/", rows[e][1], rows[e][0].toUpperCase()]);
   }

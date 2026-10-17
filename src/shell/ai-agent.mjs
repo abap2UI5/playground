@@ -596,7 +596,7 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
     } catch (e) {
       // A refusal names what is possible; the screen goes with it, so the
       // next act needs no look first.
-      let screen = "";
+      let screen;
       try {
         screen = `\n\nThe screen now:\n${screenText(await operatorOf().look())}`;
       } catch {

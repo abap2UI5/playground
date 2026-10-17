@@ -81,8 +81,6 @@ export function createChatRoom({ prefix, el, onBusy, onStartOver, showWelcome, r
   let note;
   const rows = new Map();
   let busy = false;
-  // The files going with the next message (attach-ui.mjs).
-  let attaching;
 
   function addLine(kind, text) {
     const div = document.createElement("div");
@@ -237,7 +235,7 @@ export function createChatRoom({ prefix, el, onBusy, onStartOver, showWelcome, r
   // Files for the next message: the paperclip and a paste here, a drop where
   // the room listens for one (attach-ui.mjs). The kinds and the limit are the
   // agent chunk's.
-  attaching = setUpAttaching({
+  const attaching = setUpAttaching({
     prefix,
     button: el.attach,
     input: el.fileInput,

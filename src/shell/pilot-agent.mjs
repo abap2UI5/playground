@@ -264,7 +264,7 @@ export function createPilot({ apiKey, workspace, provider: settings, host, ui, s
   // What the model is told about an app: its mirror, and the reader's typing
   // the mirror never hears of (no roundtrip).
   const stateOf = (a) => {
-    let typed = "";
+    let typed;
     try {
       typed = JSON.stringify(a.frame?.()?.pending?.() ?? {});
     } catch {
@@ -530,7 +530,7 @@ export function createPilot({ apiKey, workspace, provider: settings, host, ui, s
     } catch (e) {
       // A refusal of the client names what is possible; the screen goes
       // with it, so the next act needs no look first.
-      let screen = "";
+      let screen;
       try {
         screen = `\n\nThe screen now:\n${snapshotText(app, await operator.look())}`;
       } catch {

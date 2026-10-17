@@ -81,7 +81,7 @@ const classOf = (files) => files[0].name.replace(/\.clas\.abap$/, "");
 // Which tab a roundtrip came from: the frame's own address names it
 // (?pilot=<tab>), and Run's frame names none.
 function tabFrom(from) {
-  let id = null;
+  let id;
   try {
     id = from ? new URL(from, document.baseURI).searchParams.get("pilot") : null;
   } catch {
@@ -183,7 +183,7 @@ function loadFrame(tab) {
 async function started(tab, versionBefore) {
   const until = performance.now() + 30000;
   while (performance.now() < until) {
-    let rendering = true;
+    let rendering;
     try {
       rendering = frameApi(tab)?.busy() !== false;
     } catch {
@@ -502,7 +502,7 @@ function renderSees() {
   }
   // The reader's unsent typing is on the model's screen too - typing costs
   // no roundtrip, so it is looked for while the panel is open.
-  let typed = {};
+  let typed;
   try {
     typed = frameApi(tab)?.pending?.() ?? {};
   } catch {
