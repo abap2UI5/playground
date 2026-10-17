@@ -75,6 +75,7 @@ import { isSapui5Only } from "../src/shell/ui5-libs.mjs";
 import { githubUrlOf, rawUrlOf } from "../src/shell/catalogue-urls.mjs";
 import { highlightAbapLines } from "./abap-highlight.mjs";
 import { fetchSampleSources } from "./sample-sources.mjs";
+import { THEME_BOOT, THEME_MENU, inlineScript } from "../src/shell/theme-boot.mjs";
 
 /* Where the site is published. Only these pages need to know: a canonical
  * link and a sitemap are absolute by definition, and everything else on this
@@ -172,74 +173,13 @@ const cut = (text, max) => {
   return points.length <= max ? one : `${points.slice(0, max - 1).join("").replace(/[\s,;:.-]+$/, "")}…`;
 };
 
-/* The stored theme before the first paint - the same two lines as the
- * catalogue page and the playground's index.html, and kept in step with them
- * by hand. A page that painted light and turned dark on load would be the one
- * flash this site does not have anywhere else. */
-const THEME_SCRIPT = `<script>
-  try {
-    var t = localStorage.getItem("abap2ui5-playground:theme");
-    if (t === "dark" || t === "light") document.documentElement.dataset.theme = t;
-  } catch (e) { /* a browser that refuses storage still gets the system theme */ }
-</script>`;
-
-/* The bar's menu and the theme button inside it, wired - the hand copies of
- * setUpExtra() and setUpTheme() in src/catalogue/catalogue.mjs, which these
- * pages cannot import: they carry no bundle, which is most of what makes them
- * what they are. The menu is a <details> and opens on its own; this closes it
- * on a click anywhere else and on Escape. The switch: same key, same rule (a
- * choice that equals the system is forgotten rather than stored, so a page
- * switched back follows the system again), kept in step with that file and
- * with src/shell/theme.mjs by hand, as THEME_SCRIPT above is with its two.
- *
- * At the end of the body rather than in the head: it needs the bar to exist,
- * and nothing is painted differently by it - the stored theme was applied
- * before the first paint by THEME_SCRIPT. */
-const MENU_SCRIPT = `<script>
-  (function () {
-    var extra = document.getElementById("extra");
-    if (extra) {
-      document.addEventListener("click", function (e) {
-        if (extra.open && !extra.contains(e.target)) extra.open = false;
-      });
-      document.addEventListener("keydown", function (e) {
-        if (e.key === "Escape" && extra.open) { extra.open = false; extra.querySelector("summary").focus(); }
-      });
-    }
-    var button = document.getElementById("theme");
-    if (!button) return;
-    var media = window.matchMedia("(prefers-color-scheme: dark)");
-    var system = function () { return media.matches ? "dark" : "light"; };
-    var tell = function () {
-      button.setAttribute("aria-checked", String((document.documentElement.dataset.theme || system()) === "dark"));
-    };
-    tell();
-    button.addEventListener("click", function () {
-      var now = document.documentElement.dataset.theme || system();
-      var next = now === "dark" ? "light" : "dark";
-      document.documentElement.dataset.theme = next;
-      tell();
-      try {
-        if (next === system()) localStorage.removeItem("abap2ui5-playground:theme");
-        else localStorage.setItem("abap2ui5-playground:theme", next);
-      } catch (e) { /* a browser that refuses storage still gets the switch, just not the memory */ }
-    });
-    /* Read again when the page comes back from the back/forward cache or
-       another tab flips it - the catalogue's own setUpTheme( ) does the
-       same. */
-    var resync = function () {
-      var stored = null;
-      try { stored = localStorage.getItem("abap2ui5-playground:theme"); } catch (e) { /* blocked storage */ }
-      if (stored === "dark" || stored === "light") document.documentElement.dataset.theme = stored;
-      else delete document.documentElement.dataset.theme;
-      tell();
-    };
-    addEventListener("pageshow", function (e) { if (e.persisted) resync(); });
-    addEventListener("storage", function (e) { if (e.key === "abap2ui5-playground:theme" || e.key === null) resync(); });
-    /* And when the system flips the theme under a page that follows it. */
-    if (media.addEventListener) media.addEventListener("change", tell);
-  })();
-</script>`;
+/* The stored theme before the first paint, and the bar's menu with the switch
+ * inside it, wired - the same text the catalogue and the playground carry,
+ * written once in src/shell/theme-boot.mjs, which says why it is inline.
+ * These pages carry no bundle, which is most of what makes them what they
+ * are, so the menu's script is inline here too, at the end of the body. */
+const THEME_SCRIPT = inlineScript(THEME_BOOT);
+const MENU_SCRIPT = inlineScript(THEME_MENU);
 
 /* Where the reader is and where the documentation was left, the outline and
  * the line numbers: the three scripts every one of these pages used to carry

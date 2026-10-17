@@ -417,7 +417,7 @@ for (const row of pages.rows) stamp.update(`${row.raw}\0${row.code ?? ""}\0`);
 for (const tool of ["build-catalogue.mjs", "sample-pages.mjs", "sample-sources.mjs", "abap-highlight.mjs", "html.mjs"]) {
   stamp.update(fs.readFileSync(path.join(ROOT, "tools", tool)));
 }
-for (const shared of ["ui5-libs.mjs", "ui5-libraries.mjs"]) stamp.update(fs.readFileSync(path.join(ROOT, "src", "shell", shared)));
+for (const shared of ["ui5-libs.mjs", "ui5-libraries.mjs", "theme-boot.mjs"]) stamp.update(fs.readFileSync(path.join(ROOT, "src", "shell", shared)));
 const hash = stamp.digest("hex");
 const written = ["samples/apps.json", "samples/all/index.html", "samples/sample.css", "samples/llms.txt", "sitemap.xml", "404.html", "llms.txt"];
 const current =

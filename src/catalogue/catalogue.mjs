@@ -99,67 +99,10 @@ const isFiltered = () =>
   state.q !== "" || state.source !== "" || state.control !== "" || state.library !== ""
   || state.release !== "" || state.runs;
 
-/* ------------------------------------------------------------------ theme */
-
-const THEME_KEY = "abap2ui5-playground:theme";
-
-function setUpTheme() {
-  const media = window.matchMedia("(prefers-color-scheme: dark)");
-  const system = () => (media.matches ? "dark" : "light");
-  el.theme.setAttribute("aria-checked", String((document.documentElement.dataset.theme || system()) === "dark"));
-  el.theme.addEventListener("click", () => {
-    const now = document.documentElement.dataset.theme || system();
-    const next = now === "dark" ? "light" : "dark";
-    document.documentElement.dataset.theme = next;
-    el.theme.setAttribute("aria-checked", String(next === "dark"));
-    try {
-      /* A choice that equals the system is forgotten rather than stored, so a
-       * page switched back follows the system again from then on. Same rule as
-       * src/shell/theme.mjs, and the same key, so the two pages agree. */
-      if (next === system()) localStorage.removeItem(THEME_KEY);
-      else localStorage.setItem(THEME_KEY, next);
-    } catch {
-      // A browser that refuses storage still gets the switch, just not the memory.
-    }
-  });
-  /* The switch is shared by every page on this origin, and the bar hands
-     pages back alive from the back/forward cache (returnTo( ) in
-     site-memory.mjs) - so a page that comes back, or sees another tab flip
-     it, reads the stored choice again. src/shell/theme.mjs does the same. */
-  const resync = () => {
-    let stored = null;
-    try { stored = localStorage.getItem(THEME_KEY); } catch { /* blocked storage: the system decides */ }
-    if (stored === "dark" || stored === "light") document.documentElement.dataset.theme = stored;
-    else delete document.documentElement.dataset.theme;
-    el.theme.setAttribute("aria-checked", String((document.documentElement.dataset.theme || system()) === "dark"));
-  };
-  addEventListener("pageshow", (e) => { if (e.persisted) resync(); });
-  addEventListener("storage", (e) => { if (e.key === THEME_KEY || e.key === null) resync(); });
-  /* With no choice stored the page follows the system, and the stylesheet
-     follows it live - so the switch has to as well, or it went on telling a
-     screen reader "off" over a page the system had just turned dark. */
-  media.addEventListener?.("change", () => {
-    el.theme.setAttribute("aria-checked", String((document.documentElement.dataset.theme || system()) === "dark"));
-  });
-}
-
-/* The menu behind the bar's last button is a <details>, so it opens and closes
- * on its own; this only closes it the two ways a menu is expected to close and
- * a <details> does not - a click anywhere outside it, and Escape, which also
- * hands focus back to the button. The per-sample pages carry the same lines
- * inline (tools/sample-pages.mjs). */
-function setUpExtra() {
-  const extra = el.extra;
-  document.addEventListener("click", (e) => {
-    if (extra.open && !extra.contains(e.target)) extra.open = false;
-  });
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && extra.open) {
-      extra.open = false;
-      extra.querySelector("summary").focus();
-    }
-  });
-}
+/* The theme switch and the bar's menu are not wired here: the page carries
+ * the same inline script every sample page does (THEME_MENU in
+ * src/shell/theme-boot.mjs, written in by tools/build-site.mjs), so the two
+ * kinds of page cannot come to behave differently. */
 
 /* ------------------------------------------------------------------- data */
 
@@ -458,11 +401,9 @@ async function start() {
   for (const [key, id] of [
     ["q", "q"], ["source", "f-source"], ["control", "f-control"], ["library", "f-library"],
     ["release", "f-release"], ["runs", "f-runs"], ["results", "results"], ["count", "count"],
-    ["clear", "clear"], ["theme", "theme"], ["extra", "extra"], ["built", "built"],
+    ["clear", "clear"], ["built", "built"],
   ]) el[key] = $(id);
 
-  setUpTheme();
-  setUpExtra();
   /* The bar, before the catalogue itself: where the reader is right now - this
    * URL, filters and all - and where the documentation was last left. Both
    * belong to the bar rather than to the list, so neither waits on the fetch

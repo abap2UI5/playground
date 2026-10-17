@@ -2,9 +2,10 @@
 // and its repositories. It is a <details>, so it opens and closes on its own;
 // this only closes it the two ways a menu is expected to close and a <details>
 // does not: a click anywhere outside it, and Escape, which also hands focus
-// back to the button. The sample catalogue carries the same lines
-// (setUpExtra() in src/catalogue/catalogue.mjs) and the per-sample pages an
-// inline copy (tools/sample-pages.mjs).
+// back to the button. The sample catalogue and the per-sample pages carry
+// the same lines inline (THEME_MENU in src/shell/theme-boot.mjs, written into
+// them by the build); this one also closes the menu on a click into the app
+// frame, which only this page has.
 export function setUpExtra() {
   const extra = document.getElementById("extra");
   if (!extra) return;

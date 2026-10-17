@@ -5,16 +5,19 @@
 // tools/build-framework.mjs writes dist/runtime, tools/build-ui5.mjs writes
 // dist/app. This step is the page itself: the shell bundle, its stylesheet, and
 // whatever static assets the shell needs.
-import crypto from "node:crypto";
-import { stripHtmlComments, withPolicy } from "./html.mjs";
+//
+// What it writes besides the bundles has modules of its own: the documents
+// (tools/site-documents.mjs - index.html, the two AI doors and the catalogue's
+// page) and the service worker (tools/service-worker.mjs), both of which only
+// read what the builds here produced.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
 import { MONACO_CSS, abap2ui5LinterPlugin, monacoCssPlugin, nodeStubPlugin } from "./esbuild-plugins.mjs";
-import { appFirstLoad } from "../src/shell/warm-up.mjs";
 import { SAMPLE_LIST, SAMPLE_REPO } from "../src/editor/sample-list.mjs";
-import { SITE } from "./sample-pages.mjs";
+import { writeCatalogueDocument, writeIndex } from "./site-documents.mjs";
+import { chunks, writeServiceWorker } from "./service-worker.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "src", "shell");
@@ -317,7 +320,8 @@ writeSamples();
 // off downloads during the parse, where the network is idle, and is
 // evaluated when it lands. The chunks carry a hash in their name, so the
 // service worker's precache list and the build id are written from the
-// directory rather than from a fixed list - see writeServiceWorker( ) below.
+// directory rather than from a fixed list - see writeServiceWorker( ) in
+// tools/service-worker.mjs.
 //
 // `result` is the page build's metafile - what writeIndex( ) and
 // writeServiceWorker( ) read the chunk names off - and buildPage( ) is the
@@ -475,7 +479,7 @@ async function buildMonacoCss() {
   return rel;
 }
 
-writeIndex();
+writeIndex({ metafile: result.metafile, monacoCss });
 // The icons and the app manifest - what a tab, a home screen and an install
 // prompt show for this page.
 for (const name of ["favicon.png", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "manifest.webmanifest",
@@ -505,36 +509,7 @@ for (const name of ["favicon.png", "apple-touch-icon.png", "icon-192.png", "icon
 // The bundles themselves came out of buildCatalogue( ) above, beside the
 // other three; what follows is the document and the stylesheet.
 fs.copyFileSync(path.join(ROOT, "src", "catalogue", "catalogue.css"), path.join(DIST, "samples", "catalogue.css"));
-/* The catalogue's document, without the comments its source is written with -
-   four kilobytes of a twenty-kilobyte page - and with its policy in the head
-   (tools/html.mjs, both). */
-/* The one figure the document carries as text - the count in the no-JS
-   fallback, the sentence a crawler and a reader without scripts get - is
-   written here from the index the catalogue step has just built, so it cannot
-   say "700-odd" while the index holds 772. A source with no marker, or an
-   index that is not there, fails the build rather than publishing a guess. */
-const catalogueSource = fs.readFileSync(path.join(ROOT, "src", "catalogue", "index.html"), "utf8");
-if (!catalogueSource.includes("__SAMPLE_COUNT__")) throw new Error("src/catalogue/index.html lost its __SAMPLE_COUNT__ marker");
-/* The site's own address in the canonical, the og:url and the JSON-LD - the
-   same SITE every generated page writes, so a fork (PG_SITE_URL) does not
-   declare the upstream catalogue as the canonical copy of its own. */
-if (!catalogueSource.includes("__SITE__")) throw new Error("src/catalogue/index.html lost its __SITE__ marker");
-const catalogueIndex = JSON.parse(fs.readFileSync(path.join(DIST, "samples", "apps.json"), "utf8"));
-/* A missing index or one in a shape this does not know fails the build. An
-   EMPTY one does not: it is what build-catalogue writes, by design, when none
-   of the three catalogues arrived (raw.githubusercontent.com down during a
-   deploy), and that step's failure is the survivable one - the page then
-   says the catalogue could not be loaded. Throwing here made it fatal after
-   all. */
-if (!Array.isArray(catalogueIndex.entries ?? catalogueIndex.samples) || !Array.isArray(catalogueIndex.sources)) {
-  throw new Error("dist/samples/apps.json is not an index - build-catalogue did not run, or its shape changed");
-}
-const sampleCount = (catalogueIndex.entries ?? catalogueIndex.samples).length;
-if (!sampleCount) log("WARNING: the catalogue index is empty - the page will say it could not be loaded");
-fs.writeFileSync(
-  path.join(DIST, "samples", "index.html"),
-  withPolicy(stripHtmlComments(catalogueSource.replaceAll("__SITE__", SITE).replace("__SAMPLE_COUNT__", sampleCount ? String(sampleCount) : "no"))),
-);
+writeCatalogueDocument();
 
 /* THE HIGHLIGHTER, PUBLISHED - the file that decides which words in a class
  * are red and which are green, beside the pages it decides it for.
@@ -601,295 +576,6 @@ for (const required of ["runtime/framework.mjs", "runtime/sql-wasm.wasm", "app/i
   }
 }
 
-writeServiceWorker();
-
-// ------------------------------------------------------------ service worker
-
-// src/shell/sw.js, with an id for this build written into it - see the comment
-// at the top of that file for what the worker does with it. The id names the
-// cache, so it is what keeps one build's assets from ever being served beside
-// another's; and because the worker script is the only place it appears, a
-// build that produced identical output produces an identical worker, which the
-// browser then correctly declines to reinstall.
-//
-// Everything the worker may cache goes into the id. The core assets go in by
-// content - everything under assets/, which is the bundle, its chunks, its
-// stylesheet and Monaco's font, plus the corpus and the runtime. dist/app -
-// the UI5 build, thousands of files and most of the site by weight - goes in
-// as a listing of paths and sizes: reading it whole to hash it would cost
-// more than the rest of this step put together, and a UI5 build that changed
-// without a single file changing size is not a thing that happens.
-//
-// The chunks are written into the worker as well, so it can precache them:
-// their names carry a hash, so no list in sw.js could name them in advance.
-// And the core assets that do NOT carry one - the bundle, its stylesheet, the
-// registry worker, the corpus, the framework, SQLite - go in with the hash
-// of their bytes each, so the worker can refuse a copy from another build:
-// the CDN and the HTTP cache both hand those out for a while after a deploy,
-// and a cache filled from them was half of one build and half of the next.
-function writeServiceWorker() {
-  const id = crypto.createHash("sha256");
-  const unhashed = [
-    "assets/shell.mjs",
-    "assets/shell.css",
-    "editor/registry.mjs",
-    // The abap2UI5 linter, which the worker loads at run time: unhashed in
-    // its name like the worker, so hashed here like the worker.
-    "editor/lint.mjs",
-    "editor/corpus.json",
-    "runtime/framework.mjs",
-    "runtime/sql-wasm.wasm",
-    // The type. Not hashed in its name and not under assets/, so it is listed
-    // here like the rest: without it an installed playground opened offline
-    // falls back through the stack to the reader's own face, which is a
-    // different page from the one they installed.
-    "fonts/inter-roman-latin.woff2",
-    "fonts/inter-italic-latin.woff2",
-  ];
-  const core = [
-    ...fs.readdirSync(ASSETS).sort().map((name) => `assets/${name}`),
-    ...unhashed.filter((rel) => !rel.startsWith("assets/")),
-  ];
-  const hashes = {};
-  for (const rel of core) {
-    const bytes = fs.readFileSync(path.join(DIST, rel));
-    id.update(rel);
-    id.update(bytes);
-    if (unhashed.includes(rel)) hashes[rel] = crypto.createHash("sha256").update(bytes).digest("hex");
-  }
-  for (const entry of listing(path.join(DIST, "app")).sort()) id.update(entry);
-  /* And the BYTES of everything outside app/resources/: the frontend's own
-     files and the playground's frontend-bridge.js, which the worker serves
-     cache-first with no hash of its own. By path and size alone, an edit
-     that kept a file's length (a `!==` turned `===`, a constant changed)
-     left the build id - and so the worker, and so every returning visitor's
-     cached copy - exactly as it was. Seventy files and half a megabyte; the
-     OpenUI5 tree under resources/ is version-pinned and stays a listing. */
-  for (const entry of listing(path.join(DIST, "app")).sort()) {
-    const rel = entry.slice(0, entry.lastIndexOf(":"));
-    if (!rel.startsWith("resources/")) id.update(fs.readFileSync(path.join(DIST, "app", rel)));
-  }
-
-  /* The two documents, by their bytes as well: the worker keeps a document
-     only beside the assets of its own build (DOC_HASHES in sw.js), so a
-     change to index.html alone has to be a new build - or the worker would
-     go on serving the document it holds for good. app/index.html is in the
-     id already, with the rest of app/ outside resources/. */
-  const docs = {};
-  for (const rel of ["index.html", "app/index.html", "ai/index.html", "pilot/index.html"]) {
-    const bytes = fs.readFileSync(path.join(DIST, rel));
-    if (rel !== "app/index.html") id.update(bytes);
-    docs[rel] = crypto.createHash("sha256").update(bytes).digest("hex");
-  }
-
-  const source = fs.readFileSync(path.join(SHELL, "sw.js"), "utf8");
-  for (const marker of ["__BUILD_ID__", "__CHUNKS__", "__APP_FIRST_LOAD__", "__CORE__", "__DOCS__"]) {
-    if (!source.includes(marker)) {
-      console.error(`build-site: ERROR src/shell/sw.js no longer has a ${marker} to substitute`);
-      process.exit(1);
-    }
-  }
-  const build = id.digest("hex").slice(0, 16);
-  // The frame's first load in both themes, for the worker to precache - the
-  // list the page warms the HTTP cache with, so the two cannot drift apart.
-  const firstLoad = [...new Set([...appFirstLoad("sap_horizon"), ...appFirstLoad("sap_horizon_dark")])];
-  fs.writeFileSync(
-    path.join(DIST, "sw.js"),
-    source
-      .replaceAll("__BUILD_ID__", build)
-      /* Monaco's stylesheet is precached with the chunks: hashed in its name
-         like them, and loaded by the first visit's page before the worker
-         controls it, so the on-use path never sees that request. */
-      .replace("__CHUNKS__", JSON.stringify([...chunks().filter((c) => !onUseOnly(c)), monacoCss]))
-      .replace("__APP_FIRST_LOAD__", JSON.stringify(firstLoad))
-      .replace("__CORE__", JSON.stringify(hashes))
-      .replace("__DOCS__", JSON.stringify(docs)),
-  );
-  log(`sw.js (build ${build})`);
-}
-
-// index.html, with a modulepreload for every chunk assets/shell.mjs imports
-// statically. Splitting the bundle put the code the entry shares with its
-// chunks - most of abaplint, which the transpiler needs too - into a chunk of
-// its own that shell.mjs imports at its top, and a static import is only
-// discovered once the importing file has arrived: without the preload the
-// chunk would be fetched after the bundle instead of beside it, a round trip
-// and a serialized download on the path to the first editor frame. The names
-// carry a hash, so the tags are written here rather than by hand. Only the
-// static imports: the dynamic ones are wanted during the parse and fetched
-// then, where the network is idle.
-function writeIndex() {
-  const outputs = result.metafile.outputs;
-  const rel = (out) => path.relative(DIST, path.join(ROOT, out)).split(path.sep).join("/");
-  const entry = outputs[path.relative(ROOT, path.join(ASSETS, "shell.mjs"))];
-  const statics = entry.imports.filter((i) => i.kind === "import-statement").map((i) => rel(i.path));
-  const tags = statics.map((href) => `<link rel="modulepreload" href="${href}">`);
-  // Monaco's chunk - the output whose entry point is src/editor/monaco-editor.mjs,
-  // which src/editor/editor.mjs imports dynamically - and whatever it imports
-  // statically that the entry does not already preload. The inline script
-  // preloads these on every page but an app-only one; see index.html.
-  const monaco = Object.keys(outputs).find((o) => outputs[o].entryPoint === "src/editor/monaco-editor.mjs");
-  if (!monaco) {
-    console.error("build-site: ERROR the bundle has no chunk for src/editor/monaco-editor.mjs - is it still imported dynamically?");
-    process.exit(1);
-  }
-  const editorPreloads = [
-    rel(monaco),
-    ...outputs[monaco].imports
-      .filter((i) => i.kind === "import-statement" && !i.external)
-      .map((i) => rel(i.path))
-      .filter((href) => !statics.includes(href)),
-  ];
-  const source = fs.readFileSync(path.join(SHELL, "index.html"), "utf8");
-  const marker = "<!-- __MODULEPRELOADS__ -->";
-  for (const needed of [marker, "__EDITOR_PRELOADS__", "__EDITOR_CSS__"]) {
-    if (!source.includes(needed)) {
-      console.error(`build-site: ERROR src/shell/index.html no longer has a ${needed} to substitute`);
-      process.exit(1);
-    }
-  }
-  /* After the substitution, without the comments: 9.8 kB of the 37 kB document,
-     a third of its compressed weight (tools/html.mjs). */
-  const html = stripHtmlComments(
-    source
-      .replace(marker, tags.join("\n"))
-      .replace("__EDITOR_PRELOADS__", JSON.stringify(editorPreloads))
-      /* Monaco's stylesheet, linked by the same script on the same pages. */
-      .replace("__EDITOR_CSS__", JSON.stringify(monacoCss)),
-  );
-  fs.writeFileSync(path.join(DIST, "index.html"), html);
-  log(`index.html (${tags.length} chunk${tags.length === 1 ? "" : "s"} preloaded, Monaco's ${editorPreloads.length} where the editor is shown)`);
-  writeAiPage(html);
-  writePilotPage(html);
-}
-
-// The AI Studio's page, ai/index.html: the playground's own document, one
-// directory down, marked as the studio. Not linked from anywhere - the
-// studio is still being built, so it is reached by its address alone and
-// kept out of search engines. `<base href="../">` makes every relative URL
-// in it - the bundle, the workers the inline script starts, the app frame,
-// the service worker's scope - resolve where the playground's own do, so
-// there is one build of everything and two doors into it. main.mjs reads
-// `data-page="ai"` and opens the studio on an empty class.
-function writeAiPage(html) {
-  const page = html
-    .replace(/<html([^>]*)>/, '<html$1 data-page="ai">')
-    .replace("<head>", `<head>\n<base href="../">\n<meta name="robots" content="noindex">${preloadsFor("src/shell/chat.mjs")}`)
-    .replace(/<title>[^<]*<\/title>/, "<title>AI Studio · abap2UI5</title>")
-    .replace(/<link rel="canonical"[^>]*>\n?/, "");
-  for (const mark of ['data-page="ai"', '<base href="../">', "<title>AI Studio"]) {
-    if (!page.includes(mark)) {
-      console.error(`build-site: ERROR the AI page could not be written - ${mark} did not land in src/shell/index.html's copy`);
-      process.exit(1);
-    }
-  }
-  fs.mkdirSync(path.join(DIST, "ai"), { recursive: true });
-  fs.writeFileSync(path.join(DIST, "ai", "index.html"), page);
-  log("ai/index.html (the AI Studio)");
-}
-
-// The AI Pilot's page, pilot/index.html: the same document again, one
-// directory down, the way ai/index.html is - see writeAiPage( ). main.mjs
-// reads `data-page="pilot"` and src/shell/pilot.mjs turns the page into the
-// Pilot: the app on the stage, Claude operating it from the chat beside it.
-// Not linked and not indexed while it is being built.
-function writePilotPage(html) {
-  const page = html
-    .replace(/<html([^>]*)>/, '<html$1 data-page="pilot">')
-    .replace("<head>", `<head>\n<base href="../">\n<meta name="robots" content="noindex">${preloadsFor("src/shell/pilot.mjs")}`)
-    .replace(/<title>[^<]*<\/title>/, "<title>AI Pilot · abap2UI5</title>")
-    .replace(/<link rel="canonical"[^>]*>\n?/, "");
-  for (const mark of ['data-page="pilot"', '<base href="../">', "<title>AI Pilot"]) {
-    if (!page.includes(mark)) {
-      console.error(`build-site: ERROR the Pilot page could not be written - ${mark} did not land in src/shell/index.html's copy`);
-      process.exit(1);
-    }
-  }
-  fs.mkdirSync(path.join(DIST, "pilot"), { recursive: true });
-  fs.writeFileSync(path.join(DIST, "pilot", "index.html"), page);
-  log("pilot/index.html (the AI Pilot)");
-}
-
-// The room of an AI page - src/shell/chat.mjs for the studio, src/shell/pilot.mjs
-// for the Pilot - is a chunk main.mjs imports on that page alone, the moment
-// boot( ) starts; its hashed name is only known here, so each page preloads
-// its own, with whatever that chunk imports statically that the shell does
-// not already preload - the way index.html preloads Monaco's.
-function preloadsFor(entryPoint) {
-  const outputs = result.metafile.outputs;
-  const rel = (out) => path.relative(DIST, path.join(ROOT, out)).split(path.sep).join("/");
-  const shell = Object.keys(outputs).find((o) => outputs[o].entryPoint === "src/shell/main.mjs");
-  const statics = outputs[shell].imports.filter((i) => i.kind === "import-statement").map((i) => rel(i.path));
-  const room = Object.keys(outputs).find((o) => outputs[o].entryPoint === entryPoint);
-  if (!room) {
-    console.error(`build-site: ERROR the bundle has no chunk for ${entryPoint} - is it still imported dynamically?`);
-    process.exit(1);
-  }
-  const hrefs = [rel(room), ...outputs[room].imports
-    .filter((i) => i.kind === "import-statement" && !i.external)
-    .map((i) => rel(i.path))
-    .filter((href) => !statics.includes(href))];
-  return hrefs.map((href) => `\n<link rel="modulepreload" href="${href}">`).join("");
-}
-
-// The chunks the two AI pages load (src/shell/ai-agent.mjs, the AI Studio's
-// conversation with the app-building guide; src/shell/pilot-agent.mjs, the
-// AI Pilot's with the vendored agent client) are left out of the worker's
-// precache, and so is everything only they reach - the Anthropic SDK, which
-// both import and esbuild therefore splits into a `chunk-<hash>.mjs` of its
-// own, a name that says nothing about who needs it. Precached, they would be
-// downloaded by every visitor the worker installs for, and the point of the
-// chunks is that only somebody on one of those pages pays for them; the
-// worker still keeps them once used (`assets/*.mjs` is on its allow list),
-// and a chat needs the network to do anything anyway. So the precache is
-// what the page bundle reaches WITHOUT crossing into one of those two - read
-// off esbuild's own module graph rather than off the file names.
-// A function rather than a constant: the service worker is written above
-// this line, and a const read there would still be in its temporal dead zone.
-function precachedChunks() {
-  /* The two AI conversations, and since the rooms around them became chunks
-     of their own (src/shell/chat.mjs, src/shell/pilot.mjs - imported by
-     main.mjs on their pages alone), those rooms too: a visitor who never
-     opens either page has no use for them. */
-  const ON_USE_ENTRIES = /^src\/shell\/(?:ai-agent|pilot-agent|chat|pilot)\.mjs$/;
-  const outputs = result.metafile.outputs;
-  const shell = Object.keys(outputs).find((o) => outputs[o].entryPoint === "src/shell/main.mjs");
-  const reached = new Set();
-  const stack = [shell];
-  while (stack.length > 0) {
-    const output = stack.pop();
-    if (reached.has(output)) continue;
-    reached.add(output);
-    for (const { path: to, kind, external } of outputs[output]?.imports ?? []) {
-      if (external || !outputs[to]) continue;
-      if (kind === "dynamic-import" && ON_USE_ENTRIES.test(outputs[to].entryPoint ?? "")) continue;
-      stack.push(to);
-    }
-  }
-  return new Set([...reached].map((o) => path.relative(DIST, path.resolve(ROOT, o)).split(path.sep).join("/")));
-}
-function onUseOnly(chunk) {
-  return !precachedChunks().has(chunk);
-}
-
-// The bundle's chunks, as paths relative to dist/: every module under assets/
-// that is not the entry itself.
-function chunks() {
-  return fs
-    .readdirSync(ASSETS)
-    .filter((name) => name.endsWith(".mjs") && name !== "shell.mjs")
-    .sort()
-    .map((name) => `assets/${name}`);
-}
-
-function listing(dir, prefix = "") {
-  const out = [];
-  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    const rel = prefix + e.name;
-    if (e.isDirectory()) out.push(...listing(path.join(dir, e.name), `${rel}/`));
-    else out.push(`${rel}:${fs.statSync(path.join(dir, e.name)).size}`);
-  }
-  return out;
-}
+writeServiceWorker({ metafile: result.metafile, monacoCss });
 
 log("dist/ complete");
