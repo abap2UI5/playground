@@ -1,7 +1,7 @@
 // The page's half of the service worker (src/shell/sw.js): registering it once
 // the page is up, and throwing it away - with every cache it wrote - when the
 // page has reason to think it is serving a mix of two builds. See "What a
-// visitor waits for" in AGENTS.md for how that mix came about.
+// visitor waits for" in docs/design/load-time.md for how that mix came about.
 
 // Registers the service worker that makes a second visit cheap - see
 // src/shell/sw.js for what it keeps and what it deliberately leaves alone.

@@ -10,12 +10,11 @@ its own and, like the studio, no door from the playground while it is being
 built: `pilot/index.html`, written by `writePilotPage( )` in
 `tools/site-documents.mjs` exactly as `writeAiPage( )` writes the studio's -
 `<base href="../">`, `data-page="pilot"`, its own title, `noindex`, no
-canonical link. `main.mjs` reads `data-page`: the editor opens on what a link
+canonical link. `page.mjs` reads `data-page` (`pilotPage`): the editor opens on what a link
 carries (`#` fragment or `?src=`) or on the default sample, never on the
 stored draft, and nothing is stored over it; `setUpPilot( )` gets a small host
-(Run as `runForAgent( )`, files in place of the open ones, a carried sample by
-class, a catalogued class by its raw URL, the samples browser, the frame's
-Pilot API). The room is `body.is-pilot` ("AI Pilot" at the end of
+from `setUpPilotHooks( )` in `agent-hooks.mjs` (Run as `runForAgent( )`, files in place of the open ones, a carried sample by
+class, a catalogued class by its raw URL, the samples browser, Run's frame). The room is `body.is-pilot` ("AI Pilot" at the end of
 `shell.css`), its own palette in both themes and deliberately not the
 studio's: the app has the stage, the chat stands to its right, **What Claude
 sees** (the snapshot, `describeMirror( )`) opens between them, and on a phone
@@ -35,12 +34,13 @@ there), through that server's own client, vendored unchanged into
 **the app frame**, so nothing is simulated and the reader sees every step:
 
 1. `drive(body)` in `pilot.mjs` parks the client's request and asks the frame
-   to send a roundtrip (`__z2ui5PlaygroundPilot.roundtrip( )` in
-   `frontend-bridge.js`: busy, timers cancelled, `Server.roundtrip( )` of the
-   frontend's own component).
-2. The bridge's `roundtrip( )` in `main.mjs` takes the parked request
-   (`takePilotRequest( )`) and sends **it** to the framework in place of the
-   frame's body.
+   to send a roundtrip - a `roundtrip` call by message (`frameApi( )` in
+   `frame-link.mjs`; `pilot.roundtrip( )` in `frontend-bridge.js`: busy,
+   timers cancelled, `Server.roundtrip( )` of the frontend's own component).
+   `drive( )` in `frame-drive.mjs` takes the call's promise.
+2. The frames' `roundtrip( )` in `agent-hooks.mjs` (`offerFrameBridge( )`)
+   takes the parked request (`takePilotRequest( )`) and sends **it** to the
+   framework in place of the frame's body.
 3. The answer goes back to the frame, which renders it with its own code - a
    popup opens, a MessageBox comes up - and to the client.
 
@@ -54,7 +54,19 @@ started from it (`replayOf( )` - the mirror as ONE answer, given to the
 client's start by the transport instead of being sent). So the model always
 acts on the screen the reader is looking at, and the reader can take the
 controls at any moment - the next message carries the new screen in a
-`<screen>` block, as the first message does. Four details are easy to undo:
+`<screen>` block, as the first message does.
+
+**Nothing is read off the frame's window.** The page and the frames speak by
+message only ([runtime.md](runtime.md)), and on this page every frame - Run's
+and each tab's, isolated in `addTab` before its first load - is on an opaque
+origin. What the operator used to read off the frame (`busy`, `slots`,
+`pending`) is answered from the frame's last pushed `state` report; what it
+does (`roundtrip`, `frontend`, `fill`, `carry`) is a `call`. The handle is
+`frameApi( )`: `busy( )` stays true until the report has caught up with the
+last call (`seen`), and `ai-operator.mjs` asks `refresh( )` for a fresh report
+before it reads slots or pending values.
+
+Details that are easy to undo:
 
 - **Read the screen after the frame has settled** (`settled( )`, the bridge's
   `busy( )`): the answer is in the mirror the moment the framework gives it,
@@ -122,7 +134,7 @@ roundtrip it is (`takePilotRequest(from)`, `sawRoundtrip(…, from)`) and each
 tab keeps a mirror of its own. The runtime defines a set of classes as a
 whole (`defineClasses( )` puts back whatever the last set shadowed), so an
 app opened beside the others is not compiled alone: `addAppFiles( )` in
-`main.mjs` puts its files into the editor beside the rest and compiles and
+`agent-hooks.mjs` puts its files into the editor beside the rest and compiles and
 defines the WHOLE set - and stops there, with no fresh database and no Run
 counted, so the apps already open keep their drafts and their frames stay
 current. A set that does not compile is put back as it was - left in, every
@@ -133,7 +145,7 @@ them, so `pilotRan( )` reloads every other tab on the new Run number, or
 closes one whose class left the files - and the Pilot's `run` waits until
 every tab has started again before it reads a screen. A step parked for a
 frame that a Run replaced is refused with it, and never handed to the new
-document's app start (`roundtrip` in `main.mjs`). A pick in the samples browser goes to
+document's app start (`offerFrameBridge( )` in `agent-hooks.mjs`). A pick in the samples browser goes to
 the Pilot on this page (`pilotPicked( )`): in place of the app on screen, or
 beside after the strip's **+ App**, and a catalogue row of a sample the page
 carries opens that copy instead of fetching it; a saved draft is a pick like
@@ -179,7 +191,8 @@ refused with every one of them. `tests/pilot.spec.js` holds the three formats ag
 anywhere on the page**, not only on the chat: a file dropped where nobody
 takes it is opened by the browser in a tab of its own, which is what a drop
 on the bar or the app did. The page listens on the window; the app's frame
-hands a drop to the page (`dropFiles` on the bridge, `pilotDropped( )`)
+hands a drop to the page (a `drop` message, only where the page's
+`settings` said it takes files; `pilotDropped( )`)
 unless one of the app's own controls took it first (`defaultPrevented` - an
 upload control).
 

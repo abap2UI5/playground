@@ -135,7 +135,7 @@ export function setUpAttaching({ prefix, button, input, list, textarea, rules, r
  * takes is to open the file in a tab of its own. `highlight` is lit while a
  * file is dragged over the page. A drop something else on the page took
  * first (defaultPrevented - the editor, say) stays its. A drop on the app is
- * handed over by its frame (frontend-bridge.js, dropFiles in main.mjs).
+ * handed over by its frame (frontend-bridge.js, dropFiles in agent-hooks.mjs).
  */
 export function listenForFileDrops({ highlight, onFiles }) {
   const isFileDrag = (e) => [...(e.dataTransfer?.types ?? [])].includes("Files");

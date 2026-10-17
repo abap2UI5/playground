@@ -10,24 +10,24 @@ Below 820px (`src/shell/shell.css`, one media query; `setUpTabs()` in
 of a phone is not a pane. Two more things follow from the same arithmetic, and
 both are easy to undo by tidying up:
 
-- **The toolbar compacts rather than wrapping.** The header is two rows: the
+- **The toolbar is one row, with a ⋯ menu.** The header is two rows: the
   project's bar, which behaves as the catalogue's does (the brand's word and
   the two marks go below 620px, the search shrinks to its glyph below 820, and
   the four sections become their marks below 620), and the workbench beneath
-  it, which is what this is about. At desk width it is one row; on a phone the
-  single bar this used to be wrapped to four — a fifth of the screen, spent
-  before the editor or the app got any of it. What repeats itself goes (the
-  version line, which the About dialog carries as well), the paddings shrink,
-  and the `.spacer` that holds the right-hand group at the edge is dropped so
-  it stops pushing the last control onto a row of its own. Nothing is
-  *removed*: every control is still there and still reachable, which is what
-  `tests/shell.spec.js` holds it to, along with the height of **both rows
-  together**: 128px of a 760px phone, measured on the running page. That is
-  28px more than the one row it replaced, and what those 28px buy on a phone is
-  the four sections and the search, which the old row had dropped entirely.
-  The version line still goes at 1560; the two widths that dropped the brand's
-  word at 1440 and the whole nav at 1280 are gone with the crowded row that
-  needed them.
+  it (`.toolbar`, `role="region"`, `aria-label="Workbench"`), which is what
+  this is about. On a phone the single bar this used to be wrapped to four —
+  a fifth of the screen, spent before the editor or the app got any of it —
+  and later to two, with About alone on the second. Now the row keeps Undo,
+  Redo, Samples, Run, the status line and the ⋯ button (`#toolbar-more`);
+  every control marked `data-overflow` in `index.html` moves into its menu
+  (`#toolbar-menu`, `setUpToolbarMenu( )` in `layout.mjs`) as the SAME
+  element, put back where it was at desk width: Format, Auto, the UI5 select
+  ("Check against UI5"), Share, Back to the catalog, Source, Compare with
+  original, Reset to original, Full screen and About, each with its word.
+  Escape and a choice close it. Nothing is *removed*: every control is still
+  reachable, one tap away, which is what `tests/shell.spec.js` holds it to,
+  along with the toolbar at one row (≤ 47px) and both header rows together
+  under 152px of a 760px phone, measured on the running page.
 - **The panel starts folded away** (`setUpInsight()` in `src/shell/insight.mjs`).
   It is a fixed 11rem under an editor that has about 25 to give, so on a narrow
   screen it opens collapsed to its tab strip — where the Problems badge still
@@ -61,7 +61,7 @@ both are easy to undo by tidying up:
   in `tests/shell.spec.js`; the same `if (started)` guards a sample picked in
   the examples browser, which had switched either way.
 
-**Auto, the switch beside Run** (`main.mjs`, `tests/shell.spec.js`). On, Run
+**Auto, the switch beside Run** (`autorun.mjs`, `tests/shell.spec.js`). On, Run
 itself goes inactive — there is nothing left for it to do — and every change
 to the ABAP starts the app again 700 ms after the typing stops. Off by
 default, because a run is a fresh database and a fresh app in the frame,

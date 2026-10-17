@@ -2,7 +2,7 @@
 //
 // Every request the app frame would have POSTed to a backend passes through
 // this page on its way to the transpiled framework (see frontend-bridge.js
-// and the bridge in main.mjs), which makes the playground the one place
+// and offerFrameBridge( ) in agent-hooks.mjs), which makes the playground the one place
 // where the whole conversation between an abap2UI5 frontend and its app can
 // be watched without a proxy: the event the frontend named, the model delta
 // it sent, the view the app answered with, how long the ABAP took. A binding

@@ -1,11 +1,13 @@
 // Open in Layout Editor - the way back to abap2UI5/layout-editor, which has
 // had "Open in Playground" all along. A section of the Share dialog.
 //
-// What the layout editor reads today (its README, "Open ABAP class"): a class
-// by URL - `?src=<raw URL>` from raw.githubusercontent.com or
+// What the layout editor reads (its README, "Open ABAP class"): a class by
+// URL - `?src=<raw URL>` from raw.githubusercontent.com or
 // gist.githubusercontent.com, the playground's own parameter - or pasted
 // into its Open ABAP class dialog. Its `#d=` link carries a design of its
-// own, not a class, and nothing there reads a class out of the address.
+// own, not a class. `#playground=` (below) is read from its branch
+// claude/zealous-feynman-nf350a on (openClassFromPlayground( ) in its
+// src/ui/files.js); a deployment from before that ignores it.
 //
 // So there are two hand-overs:
 //   - the app class is still exactly as it was opened from GitHub: its raw
@@ -14,9 +16,8 @@
 //     class goes to the clipboard, to paste into Open ABAP class there, and
 //     the link carries it as well, in this playground's share format behind
 //     `#playground=` - the same fragment a share link has (share.mjs), which
-//     the layout editor already writes for its own "Open in Playground". It
-//     ignores the fragment until it learns to read it; the clipboard is what
-//     works meanwhile.
+//     the layout editor already writes for its own "Open in Playground" and
+//     now reads back; where it does not yet, the clipboard is what works.
 // Only the app goes - the first file. The layout editor edits one class.
 //
 // Part of the Share dialog's chunk. Where the class came from is the shell's

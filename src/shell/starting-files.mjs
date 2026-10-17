@@ -1,7 +1,8 @@
 // What the editor opens on: a link somebody was sent, the draft they were
 // last working on, or the sample. Read once, by boot( ) in main.mjs, while
-// the corpus parses - see "What a visitor waits for" in AGENTS.md for why
-// that await must not hold anything else up.
+// the corpus parses - see "What a visitor waits for" in
+// docs/design/load-time.md for why that await must not hold anything else
+// up.
 import { checkFileSet, MAIN_FILE } from "../editor/files.mjs";
 import { DEFAULT_FILES, DEFAULT_SAMPLE } from "../editor/samples.mjs";
 import { fetchLinkedFiles, followNavigation, linkedSources, REPOSITORY_HOSTS, setOrigin } from "./deep-link.mjs";

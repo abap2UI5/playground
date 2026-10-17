@@ -25,8 +25,20 @@ read them before touching `tools/` or `src/runtime/`.
 
 | Module | Purpose |
 | --- | --- |
-| `main.mjs` | Boot and Run, the frame bridge (`roundtrip()`), Auto beside Run (debounce, stored setting, the three reasons Run may be inactive), `boot()` caught as a whole |
-| <!-- 2A: main.mjs split pending --> | |
+| `main.mjs` | Boot and the bar: `boot()` caught as a whole, `remember()` (draft, studio build), `showSourceLink()`, Share/Full screen |
+| `page.mjs` | Which page this is: `params`, `embedded`, `aiPage`, `pilotPage`, `appOnly`, `keepsDrafts`, `frameIsolated`, the catalogue query, the frame |
+| `starting-files.mjs` | `startingFiles()`: link, draft or sample; a failed link or a declined Pilot link with its files |
+| `run.mjs` | Run: compile, define, test, start; frame load and restart in place, `runWhenFree`/`withRunLock`, `pointAtDump`, `structuralProblem`, frame theme |
+| `run-status.mjs` | The status line between runs ("running - the code on screen has N errors"), transient words, the stale-frame mark |
+| `autorun.mjs` | Auto (debounce, stored setting) and Run's three reasons to be inactive |
+| `file-sets.mjs` | `replaceWith()`, `keepDraft()`, opening a sample/draft/linked class, the kept-draft sentence; `openedFiles()`, `isAsOpened()`, `onOpenedChange()` |
+| `agent-hooks.mjs` | `offerFrameBridge()` (the frames' roundtrips), the AI Studio's and Pilot's hosts, `runForAgent()`, `addAppFiles()` |
+| `site-cache.mjs` | `keepAssetsForNextTime()` (registers `sw.js`), `discardCachedSite()` |
+| `frame-link.mjs` | The page's half of the frame line, messages only: `isolate()`, `navigate()`, `serveFrames()`, `tellFrames()`, `frameApi()`, `linkOf()`, `onFrameMessage()` |
+| `guides.mjs`, `first-steps.mjs`, `learn-path.mjs` | The first-visit hint strip and "Lesson n of m" (chunks after the first run), and the module that decides on them |
+| `original.mjs`, `compare-dialog.mjs` | Compare (± Monaco diff dialog, chunk) and Reset (⟲) against the original; `unchangedRawUrl()` |
+| `layout-editor.mjs` | The Share dialog's "Open in Layout Editor" (`?src=` or clipboard + `#playground=`) |
+| `ui5-floor.mjs` | The bar's UI5 select: the linter's `ui5` floor, kept in step with the lint tab |
 | `index.html` | The document; its inline script starts both workers, the wasm fetch and Monaco's preloads before the bundle arrives |
 | `shell.css` | The page's styles and the palette's original (`catalogue.css` copies it) |
 | `layout.mjs` | Splitter at desk width, ABAP/App tabs below 820px |
@@ -57,8 +69,8 @@ read them before touching `tools/` or `src/runtime/`.
 | `site-memory.mjs` | Where the reader was on each neighbouring site; `returnTo()` |
 | `runtime-client.mjs` | The page's handle on the runtime worker (HEAD probe, STALLED) |
 | `warm-up.mjs` | The app frame's first load, fetched into the HTTP cache during the parse |
-| `frontend-bridge.js` | Injected into the app frame: the fetch interception, restart in place, the Pilot API |
-| `sw.js` | The service worker (build id, hashes and chunks substituted by the build) |
+| `frontend-bridge.js` | Injected into the app frame, talks to the page by `postMessage` only: the fetch interception, restart in place, the AI calls, storage shims for an opaque frame |
+| `sw.js` | The service worker (build id, hashes and chunks substituted by the build; `verifiedHit()`) |
 | `roundtrips.mjs` | The recorded roundtrips (bounded at 200, cleared per Run) |
 | `insight.mjs` | The bottom panel: strip, folding, drag, redraw, empty-tab shrink |
 | `insight-common.mjs` | What a tab may ask of the panel (`empty()`, `blockHead()`, …) |
@@ -86,7 +98,7 @@ read them before touching `tools/` or `src/runtime/`.
 | Module | Purpose |
 | --- | --- |
 | `editor.mjs` | The editor as the page sees it; one API answered by one of two halves |
-| `monaco-editor.mjs` | Monaco itself (0.82 MB chunk, never on `?view=app`/`full`); `lockEditor()`, `markLines()` |
+| `monaco-editor.mjs` | Monaco itself (0.82 MB chunk, never on `?view=app`/`full`); `lockEditor()`, `markLines()`, `showDiff()`/`closeDiff()` |
 | `file-store.mjs` | The other half: a plain file list for app-only pages |
 | `files.mjs` | File naming and checks (abapGit names, test includes, tables) |
 | `analysis.mjs` | One analysis, three readers; applies `parser-hint.mjs` |
@@ -108,7 +120,8 @@ read them before touching `tools/` or `src/runtime/`.
 
 | Module | Purpose |
 | --- | --- |
-| `worker.mjs` | The framework bundle's entry, answering over `postMessage` |
+| `worker.mjs` | The framework bundle's entry, answering over `postMessage`; imports `lockdown.mjs` first |
+| `lockdown.mjs` | Takes `caches`, `indexedDB`, `Worker`, `SharedWorker`, `navigator.serviceWorker` off the worker before user code runs |
 | `index.mjs` | `roundtrip()` (with `console`, `state`), `defineClasses()` (class and DDIC put-back), `runUnitTests()`, `locate()`, user tables |
 | `app-state.mjs` | The State tab's snapshot (`snapshot()`, bounded) |
 | `db-setup.mjs` | sql.js, the empty-database image, `resetDatabase()` |
@@ -136,7 +149,7 @@ read them before touching `tools/` or `src/runtime/`.
 | `tools/sample-sources.mjs` | The printed ABAP, one tarball per ref |
 | `tools/abap-highlight.mjs` | Build-time ABAP colouring (published: the docs import it) |
 | `tools/html.mjs` | Comment stripping and `withPolicy()` (CSP) for every written document |
-| `tools/build-site.mjs` | The page, worker, linter and catalogue bundles; corpus; samples; examples; embed |
+| `tools/build-site.mjs` | The page, worker, linter and catalogue bundles; corpus; samples (`lessons.json`); examples; embed |
 | `tools/site-documents.mjs` | `writeIndex()`, the AI and Pilot pages, `preloadsFor()`, `writeCatalogueDocument()` |
 | `tools/service-worker.mjs` | `writeServiceWorker()`: build id, hashes, precached chunks |
 | `tools/esbuild-plugins.mjs` | The load-bearing esbuild plugins (shims, stubs, Monaco CSS) |
@@ -222,11 +235,14 @@ Each bullet names the design doc that explains it. Keep them true.
 
 **Runtime** ([runtime.md](docs/design/runtime.md))
 - The frame POSTs to its own URL because the component gets `checkLocal: true` in its component data; `window.z2ui5` no longer exists. The bridge intercepts by origin and pathname only.
+- Frame and page exchange messages only (`frame-link.mjs` ↔ `frontend-bridge.js`), never reach into each other's window or document; nothing secret goes to a frame. On `/ai/` and `/pilot/` the frame is sandboxed without `allow-same-origin`.
+- The runtime worker imports `lockdown.mjs` before anything else.
 - Run = a fresh database (SQLite reopened on the empty image, user tables rebuilt from their text) and the app restarted in place where possible.
 
 **Load time** ([load-time.md](docs/design/load-time.md))
 - Both workers start from the inline script in `index.html`; the preloads must match what the page actually fetches; `boot()`'s two orderings and `heard()` keep costs overlapping.
-- The service worker caches a core asset only if it hashes to the build; the documents and catalogue files are network-first; a new document must be added to `DOCUMENTS` in `sw.js` and to `writeServiceWorker()`.
+- The service worker caches a core asset only if it hashes to the build, and a cached hit is verified before it is served (`verifiedHit()`); the documents and catalogue files are network-first; a new document must be added to `DOCUMENTS` in `sw.js` and to `writeServiceWorker()`.
+- A chunk never imports a shell module (`editor.mjs`, `insight.mjs`, `file-sets.mjs`, `deep-link.mjs`, …) — what it needs is handed to its setup function, or esbuild splits the shell.
 - The size budget sums `assets/*.mjs`; the shell entry and its static imports stay free of Monaco and `shell.css` free of Monaco's CSS; the corpus must parse in 256 KB of stack.
 - Never `window.prompt()`/`alert()` (dead in a cross-origin frame); never treat `blur` as cancel in a shell input (the app frame steals focus); every `localStorage` access through `storage.mjs` (bar `theme-boot.mjs`).
 - Nothing may keep a page out of the back/forward cache: no `unload`, no `beforeunload`, no `no-store` (`tests/bfcache.spec.js`).
@@ -234,25 +250,27 @@ Each bullet names the design doc that explains it. Keep them true.
 **Editor and checkers** ([checkers.md](docs/design/checkers.md), [format.md](docs/design/format.md), [panel.md](docs/design/panel.md))
 - An abaplint error blocks Run; an abap2UI5 linter finding never does. The two use separate Monaco marker owners.
 - A stored setting (checkers, theme, Auto, draft) is validated like a typed one, forgotten when it equals the default, and never restored in an embedded playground. A file set identical to a carried sample is not stored as a draft.
-- Fix them and Format: one edit per file (one Ctrl+Z), nothing without a correct answer guessed. Format is one implementation for the button and Shift+Alt+F; `FORMAT_RULES` is layout only — never `keyword_case`, `indentation`, `align_parameters`, `line_break_multiple_parameters`, `keep_single_parameter_on_one_line`.
+- Format, Fix them, View edit and Reset to original: one edit per file (one Ctrl+Z), nothing without a correct answer guessed. Format is one implementation for the button and Shift+Alt+F; `FORMAT_RULES` is layout only — never `keyword_case`, `indentation`, `align_parameters`, `line_break_multiple_parameters`, `keep_single_parameter_on_one_line`.
 - View edit: what nobody edited is not rewritten; what it cannot do it refuses with a sentence, never guesses.
 
 **Phone** ([phone.md](docs/design/phone.md))
-- Below 820px the toolbar compacts but every control stays reachable; the panel starts folded; Run brings the app forward only when it started one; autorun never moves the caret or the pane.
+- Below 820px the toolbar is one row and every `data-overflow` control moves into its ⋯ menu (the same element, still reachable); the panel starts folded; Run brings the app forward only when it started one; autorun never moves the caret or the pane.
 
 **AI** ([ai-chat.md](docs/design/ai-chat.md), [ai-pilot.md](docs/design/ai-pilot.md))
-- A key or token is held in memory for the visit and never stored; a key goes only to the server it was typed for. The Pilot opens a link's code only after asking; the Gist section asks once a link's code has run.
+- A key or token is held in memory for the visit and never stored; a key goes only to the server it was typed for. The Pilot opens a link's code only after asking (the app steers the model); the Gist section asks once a link's code has run (the playground's frame is same-origin).
 - The model's tools go through the same paths as the reader's (`replaceWith()`, `run()`); the conversation is append-only (bar `rewind()` of the last exchange); agent chunks stay out of the precache.
 - `src/vendor/agent/` is never edited here — change upstream and re-vendor.
 
 **Public surfaces and the site** ([public-surfaces.md](docs/design/public-surfaces.md), [sample-catalogue.md](docs/design/sample-catalogue.md), [one-site.md](docs/design/one-site.md))
 - Share links, `?src=`, `?gist=`, `?embed=`, `?view=`, `?readonly=`, `?lines=`, the embed loader and its messages, `abap-highlight.mjs`'s export and `apps.json`'s fields are contracts with abap2UI5/docs; a docs change needing new behaviour ships after the playground deploy. External pages build URLs with `abap2ui5Embed.url()`.
-- An embedded playground never reads or writes the stored draft or settings.
+- An embedded playground never reads or writes the stored draft or settings. The first-steps strip never shows on an embed, an app-only page, the AI pages or anything a link opened.
+- `#playground=` (the share fragment) is read by abap2UI5/layout-editor too.
 - The catalogue build degrades per repository and never fails the build; everything on sample pages is escaped, links are `https` only, documents go out through `withPolicy()`.
 - The bar, the menu, the palette and the font exist in several copies across two repositories — change them together, playground first. `search-engine.mjs` is a copy of the docs repo's; a change to matching starts there.
 
 **Tests** ([testing.md](docs/design/testing.md))
 - Anything user-visible is tested through a real browser against the built `dist/`; pure modules may add `node:test` tests in `tests/node/`.
+- Every spec starts with the first-steps strip closed (`use.storageState` in `playwright.config.js`); only `tests/onboarding.spec.js` clears it.
 
 ## Deliberate limits — do not "fix" these
 
@@ -292,19 +310,11 @@ Each bullet names the design doc that explains it. Keep them true.
   up would mean carrying 1.7 MB of frontend text a second time for nothing
   on screen.
 - **The open-abap classes the framework never reaches stay in its bundle.**
-  Measured 2026-10-10: a scan of every transpiled module, the runtime, the
-  page's sources, `@abaplint/runtime`, the carried samples and the three sample
-  repositories' tarballs finds 93 open-abap classes nothing names
-  (`cl_aunit_authority_check`, `cl_os_ca_common`, `cl_shm_area`,
-  `kernel_scan_abap_source`, sixty exception classes) —
-  0.59 MB of the 7.3 MB transpilat. Stubbing 31 of them took the bundle from
-  6.94 to 6.54 MB (0.64 → 0.60 MB compressed) and the worker's boot from a
-  median of 657 ms to 673 ms over seven runs (minimum 634 → 612): nothing, as
-  V8 compiles an uncalled class body lazily. What it would cost is a failure
-  mode: a catalogued sample reaching one of them (`cl_abap_datfm`,
-  `cl_abap_dyn_prg`) would die with the stub's message, and the gate cannot
-  see the sample repositories on a fresh runner (the catalogue step runs after
-  the framework step). Forty kilobytes was not worth that.
+  Measured 2026-10-10: 93 of them that nothing names (0.59 MB of the 7.3 MB
+  transpilat); stubbing 31 saved 0.04 MB compressed and nothing at boot (V8
+  compiles an uncalled class lazily), and would make a catalogued sample that
+  reaches one (`cl_abap_datfm`, `cl_abap_dyn_prg`) die with the stub's
+  message where the gate cannot see it. Not worth it.
 - **The `?src=` host allow list stays short.** The playground fetches on
   behalf of whoever opened the link and must not become a general-purpose
   reader for arbitrary URLs.
@@ -320,15 +330,15 @@ sample pages' per-line markup and the 220 MB site budget
 | You are touching | Read |
 | --- | --- |
 | `tools/`, the build steps, pins, stamps, esbuild, bundle splitting | [build-pipeline.md](docs/design/build-pipeline.md), [build-traps.md](docs/design/build-traps.md) |
-| `src/runtime/`, `frontend-bridge.js`, the bridge, Run, restart in place, tables, WRITE, state | [runtime.md](docs/design/runtime.md), [build-traps.md](docs/design/build-traps.md) |
-| Boot order, workers, preloads, warm-up, `sw.js`, `check-size.mjs`, `storage.mjs`, dialogs/focus | [load-time.md](docs/design/load-time.md) |
-| The narrow layout, toolbar, panel strip, Auto | [phone.md](docs/design/phone.md) |
+| `src/runtime/`, `lockdown.mjs`, `frontend-bridge.js`, `frame-link.mjs`, `run.mjs`, restart in place, tables, WRITE, state | [runtime.md](docs/design/runtime.md), [build-traps.md](docs/design/build-traps.md) |
+| Boot order, workers, preloads, warm-up, chunks, `sw.js`, `site-cache.mjs`, `check-size.mjs`, `storage.mjs`, dialogs/focus | [load-time.md](docs/design/load-time.md) |
+| The narrow layout, toolbar and ⋯ menu, panel strip, Auto (`autorun.mjs`) | [phone.md](docs/design/phone.md) |
 | Format, `FORMAT_RULES`, the formatting provider | [format.md](docs/design/format.md) |
-| abaplint, the linter, Config tabs, stored settings, the draft, Fix them, the parser hint | [checkers.md](docs/design/checkers.md) |
-| The bottom panel's tabs, View edit (`chain-*.mjs`, `view-edit.mjs`), unit tests, dumps | [panel.md](docs/design/panel.md) |
-| The AI Studio, providers, keys, attachments | [ai-chat.md](docs/design/ai-chat.md) |
-| The AI Pilot, the vendored agent client | [ai-pilot.md](docs/design/ai-pilot.md) |
-| Share, `?src=`, `?gist=`, `?embed=`/`?view=`/`?readonly=`/`?lines=`, the samples dialog, `src/embed/` | [public-surfaces.md](docs/design/public-surfaces.md) |
+| abaplint, the linter, Config tabs, `ui5-floor.mjs`, stored settings, the draft (`file-sets.mjs`), Fix them, Reset, the parser hint | [checkers.md](docs/design/checkers.md) |
+| The bottom panel's tabs, View edit (`chain-*.mjs`, `view-edit.mjs`), unit tests, dumps, `guides.mjs`/`first-steps.mjs`/`learn-path.mjs` | [panel.md](docs/design/panel.md) |
+| The AI Studio, providers, keys, attachments, `agent-hooks.mjs`, `linked-code.mjs` | [ai-chat.md](docs/design/ai-chat.md) |
+| The AI Pilot, `frame-drive.mjs`, the vendored agent client | [ai-pilot.md](docs/design/ai-pilot.md) |
+| Share, `?src=`, `?gist=`, `?embed=`/`?view=`/`?readonly=`/`?lines=`, the samples dialog, `original.mjs`, `layout-editor.mjs`, `src/embed/` | [public-surfaces.md](docs/design/public-surfaces.md) |
 | `src/catalogue/`, `build-catalogue.mjs`, sample pages, the 404 | [sample-catalogue.md](docs/design/sample-catalogue.md) |
 | The bar, palette, font, search box, site memory, anything shared with abap2UI5/docs | [one-site.md](docs/design/one-site.md) |
 | `tests/`, `playwright.config.js`, CI workflows | [testing.md](docs/design/testing.md) |
