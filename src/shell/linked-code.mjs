@@ -15,11 +15,13 @@
 //   - the RUNTIME WORKER, where the ABAP itself runs - transpiled to
 //     JavaScript, `WRITE '@KERNEL …'` included - on every page. A worker has
 //     no DOM and no localStorage, and nothing of the page's memory reaches it
-//     (the page sends it roundtrips and classes, never a key). But it is this
-//     origin: it can fetch, and it can write this origin's IndexedDB and
-//     CacheStorage - the service worker's cache among them, which serves
-//     what it holds to the NEXT visit (sw.js serves a cached hit as it is).
-//     So its reach is later visits of this site, not this page's secrets now.
+//     (the page sends it roundtrips and classes, never a key). It is this
+//     origin, but it gives up the origin's CacheStorage, IndexedDB and
+//     nested workers before any of the reader's code runs
+//     (src/runtime/lockdown.mjs), and the service worker hashes a cached
+//     script against the build before it serves it (verifiedHit( ) in
+//     sw.js) - so it cannot leave anything behind for a later visit either.
+//     What it keeps is fetch: it can reach the network, as any page can.
 //
 // What the page holds that is worth taking is what the reader types into it,
 // never anything stored:
@@ -37,9 +39,11 @@
 // So where a link's code and a secret meet, the reader is asked first. On
 // the AI Pilot's page - which opens share links and ?src= beside its key -
 // the code is opened only once they said so (`#linked-dialog` in index.html,
-// confirmLinkedCode( ) below): the frame cannot reach the key there any
-// more, but the worker can still leave something in this site's cache for
-// the next visit, which is where the key is typed again. On the playground,
+// confirmLinkedCode( ) below). Neither the frame nor the worker reaches the
+// key there any more; what is left is that the app is what the model reads
+// and acts on - an app written to mislead Claude can steer what it does in
+// that chat (open, run, type into its apps), and the reader should know
+// whose app that is before handing it the controls. On the playground,
 // a link opens and runs with no question - that is what nine links in ten
 // are for - and the question moves to the one place a secret is typed: once
 // code from a link has run here (markLinkedCodeRan( ), called by run( ) in
