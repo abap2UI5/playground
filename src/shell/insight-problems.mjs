@@ -112,6 +112,37 @@ export function problemsTab() {
   return wrap;
 }
 
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+// What Fix them would repair, by kind. "1 of these can be fixed
+// automatically" over a list of three errors read as one of the errors - and
+// the one was a warning about an obsolete call, with all three errors still
+// there after the press. So the sentence names what is fixable, and when
+// errors are left over it says that too: the button is not the way to make
+// the ABAP compile, and the reader should know before pressing it.
+//
+// Counted off the rows, each of which says whether its checker has a fix for
+// it (`fixable`); `count` is the checkers' own total, which the rows can fall
+// short of (a finding in a file not on screen) - then the plain number is all
+// there is to say.
+export function fixableSaid(count, problems) {
+  const fixable = problems.filter((p) => p.fixable);
+  if (fixable.length !== count) return `${count} of these can be fixed automatically`;
+  const errors = fixable.filter((p) => p.severity === 1).length;
+  const warnings = fixable.filter((p) => p.severity === 2).length;
+  const rest = fixable.length - errors - warnings;
+  const parts = [];
+  if (errors > 0) parts.push(plural(errors, "error"));
+  if (warnings > 0) parts.push(plural(warnings, "warning"));
+  if (rest > 0) parts.push(plural(rest, "hint"));
+  const what = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+  const said = `${what} can be fixed automatically`;
+  const allErrors = problems.filter((p) => p.severity === 1).length;
+  const left = allErrors - errors;
+  if (left === 0) return said;
+  return `${said} - ${left === allErrors ? `the ${plural(allErrors, "error")}` : `${left} of the ${plural(allErrors, "error")}`} cannot`;
+}
+
 // The autofix offer. Shown only when something is actually repairable, and it
 // says how many - a button that turns out to do nothing is worse than no
 // button, and "Fix" alone does not tell anybody whether it is worth pressing.
@@ -120,7 +151,7 @@ function fixBar(count) {
   bar.className = "insight-fixbar";
 
   const said = document.createElement("span");
-  said.textContent = `${count} of these can be fixed automatically`;
+  said.textContent = fixableSaid(count, lastProblems);
 
   const button = document.createElement("button");
   button.type = "button";

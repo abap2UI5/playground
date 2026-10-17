@@ -326,10 +326,14 @@ export function analyseFiles(files) {
   for (const issue of registry.findIssues()) {
     const name = nameOf(issue.getFilename());
     if (!held.has(name)) continue;
-    if (issue.getDefaultFix() !== undefined) fixable++;
+    const fix = issue.getDefaultFix() !== undefined;
+    if (fix) fixable++;
     // A file the registry holds that the editor does not list - the sidecar
-    // of a class, say - has nowhere to be shown and is not asked for.
-    if (diagnostics[name] !== undefined) diagnostics[name].push(Diagnostics.mapDiagnostic(issue));
+    // of a class, say - has nowhere to be shown and is not asked for. Which
+    // ones carry a fix goes with each, so the Fix them bar can say what it
+    // would repair - "1 warning", not "1 of these" over three errors it
+    // would leave alone.
+    if (diagnostics[name] !== undefined) diagnostics[name].push({ ...Diagnostics.mapDiagnostic(issue), fixable: fix });
   }
   return { diagnostics, fixable };
 }
