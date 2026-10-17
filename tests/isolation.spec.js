@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { open } from "./helpers.mjs";
+import { MAIN_CLASS, open, setSource } from "./helpers.mjs";
 
 // The app frame and the page around it speak only in messages
 // (src/shell/frame-link.mjs, src/shell/frontend-bridge.js), and on the AI
@@ -84,4 +84,67 @@ test("the playground's frame is answered by message: the page offers it no objec
   // worker, offline): same origin, no sandbox.
   expect(await page.locator("#app").getAttribute("sandbox")).toBeNull();
   await expect(page.frameLocator("#app").locator(".sapMShell, .sapMPage").first()).toBeVisible({ timeout: 30000 });
+});
+
+// Where a link's ABAP itself runs: the runtime worker, on the site's origin.
+// It gives up the origin's CacheStorage and IndexedDB, and nested workers,
+// before anything of the reader's runs in it (src/runtime/lockdown.mjs) - the
+// service worker answers from that cache, so a script put there ran on the
+// next visit, the AI pages' included.
+const runtimeWorker = (page) => page.workers().find((w) => w.url().includes("/runtime/framework.mjs"));
+
+test("the runtime worker cannot reach the origin's cache, its databases or a fresh worker", async ({ page }) => {
+  await open(page);
+  const found = await runtimeWorker(page).evaluate(() => {
+    const own = (o, name) => Object.prototype.hasOwnProperty.call(o, name);
+    const chain = [];
+    for (let o = self; o && o !== Object.prototype; o = Object.getPrototypeOf(o)) chain.push(o);
+    const tryIt = (fn) => {
+      try {
+        return String(fn());
+      } catch (e) {
+        return `threw ${e?.name}`;
+      }
+    };
+    return {
+      types: [typeof caches, typeof indexedDB, typeof Worker, typeof self.SharedWorker].join(","),
+      // No accessor left anywhere up the chain to call again...
+      accessors: chain.filter((o) => o !== self).flatMap((o) => ["caches", "indexedDB", "Worker"].filter((n) => own(o, n))),
+      // ...and the pinned property cannot be taken back.
+      redefine: tryIt(() => Object.defineProperty(self, "caches", { value: 1 })),
+      reassigned: tryIt(() => {
+        self.indexedDB = {};
+        return typeof self.indexedDB;
+      }),
+    };
+  });
+  expect(found.types).toBe("undefined,undefined,undefined,undefined");
+  expect(found.accessors).toEqual([]);
+  expect(found.redefine).toBe("threw TypeError");
+  // Silently ignored in sloppy code, a TypeError in strict - never a store.
+  expect(found.reassigned).toMatch(/^(undefined|threw TypeError)$/);
+});
+
+test("an app's WRITE '@KERNEL' finds no cache, database or worker to reach for", async ({ page }) => {
+  await open(page);
+  const cls = MAIN_CLASS.toLowerCase();
+  await setSource(
+    page,
+    `CLASS ${cls} DEFINITION PUBLIC.
+  PUBLIC SECTION.
+    INTERFACES z2ui5_if_app.
+    DATA probe TYPE string.
+ENDCLASS.
+
+CLASS ${cls} IMPLEMENTATION.
+  METHOD z2ui5_if_app~main.
+    WRITE '@KERNEL this.probe.set("reached:" + [typeof caches, typeof indexedDB, typeof Worker].join("/"));'.
+    client->view_display( z2ui5_cl_ui5_view_builder=>factory( )->stringify( ) ).
+    client->message_box_display( probe ).
+  ENDMETHOD.
+ENDCLASS.
+`,
+  );
+  await page.locator("#run").click();
+  await expect(page.frameLocator("#app").getByText("reached:undefined/undefined/undefined")).toBeVisible({ timeout: 60000 });
 });
