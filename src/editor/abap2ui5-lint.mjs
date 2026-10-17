@@ -77,9 +77,20 @@ function validated(next) {
 // the sentence the Config tab shows. The message to the worker is heard: a
 // worker that has died is reported by the boot, not by a Config tab.
 export function applyLinterSettings(next) {
+  const before = settings;
   settings = validated(next);
   useLinterSettings(settingsFor(settings)).catch(() => {});
+  for (const fn of listeners) fn({ ...settings }, { ...before });
 }
+
+// Told after every applied change, with the settings now and before: the
+// setting has two faces - the abap2UI5 lint tab and the bar's UI5 select
+// (src/shell/ui5-floor.mjs) - and each follows what the other applied.
+const listeners = new Set();
+export const onLinterSettings = (fn) => {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+};
 
 // The settings in the shape the linter takes them.
 //

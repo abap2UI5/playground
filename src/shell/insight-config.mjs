@@ -14,11 +14,11 @@ import {
   allRuleNames,
   applyAbaplintSettings,
 } from "../editor/registry.mjs";
-import { applyLinterSettings, linterDefaults, linterSettings } from "../editor/abap2ui5-lint.mjs";
+import { applyLinterSettings, linterDefaults, linterSettings, onLinterSettings } from "../editor/abap2ui5-lint.mjs";
 import { keepAbaplintSettings, keepLinterSettings } from "./checker-settings.mjs";
 import { problemsChanged } from "./insight-common.mjs";
 
-function configEditor({ title, blurb, value, onApply, onKeep, onReset, extra }) {
+function configEditor({ title, blurb, value, onApply, onKeep, onReset, extra, follow }) {
   const wrap = document.createElement("div");
   wrap.className = "config";
 
@@ -55,6 +55,24 @@ function configEditor({ title, blurb, value, onApply, onKeep, onReset, extra }) 
   wrap.append(row);
 
   if (extra) wrap.append(extra);
+
+  // A change applied somewhere else (the bar's UI5 select): the text follows
+  // it - unless it holds an edit not applied yet, which is the reader's.
+  // The tab is built afresh each time it is opened, so a copy no longer on
+  // screen stops listening the first time it is told.
+  const stop = follow?.((now, before) => {
+    if (!area.isConnected) {
+      stop?.();
+      return;
+    }
+    let typed;
+    try {
+      typed = JSON.parse(area.value);
+    } catch {
+      return;
+    }
+    if (JSON.stringify(typed) === JSON.stringify(before)) area.value = JSON.stringify(now, null, 2);
+  });
 
   apply.addEventListener("click", async () => {
     // Changing abaplint's rules dirties every object in the corpus, so applying
@@ -165,6 +183,7 @@ export function linterTab() {
     onApply: applyLinterSettings,
     onKeep: keepLinterSettings,
     onReset: linterDefaults,
+    follow: onLinterSettings,
     extra: appended(
       docsLink("https://github.com/abap2UI5/linter", "The abap2UI5 linter, its rules and its config file"),
       docsLink("https://www.npmjs.com/package/@abap2ui5/linter", "@abap2ui5/linter on npm"),
