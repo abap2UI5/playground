@@ -29,6 +29,21 @@ const DIST = path.join(ROOT, "dist");
 
 const MB = 1024 * 1024;
 
+// How many samples the index holds, counted from the index this run measures.
+// The note under its budget used to say "800 samples" in a string literal,
+// beside a dialog and a page that counted the file and said 804 and 813: three
+// numbers for one list, and the one written by hand was the one that was
+// wrong. Unknown where there is no index to count - this is a size report,
+// and a missing file is the size check's to fail, not this line's.
+function samplesIndexed() {
+  try {
+    const entries = JSON.parse(fs.readFileSync(path.join(DIST, "samples", "apps.json"), "utf8")).entries;
+    return Array.isArray(entries) ? `${entries.length} samples` : "no entries";
+  } catch {
+    return "not counted";
+  }
+}
+
 // Everything a visitor downloads before the playground is usable. These are the
 // ones measured compressed, because that is what travels.
 //
@@ -64,8 +79,8 @@ const TRANSFERRED = [
    * read it. Budgeted because it is the one file here that grows with the
    * corpus - a sample added in any of the three repositories adds a row - and
    * it is what stands between opening the page and seeing a list. It
-   * compresses hard: it is 770 near-identical objects. */
-  { file: "samples/apps.json", limit: 0.15 * MB, note: "the sample catalogue's index, 800 samples" },
+   * compresses hard: it is 800-odd near-identical objects. */
+  { file: "samples/apps.json", limit: 0.15 * MB, note: `the sample catalogue's index, ${samplesIndexed()}` },
   { file: "samples/catalogue.mjs", limit: 0.02 * MB, note: "the catalogue page itself" },
   /* The bar's search box, loaded by the catalogue and by every per-sample
    * page - so it is one file for 773 documents, and the budget is on the file
