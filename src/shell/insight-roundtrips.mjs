@@ -1,5 +1,5 @@
 // The Roundtrips tab: the conversation between the frontend and the app, one
-// row per roundtrip (recorded by the bridge in main.mjs into roundtrips.mjs) -
+// row per roundtrip (recorded by agent-hooks.mjs into roundtrips.mjs) -
 // the event, how long the ABAP took, and what the answer did: a view, a
 // popup, a model update, a dump. A row opens up into the request and the
 // response as they travelled, and the view XML the answer carried, one

@@ -9,7 +9,7 @@
 // roundtrip( ) in agent-hooks.mjs takes the parked body (`take( )`) and sends
 // IT to the framework in place of the frame's own, and the answer goes both to
 // the frame, which renders it, and to the promise `drive( )` answered. How an
-// answer comes in: main.mjs hands every answer the frame got to `saw( )`, the
+// answer comes in: agent-hooks.mjs hands every answer the frame got to `saw( )`, the
 // reader's own clicks included; `observe( )` is the mirror's ear, and what
 // arrived before there was one is kept for it (a few dozen answers at most -
 // a timer app before the chunk landed is not worth more memory than that).
@@ -20,7 +20,7 @@ export function createDriver() {
   const early = [];
   let observer = null;
   return {
-    /** main.mjs, in the bridge's roundtrip( ): the parked request, taken. */
+    /** agent-hooks.mjs, in the frames' roundtrip( ): the parked request, taken. */
     take() {
       const taken = request;
       if (!taken) return null;
@@ -28,7 +28,7 @@ export function createDriver() {
       taken.settled();
       return taken;
     },
-    /** main.mjs, after every answer the framework gave this frame. */
+    /** agent-hooks.mjs, after every answer the framework gave this frame. */
     saw(body, response) {
       if (observer) {
         observer(body, response);

@@ -1,5 +1,5 @@
 // The Tests tab: what the last Run's unit tests said - set by run( ) in
-// main.mjs from the runtime's answer (runUnitTests( ) in
+// run.mjs from the runtime's answer (runUnitTests( ) in
 // src/runtime/index.mjs); a run with no test include sets an empty list,
 // which the tab explains.
 import { empty, redrawIf } from "./insight-common.mjs";

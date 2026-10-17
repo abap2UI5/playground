@@ -94,20 +94,20 @@ function tabFrom(from) {
 
 // ------------------------------------------------------------- the bridge
 
-/** main.mjs, in the bridge's roundtrip( ): the Pilot's request parked for
+/** agent-hooks.mjs, in the frames' roundtrip( ): the Pilot's request parked for
  *  the frame that is asking, if there is one - taken, so it goes out once. */
 export function takePilotRequest(from) {
   const tab = host && tabFrom(from);
   return tab?.driver.take() ?? null;
 }
 
-/** main.mjs, after every answer the framework gave a frame. */
+/** agent-hooks.mjs, after every answer the framework gave a frame. */
 export function sawRoundtrip(body, response, from) {
   const tab = host && tabFrom(from);
   tab?.driver.saw(body, response);
 }
 
-/** main.mjs, after a Run: one fresh database for all of them, so every other
+/** run.mjs, after a Run: one fresh database for all of them, so every other
  *  app starts again too - or closes, when its class left the files. */
 export function pilotRan() {
   if (!host) return;
@@ -119,8 +119,8 @@ export function pilotRan() {
 }
 
 /** A file drop: on the page (setUpPilot) or on an app, handed over by its
- *  frame (main.mjs, the bridge's dropFiles). It goes to the chat, which a
- *  phone brings forward. */
+ *  frame (dropFiles in agent-hooks.mjs, a message through frame-link.mjs).
+ *  It goes to the chat, which a phone brings forward. */
 export function pilotDropped(files) {
   if (!room?.attaching || files.length === 0) return;
   setView("chat");
@@ -296,7 +296,7 @@ function renderTabs() {
 // ---------------------------------------------------------------- the page
 
 /**
- * `pilotHost` is the page (main.mjs):
+ * `pilotHost` is the page (setUpPilotHooks( ) in agent-hooks.mjs):
  *   files()                   the open files, the app first
  *   run()                     Run, and its report (runForAgent)
  *   addFiles(files, {first})  files beside the open ones, compiled, no Run

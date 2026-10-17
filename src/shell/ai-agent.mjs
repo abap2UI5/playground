@@ -310,8 +310,8 @@ export function filesAsText(files, { all = files } = {}) {
 }
 
 /**
- * One conversation. `host` is the page (src/shell/main.mjs hands it over
- * through chat.mjs); `ui` is what the chat draws.
+ * One conversation. `host` is the page (setUpStudio( ) in
+ * src/shell/agent-hooks.mjs hands it over through chat.mjs); `ui` is what the chat draws.
  *
  *   host.files()           -> [{ name, source }], the app first
  *   host.setFiles(files)   -> puts a whole file set into the editor (throws on a bad name)

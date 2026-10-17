@@ -67,7 +67,7 @@ let transcript = [];
 let lastUser;
 
 /**
- * `chatHost` is the page (main.mjs): files(), setFiles(files), run(),
+ * `chatHost` is the page (setUpStudio( ) in agent-hooks.mjs): files(), setFiles(files), run(),
  * currentFiles for the export. `onToggle(open)` lets the page bring the
  * left pane forward on a phone.
  */
@@ -234,8 +234,8 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
 
   // No beforeunload here, though a reload takes the conversation with it:
   // nothing on this site may keep a page out of the back/forward cache
-  // (tests/bfcache.spec.js). The files are kept (the studio's draft in
-  // main.mjs) and the conversation can be exported; that is the net.
+  // (tests/bfcache.spec.js). The files are kept (the studio's draft,
+  // remember( ) in main.mjs) and the conversation can be exported; that is the net.
 
   showWelcome();
   if (el.toggle) el.toggle.disabled = false;
@@ -244,19 +244,20 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
 
 export const chatOpen = () => open;
 
-/** main.mjs, in the bridge's roundtrip( ): the model's request parked for
+/** agent-hooks.mjs, in the frames' roundtrip( ): the model's request parked for
  *  Run's frame, taken - the one frame this page has (the Pilot has tabs). */
 export function takePilotRequest() {
   return driver.take();
 }
 
-/** main.mjs, after every answer the framework gave the frame. */
+/** agent-hooks.mjs, after every answer the framework gave the frame. */
 export function sawRoundtrip(body, response) {
   driver.saw(body, response);
 }
 
-/** A file drop on the studio's page, or on the app in its frame (main.mjs,
- *  the bridge's dropFiles): to the chat, which a phone brings forward. */
+/** A file drop on the studio's page, or on the app in its frame (dropFiles
+ *  in agent-hooks.mjs, a message through frame-link.mjs): to the chat,
+ *  which a phone brings forward. */
 export function chatDropped(files) {
   if (!room?.attaching || !open || files.length === 0) return;
   if (narrow()) setStage("chat", true);
