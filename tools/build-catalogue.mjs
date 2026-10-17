@@ -414,10 +414,13 @@ const stamp = crypto.createHash("sha256");
 stamp.update(JSON.stringify({ ...index, built: undefined }));
 stamp.update(SITE);
 for (const row of pages.rows) stamp.update(`${row.raw}\0${row.code ?? ""}\0`);
-for (const tool of ["build-catalogue.mjs", "sample-pages.mjs", "sample-sources.mjs", "abap-highlight.mjs", "html.mjs"]) {
+for (const tool of ["build-catalogue.mjs", "sample-pages.mjs", "sample-frame.mjs", "not-found-page.mjs", "sample-sources.mjs",
+                    "abap-highlight.mjs", "html.mjs"]) {
   stamp.update(fs.readFileSync(path.join(ROOT, "tools", tool)));
 }
-for (const shared of ["ui5-libs.mjs", "ui5-libraries.mjs", "theme-boot.mjs"]) stamp.update(fs.readFileSync(path.join(ROOT, "src", "shell", shared)));
+for (const shared of ["shell/ui5-libs.mjs", "shell/ui5-libraries.mjs", "shell/theme-boot.mjs", "catalogue/sample.css"]) {
+  stamp.update(fs.readFileSync(path.join(ROOT, "src", shared)));
+}
 const hash = stamp.digest("hex");
 const written = ["samples/apps.json", "samples/all/index.html", "samples/sample.css", "samples/llms.txt", "sitemap.xml", "404.html", "llms.txt"];
 const current =
