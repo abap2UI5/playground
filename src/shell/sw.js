@@ -301,7 +301,7 @@ self.addEventListener("fetch", (event) => {
 
 // Network first, so a deploy reaches the next visit the way it always has;
 // the cached copy only when the network has nothing to say - an installed
-// playground opened on a train. The copy kept is the last clean answer, under
+// playground opened on a train - or says only that it failed. The copy kept is the last clean answer, under
 // the bare name, and a 200 is the only thing worth keeping: an error page
 // cached as the document would be an error page forever.
 async function serveDocument(event, doc) {
@@ -314,6 +314,11 @@ async function serveDocument(event, doc) {
   // bundle, and was then written over the clean precached copy.
   const network = (async () => {
     const response = await fetch(event.request, { cache: "no-cache" });
+    // An answer that is not ok - a 503 while Pages is having a moment, a
+    // captive portal's error - is no better than no answer: with a good copy
+    // kept, that copy is the page. It used to be served over the copy, and a
+    // transient 5xx was the playground gone for as long as it lasted.
+    if (!response.ok) return kept ?? response;
     if (response.status !== 200) return response;
     if (rel in DOC_HASHES && !(await matchesBuild(rel, response.clone()))) {
       // Another build's document - see DOC_HASHES. The kept copy if there
