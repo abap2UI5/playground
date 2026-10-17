@@ -5,8 +5,8 @@
 // Claude operate the app the same way (src/shell/ai-operator.mjs).
 //
 // How a request goes out: `drive( )` parks it and asks the frame to send a
-// roundtrip (frontend-bridge.js, __z2ui5PlaygroundPilot.roundtrip); the
-// bridge's roundtrip( ) in main.mjs takes the parked body (`take( )`) and sends
+// roundtrip (a "call" to frontend-bridge.js, frame-link.mjs); the frames'
+// roundtrip( ) in agent-hooks.mjs takes the parked body (`take( )`) and sends
 // IT to the framework in place of the frame's own, and the answer goes both to
 // the frame, which renders it, and to the promise `drive( )` answered. How an
 // answer comes in: main.mjs hands every answer the frame got to `saw( )`, the
@@ -44,7 +44,9 @@ export function createDriver() {
     },
     /*
      * One request, sent by the frame so that it renders the answer. `frameApi`
-     * answers the frame's __z2ui5PlaygroundPilot, or nothing. Answers what the
+     * answers the frame's handle (frameApi( ) in frame-link.mjs), or nothing;
+     * its roundtrip( ) answers - a promise, now that the frame is asked by
+     * message - whether the frame sent it. Answers what the
      * framework answered ({ status, body }), or rejects when the frame cannot
      * send - no app in it, or a frontend that no longer has what
      * frontend-bridge.js reaches for.
@@ -56,18 +58,28 @@ export function createDriver() {
           request = null;
           reject(new Error("the app did not send the roundtrip - restart_app starts it again"));
         }, 15000);
-        request = { body, resolve, reject, settled: () => clearTimeout(gaveUp) };
-        let sent;
-        try {
-          sent = frameApi()?.roundtrip() === true;
-        } catch {
-          sent = false;
-        }
-        if (!sent) {
+        const parked = { body, resolve, reject, settled: () => clearTimeout(gaveUp) };
+        request = parked;
+        const refused = () => {
+          // Only while it is still parked: a frame that sent the request and
+          // then reported a failure has already had it taken.
+          if (request !== parked) return;
           clearTimeout(gaveUp);
           request = null;
           reject(new Error("the app could not be updated - it is not running (restart_app starts it)"));
+        };
+        let asked;
+        try {
+          asked = frameApi()?.roundtrip();
+        } catch {
+          asked = false;
         }
+        Promise.resolve(asked).then(
+          (sent) => {
+            if (sent !== true) refused();
+          },
+          refused,
+        );
       });
     },
     /** The frame is gone: a step still parked for it is refused. */

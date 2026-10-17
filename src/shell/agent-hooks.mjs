@@ -1,6 +1,7 @@
-// What the page offers the parties beside the reader: the app frame, which
-// asks this page for every roundtrip it would otherwise POST to a backend
-// (window.__z2ui5Playground, read by frontend-bridge.js), and the AI rooms -
+// What the page offers the parties beside the reader: the app frames, which
+// ask this page for every roundtrip they would otherwise POST to a backend
+// (by message - serveFrames( ) in frame-link.mjs, frontend-bridge.js on the
+// frame's side), and the AI rooms -
 // the AI Studio (chat.mjs) and the AI Pilot (pilot.mjs) - which work on the
 // same editor and press the same Run through the hooks set up here.
 import { getFiles, openFile, refreshNow } from "../editor/editor.mjs";
@@ -17,6 +18,7 @@ import { currentLog, setStatus, showOutput } from "./ui.mjs";
 import { aiPage, frame, pilotPage } from "./page.mjs";
 import { caretMayMove, firstLine, isRunning, lastTests, pointAtDump, run, uiTheme, withRunLock } from "./run.mjs";
 import { linkedFiles, replaceWith } from "./file-sets.mjs";
+import { frameApi, serveFrames } from "./frame-link.mjs";
 
 // The AI Studio's last build (see remember( ) in main.mjs, and chat.mjs).
 export const AI_STORAGE_KEY = "abap2ui5-playground:ai-files";
@@ -40,13 +42,13 @@ function typingHere() {
   return at instanceof HTMLInputElement && !NOT_TYPED_INTO.has(at.type);
 }
 
-// What the frontend in the app frame reaches for: the roundtrip it would
-// otherwise POST to a backend, and whether the shell has a dialog open -
-// see src/shell/frontend-bridge.js for what the frame does with that.
-// `room` is the AI room of this page, if it has one, as the frame's other
-// party.
+// What the frontend in an app frame asks this page for: the roundtrip it
+// would otherwise POST to a backend, and whether the shell has a dialog
+// open - see src/shell/frontend-bridge.js for what the frame does with
+// that, and frame-link.mjs for how it is asked. `room` is the AI room of
+// this page, if it has one, as the frame's other party.
 export function offerFrameBridge({ room, chat, pilot }) {
-  window.__z2ui5Playground = {
+  serveFrames({
     // Every roundtrip is kept for the Roundtrips tab on its way through -
     // see src/shell/roundtrips.mjs. Timed around the worker's answer, so
     // the number is the ABAP plus the message hops and not the render.
@@ -109,8 +111,9 @@ export function offerFrameBridge({ room, chat, pilot }) {
         throw e;
       }
     },
-    // Whether the frame should leave the focus alone right now: the
-    // frontend asks before every focus( ) (frontend-bridge.js). While a
+    // Whether the frame should leave the focus alone right now: told to the
+    // frames whenever it changes, and the frontend checks it before every
+    // focus( ) (frontend-bridge.js). While a
     // dialog is open - the bar's search panel counts: it is modal too
     // (search-box.mjs makes the page under it inert), and an app rendering
     // while it was open took the focus and the rest of the search with it.
@@ -119,12 +122,12 @@ export function offerFrameBridge({ room, chat, pilot }) {
     // the AI ran, took the editor's or the chat's next keystrokes. Once the
     // reader is in the app the frame holds the focus, and nothing here
     // stops it.
-    dialogOpen: () => document.querySelector("dialog[open], .search-scrim:not([hidden])") !== null || typingHere(),
+    holdFocus: () => document.querySelector("dialog[open], .search-scrim:not([hidden])") !== null || typingHere(),
     // Files dropped on the app in a frame, on the AI Pilot's page or the AI
     // Studio's: they go to that page's chat (pilot.mjs, chat.mjs).
     // Elsewhere a frame keeps the browser's own answer to a drop.
     dropFiles: pilotPage ? (files) => pilot?.pilotDropped(files) : aiPage ? (files) => chat?.chatDropped(files) : undefined,
-  };
+  });
 }
 
 // Run, for the AI chat - and everything a person would look at afterwards,
@@ -149,7 +152,7 @@ async function runForAgent() {
     const until = performance.now() + 30000;
     const rendering = () => {
       try {
-        return frame.contentWindow?.__z2ui5PlaygroundPilot?.busy() !== false;
+        return frameApi(frame)?.busy() !== false;
       } catch {
         return true;
       }
@@ -299,7 +302,7 @@ export function setUpPilotHooks(pilot, { openSamples }) {
     // promise of its files, since the sample's chunk may not have landed.
     carried: (cls) => carriedSampleFiles(cls),
     openSamples,
-    frame: () => frame.contentWindow?.__z2ui5PlaygroundPilot,
+    frame: () => frameApi(frame),
     appClass: () => entryClass(getFiles()),
   });
 }

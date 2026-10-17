@@ -14,9 +14,9 @@
 // client, vendored unchanged into src/vendor/agent/ and run in the chunk
 // src/shell/pilot-agent.mjs. That client sends its requests through a
 // `transport`, and the transport here is the APP FRAME: the frame is made to
-// send a roundtrip (frontend-bridge.js, __z2ui5PlaygroundPilot.roundtrip),
-// the page puts the Pilot's request in place of the frame's (main.mjs, the
-// bridge's roundtrip( ) asks takePilotRequest( )), and the answer goes both
+// send a roundtrip (a "call" to frontend-bridge.js, through frame-link.mjs),
+// the page puts the Pilot's request in place of the frame's (agent-hooks.mjs,
+// the frames' roundtrip( ) asks takePilotRequest( )), and the answer goes both
 // to the client and to the frame, which renders it with its own code. So
 // what the model did is what the reader sees - a popup opens, a toast shows,
 // a table grows - and nothing is simulated.
@@ -33,6 +33,8 @@
 import { listenForFileDrops } from "./attach-ui.mjs";
 import { createChatRoom, narrow } from "./chat-ui.mjs";
 import { createDriver } from "./frame-drive.mjs";
+import { frameApi as apiOf, isolate, linkOf, navigate, unlink } from "./frame-link.mjs";
+import { frameIsolated } from "./page.mjs";
 import { highlightJson } from "./highlight.mjs";
 import { readStored, removeStored, writeStored } from "./storage.mjs";
 import { setStatus } from "./ui.mjs";
@@ -75,7 +77,7 @@ let hudTimer;
 
 const tabById = (id) => tabs.find((t) => t.id === id);
 const visibleTab = () => tabById(visible) ?? tabs[0];
-const frameApi = (tab) => tab.frame.contentWindow?.__z2ui5PlaygroundPilot;
+const frameApi = (tab) => apiOf(tab.frame);
 const classOf = (files) => files[0].name.replace(/\.clas\.abap$/, "");
 
 // Which tab a roundtrip came from: the frame's own address names it
@@ -161,18 +163,7 @@ function attachMirror(tab) {
 // (Re)loads a tab's frame on its class, at the current Run - Run's own frame
 // as well as the others, with the address run( ) builds.
 function loadFrame(tab) {
-  const src = host.frameSrc(tab.cls, tab.id === "1" ? {} : { pilot: tab.id });
-  tab.frame.dataset.src = src;
-  const win = tab.frame.contentWindow;
-  try {
-    if (win && win.location.href !== "about:blank") {
-      win.location.replace(src);
-      return;
-    }
-  } catch {
-    // another origin - set src instead
-  }
-  tab.frame.src = src;
+  navigate(tab.frame, host.frameSrc(tab.cls, tab.id === "1" ? {} : { pilot: tab.id }));
 }
 
 // Until the tab's app has started: its first answer folded, and rendered -
@@ -218,6 +209,10 @@ async function openApp(files, { beside = false, tab: target } = {}) {
     const id = String(nextTab++);
     frame.title = `app ${id}`;
     frame.className = "pilot-frame";
+    // On the same origin as Run's frame, or on none (page.mjs), and heard
+    // from by the page the same way (frame-link.mjs) - before it loads.
+    if (frameIsolated) isolate(frame);
+    linkOf(frame);
     el.stage.querySelector(".app-frame").append(frame);
     tab = addTab(id, frame, cls);
   }
@@ -238,6 +233,7 @@ function closeTab(id) {
   if (!tab) return false;
   tabs.splice(tabs.indexOf(tab), 1);
   tab.driver.close();
+  unlink(tab.frame);
   tab.frame.remove();
   if (visible === id) visible = "1";
   showTab(visible);

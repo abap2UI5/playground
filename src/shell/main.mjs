@@ -56,7 +56,7 @@ import { isDark, onThemeChange, setUpTheme } from "./theme.mjs";
 import { setUpExtra } from "./extra.mjs";
 import { closeOnBackdrop, describeError, setStatus, showOutput } from "./ui.mjs";
 import { warmUpAppFrame } from "./warm-up.mjs";
-import { aiPage, appOnly, cameFromCatalogue, catalogueQuery, embedded, keepsDrafts, params, pilotPage } from "./page.mjs";
+import { aiPage, appOnly, cameFromCatalogue, catalogueQuery, embedded, keepsDrafts, params, frameIsolated, pilotPage } from "./page.mjs";
 import { FROM_LAST_SESSION, startingFiles } from "./starting-files.mjs";
 import { autorunAfterChange, markBooted, setUpAutorun } from "./autorun.mjs";
 import { applyFrameTheme, isRunning, isRunWaiting, lastRun, run, setRunContext, uiTheme } from "./run.mjs";
@@ -114,10 +114,10 @@ const heard = (promise) => {
 };
 
 // The Anthropic key an earlier version of the AI chat kept in localStorage.
-// chat.mjs takes it out - but only on the studio's own page, and the pages
-// where a link's ABAP runs and can read this origin's storage (a view's
-// core:HTML, a WRITE '@KERNEL …') are this one, embedded or not, and the
-// Pilot's. So it goes on every page, before any linked code has run.
+// chat.mjs takes it out - but only on the studio's own page, and the page
+// where a link's app can read this origin's storage (a view's core:HTML, in
+// a frame on this origin - page.mjs, frameIsolated) is the playground,
+// embedded or not. So it goes on every page, before any linked code has run.
 const LEGACY_KEY = "abap2ui5-playground:anthropic-key";
 
 async function boot() {
@@ -184,7 +184,9 @@ async function boot() {
   // corpus parses - see src/shell/warm-up.mjs. After the corpus has landed,
   // not before: until then the network is busy with what the page cannot
   // start without, and these can wait for the stretch where it is not.
-  corpusLanded.then(() => warmUpAppFrame(uiTheme())).catch(() => {});
+  // Not where the frame is isolated (page.mjs): a frame on an opaque origin
+  // reads nothing from the HTTP cache these fetches fill.
+  if (!frameIsolated) corpusLanded.then(() => warmUpAppFrame(uiTheme())).catch(() => {});
 
   // The piece of the page bundle that rides in the same stretch: the abap2UI5
   // linter, which the first analysis needs - split off assets/shell.mjs so
@@ -652,9 +654,9 @@ function remember(files) {
 // editor around it.
 //
 // The new tab is a second playground rather than a window onto this one. The
-// cheaper thing was there for the taking: it is the same origin, so the app
-// could have kept asking this page for its roundtrips through window.opener,
-// the way the iframe asks through window.parent. It would also have tied the
+// cheaper thing was there for the taking: the app could have kept asking this
+// page for its roundtrips through window.opener, the way the iframe asks its
+// parent (frame-link.mjs). It would also have tied the
 // app to the tab that opened it - the next Run here resets the database under
 // it, and closing this tab would kill it mid-form. A tab that carries its own
 // code boots on its own and then owes nothing to anybody.

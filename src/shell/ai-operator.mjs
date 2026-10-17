@@ -202,7 +202,9 @@ function replayOf(state) {
  * transport. One operator per app on the stage; `app` is that app's tab
  * (pilot.mjs, the apps( ) of its host):
  *   app.drive(body)   one request, sent by the app's frame -> { status, body }
- *   app.frame()       the frame's __z2ui5PlaygroundPilot
+ *   app.frame()       the frame's handle (frameApi( ) in frame-link.mjs): busy,
+ *                     slots and pending as the frame last reported them,
+ *                     refresh( ) for a fresh report, the rest asked of it
  *   app.cls           the class the tab was opened on
  */
 export function createOperator({ app, mirror, ui = {}, halted = () => false }) {
@@ -254,6 +256,13 @@ export function createOperator({ app, mirror, ui = {}, halted = () => false }) {
   // has settled, or a popup still being built reads as one that was closed.
   async function catchUpWithFrame() {
     if (!(await settled())) return;
+    // The frame reports on its own ten times a second; this waits for one
+    // made after everything before it, the reader's last keystroke included.
+    try {
+      await host.frame()?.refresh?.();
+    } catch {
+      // the last report stands
+    }
     let open;
     try {
       open = host.frame()?.slots();
@@ -382,8 +391,10 @@ export function createOperator({ app, mirror, ui = {}, halted = () => false }) {
       const typed = await client.act(id, { values, maxRows });
       typeIntoFrame(typed, values);
       // What is pending now is what the frame holds: the next current( )
-      // is not to take the Pilot's own typing for the reader's.
+      // is not to take the Pilot's own typing for the reader's. Read from a
+      // report made after the fills above (the frame answers in order).
       try {
+        await host.frame()?.refresh?.();
         typedKey = JSON.stringify(host.frame()?.pending?.() ?? {});
       } catch {
         typedKey = "{}";
