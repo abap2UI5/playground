@@ -13,11 +13,28 @@
 //   { source: "abap2ui5-playground", type: "height", height: <css pixels> }
 //   { source: "abap2ui5-playground", type: "status", state: "running" | "error",
 //     message: <the line the status bar shows> }
+//   { source: "abap2ui5-playground", type: "edited", edited: true | false }
+//
+// "edited" is sent when the reader's code stops being the code the page
+// embedded, and again (edited: false) when it is that code once more - undone
+// back to it, or Reset. Only on the change, never per keystroke.
+//
+// And ONE message the other way, the single exception to "it does not
+// command": { source: "abap2ui5-embed", type: "reset" } puts the code the page
+// embedded back and runs it - the loader's "Reset example" button. Accepted
+// only from the window that framed this one (e.source === window.parent), the
+// same check the loader makes the other way round; the origin is not knowable,
+// and nothing here needs it to be - the worst a stranger can do with it is
+// show the reader the example the page asked for.
 //
 // Sent to "*", because the embedding page's origin is not knowable from here
 // and the content is a height and a status line - nothing that is worth
 // protecting and nothing an attacker could not read by loading the same URL.
+import { getFiles, lockEditor, markLines, setFiles } from "../editor/editor.mjs";
+
 const SOURCE = "abap2ui5-playground";
+// The loader's name on the one message it sends in (abap2ui5-embed.js).
+const HOST = "abap2ui5-embed";
 
 let enabled = false;
 
@@ -151,4 +168,74 @@ function sameOriginDocument(frame) {
   } catch {
     return undefined;
   }
+}
+
+// ------------------------------------------------- what the page asked for
+
+// `?lines=12-18,25` - the lines an embedding page wants read first. Written
+// the way a sample page's address is too (#L42-L58), so a link copied off one
+// of those works here as it stands: "L42-L58", "#L42-L58" and "42-58" are all
+// the same range. Lines count from 1; anything else in the list is skipped
+// rather than refusing the rest, and a page cannot make this walk more than a
+// handful of ranges.
+export function parseLines(text) {
+  const ranges = [];
+  for (const part of String(text ?? "").split(/[\s,]+/).filter(Boolean).slice(0, 20)) {
+    const m = /^#?L?(\d+)(?:-L?(\d+))?$/i.exec(part);
+    if (!m) continue;
+    const a = Number(m[1]);
+    const b = m[2] === undefined ? a : Number(m[2]);
+    if (a < 1 || b < 1) continue;
+    ranges.push({ from: Math.min(a, b), to: Math.max(a, b) });
+  }
+  return ranges;
+}
+
+// What the embedding page asked for, applied once the editor exists:
+// read-only, marked lines, and the code it embedded kept for "edited" and for
+// Reset. Called by main.mjs on an embedded playground only.
+//
+//   ?readonly=1   the editor takes no typing; Format, Undo, Redo, Fix them and
+//                 the View tab's Edit go with it (body.is-read-only in
+//                 shell.css). Run still runs - the point of a read-only
+//                 example is that it is read AND seen working.
+//   ?lines=…      see parseLines( ) above.
+//
+// `run` is the playground's Run, for Reset to start the restored code with.
+let original;
+let originalFiles;
+let edited = false;
+let ranges = [];
+
+export function setUpEmbeddedEditor(params, { run }) {
+  originalFiles = getFiles();
+  original = JSON.stringify(originalFiles);
+  const readOnly = params.has("readonly") && params.get("readonly") !== "0";
+  if (readOnly) {
+    lockEditor();
+    document.body.classList.add("is-read-only");
+  }
+  ranges = parseLines(params.get("lines"));
+  if (ranges.length) markLines(ranges);
+
+  window.addEventListener("message", (e) => {
+    if (!enabled || e.source !== window.parent) return;
+    if (e.data?.source !== HOST || e.data.type !== "reset") return;
+    if (readOnly || !edited) return;
+    // Through setFiles( ), which rewrites a file still open as an edit: the
+    // reader who pressed Reset by mistake has their version a Ctrl+Z away.
+    setFiles(originalFiles);
+    if (ranges.length) markLines(ranges);
+    run();
+  });
+}
+
+// Every debounced change to the files comes through here (main.mjs's
+// remember( )). Said to the page only when the answer changes.
+export function announceEdited(files) {
+  if (original === undefined) return;
+  const now = JSON.stringify(files) !== original;
+  if (now === edited) return;
+  edited = now;
+  send({ type: "edited", edited: now });
 }

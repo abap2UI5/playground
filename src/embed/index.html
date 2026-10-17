@@ -60,7 +60,7 @@
 
 <h1>Embedding the playground</h1>
 <p class="lede">
-  Six shapes a documentation page can take, from the whole playground down to a
+  Eight shapes a documentation page can take, from the whole playground down to a
   single rendered app. Every demo below is real — the same playground, in an
   iframe, running the ABAP it shows.
 </p>
@@ -178,7 +178,41 @@ ENDCLASS."></div>
 
 <pre>&lt;div class="abap2ui5-demo" data-auto="1" data-src="…"&gt;&lt;/div&gt;</pre>
 
-<h2><span class="num">6</span> A plain iframe, no script at all</h2>
+<h2><span class="num">6</span> Read-only, with the lines that matter marked</h2>
+<p class="when">
+  <strong>For a page that explains a passage</strong> rather than inviting a
+  rewrite. <code>data-readonly</code> takes the typing away — and Format and
+  Fix them with it — while Run still runs. <code>data-lines</code> marks lines
+  and scrolls to the first; it takes <code>12-18,25</code>, or the
+  <code>L42-L58</code> a sample page's line links write.
+</p>
+
+<div class="abap2ui5-demo" data-src="../examples/zcl_linked_example.clas.abap"
+     data-readonly data-lines="37-43" data-label="Read the example"></div>
+
+<pre>&lt;div class="abap2ui5-demo" data-src="…" data-readonly data-lines="37-43"&gt;&lt;/div&gt;</pre>
+
+<h2><span class="num">7</span> Inviting a change, with a way back</h2>
+<p class="when">
+  <strong>For an exercise.</strong> <code>data-reset</code> shows a
+  <em>Reset example</em> button under the demo once the reader has changed the
+  code, and puts the page's code back (their version stays a Ctrl+Z away).
+  Whether or not you ask for the button, the element fires
+  <code>abap2ui5-edited</code> when the code stops — or starts again — being
+  yours, for a page with a note of its own to show.
+</p>
+
+<div class="abap2ui5-demo" data-src="../examples/zcl_linked_example.clas.abap"
+     data-reset data-label="Try changing the example"></div>
+
+<pre>&lt;div class="abap2ui5-demo" data-src="…" data-reset&gt;&lt;/div&gt;
+&lt;script&gt;
+  document.addEventListener("abap2ui5-edited", (e) =&gt; {
+    e.target.classList.toggle("is-changed", e.detail.edited);
+  });
+&lt;/script&gt;</pre>
+
+<h2><span class="num">8</span> A plain iframe, no script at all</h2>
 <p class="when">
   <strong>When your documentation framework will not run custom JavaScript</strong>,
   or you want no dependency. Everything the loader does is in the URL anyway;
@@ -206,12 +240,17 @@ ENDCLASS."></div>
   <tr><td><code>data-label</code></td><td>The text on the button.</td></tr>
   <tr><td><code>data-auto</code></td><td><code>1</code> to load without a click.</td></tr>
   <tr><td><code>data-origin</code></td><td>Where the playground is served from, if not this script's own.</td></tr>
+  <tr><td><code>data-readonly</code></td><td>Present for an example that is read and run but not changed. <code>?readonly=1</code> on a plain iframe.</td></tr>
+  <tr><td><code>data-lines</code></td><td>Lines to mark and scroll to: <code>12-18,25</code> or <code>L42-L58</code>. <code>?lines=…</code> on a plain iframe.</td></tr>
+  <tr><td><code>data-reset</code></td><td>Present for a <em>Reset example</em> button once the reader has changed the code.</td></tr>
 </table>
 
 <p class="note">
   For a documentation framework that swaps pages without reloading — Docusaurus,
   VitePress and friends — call <code>window.abap2ui5Embed.setUp()</code> after
-  each navigation to pick up the new page's demos.
+  each navigation to pick up the new page's demos. Every demo fires
+  <code>abap2ui5-edited</code> (bubbling, <code>detail.edited</code> true or
+  false) when its code is changed from the page's, or changed back.
 </p>
 
 <h2>Why nothing loads until it is clicked</h2>

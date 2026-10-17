@@ -77,7 +77,9 @@ const APPS_INDEX = {
       source: "learn",
       class: "z2ui5_cl_smp_app_040",
       title: "Responsive Table I",
-      note: "An internal table on screen",
+      // A learn title ending in a capability marker: (A) a frontend action,
+      // (C) a custom control - said in words on the row, not as letters.
+      note: "An internal table on screen (A,C)",
       group: "Table",
       stage: "rows",
       controls: [0, 1],
@@ -121,7 +123,7 @@ const APPS_INDEX = {
       needs: "needs sap.ui.webc.main",
       file: "src/02/z2ui5_cl_smpc_app_902.clas.abap",
     }),
-    // Above the floor: what the "newer than 1.71" box hides.
+    // Above the floor: what unticking "Include samples that need a UI5 newer than 1.71" hides.
     entry({
       class: "z2ui5_cl_smpc_app_901",
       title: "Newer Control",
@@ -227,9 +229,9 @@ test("the index is listed by learning-path stage, and an entry runs through the 
   await open(page);
   await openBrowser(page);
 
-  // The reader's own drafts first (none yet, but the row that saves one),
-  // then the ones the page carries, then the samples repository in reading order, then
-  // the controls grouped by library.
+  // The reader's own drafts first (none yet, folded to one line), then the
+  // ones the page carries that the index does not list, then the samples
+  // repository in reading order, then the controls grouped by library.
   await expect(page.locator(".examples-group").first()).toHaveText("Your drafts");
   await expect(page.locator(".examples-group").nth(1)).toHaveText("In the page");
   await expect(page.locator(".examples-group", { hasText: "Start here" })).toBeVisible();
@@ -240,20 +242,20 @@ test("the index is listed by learning-path stage, and an entry runs through the 
   // it is what proves a new app started - the status line alone still says
   // "running" from the app before (see runSample in helpers.mjs).
   const before = await page.locator("#app").getAttribute("data-src");
-  await page.locator(".example-row", { hasText: "z2ui5_cl_smp_app_493" }).click();
+  await page.locator(".example-row", { hasText: "z2ui5_cl_smp_app_040" }).click();
   await expect(page.locator("#examples-dialog")).toBeHidden();
   await expect(page.locator("#app")).not.toHaveAttribute("data-src", before ?? "", { timeout: 60000 });
   await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
 
   // The class kept the name the repository gave it, and it is what runs.
-  expect(await openFiles(page)).toEqual(["z2ui5_cl_smp_app_493.clas.abap"]);
+  expect(await openFiles(page)).toEqual(["z2ui5_cl_smp_app_040.clas.abap"]);
   await expect(control(page, "txtNote")).toContainText("came from the samples catalogue");
 
   // It arrived through deep-link.mjs, so it carries what linked code carries:
   // the way back to where it lives, as the page a human would want.
   await expect(page.locator("#source-link")).toBeVisible();
   expect(await page.locator("#source-link").getAttribute("href")).toBe(
-    "https://github.com/abap2UI5/samples/blob/main/src/01/z2ui5_cl_smp_app_493.clas.abap",
+    "https://github.com/abap2UI5/samples/blob/main/src/01/z2ui5_cl_smp_app_040.clas.abap",
   );
 
 });
@@ -267,13 +269,13 @@ test("a catalogued entry opened over a draft leaves the stored draft for the rel
 
   await openBrowser(page);
   const before = await page.locator("#app").getAttribute("data-src");
-  await page.locator(".example-row", { hasText: "z2ui5_cl_smp_app_493" }).click();
+  await page.locator(".example-row", { hasText: "z2ui5_cl_smp_app_040" }).click();
   await expect(page.locator("#app")).not.toHaveAttribute("data-src", before ?? "", { timeout: 60000 });
   await expect(page.locator("#status")).toHaveText('running - your draft is kept in Samples, as "Before the last pick"', { timeout: 60000 });
   // The editor reported the new files before the page had marked them as
   // opened, and that one report stored the catalogued class over the draft.
   expect(await stored()).toContain("work of my own");
-  expect(await stored()).not.toContain("z2ui5_cl_smp_app_493");
+  expect(await stored()).not.toContain("z2ui5_cl_smp_app_040");
 });
 
 test("the search narrows the list across every group", async ({ page }) => {
@@ -432,7 +434,7 @@ test("entries the playground cannot run are listed, say why, cannot be clicked, 
   await expect(page.locator(".examples-group", { hasText: "Stack — Smart Controls" })).toBeVisible();
   await expect(stack.locator(".example-needs")).toContainText("needs a system");
   await expect(stack).toBeDisabled();
-  await expect(page.locator("#examples-count")).toHaveText(/^\d+ of \d+$/);
+  await expect(page.locator("#examples-count")).toHaveText(/^\d+ of \d+ samples$/);
 
   // Every row links to the file on GitHub - the stack one on its own branch.
   const item = page.locator(".example-item", { hasText: "z2ui5_cl_smps_app_314" });
@@ -549,7 +551,7 @@ test("the facets ask what only the index can answer: control, library, release",
   await expect(page.locator(".example-row[data-sample]").first()).toBeVisible();
 });
 
-test("\"Only what runs here\" drops the rows that cannot be clicked anyway", async ({ page }) => {
+test("\"Only samples that run in this browser\" drops the rows that cannot be clicked anyway", async ({ page }) => {
   await serveCatalogues(page);
   await open(page);
   await openBrowser(page);
@@ -718,4 +720,91 @@ test("the dialog links to the catalogue page, where a search has an address", as
   await open(page);
   await openBrowser(page);
   await expect(page.locator(".examples-all")).toHaveAttribute("href", "samples/");
+});
+
+test("a sample the page carries and the index lists is one row, and the count is of samples", async ({ page }) => {
+  // It used to be two: under "In the page" with the carried title, and again
+  // in "Start here" with the catalogue's - and the count added the drafts and
+  // the carried samples on top of the index, "813 of 813" beside a catalogue
+  // page that said 804 samples for the same list.
+  const fetched = [];
+  await serveCatalogues(page);
+  page.on("request", (r) => {
+    if (r.url().endsWith("z2ui5_cl_smp_app_493.clas.abap")) fetched.push(r.url());
+  });
+  await open(page);
+  await openBrowser(page);
+
+  const hello = SAMPLES.find((s) => s.files[0] === "z2ui5_cl_smp_app_493.clas.abap");
+  expect(hello, "the fixture's learn row is a sample the page carries").toBeTruthy();
+  await expect(page.locator(`.example-row[data-sample="${hello.id}"]`)).toHaveCount(1);
+  await expect(page.locator(`.example-row[data-sample="${hello.id}"]`)).toContainText("z2ui5_cl_smp_app_493");
+  const inThePage = page.locator('xpath=//h3[.="In the page"]/following-sibling::ul[1]/li');
+  await expect(inThePage).toHaveCount(SAMPLES.length - 1);
+
+  // The index's entries and the carried samples it does not list; a draft is
+  // the reader's own and not one of them.
+  const total = APPS_INDEX.entries.length + SAMPLES.length - 1;
+  await expect(page.locator("#examples-count")).toHaveText(`${total} of ${total} samples`);
+  await page.locator('input[data-filter="stack"]').uncheck();
+  await expect(page.locator("#examples-count")).toHaveText(`${total - 1} of ${total} samples`);
+  await page.locator('input[data-filter="stack"]').check();
+
+  // The row is the index's, and it opens the copy the page carries - no fetch.
+  const before = await page.locator("#app").getAttribute("data-src");
+  await page.locator(`.example-row[data-sample="${hello.id}"]`).click();
+  await expect(page.locator("#app")).not.toHaveAttribute("data-src", before ?? "", { timeout: 60000 });
+  await expect(page.locator("#status")).toHaveText(/running/, { timeout: 60000 });
+  expect(await openFiles(page)).toEqual(hello.files);
+  expect(fetched).toEqual([]);
+});
+
+test("the drafts are one folded line above the samples, and stay the way the reader left them", async ({ page }) => {
+  // Open, with their save row, they were a form in front of every sample - a
+  // phone's whole first screen.
+  await serveCatalogues(page);
+  await open(page);
+  await openBrowser(page);
+
+  const drafts = page.locator(".examples-drafts");
+  await expect(drafts.locator("summary")).toContainText("Your drafts");
+  await expect(drafts.locator("summary")).toContainText("none saved yet");
+  await expect(page.locator(".drafts-name")).toBeHidden();
+  await expect(page.locator(".example-row").first()).toBeInViewport();
+
+  await drafts.locator("summary").click();
+  await expect(page.locator(".drafts-name")).toBeVisible();
+  // Kept with the filters: open next time too.
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#examples-dialog")).toBeHidden();
+  await openBrowser(page);
+  await expect(page.locator(".drafts-name")).toBeVisible();
+  await drafts.locator("summary").click();
+  await expect(page.locator(".drafts-name")).toBeHidden();
+});
+
+test("a capability marker is said in words, and the filters say what their tick does", async ({ page }) => {
+  await serveCatalogues(page);
+  await open(page);
+  await openBrowser(page);
+
+  // "(A,C)" at the end of the repository's text: a frontend action and a
+  // custom control, as two badges whose tooltip is the long reading.
+  const row = page.locator(".example-row", { hasText: "z2ui5_cl_smp_app_040" });
+  await expect(row).not.toContainText("(A,C)");
+  await expect(row.locator(".example-mark")).toHaveText(["frontend action", "custom control"]);
+  await expect(row.locator(".example-mark").first()).toHaveAttribute("title", /follow_up_action/);
+  await page.locator("#examples-search").fill("custom control");
+  await expect(row).toBeVisible();
+  await page.locator("#examples-search").fill("");
+
+  // Each box is an instruction, explained on hover and to a screen reader;
+  // the floor in the release box is the index's.
+  for (const f of ["runsonly", "openui5only", "newer"]) {
+    await expect(page.locator(`input[data-filter="${f}"]`)).toHaveAttribute("aria-description", /.{40}/);
+  }
+  await expect(page.locator(".examples-filter", { has: page.locator('[data-filter="newer"]') }))
+    .toHaveText(/Include samples that need a UI5 newer than 1\.71/);
+  await expect(page.locator('input[data-filter="newer"]')).toBeChecked();
+  await expect(page.locator('input[data-filter="runsonly"]')).not.toBeChecked();
 });

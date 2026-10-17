@@ -73,7 +73,8 @@ const INDEX = {
     }),
     row({
       source: "learn", class: "z2ui5_cl_smp_app_040", title: "Responsive Table I",
-      note: "An internal table on screen", group: "Table", stage: "rows", controls: [0, 1],
+      // Ending in a capability marker, as abap2UI5/samples writes them.
+      note: "An internal table on screen (A)", group: "Table", stage: "rows", controls: [0, 1],
       file: "src/01/z2ui5_cl_smp_app_040.clas.abap",
     }),
     // Filed under Breadcrumbs, BUILDS a Table: the whole point of the control
@@ -151,6 +152,18 @@ test("two words find the row that has both, in any order - the same answer the p
   await page.fill("#q", "table internal");
   await expect(page.locator(".card h3")).toHaveText(["Responsive Table I"]);
   await page.fill("#q", "internal table");
+  await expect(page.locator(".card h3")).toHaveText(["Responsive Table I"]);
+});
+
+test("a capability marker is said in words on the card, not as a letter in brackets", async ({ page }) => {
+  // "(A)" on the end of a learn title is abap2UI5/samples' code for a
+  // frontend action; nothing on this site explained it. The card says it.
+  await openCatalogue(page);
+  const card = page.locator(".card", { hasText: "Responsive Table I" });
+  await expect(card.locator(".sub")).toHaveText("An internal table on screen");
+  await expect(card.locator(".badge.mark")).toHaveText("frontend action");
+  await expect(card.locator(".badge.mark")).toHaveAttribute("title", /follow_up_action/);
+  await page.fill("#q", "frontend action");
   await expect(page.locator(".card h3")).toHaveText(["Responsive Table I"]);
 });
 

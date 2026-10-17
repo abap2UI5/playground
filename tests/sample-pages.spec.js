@@ -167,6 +167,48 @@ test("the demo box mounts a playground in the page, and not before it is pressed
   await expect(inside.locator("#app")).toBeVisible();
 });
 
+test("Run it here is under the title, and one press of it starts the demo", async ({ page }) => {
+  // The demo box is below the facts, the controls and the libraries - a
+  // screen and more down - so the action a reader came for was below the
+  // fold. It is a link to the box's heading, so it works with the script
+  // blocked too; with it, the box is started as well.
+  const entry = paged.find((e) => e.runs && e.source === "learn") || paged.find((e) => e.runs);
+  await page.route(`**/${entry.raw.split("/").pop()}`, (route) =>
+    route.fulfill({
+      status: 200, contentType: "text/plain", headers: CORS,
+      body: `CLASS ${entry.class} DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    INTERFACES z2ui5_if_app.\nENDCLASS.\n`
+        + `CLASS ${entry.class} IMPLEMENTATION.\n  METHOD z2ui5_if_app~main.\n  ENDMETHOD.\nENDCLASS.\n`,
+    }),
+  );
+  await page.goto(`/samples/${entry.page}`);
+
+  const jump = page.locator(".sample-body .run-jump");
+  await expect(jump).toBeInViewport();
+  await expect(jump).toHaveAttribute("href", "#run-it-here");
+  await expect(page.locator("h2#run-it-here")).toHaveCount(1);
+  await expect(page.locator(".demo iframe")).toHaveCount(0);
+
+  await jump.click();
+  await expect(page).toHaveURL(/#run-it-here$/);
+  await expect(page.locator(".demo iframe")).toHaveCount(1);
+  await expect(page.locator(".abap2ui5-demo-start")).toHaveCount(0);
+});
+
+test("a capability marker on a title is said in words on its page", async () => {
+  // abap2UI5/samples ends a title in (A), (C) or (A,C) - a frontend action,
+  // a custom control, both. In a heading, a browser tab or a search result
+  // the two letters explained nothing; the page says it as badges, and
+  // prints the marker once more beside its legend in the facts.
+  const marked = paged.find((e) => /\((A|C|A,C)\)\s*$/.test(`${e.note || ""}`) || /\((A|C|A,C)\)\s*$/.test(`${e.title || ""}`));
+  test.skip(!marked, "no sample in the index carries a marker today");
+  const html = fs.readFileSync(path.join(DIST, "samples", marked.page, "index.html"), "utf8");
+  const title = html.match(/<title>([^<]*)<\/title>/)[1];
+  expect(title).not.toMatch(/\((A|C|A,C)\)/);
+  expect(html.match(/<h1>([^<]*)<\/h1>/)[1]).not.toMatch(/\((A|C|A,C)\)/);
+  expect(html).toMatch(/class="badge mark" title="[^"]+">(frontend action|custom control)</);
+  expect(html).toMatch(/<dt>Marked<\/dt><dd><code>\((A|C|A,C)\)<\/code> — /);
+});
+
 test("the outline marks the section being read, and moves with the scroll", async ({ page }) => {
   // The documentation's outline has always done this - the entry at full
   // strength and a bar in the accent beside it - and these pages listed the
@@ -436,6 +478,7 @@ test("a sample that cannot run here says what it needs, and offers no Run", asyn
   // cannot find is worse than one they cannot run. What it does not get is a
   // demo box: a start button that could only ever fail is not an offer.
   expect(html).not.toContain('class="run"');
+  expect(html).not.toContain('class="run-jump"');
   expect(html).not.toContain('class="abap2ui5-demo"');
   expect(html).not.toContain("abap2ui5-embed.js");
   expect(html).toContain(entry.github);
