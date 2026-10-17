@@ -23,38 +23,17 @@
 // price; one that was stored by an earlier version is removed on load. An embedded playground never shows the chat at all: a demo in
 // somebody's documentation page is not where a reader types a key.
 import { isUntouchedStarter } from "./ai-starter.mjs";
-import { listenForFileDrops, listSentFiles, setUpAttaching } from "./attach-ui.mjs";
+import { listenForFileDrops } from "./attach-ui.mjs";
+import { createChatRoom, narrow } from "./chat-ui.mjs";
 import { abapGitZip, download } from "./export.mjs";
 import { createDriver } from "./frame-drive.mjs";
-import { keyTarget, setUpProviderForm } from "./llm-form.mjs";
-import { readProviderSettings } from "./llm-provider.mjs";
 import { readStored, removeStored, writeStored } from "./storage.mjs";
 import { setStatus } from "./ui.mjs";
 
 const KEY_STORAGE = "abap2ui5-playground:anthropic-key";
-// The key, for this page's lifetime only (see above). An empty string is a
-// key too: an OpenAI-compatible server on this machine takes none, and the
-// form was submitted without one on purpose. null is "not asked yet".
-let sessionKey = null;
-const storedKey = () => sessionKey;
-// The provider half of the key form (llm-form.mjs): Anthropic, or an
-// OpenAI-compatible server with its base URL and model.
-let providerForm;
-// Which server the key in memory was typed for (keyTarget in llm-form.mjs).
-let keyFor;
-// The workspace a key that is not tied to one sends its requests to - the
-// API refuses such a key without the anthropic-workspace-id header. Empty
-// for the ordinary key, which belongs to a workspace already.
-const WORKSPACE_STORAGE = "abap2ui5-playground:anthropic-workspace";
-// Thorough, Balanced or Fast (SPEEDS in ai-agent.mjs). Kept only while it
-// differs from Balanced, the rule the page's other preferences follow.
-const SPEED_STORAGE = "abap2ui5-playground:ai-speed";
-const DEFAULT_SPEED = "balanced";
 // The stage the studio last showed - kept, the way a split is.
 const STAGE_STORAGE = "abap2ui5-playground:ai-stage";
 const STAGES = ["chat", "preview", "code", "split"];
-// The one width the stylesheet and layout.mjs share for "a phone".
-const narrow = () => window.matchMedia("(max-width: 820px)").matches;
 
 const SUGGESTIONS = [
   "A table of flights with a search field that filters by carrier",
@@ -64,7 +43,9 @@ const SUGGESTIONS = [
 ];
 
 let host;
-let agent;
+// The chat itself - the log, the key, Send and Stop, a turn from message to
+// answer - is chat-ui.mjs, shared with the Pilot; what is here is the studio.
+let room;
 // Run's frame as the model's transport, and the mirror of its screen - what
 // lets the model try the app it built (look and act in ai-agent.mjs, the
 // operator in ai-operator.mjs, as in the Pilot). The driver is here from the
@@ -73,27 +54,8 @@ let agent;
 const driver = createDriver();
 let mirror;
 const frameApi = () => document.getElementById("app")?.contentWindow?.__z2ui5PlaygroundPilot;
-// The agent whose turn is running, which is not always `agent`: a new key or
-// New chat replaces `agent` while a turn may still be under way, and Stop has
-// to reach the turn that is actually running.
-let active;
-// Stop pressed while the chat's chunk was still downloading, before there
-// was an agent to tell.
-let stopAsked = false;
-// Bumped by everything that starts the conversation over. A turn still
-// running from before draws nothing into the new log.
-let generation = 0;
-// What the running turn is drawing: the answer being written, its raw
-// markdown, the progress note, and each tool call's row by its id.
-let current;
-let raw = "";
-let note;
-const rows = new Map();
-let busy = false;
 let open = false;
 let el;
-// The files going with the next message (attach-ui.mjs, shared with the Pilot).
-let attaching;
 // The conversation as text, for the export: { role, text } per line.
 let transcript = [];
 // The reader's latest message, which can be edited and sent again once the
@@ -163,85 +125,84 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
     if (open) setStage(document.body.dataset.stage);
   });
 
-  providerForm = setUpProviderForm("chat");
-  reflectProvider(readProviderSettings());
-  el.keyForm.addEventListener("submit", (e) => {
-    e.preventDefault();
-    const key = el.keyInput.value.trim();
-    // A key goes only to the server it was typed for: another provider or
-    // base URL asks for its own (an Anthropic key sent as the bearer of
-    // somebody's OpenAI-compatible server is a key given away). The
-    // workspace can be added later on its own, to a key already held - and
-    // a local server needs no key at all.
-    const target = keyTarget(providerForm.read());
-    if (key === "" && keyFor !== target && providerForm.keyRequired()) {
-      sessionKey = null;
-      keyFor = undefined;
-      el.keyRemove.hidden = true;
-      el.keyInput.focus();
-      return;
-    }
-    if (key !== "" || keyFor !== target) {
-      sessionKey = key;
-      keyFor = target;
-    }
-    const workspace = el.workspaceInput.value.trim();
-    if (workspace === "") removeStored(WORKSPACE_STORAGE);
-    else writeStored(WORKSPACE_STORAGE, workspace);
-    reflectProvider(providerForm.save());
-    el.keyInput.value = "";
-    // A new key is a new client; the conversation so far went with the old one,
-    // and so does a turn still running on the old key.
-    startOver();
-    showKeyForm(false);
-    el.input.focus();
-  });
-  el.keyRemove.addEventListener("click", () => {
-    sessionKey = null;
-    keyFor = undefined;
-    removeStored(WORKSPACE_STORAGE);
-    el.workspaceInput.value = "";
-    startOver();
-    showKeyForm(true);
-  });
-  el.keyButton.addEventListener("click", () => showKeyForm(el.keyForm.hidden));
-
-  el.compose.addEventListener("submit", (e) => {
-    e.preventDefault();
-    if (busy) stopTurn();
-    else submit();
-  });
-  el.log.addEventListener("scroll", () => {
-    following = el.log.scrollHeight - el.log.scrollTop - el.log.clientHeight < 48;
-  }, { passive: true });
-  // Enter sends, Shift+Enter is a new line - what every chat does.
-  el.input.addEventListener("keydown", (e) => {
-    // Safari ends the composition BEFORE the Enter that commits it, so
-    // isComposing is already false there; keyCode 229 is that Enter.
-    if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
-      e.preventDefault();
-      if (!busy) submit();
-    }
-  });
-
-  // Files for the next message: the paperclip, a paste, and - on the studio's
-  // own page - a drop anywhere on it. The kinds and the limit are the agent
-  // chunk's, imported the first time a file is added.
-  attaching = setUpAttaching({
+  // The key form, Send and Stop, New chat, the speed and the files for the
+  // next message (chat-ui.mjs). The kinds and the limit of the files are the
+  // agent chunk's, imported the first time a file is added.
+  room = createChatRoom({
     prefix: "chat",
-    button: el.attach,
-    input: el.fileInput,
-    list: el.files,
-    textarea: el.input,
+    el,
+    // A turn that keeps running while the studio is closed is still working.
+    onBusy: (busy) => document.body.classList.toggle("is-ai-working", busy && open),
+    onStartOver: () => {
+      transcript = [];
+      lastUser = undefined;
+    },
+    showWelcome,
     rules: () => import("./ai-agent.mjs"),
-    refused: (text) => addLine("notice is-error", text),
+    turn: {
+      load: () => import("./ai-agent.mjs"),
+      sent({ line, typed, files }) {
+        lastUser?.div.querySelector(".chat-edit")?.remove();
+        lastUser = { div: line, text: typed, files };
+        transcript.push({ role: "user", text: `${typed}${files.length ? `\n\n${files.map((f) => `📎 ${f.name}`).join("\n")}` : ""}` });
+        // The files as they are now - offered back under the answer when the
+        // step changed them.
+        return host.files().map((f) => ({ ...f }));
+      },
+      createAgent({ mod, ...conversation }) {
+        if (!mirror) {
+          mirror = mod.createMirror();
+          driver.observe((body, response) => mirror.observe(body, response));
+        }
+        return mod.createAgent({
+          ...conversation,
+          host: {
+            ...host,
+            // The running app, for look and act: its frame as the transport,
+            // its screen as the mirror, the class Run starts.
+            app: {
+              drive: (body) => driver.drive(frameApi, body),
+              frame: frameApi,
+              mirror: () => mirror,
+              get cls() {
+                return host.files()[0]?.name.replace(/\.clas\.abap$/, "") ?? "";
+              },
+            },
+          },
+          speed: () => el.speed.value,
+        });
+      },
+      working: "the AI is working…",
+      done: "the AI is done",
+      ui: {
+        // The answer so far, in the transcript - replaced on every delta.
+        text(raw, line) {
+          const last = transcript[transcript.length - 1];
+          if (last?.role === "assistant" && last.el === line) last.text = raw;
+          else transcript.push({ role: "assistant", text: raw, el: line });
+        },
+        tool({ summary, error, started }) {
+          transcript.push({ role: error ? "failed" : "did", text: summary });
+          if (started) appUpdated();
+        },
+        notice(t) {
+          transcript.push({ role: "note", text: t });
+        },
+        // The model is about to do something in the app: said in the bar,
+        // and on a phone the app comes forward so the reader sees it happen.
+        acting(t) {
+          setStatus(t);
+          if (narrow()) setStage("preview");
+        },
+      },
+      answered(before) {
+        if (JSON.stringify(host.files()) !== JSON.stringify(before)) addCheckpoint(before);
+      },
+      settled: () => offerEdit(),
+    },
   });
+  // A drop anywhere on the studio's own page.
   if (startOpen) listenForFileDrops({ highlight: el.chat, onFiles: (files) => chatDropped(files) });
-
-  el.reset.addEventListener("click", () => {
-    startOver();
-    showWelcome();
-  });
 
   el.download.addEventListener("click", () => {
     try {
@@ -250,7 +211,7 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
       setStatus(`${zip.name} is on its way`);
     } catch (e) {
       setStatus("the zip could not be written", true);
-      addLine("notice", String(e?.message ?? e));
+      room.addLine("notice", String(e?.message ?? e));
     }
   });
 
@@ -265,14 +226,6 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
     const name = `abap2ui5-ai-studio-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-")}.md`;
     download(name, new TextEncoder().encode(transcriptMarkdown()), "text/markdown");
     setStatus(`${name} is on its way`);
-  });
-
-  // Asked before every request, so a change applies from the next turn on.
-  const stored = readStored(SPEED_STORAGE);
-  if (stored && [...el.speed.options].some((o) => o.value === stored)) el.speed.value = stored;
-  el.speed.addEventListener("change", () => {
-    if (el.speed.value === DEFAULT_SPEED) removeStored(SPEED_STORAGE);
-    else writeStored(SPEED_STORAGE, el.speed.value);
   });
 
   // No beforeunload here, though a reload takes the conversation with it:
@@ -301,31 +254,9 @@ export function sawRoundtrip(body, response) {
 /** A file drop on the studio's page, or on the app in its frame (main.mjs,
  *  the bridge's dropFiles): to the chat, which a phone brings forward. */
 export function chatDropped(files) {
-  if (!attaching || !open || files.length === 0) return;
+  if (!room?.attaching || !open || files.length === 0) return;
   if (narrow()) setStage("chat", true);
-  attaching.add(files);
-}
-
-function stopTurn() {
-  stopAsked = true;
-  active?.stop();
-}
-
-// The conversation is over: the turn still running (if any) is stopped, and
-// whatever it still says goes nowhere - see `generation`.
-function startOver() {
-  if (busy) stopTurn();
-  agent = undefined;
-  generation += 1;
-  finishRows();
-  // The old turn may still be inside a tool (a run, a sample being fetched)
-  // and only unwinds when that ends; the new conversation is not busy.
-  setBusy(false);
-  // Its tokens went with it.
-  el.usage.textContent = "";
-  el.usage.title = "";
-  transcript = [];
-  lastUser = undefined;
+  room.attaching.add(files);
 }
 
 function transcriptMarkdown() {
@@ -350,28 +281,28 @@ function addCheckpoint(before) {
   button.className = "ghost chat-checkpoint-restore";
   button.textContent = "↩ Put the files back as before this step";
   button.addEventListener("click", () => {
-    if (busy) return;
+    if (room.busy) return;
     try {
       host.setFiles(before);
     } catch (e) {
-      addLine("notice is-error", `The files could not be put back: ${String(e?.message ?? e)}`);
+      room.addLine("notice is-error", `The files could not be put back: ${String(e?.message ?? e)}`);
       return;
     }
     line.remove();
     showAppName();
-    addLine("notice", "The files are back as they were before that step - the model is told with your next message.");
+    room.addLine("notice", "The files are back as they were before that step - the model is told with your next message.");
     transcript.push({ role: "note", text: "the files were put back as before the last step" });
     host.run().catch(() => {});
   });
   line.append(button);
   el.log.append(line);
-  scrollDown();
+  room.scrollDown();
 }
 
 // "Edit" on the reader's latest message: the exchange is taken out of the
 // conversation and the text put back to send again, changed.
 function offerEdit() {
-  if (!lastUser || !agent) return;
+  if (!lastUser || !room.agent) return;
   const { div, text, files } = lastUser;
   if (div.querySelector(".chat-edit")) return;
   const edit = document.createElement("button");
@@ -381,34 +312,23 @@ function offerEdit() {
   edit.setAttribute("aria-label", "Edit this message and send it again");
   edit.textContent = "✎";
   edit.addEventListener("click", () => {
-    if (busy || !agent?.rewind()) return;
+    if (room.busy || !room.agent?.rewind()) return;
     for (let node = div.nextSibling; node; ) {
       const next = node.nextSibling;
       node.remove();
       node = next;
     }
     div.remove();
-    rows.clear();
+    room.rows.clear();
     const at = transcript.findLastIndex((t) => t.role === "user");
     if (at !== -1) transcript.length = at;
     lastUser = undefined;
     el.input.value = text;
-    if (files.length > 0) attaching.add(files);
+    if (files.length > 0) room.attaching.add(files);
     el.input.focus();
     setStatus("edit the message and send it again");
   });
   div.append(edit);
-}
-
-// Every tool row still drawn as pending is a call that will not finish now -
-// stopped, refused, or the request failed under it. Left as it was, it went
-// on shimmering as if the work were still going on.
-function finishRows() {
-  for (const row of rows.values()) {
-    row.className = "chat-msg chat-tool is-error";
-    row.textContent = `${row.textContent.replace(/…$/, "")} - not finished`;
-  }
-  rows.clear();
 }
 
 function setOpen(value) {
@@ -419,7 +339,7 @@ function setOpen(value) {
   el.bar.hidden = !open;
   document.body.classList.toggle("is-studio", open);
   // A turn that kept running while the studio was closed is still working.
-  document.body.classList.toggle("is-ai-working", busy && open);
+  document.body.classList.toggle("is-ai-working", room.busy && open);
   if (!open) {
     delete document.body.dataset.stage;
     document.body.classList.remove("is-ai-working");
@@ -435,7 +355,7 @@ function setOpen(value) {
   // seen yet; a wide screen on the chat beside code and app.
   setStage(narrow() ? "chat" : stored ?? (window.innerWidth >= 1500 ? "split" : "preview"));
   showAppName();
-  showKeyForm(storedKey() === null);
+  room.showKeyForm(!room.hasKey());
   if (el.keyForm.hidden) el.input.focus();
   else el.keyInput.focus();
 }
@@ -478,35 +398,11 @@ function appUpdated() {
   card.addEventListener("click", () => {
     const stage = document.body.dataset.stage;
     if (stage === "code" || stage === "chat") setStage("preview", true);
-    flashStage();
+    room.flashStage();
   });
   el.log.append(card);
-  scrollDown();
-  flashStage();
-}
-
-function flashStage() {
-  el.stage.classList.remove("is-flash");
-  void el.stage.offsetWidth;
-  el.stage.classList.add("is-flash");
-}
-
-function showKeyForm(show) {
-  el.keyForm.hidden = !show;
-  el.keyRemove.hidden = storedKey() === null;
-  if (show) {
-    el.workspaceInput.value = readStored(WORKSPACE_STORAGE) ?? "";
-    providerForm.fill();
-  }
-}
-
-// The header follows the provider: the speeds are Anthropic's models, so an
-// OpenAI-compatible server - one model, named in the form - has no select.
-function reflectProvider(settings) {
-  el.speed.hidden = settings.provider !== "anthropic";
-  el.keyButton.title = settings.provider === "openai"
-    ? `${settings.model} at ${settings.baseUrl} - your API key, and which model API answers`
-    : "Your API key, and which model API answers";
+  room.scrollDown();
+  room.flashStage();
 }
 
 function showWelcome() {
@@ -550,12 +446,12 @@ function showWelcome() {
       try {
         host.setFiles(last);
       } catch (e) {
-        addLine("notice is-error", `The last build could not be opened: ${String(e?.message ?? e)}`);
+        room.addLine("notice is-error", `The last build could not be opened: ${String(e?.message ?? e)}`);
         return;
       }
       resume.remove();
       showAppName();
-      addLine("notice", "The last build is back in the editor - ask for a change, or describe something new.");
+      room.addLine("notice", "The last build is back in the editor - ask for a change, or describe something new.");
       // Run, so the stage shows it; the report goes nowhere.
       host.run().catch(() => {});
     });
@@ -571,330 +467,4 @@ function showWelcome() {
     intro.append(resume);
   }
   el.log.append(intro);
-}
-
-function addLine(kind, text) {
-  const div = document.createElement("div");
-  div.className = `chat-msg chat-${kind}`;
-  div.textContent = text;
-  el.log.append(div);
-  scrollDown();
-  return div;
-}
-
-// The log follows the answer while the reader is at its end. Scrolled up to
-// read something earlier, they stay there: every delta of a turn that runs
-// for minutes pulled them back down, several times a second. A scroll the
-// page makes itself lands at the end and keeps `following` true.
-let following = true;
-function scrollDown(force = false) {
-  if (force) following = true;
-  if (following) el.log.scrollTop = el.log.scrollHeight;
-}
-
-function setBusy(value) {
-  busy = value;
-  el.send.textContent = busy ? "Stop" : "Send";
-  el.send.classList.toggle("primary", !busy);
-  el.chat.classList.toggle("is-busy", busy);
-  document.body.classList.toggle("is-ai-working", busy && open);
-  // The answer is redrawn on every delta, inside a live region: busy, a
-  // screen reader waits for the turn rather than reading it from the top on
-  // each redraw.
-  el.log.setAttribute("aria-busy", String(busy));
-}
-
-async function submit() {
-  const typed = el.input.value.trim();
-  // A file dropped a moment ago may still be being checked in.
-  await attaching.settled();
-  if (busy || (typed === "" && attaching.count === 0)) return;
-  // Files alone are a message too: the model is told they are what it is about.
-  const text = typed || "Here are the files.";
-  const key = storedKey();
-  if (key === null) {
-    showKeyForm(true);
-    el.keyInput.focus();
-    return;
-  }
-  el.log.querySelector(".chat-welcome")?.remove();
-  el.input.value = "";
-  const files = attaching.take();
-  lastUser?.div.querySelector(".chat-edit")?.remove();
-  const userLine = addLine("user", typed);
-  listSentFiles(userLine, files, "chat-user-files");
-  lastUser = { div: userLine, text: typed, files };
-  transcript.push({ role: "user", text: `${typed}${files.length ? `\n\n${files.map((f) => `📎 ${f.name}`).join("\n")}` : ""}` });
-  // The files as they are now - offered back under the answer when the
-  // step changed them.
-  const before = host.files().map((f) => ({ ...f }));
-  scrollDown(true);
-  setBusy(true);
-  stopAsked = false;
-  current = undefined;
-  note = undefined;
-  raw = "";
-
-  // This turn's conversation; anything it says after the conversation was
-  // started over is dropped.
-  const gen = generation;
-  const live = () => gen === generation;
-  let mod;
-  let turn;
-  try {
-    mod = await import("./ai-agent.mjs");
-    if (stopAsked || !live()) {
-      if (live()) addLine("notice", "Stopped.");
-      setStatus("stopped");
-      return;
-    }
-    if (!agent) {
-      // Every callback asks whether its conversation is still the one on
-      // screen - `ui` belongs to this agent for as long as it lives.
-      const ui = {
-        assistantStart() {
-          current = undefined;
-          note = undefined;
-        },
-        thinkingStart() {
-          note = undefined;
-        },
-        thinking(delta) {
-          current = undefined;
-          if (!note) note = addLine("progress", "");
-          note.textContent += delta;
-          scrollDown();
-        },
-        toolPending({ id, text }) {
-          current = undefined;
-          note = undefined;
-          let row = rows.get(id);
-          if (!row) {
-            row = addLine("tool is-pending", "");
-            rows.set(id, row);
-          }
-          row.textContent = text;
-          scrollDown();
-        },
-        text(delta) {
-          if (!current) {
-            current = addLine("assistant", "");
-            raw = "";
-          }
-          // Rendered again on every delta: an answer is a few paragraphs,
-          // and a half-written **bold** has to become bold once it closes.
-          raw += delta;
-          renderMarkdown(current, raw);
-          scrollDown();
-          // The answer so far, in the transcript - replaced on every delta.
-          const last = transcript[transcript.length - 1];
-          if (last?.role === "assistant" && last.el === current) last.text = raw;
-          else transcript.push({ role: "assistant", text: raw, el: current });
-        },
-        tool({ id, summary, error, started }) {
-          current = undefined;
-          note = undefined;
-          const row = rows.get(id) ?? addLine("tool", "");
-          rows.delete(id);
-          row.className = `chat-msg chat-tool${error ? " is-error" : ""}`;
-          row.textContent = summary;
-          scrollDown();
-          transcript.push({ role: error ? "failed" : "did", text: summary });
-          if (started) appUpdated();
-        },
-        usage(total) {
-          const { text, title } = mod.usageText(total);
-          el.usage.textContent = text;
-          el.usage.title = title;
-        },
-        notice(t) {
-          current = undefined;
-          addLine("notice", t);
-          transcript.push({ role: "note", text: t });
-        },
-        // The model is about to do something in the app: said in the bar,
-        // and on a phone the app comes forward so the reader sees it happen.
-        acting(t) {
-          setStatus(t);
-          if (narrow()) setStage("preview");
-        },
-      };
-      const agentGen = generation;
-      const guarded = Object.fromEntries(
-        Object.entries(ui).map(([k, f]) => [k, (...args) => (agentGen === generation ? f(...args) : undefined)]),
-      );
-      if (!mirror) {
-        mirror = mod.createMirror();
-        driver.observe((body, response) => mirror.observe(body, response));
-      }
-      agent = mod.createAgent({
-        apiKey: key,
-        workspace: readStored(WORKSPACE_STORAGE) ?? undefined,
-        provider: readProviderSettings(),
-        host: {
-          ...host,
-          // The running app, for look and act: its frame as the transport,
-          // its screen as the mirror, the class Run starts.
-          app: {
-            drive: (body) => driver.drive(frameApi, body),
-            frame: frameApi,
-            mirror: () => mirror,
-            get cls() {
-              return host.files()[0]?.name.replace(/\.clas\.abap$/, "") ?? "";
-            },
-          },
-        },
-        speed: () => el.speed.value,
-        ui: guarded,
-      });
-    }
-    turn = agent;
-    active = turn;
-    setStatus("the AI is working…");
-    const { stopped } = await turn.send(text, files);
-    if (!live()) return;
-    if (stopped) addLine("notice", "Stopped.");
-    setStatus(stopped ? "stopped" : "the AI is done");
-    if (JSON.stringify(host.files()) !== JSON.stringify(before)) addCheckpoint(before);
-  } catch (e) {
-    if (!live()) return;
-    const said = mod ? mod.explainError(e) : { text: `The AI part of the page could not be loaded: ${String(e?.message ?? e)}` };
-    addLine(said.stopped ? "notice" : "notice is-error", said.text);
-    setStatus(said.stopped ? "stopped" : "the AI request failed", !said.stopped);
-    if (said.key) {
-      // The message never reached a model, and a new key is a new
-      // conversation: what was typed and attached is put back to send again.
-      if (el.input.value === "") el.input.value = typed;
-      if (files.length > 0) attaching.add(files);
-      showKeyForm(true);
-      // A key without a workspace is a valid key - what is missing is the
-      // workspace, so that is where the caret goes.
-      (said.workspace ? el.workspaceInput : el.keyInput).focus();
-    }
-  } finally {
-    if (active === turn) active = undefined;
-    // A turn of a conversation started over leaves the new one alone - it
-    // was set idle by startOver( ) and may be busy with a turn of its own.
-    if (live()) {
-      finishRows();
-      setBusy(false);
-      offerEdit();
-    }
-  }
-}
-
-// The model answers in markdown. Rendered here into nodes - paragraphs,
-// lists, headings, fenced code, `code` and **bold** - and never through
-// innerHTML: every character of the answer reaches the page as text, so
-// nothing the model writes can be markup.
-export function renderMarkdown(target, text) {
-  const blocks = [];
-  let paragraph = [];
-  let list;
-  const endParagraph = () => {
-    if (paragraph.length === 0) return;
-    blocks.push(element("p", inline(paragraph.join(" "))));
-    paragraph = [];
-  };
-  const endList = () => {
-    if (list) blocks.push(list);
-    list = undefined;
-  };
-  const lines = text.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (/^\s*```/.test(line)) {
-      endParagraph();
-      endList();
-      const code = [];
-      for (i += 1; i < lines.length && !/^\s*```/.test(lines[i]); i++) code.push(lines[i]);
-      const pre = document.createElement("pre");
-      const c = document.createElement("code");
-      c.textContent = code.join("\n");
-      pre.append(c);
-      blocks.push(pre);
-      continue;
-    }
-    // A table: a header row, a separator row of dashes, then rows - each
-    // cell rendered inline, so a field list the model proposes keeps its
-    // columns. Pipes at the edges are optional, as in GitHub's markdown.
-    if (/^\s*\|?.*\|.*$/.test(line) && /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(lines[i + 1] ?? "")) {
-      endParagraph();
-      endList();
-      const cells = (row) => row.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
-      const table = document.createElement("table");
-      const thead = document.createElement("thead");
-      thead.append(element("tr", cells(line).map((c) => element("th", inline(c)))));
-      table.append(thead);
-      const tbody = document.createElement("tbody");
-      for (i += 2; i < lines.length && lines[i].includes("|") && lines[i].trim() !== ""; i++) {
-        tbody.append(element("tr", cells(lines[i]).map((c) => element("td", inline(c)))));
-      }
-      i -= 1;
-      table.append(tbody);
-      blocks.push(table);
-      continue;
-    }
-    const item = /^\s*(?:([-*])|(\d+)\.)\s+(.*)$/.exec(line);
-    if (item) {
-      endParagraph();
-      const kind = item[1] ? "ul" : "ol";
-      if (!list || list.tagName.toLowerCase() !== kind) {
-        endList();
-        list = document.createElement(kind);
-        // A numbered list broken by a nested bullet or a code block goes
-        // on with its own number, not with 1 again.
-        if (kind === "ol") list.start = Number(item[2]);
-      }
-      list.append(element("li", inline(item[3])));
-      continue;
-    }
-    const heading = /^#{1,6}\s+(.*)$/.exec(line);
-    if (heading) {
-      endParagraph();
-      endList();
-      blocks.push(element("p", [element("strong", inline(heading[1]))]));
-      continue;
-    }
-    if (line.trim() === "") {
-      endParagraph();
-      endList();
-      continue;
-    }
-    endList();
-    paragraph.push(line.trim());
-  }
-  endParagraph();
-  endList();
-  target.replaceChildren(...blocks);
-}
-
-function element(tag, children) {
-  const el = document.createElement(tag);
-  el.append(...children);
-  return el;
-}
-
-function inline(text) {
-  const nodes = [];
-  for (const part of text.split(/(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\(https:\/\/[^\s)]+\))/)) {
-    if (part === "") continue;
-    const link = /^\[([^\]]+)\]\((https:\/\/[^\s)]+)\)$/.exec(part);
-    if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
-      nodes.push(element("code", [part.slice(1, -1)]));
-    } else if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
-      nodes.push(element("strong", [part.slice(2, -2)]));
-    } else if (link) {
-      // Only https, opened beside, and never a handle on this page: the
-      // address is text the model wrote.
-      const a = element("a", [link[1]]);
-      a.href = link[2];
-      a.target = "_blank";
-      a.rel = "noopener noreferrer";
-      nodes.push(a);
-    } else {
-      nodes.push(document.createTextNode(part));
-    }
-  }
-  return nodes;
 }

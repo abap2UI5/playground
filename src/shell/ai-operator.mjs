@@ -14,13 +14,12 @@
 // they took the controls.
 import { AgentError, createAppClient } from "../vendor/agent/appclient.mjs";
 import { analyzeScreen, applyResponse, emptyState, FRONTEND_EVENTS, getAt, modelKeyOf } from "../vendor/agent/snapshot.mjs";
+import { clip } from "./ai-common.mjs";
 
 const SLOTS = ["MAIN", "NEST", "NEST2", "POPUP", "POPOVER"];
 export const MAX_ROWS = 20;
 // A dump of the reader's click as the model is told it.
 export const MAX_ERROR_TEXT = 2000;
-export const clip = (text, max) =>
-  text.length <= max ? text : `${text.slice(0, max)}\n… (${text.length - max} more characters cut)`;
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const VALUE_CAP = 2000;
 
