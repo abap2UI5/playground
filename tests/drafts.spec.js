@@ -17,6 +17,8 @@ test("a draft saved under a name comes back another day, and can be deleted", as
   // Named and saved from the samples browser.
   await page.locator("#examples").click();
   await expect(page.locator("#examples-body")).toContainText("Nothing saved yet");
+  // Folded to one line until opened - and opened, kept open from then on.
+  await page.locator(".examples-drafts > summary").click();
   await page.locator(".drafts-name").fill("my greeting");
   await page.locator(".drafts-save-button").click();
   const row = page.locator('.example-row[data-draft="my greeting"]');
@@ -68,6 +70,7 @@ test("a draft's name typed while the index is on its way is still there when it 
   });
   await open(page);
   await page.locator("#examples").click();
+  await page.locator(".examples-drafts > summary").click();
   await page.locator(".drafts-name").click();
   await page.keyboard.type("my ");
   land();

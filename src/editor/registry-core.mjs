@@ -454,6 +454,11 @@ const FORMAT_RULES = {
   // Not contains_tab: its fix replaces everything from a line's first tab to
   // the column the count of its tabs reaches with one space, so
   // `\tCLEAR \t x` lost its CLEAR. Tabs are taken out by untab( ) below.
+  // double_space folds a run AFTER a keyword, an `=` or a bracket, and never
+  // one in front of a token: `a    =   b.` comes back `a    = b.`. That half
+  // is the house layout - assignments, components and a chain's `v =` column
+  // are lined up by padding there - and folding every run rewrote 2,300 lines
+  // of the pinned samples. tests/node/format.test.mjs holds both halves.
   double_space: true,
   empty_line_in_statement: true,
   line_only_punc: true,

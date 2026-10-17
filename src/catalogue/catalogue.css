@@ -569,8 +569,9 @@ html { scroll-padding-top: 62px; }
 /* The one thing on a card that is above the link stretched over it: what a
    sample needs in full is the badge's tooltip, and a tooltip under an overlay
    is a tooltip nobody can reach. The cost is a badge-sized patch of a card
-   that does not open it, which is cheaper than the answer being unreachable. */
-.card .badge.needs[title] { position: relative; z-index: 1; }
+   that does not open it, which is cheaper than the answer being unreachable.
+   The same goes for a marker's badge, whose reading is its tooltip. */
+.card .badge.needs[title], .card .badge.mark { position: relative; z-index: 1; }
 .badge {
   font-size: 11px;
   padding: 1px 7px;
@@ -580,6 +581,10 @@ html { scroll-padding-top: 62px; }
   white-space: nowrap;
 }
 .badge.needs { background: var(--warn-bg); border-color: transparent; color: var(--warn); }
+/* "(A)" and "(C)" off the end of a title, as the words they stand for
+   (src/shell/sample-marks.mjs) - the long reading is the tooltip, which is
+   why a card lifts this badge above its link like the one above. */
+.badge.mark { border-style: dashed; cursor: help; }
 
 .actions { display: flex; gap: 8px; margin-top: auto; padding-top: 3px; }
 .actions a {

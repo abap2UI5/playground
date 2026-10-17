@@ -10,6 +10,7 @@
 import { keepSiteLinksCurrent, rememberHere } from "../shell/site-memory.mjs";
 import { setUpOutline } from "./outline.mjs";
 import { setUpLines } from "./lines.mjs";
+import { setUpRunJump } from "./run-jump.mjs";
 
 /* Where the reader is, in the samples: this page. Then the bar - the other
    sections lifted to where they were left, the step back to a page still in
@@ -21,3 +22,4 @@ if (!document.body.hasAttribute("data-not-found")) rememberHere("samples");
 keepSiteLinksCurrent();
 setUpOutline();
 setUpLines();
+setUpRunJump();
