@@ -324,7 +324,9 @@ test("the running app cannot take the focus off the examples browser", async ({ 
       return took;
     });
 
-  expect(await appTakesFocus()).toBe(false);
+  // Polled: the page tells the frame about the dialog by message
+  // (frame-link.mjs), so the hold lands a moment after showModal( ).
+  await expect.poll(appTakesFocus).toBe(false);
 
   // Still in the dialog, so the search box gets what is typed...
   await expect(page.locator("#examples-dialog")).toBeVisible();
@@ -343,8 +345,9 @@ test("the running app cannot take the focus off the examples browser", async ({ 
 
   // With the dialog gone the app has its focus back, which is the half of this
   // that must not be traded away: the frame declines the focus while a dialog
-  // is open over it, not for good.
-  expect(await appTakesFocus()).toBe(true);
+  // is open over it, not for good. Polled like the hold: its release is a
+  // message too.
+  await expect.poll(appTakesFocus).toBe(true);
 });
 
 // The bar's search panel is the other modal on the page, and it is not a
