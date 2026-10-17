@@ -128,6 +128,35 @@ deploy — readers get the published playground, never your checkout.
   not judged here. Everything else is run and judged by the two checkers and
   Run, exactly like typed code; a catalogued sample the transpiler cannot
   compile fails visibly there, and that is the designed behaviour, not a bug.
+- **What a link opens on, and what it adds.** A link - a share fragment,
+  `?src=`, `?gist=`, `?from=catalogue`, and every embed and `?view=` page -
+  never gets the first-steps strip ([panel.md](panel.md)): somebody sent it
+  with something particular to show. Embeds and app-only pages get neither
+  the lesson bar, nor **Compare** and **Reset to original**, nor the UI5
+  select. On the playground the files a link opened ARE the original those two
+  buttons compare with (`original.mjs`, `openedFiles( )` in `file-sets.mjs`) -
+  as are a sample and a named draft; a restored last session and the AI's
+  writes have none, and the buttons say so in their tooltip rather than
+  disappearing. `tests/original.spec.js` holds them.
+- **Open in Layout Editor** (`src/shell/layout-editor.mjs`, a section of the
+  Share dialog, `tests/layout-editor.spec.js`) hands the app class - the first
+  file only; the layout editor edits one class - to
+  [abap2UI5/layout-editor](https://abap2ui5.github.io/layout-editor/), the way
+  back from its long-standing "Open in Playground". Two hand-overs: an app
+  class unchanged since it was opened from GitHub goes as `?src=<raw URL>`
+  (`unchangedRawUrl( )` in `original.mjs`, handed to the dialog's chunk from
+  `main.mjs`; only `raw.githubusercontent.com` and
+  `gist.githubusercontent.com`, the two hosts the layout editor's `?src=`
+  reads); anything else is copied to the clipboard AND carried as
+  `#playground=<share fragment>` - this site's own share format ("2" +
+  base64url(deflate-raw(JSON `[{ name, source }]`))). The layout editor
+  reads that fragment as of abap2UI5/layout-editor's branch
+  `claude/zealous-feynman-nf350a` (`openClassFromPlayground( )` in its
+  `src/ui/files.js`, on load and on `hashchange`; `filesFromPlaygroundFragment( )`
+  in `src/handoff.js`: the hash cleared, decoded, the first file imported as
+  Open ABAP class does); a layout editor deployed without it
+  ignores the fragment, and the clipboard is what works there. The format is
+  therefore a contract with that repository too.
 - **`embed/abap2ui5-embed.js`**: turns an element into a click-to-load demo —
   `data-src` (one URL or several, first is the app), `data-code` (inline ABAP;
   the file is named after the class in it), `data-view`, `data-height`,

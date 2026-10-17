@@ -11,8 +11,8 @@ is being built: `ai/index.html`, written by `writeAiPage( )` in
 document one directory down, with `<base href="../">` (so the bundle, the
 workers the inline script starts, the app frame and the service worker's scope
 all resolve where the playground's do: one build, two doors), `data-page="ai"`
-on `<html>`, its own title, no canonical link and `noindex`. `main.mjs` reads
-`data-page`: only there is `setUpChat( )` called (with `startOpen`), the editor
+on `<html>`, its own title, no canonical link and `noindex`. `page.mjs` reads
+`data-page` (`aiPage`) and `main.mjs` acts on it: only there is `setUpChat( )` called (with `startOpen`), the editor
 starts on one minimal class (`AI_STARTER` in `ai-starter.mjs`: `z2ui5_if_app`
 implemented, `main( )` empty) without a run - the placeholder says
 where the app will appear and `run( )` takes it away when an app first starts
@@ -54,10 +54,10 @@ talks to a model or needs a key.
 
 - **The model has no back door.** Its tools (`TOOLS` in `ai-agent.mjs`) are the
   editor and Run: `write_file`, `edit_file` and `delete_file` go through
-  `replaceWith( )` in `main.mjs`, which is the path a sample takes (undoable,
+  `replaceWith( )` in `file-sets.mjs`, which is the path a sample takes (undoable,
   strip redrawn, draft stored by the change handler, `checkFileSet( )` refusing
   a name the editor cannot hold); `run_app` is `runForAgent( )`, which presses
-  the real `run( )` — waiting out a run autorun started — then waits up to
+  the real `run( )` (`agent-hooks.mjs`, `run.mjs`) — waiting out a run autorun started — then waits up to
   thirty seconds for the app's first roundtrip (as the Pilot waits for a
   tab; ten read as "none arrived" on a slow first boot) and hands back the
   status line, the problems, the tests, the roundtrips, the Log and
@@ -77,7 +77,7 @@ talks to a model or needs a key.
   and hands on Run's own frame: the mirror and the operator moved to
   `src/shell/ai-operator.mjs` and the frame transport to
   `src/shell/frame-drive.mjs` (one driver per frame: the parked request the
-  bridge's `roundtrip( )` takes - `room.takePilotRequest( )`, the room being
+  frames' `roundtrip( )` in `agent-hooks.mjs` takes - `room.takePilotRequest( )`, the room being
   the Pilot or the studio - and every answer it saw, kept until a mirror
   listens), so both rooms share them. `chat.mjs` makes the mirror with the
   agent's chunk and hands the agent `host.app`; a run that started ends its
@@ -87,13 +87,12 @@ talks to a model or needs a key.
   before one. `tests/ai.spec.js` holds the act in the real app.
 - **The key is the reader's, the request is the browser's.** Held in the
   page's memory for the visit and **never stored**: the playground runs ABAP
-  from any link in this same origin, and both a view's `core:HTML` in the app
-  frame and a `WRITE '@KERNEL …'` in the runtime worker can read this origin's
-  localStorage - a stored key was one shared link away from somebody else's
-  account. A key an earlier version stored under
-  `abap2ui5-playground:anthropic-key` is removed on load - by every page
-(`boot( )` in `main.mjs`), since the playground, embedded or not, is where a
-link's ABAP runs. Sent by the
+  from any link in this same origin, and on the playground a view's
+  `core:HTML` in the app frame can read this origin's `localStorage` - a
+  stored key was one shared link away from somebody else's account. A key an
+  earlier version stored under `abap2ui5-playground:anthropic-key` is removed
+  on load - by every page (`boot( )` in `main.mjs`), since the playground,
+  embedded or not, is where a link's ABAP runs. Sent by the
   Anthropic SDK straight from the page (`dangerouslyAllowBrowser`, which sends
   the `anthropic-dangerous-direct-browser-access` header CORS needs). A key
   that is not tied to a workspace needs `anthropic-workspace-id` on every
@@ -102,25 +101,39 @@ link's ABAP runs. Sent by the
   `explainError( )` recognises the API's refusal and points at that field. No proxy,
   no server: the page stays a static file. Never in an embedded playground —
   the switch is hidden there (`shell.css`) and `setUpChat( )` is not called.
-  **Storage is not the only way at the key.** The app frame is the same
-  origin and has no sandbox, and its bridge reaches into this page
-  (`window.parent.__z2ui5Playground`): a view's `core:HTML` with a script can
-  read the key form's DOM or patch the page's `fetch`. So the one page where
-  a stranger's code and a key meet - the Pilot's, which opens share links
-  and `?src=` - opens a link's code only once the reader said so
+  **The app's code cannot reach the key on the AI pages.** On `/ai/` and
+  `/pilot/` the app frame is sandboxed without `allow-same-origin`
+  (`frameIsolated` in `page.mjs`, `isolate( )` in `frame-link.mjs`): an
+  opaque origin, and messages the only channel between it and the page
+  ([runtime.md](runtime.md) has the protocol), so a `core:HTML` script
+  reaches neither the key form's DOM, nor the page's memory or `fetch`, nor
+  this origin's storage. The ABAP itself - `WRITE '@KERNEL …'` included -
+  runs in the runtime worker, on the site's origin but with no DOM and no
+  `localStorage` (an earlier version of this note said it could read
+  `localStorage`; a worker has none), and with CacheStorage, IndexedDB and
+  nested workers taken away before any of it runs
+  (`src/runtime/lockdown.mjs`), so it leaves nothing for a later visit
+  either. The Pilot - which opens share links and `?src=` beside its key -
+  still opens a link's code only once the reader said so
   (`src/shell/linked-code.mjs`, `#linked-dialog`; `startingFiles( )` in
-  `main.mjs`) and takes no gist there (`REPOSITORY_HOSTS` in
-  `deep-link.mjs`). The studio opens no links. On the playground a link's
-  code (a fragment, `?src=`, `?gist=`) still opens and runs without asking -
-  that is what nine links in ten are for - but it is not a page without a
-  secret any more: the Share dialog's Gist section takes the reader's GitHub
-  token. So once a link's code has run (`markLinkedCodeRan( )`, called by
-  `run( )` in `main.mjs`, for the rest of the visit), that section asks for a
-  tick first (`#share-gist-caution`, `#share-gist-trust`, once per visit)
-  before it takes a token. The whole answer is a frame on
-  an opaque origin with a `postMessage` bridge, which is not built.
+  `starting-files.mjs`) and takes no gist (`REPOSITORY_HOSTS` in
+  `deep-link.mjs`): not for the key any more, but because the app is what
+  Claude reads and acts on, and an app written to mislead can steer the
+  chat. The studio opens no links. On the playground the frame stays
+  same-origin - the HTTP cache, the service worker and offline need it
+  ([load-time.md](load-time.md)) - and a link's code (a fragment, `?src=`,
+  `?gist=`) still opens and runs without asking, which is what nine links
+  in ten are for. But the Share dialog's Gist section takes the reader's
+  GitHub token there, so once a link's code has run (`markLinkedCodeRan( )`,
+  called by `run( )` in `run.mjs`, for the rest of the visit), that section
+  asks for a tick first (`#share-gist-caution`, `#share-gist-trust`, once
+  per visit) before it takes a token. `tests/isolation.spec.js` holds the
+  wall: code in the Pilot's app frame finds an opaque origin, no parent
+  document, location or global, a storage of its own and no `caches`; the
+  studio's frame carries the same sandbox.
 - **The studio keeps its build, not its chat.** `AI_STORAGE_KEY`
-  (`abap2ui5-playground:ai-files`) in `main.mjs` holds the files whenever they
+  (`abap2ui5-playground:ai-files`, `agent-hooks.mjs`; written by
+  `remember( )` in `main.mjs`) holds the files whenever they
   are not the untouched starter - a key of its own, so the playground's draft
   is never written over - and the welcome offers them back
   (`host.lastBuild( )`, `.chat-resume` in `chat.mjs`); the studio still
@@ -165,8 +178,8 @@ link's ABAP runs. Sent by the
   validated before it touches the editor, a turn cut off at `max_tokens` never
   runs its tools, and all results of a turn go back in one message.
 - **Files in a message**, as in the AI Pilot: the paperclip, a paste, or a
-  drop anywhere on the studio's page or on its app (`dropFiles` on the
-  bridge, `chatDropped( )`), read by `attachments.mjs` into the blocks in
+  drop anywhere on the studio's page or on its app (the frame's `drop`
+  message, `chatDropped( )`), read by `attachments.mjs` into the blocks in
   front of the message's text. The chips, the paste and the page-wide drop
   are `src/shell/attach-ui.mjs`, the one implementation both chats use in the
   dress of their own room (`chat-file` here, `pilot-file` there); the kinds

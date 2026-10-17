@@ -1,6 +1,6 @@
 # The runtime: how a roundtrip reaches the framework
 
-> Design notes, moved out of `AGENTS.md`. Read this before touching `src/runtime/`, `src/shell/frontend-bridge.js`, `src/shell/runtime-client.mjs` or the bridge in `main.mjs`.
+> Design notes, moved out of `AGENTS.md`. Read this before touching `src/runtime/`, `src/shell/frontend-bridge.js`, `src/shell/runtime-client.mjs`, `src/shell/frame-link.mjs` or the frames' half in `agent-hooks.mjs`.
 > The rules in short, and every other area, are in [AGENTS.md](../../AGENTS.md).
 
 ## How the pieces meet at run time
@@ -15,12 +15,12 @@ component ComponentSupport names `container-z2ui5`) — and `Component.init()`
 reads the flag from its component data and from nowhere else, so a flag set
 on the window is ignored, every roundtrip goes to the manifest's path, which
 this site does not have, and nothing renders. Nothing in the playground reads
-the frontend's state - the Roundtrips tab is fed by the bridge in `main.mjs`,
-below - with one exception, on one page: the AI Pilot asks the frontend to
-send a roundtrip, to type a value and to say which slots are open, through
-`__z2ui5PlaygroundPilot` at the end of `frontend-bridge.js` (see [ai-pilot.md](ai-pilot.md)). `frontend-bridge.js` replaces `window.fetch` for exactly that one
+the frontend's state - the Roundtrips tab is fed by `offerFrameBridge( )` in
+`agent-hooks.mjs` - with one exception: the AI rooms ask the frontend to
+send a roundtrip, to type a value and to say which slots are open, by
+message (`call`, below; see [ai-pilot.md](ai-pilot.md)). `frontend-bridge.js` replaces `window.fetch` for exactly that one
 request (comparing origin and pathname
-only — the run counter lives in the query) and hands the body to the parent
+only — the run counter lives in the query) and posts the body to the parent
 page, which hands it to the transpiled handler — running in a **dedicated
 worker** the page started (`src/shell/runtime-client.mjs`,
 `src/runtime/worker.mjs`), so the framework's evaluation and every roundtrip
@@ -36,8 +36,10 @@ ran, took the next keystrokes. Once the reader is in the app, the app has it.
 The drafts abap2UI5 keeps in a database live in an in-memory SQLite — sql.js,
 compiled to WebAssembly. Run means: a fresh database, then the app started
 again in the iframe on `?app_start=<CLASS>&run=<n>` — **in place** where the
-frame is up (`__z2ui5PlaygroundRestart` in `frontend-bridge.js`, asked by
-`restartInPlace()` in `main.mjs`): the ComponentContainer that
+frame is up (the `restart` call to `frontend-bridge.js`, asked by
+`restartInPlace()` in `run.mjs` only when the frame's last `state` report
+says UI5 is up, the bridge restarts, the document is `complete` and on the
+same pathname): the ComponentContainer that
 ComponentSupport made is destroyed and made again on the new address, which
 is what the frontend's own `Component.exit()`/`init()` are built for (an FLP
 re-launch — every listener detached, the roundtrips in flight aborted, the
@@ -49,7 +51,10 @@ another origin, one that never booted UI5 or carries an older bridge, and a
 restart that fails or takes thirty seconds, load the document as before —
 the one path there used to be, because a reload was the only thing that
 reset the view slots, the routing and the component until the frontend
-learned to. `tests/app.spec.js` holds a second Run to the kept document (a
+learned to. A loaded document counts as booted when its bridge reports
+`ui5` within five seconds (`linkOf(frame).up(5000)`); which Run a roundtrip
+belongs to is read from the `?run=` of the href the frame reports with it.
+`tests/app.spec.js` holds a second Run to the kept document (a
 mark on the frame's window survives it) and to nothing of the old app
 surviving: its typed values, its hash, its draft. "Fresh" is SQLite reopened on an image of
 the empty database taken once after the transpiled init seeded it
@@ -58,6 +63,66 @@ tables, then 724 seed rows) was 85 ms per Run on a desk and several times that
 on a phone. TADIR is not seeded at all (`populateTables` in
 `build-framework.mjs`): nothing reads it, and its 760 INSERTs were about a
 quarter of a second of every boot.
+
+## The frame line: messages only
+
+The page and an app frame never reach into each other: no
+`window.parent.…`, no `contentWindow.…` read - the global the bridge once
+read off the page (`window.__z2ui5Playground`) is gone, and
+`tests/isolation.spec.js` holds that. `src/shell/frame-link.mjs` is the
+page's half (`linkOf(frame)` with `.call( )`, `.up( )`, `.state`;
+`frameApi( )` for the AI rooms; `serveFrames( )`, `tellFrames( )`,
+`onFrameMessage( )`; `navigate( )`, a `location.replace( )`, which a page
+may do to a cross-origin child), `frontend-bridge.js` the frame's. On the AI
+Studio's and the AI Pilot's pages (`frameIsolated` in `page.mjs`) the frames
+get `sandbox="allow-scripts allow-forms allow-popups allow-modals
+allow-downloads"` - no `allow-same-origin`, so an opaque origin, and an
+app's script reaches neither the key form nor the page's memory, storage or
+`fetch` ([ai-chat.md](ai-chat.md)). There the bridge shims `localStorage`,
+`sessionStorage` and `document.cookie` in memory, which throw on an opaque
+origin and UI5 touches ([build-traps.md](build-traps.md)). Everywhere else
+the frame stays same-origin, for the HTTP cache, the service worker and
+offline ([load-time.md](load-time.md)), and speaks the same messages.
+
+Every message is `{ z2ui5Frame: 1, type, … }`; the frame's carry `doc`, the
+id of the document that sent it, so a late message of a replaced document is
+ignored.
+
+| Direction | `type` | Fields |
+| --- | --- | --- |
+| frame → page (to `location.origin`, which an opaque frame still knows by name) | `state` | `href, readyState, ui5, app, restarts, busy, slots, pending, seen` - pushed whenever it changes |
+| | `roundtrip` | `id, body, href` - the frontend's POST |
+| | `reply` | `id, ok, value, error` - the answer to a `call` |
+| | `drop` | `files` - only where the page said it takes them |
+| | `height` | `height` - only when `settings` asked (embedded `?view=app`) |
+| page → frame (to `"*"`: an opaque origin has no name, so nothing secret is ever sent) | `answer` | `id, status, reason, body` or `id, error` |
+| | `call` | `id, op, args` - `op`: `roundtrip`, `frontend`, `fill`, `carry`, `restart`, `state` |
+| | `theme` | `theme` |
+| | `hold` | `hold` - whether a `focus( )` in the frame is skipped (pushed, since the frame's focus is synchronous) |
+| | `settings` | `takesFiles, height` |
+
+The page takes a message only from the `contentWindow` of a registered
+frame, with origin `"null"` for an isolated one and its own otherwise, and
+refuses a roundtrip whose `?pilot=` tab is not that frame's own. The frame
+takes one only from `window.parent` and the site's origin. The bridge's
+own `__z2ui5PlaygroundPilot`/`__z2ui5PlaygroundRestart` remain on the
+FRAME's window, for tests only.
+
+## The runtime worker gives things up
+
+The worker runs whatever ABAP the editor holds, `WRITE '@KERNEL …'` (plain
+JavaScript) included, on the site's own origin. It has no DOM, no
+`localStorage` and none of the page's memory, but it had the origin's
+CacheStorage and IndexedDB - and the service worker answers from that cache.
+`src/runtime/lockdown.mjs`, imported first by `worker.mjs`, deletes
+`caches`, `indexedDB`, `Worker` and `SharedWorker` wherever the global's
+prototype chain defines them and pins them `undefined`, read-only and
+non-configurable on `self`; `navigator.serviceWorker` goes too. `fetch`
+stays (sql.js loads its wasm with it; it reaches no storage) and so does
+`navigator.storage` (nothing reads it). Nothing in the framework bundle names
+any of them (checked). Behind it, the service worker hashes a cached hit
+before serving it ([load-time.md](load-time.md)); `tests/worker.spec.js`
+plants a forged `shell.mjs` and a chunk and sees neither run.
 
 ## Tables of your own
 

@@ -115,7 +115,7 @@ way the transpiler's own runner script does. `runUnitTests()` in
 `src/runtime/index.mjs` feeds them to open-abap's `kernel_unit_runner`
 (class_setup, setup, method, teardown; expected, actual, message and the
 JavaScript frame of the assertion, which `locate()` turns into the ABAP
-line), `run()` in `main.mjs` runs them between compile and app start, and
+line), `run()` in `run.mjs` runs them between compile and app start, and
 the **Tests** tab (`testsTab()` in `insight-tests.mjs`) lists them — a failure
 brings the tab forward and is said in the status line, and the app starts
 regardless, because it is the fastest way to see what the test is about.
@@ -132,7 +132,8 @@ Two stacks reach it: an ABAP exception's — `cx_root extends Error` in the
 transpiled code, so it carries the stack from where it was raised, and the
 framework's `_error_response` is wrapped to keep the innermost one before
 the 500 is built — and a raw JavaScript error's, on the worker's error path.
-The bridge in `main.mjs` then lists the line under Problems as a `runtime`
+The frames' roundtrip in `agent-hooks.mjs` then hands it to `pointAtDump( )`
+in `run.mjs`, which lists the line under Problems as a `runtime`
 problem, underlines it and puts the cursor there, the way a transpiler
 error is pointed at; the frame keeps showing the framework's own error page.
 
@@ -140,7 +141,8 @@ error is pointed at; the frame keeps showing the framework's own error page.
 
 The **Roundtrips tab** (`src/shell/roundtrips.mjs`, `roundtripsTab()` in
 `insight-roundtrips.mjs`, `tests/roundtrips.spec.js`) lists every request the app frame
-sends and every answer it gets — the bridge in `main.mjs` records them on
+sends and every answer it gets — `offerFrameBridge( )` in `agent-hooks.mjs`
+records them on
 the way through, timed around the worker's answer — with the event, what the
 answer did (a view for a slot, a popup, a model update, a dump) and the
 bodies as they travelled, the view XML one element per line. Cleared by
@@ -187,3 +189,38 @@ fields and are read through `FRIENDS_ACCESS_INSTANCE` (see
 The snapshot travels as the roundtrip answer's `state`, counts towards the
 roundtrip budget, and is reset with them by every Run. Read-only: the app's
 state is what the app made it.
+
+## Around the editor: first steps and the lesson bar
+
+Two guides for somebody new, both decided by `src/shell/guides.mjs` and both
+chunks asked for after the first run (the chunk rule is in
+[load-time.md](load-time.md): what they need of the editor, the panel and
+storage is handed in, never imported). Neither appears on an embed, on
+`?view=app`/`full`, or on the AI pages (`keepsDrafts`, `appOnly`).
+
+- **The first-steps strip** (`first-steps.mjs`, `#first-steps`): "New here?
+  Try:" and four buttons - Run (the caret put on the line that titles the
+  page), Auto, the View tab, the samples browser. Only on the plain
+  playground opened on the default sample with nothing else to open: not on
+  a share link, `?src=`, a gist, `?from=catalogue`, a restored draft or a
+  link that failed. Closed by ✕ or Escape and stored
+  (`abap2ui5-playground:first-steps=closed`, through `storage.mjs`); where
+  storage refuses, it simply shows again next time. It hangs off a
+  zero-height anchor between the editor and the panel and draws upwards over
+  the editor's last lines, so it costs the editor no height - pushing the
+  code down a row a second after it was laid out moved it under the reader's
+  eye. One line at every width (a container query picks long or short
+  labels; on a phone it scrolls sideways).
+- **The lesson bar** (`learn-path.mjs`): "Lesson n of m" with Prev/Next, over
+  the right-hand end of the file strip, while the first file is one of
+  abap2UI5/samples' "Start here" lessons (Basics I-VII, the learning path's
+  first stage). Which lesson is read from the app alone, so a lesson opened
+  from anywhere - and one being changed - is the same lesson. Prev/Next open
+  a neighbour exactly as the samples browser does (`loadSample( )`, or
+  `loadLinked( )` over `?src=` for one the page does not carry), so the
+  draft it replaces is kept and said the same way. The list is
+  `build/samples/lessons.json`, written by `writeLessons( )` in
+  `tools/build-site.mjs`; an empty one means no bar.
+
+`tests/onboarding.spec.js` holds both; every other spec starts with the strip
+closed ([testing.md](testing.md)).

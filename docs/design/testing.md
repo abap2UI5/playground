@@ -43,6 +43,38 @@ a sample without a test is not possible. CI:
 | `lint` (in both) | one runner beside the shards: `npm run lint`, `npm run typecheck`, `npm run test:unit` - no build, no browser |
 | `upstream.yml` | weekly: build and test against upstream `HEAD` without moving the pins, and open or extend an issue when that fails, so a bump stays a two-line commit |
 
+## Every spec starts with the first steps closed
+
+A fresh browser profile is a first visit, and a first visit on the default
+sample gets the first-steps strip over the editor's last lines
+([panel.md](panel.md)) - which no test but one is about. So
+`playwright.config.js` gives every test a `use.storageState` with
+`abap2ui5-playground:first-steps=closed` for the test server's origin (in the
+config rather than `tests/helpers.mjs`, because most specs open the page with
+`page.goto( )`). `tests/onboarding.spec.js` empties it again
+(`test.use({ storageState: … })`); a context a test makes for itself with
+`browser.newContext( )` starts empty and sees the strip.
+
+## What the newer specs hold
+
+- `onboarding.spec.js` - the first-steps strip (when it shows and when not,
+  its four buttons, closing for good) and the lesson bar.
+- `original.spec.js` - Compare with the original (the diff dialog) and Reset
+  to it, one Ctrl+Z away.
+- `ui5-floor.spec.js` - the bar's UI5 select and the lint tab kept in step,
+  stored, and the check run again.
+- `layout-editor.spec.js` - Open in Layout Editor's two hand-overs (`?src=`
+  for an unchanged GitHub class, clipboard + `#playground=` otherwise).
+- `tables.spec.js` - a table of the reader's own, created afresh at every Run.
+- `state.spec.js` - the State tab, attributes per roundtrip with the changes
+  marked.
+- `isolation.spec.js` - the AI pages' app frame on an opaque origin, reaching
+  neither page, location, storage nor `caches`; a forged message ignored; the
+  playground's frame offered no page object; the runtime worker, and an app's
+  `WRITE '@KERNEL'`, finding no cache, database or nested worker.
+- `worker.spec.js` also plants a forged `shell.mjs` and chunk in the cache:
+  not run, the cache restored.
+
 ## The second layer: `tests/node/`
 
 Playwright used to be the only test layer. The pure modules - the builder

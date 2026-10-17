@@ -114,6 +114,15 @@ code:
   the locale data, the version file, the manifest, the full layout preload
   and its stylesheet, and the four fonts the first app draws in - each a
   round trip the frame only started once the one before had answered.
+  **Not on the AI pages.** There the app frame is on an opaque origin
+  ([runtime.md](runtime.md)), and Chromium gives such a frame's requests a
+  one-off network isolation key: nothing it fetches comes out of, or stays
+  in, the HTTP cache the page primed (measured - see
+  [build-traps.md](build-traps.md)), and no service worker serves it. So
+  `boot()` skips the warm-up where `frameIsolated` (`page.mjs`), those pages'
+  frame loads UI5 from the network every time and is online-only, and the
+  isolation stays on the two pages where a key is typed - the playground's
+  frame stays same-origin for exactly this cache.
 - **The service worker** (`src/shell/sw.js`, `tests/worker.spec.js`). Cache
   first, over an allow list, in a cache named after the build. Its own comment
   is the long form: what it caches (the core assets — the linter's bundle
@@ -122,8 +131,22 @@ code:
   UI5 puts on its stylesheets and manifest, which name the build, not a
   moment), what it deliberately leaves live (the app frame's document, linked
   ABAP, the catalogues), and why it neither calls `skipWaiting()` nor claims
-  the page that registered it. `main.mjs` registers it last thing in
-  `boot()`, after the first run. **A core asset goes into the cache only if
+  the page that registered it. `boot()` in `main.mjs` registers it last
+  thing, after the first run (`keepAssetsForNextTime( )` in `site-cache.mjs`,
+  which also holds `discardCachedSite( )`). **A cached hit is verified before
+  it is served**, too (`verifiedHit( )`, used by `serve()` and by
+  `serveDocument()`'s kept copy): the build writes `ASSET_HASHES` (the
+  `__ASSET_HASHES__` marker; the SHA-256 of every file under `assets/`)
+  beside `CORE_HASHES` and `DOC_HASHES`, and a cached document, core asset or
+  `assets/*` file whose bytes do not match is deleted and fetched again. The
+  cache is not the worker's alone - any script of this origin can open it,
+  and the playground's frame is this origin - so a share link's app could
+  otherwise plant a script under the bundle's name for the next visit, the AI
+  pages' included. Cost measured 2026-10-17: 70-210 ms of WebCrypto for the
+  ~20 MB, off the page's thread. An unguessable cache name was refused
+  (`caches.keys()` lists it to any same-origin script). The UI5 tree under
+  `app/` is not covered (pinned by version, thousands of files). The runtime
+  worker cannot open the cache at all (`src/runtime/lockdown.mjs`). **A core asset goes into the cache only if
   it hashes to the build** — `build-site.mjs` writes the SHA-256 of each
   unhashed core file into the worker beside the build id, and install and
   the on-miss path both check it, fetching past the HTTP cache at install.
@@ -255,6 +278,23 @@ every keystroke pause — 10 to 100 ms a file on a desk, several times that on
 a phone, between the keystroke and the paint. Its eight-entry memo by source
 moved with it, dropped when the settings change; the page's
 `abap2ui5-lint.mjs` keeps the settings, validates them and tells the worker.
+
+## Chunks hand in, never import the shell
+
+Everything a first visit does not need on screen at once is a chunk asked
+for later: the AI rooms, the samples browser, the Share dialog (with
+`layout-editor.mjs`), the Compare dialog (`compare-dialog.mjs`, imported on
+the first press by `original.mjs`), and the guided first steps
+(`first-steps.mjs`, `learn-path.mjs`, asked for by `guides.mjs` after the
+first run, so nothing at boot waits on them). **A chunk must not import a
+shell module** (`editor.mjs`, `insight.mjs`, `file-sets.mjs`,
+`deep-link.mjs`, …): esbuild gives every set of entry points that reaches a
+module a chunk of its own, so such an import moves that shell code out of
+`assets/shell.mjs` into a new shared chunk - one more request at boot, and a
+shell budget that measures less than the shell. What a chunk needs is handed
+to its setup function by the shell module that imports it (`guides.mjs`,
+`original.mjs`, the Share dialog's raw-URL lookup from `main.mjs`). `ui.mjs`
+and `share.mjs` are already shared with the Share dialog's chunk.
 
 ## Three traps the browser sets, and what they cost
 

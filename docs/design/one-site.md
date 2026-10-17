@@ -12,6 +12,16 @@ same palette, the same measure. The documentation lives in
 [abap2UI5/docs](https://github.com/abap2UI5/docs), which carries its half of
 each mechanism below.
 
+**One exception to the one origin: the AI pages' app frame.** On `/ai/` and
+`/pilot/` the frame the app renders in is sandboxed onto an opaque origin
+(`frameIsolated` in `page.mjs`, [runtime.md](runtime.md)), so the app's code
+cannot reach the page where an API key is typed. Such a frame gets no HTTP
+cache (Chromium keys its requests on a one-off isolation key) and no service
+worker: the warm-up is skipped there and those pages' frame needs the network
+on every load, where the installed playground runs offline
+([load-time.md](load-time.md)). The playground, its embeds and the sample
+pages keep a same-origin frame for that reason.
+
 **The ABAP highlighter is published, and the documentation reads it.**
 `tools/abap-highlight.mjs` is a build-time module here — `tools/sample-pages.mjs`
 calls it and writes the answer into all 772 pages, so nothing on this site loads

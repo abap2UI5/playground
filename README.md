@@ -6,6 +6,14 @@ browser — no server, no SAP system, no backend of any kind.
 
 ![The playground: an ABAP class on the left, the app it produces on the right](docs/playground.png)
 
+**First time here?** The playground opens on a first lesson, with a strip of
+four first steps over the editor's last lines: change the code and press Run,
+turn on Auto, edit the view in the View tab, browse the samples. ✕ or Escape
+closes it for good in this browser. While the app in the editor is one of the
+learning path's "Start here" lessons (Basics I–VII), **Lesson n of m** over the
+file strip steps to the lesson before or after. Neither appears on a link
+somebody sent you, an embed or the AI pages.
+
 ## How it works
 
 The [abaplint transpiler](https://github.com/abaplint/transpiler) translates ABAP
@@ -85,8 +93,10 @@ pipeline and moves the last step into the browser.
   while a view is taking shape.
 - **Rendering.** The abap2UI5 frontend runs in an iframe and talks to its backend
   over a plain `fetch` POST, so the playground replaces `window.fetch` for that
-  one request with a call into the framework in the parent page. From the
-  framework's point of view nothing changed.
+  one request with a message to the parent page, which hands it to the
+  framework and posts the answer back. The frame and the page exchange
+  messages and nothing else. From the framework's point of view nothing
+  changed.
 
 Roughly 3 MB travels to a visitor, compressed: the page bundle, the transpiled
 framework, the ABAP corpus and SQLite. UI5 loads its libraries on demand on top
@@ -158,7 +168,11 @@ reader was told to fix code that had nothing wrong with it.
 
 The abap2UI5 linter runs its own rules on top, against UI5 **1.71** — the floor
 abap2UI5 holds its own shipped apps to, and therefore the floor an example
-copied out of the playground has to clear.
+copied out of the playground has to clear. **UI5** in the bar, after Auto
+("Check against UI5" in the ⋯ menu on a phone), moves that floor: 1.71, 1.84,
+1.96, 1.108, 1.120 or the latest this site carries — *"my system runs 1.84,
+what will not render there?"*. It is the same setting as the abap2UI5 lint
+tab's `ui5`, kept between visits the same way.
 
 The two are kept apart on purpose, in the list and in what they block: an
 abaplint error means the ABAP does not compile, so Run stops and says so. An
@@ -215,6 +229,12 @@ with abapGit.
   (the API answers *"This API key is not scoped to a workspace"*) also needs
   the workspace ID (`wrkspc_…`, in the Console under Settings → Workspaces),
   which the key form takes as an optional second field.
+- **The app cannot reach your key.** On this page the app runs in a frame on
+  an origin of its own (a sandbox), and talks to the page by message only: a
+  script in an app's view — whoever wrote it, Claude included — cannot read
+  the key form, the page or its storage. The ABAP runs in a worker that has
+  no page and no storage to read either. The cost is that the app frame here
+  loads UI5 from the network every time and does not work offline.
 - **The model uses the playground the way you do.** It has no compiler of its
   own: it writes files into the editor (Ctrl+Z takes them back), presses the
   same Run, and is told what you would see — the abaplint errors, the abap2UI5
@@ -283,8 +303,9 @@ carries on from there.
 - **Any sample.** It opens on Basics II; *Change app* opens the samples
   browser, and Claude can look an app up in the catalogue and open it itself.
   A shared link or `?src=` opens your own class:
-  `/playground/pilot/?src=<raw url>` - after you said so, because that code
-  runs in the same page as your key.
+  `/playground/pilot/?src=<raw url>` - after you said so: the app's code
+  cannot reach your key, but the app is what Claude reads and acts on, and an
+  app written to mislead can steer what Claude does in this chat.
 - **Several apps at once.** Up to four, one tab each over the stage — *+ App*
   opens one beside the others, and so does Claude when a task spans two apps
   (*"look the colour up in the value help app and greet it in the first"*).
@@ -298,7 +319,10 @@ carries on from there.
   JSON, XML, …) as text — *"enter every order in this sheet"*. The Office files are read in your browser; the
   old binary formats (`.xls`, `.doc`) are refused with what to save them as.
 - **Your own key, and no server** — exactly as in the AI Studio: held in
-  memory for the visit, sent to `api.anthropic.com` and nowhere else.
+  memory for the visit, sent to `api.anthropic.com` and nowhere else, and out
+  of reach of the apps' code — every app frame on this page, each tab's
+  included, is on an origin of its own and talks to the page by message
+  only.
 
 ## The sample catalogue
 
@@ -391,10 +415,20 @@ row goes to the assertion, and the status line says how many failed.
 **Drafts.** The playground keeps whatever was last in the editor on its own.
 Opening a sample over it never loses it: the status line says which way back
 there is — *one Undo away* when the sample went in under the same file name,
-*comes back if you reload* when it brought its own class name and the editor
-had to close yours. For more than one piece of work, the samples browser has
-**Your drafts** at the top: name what is open, save it, and it is listed there
-— in this browser — to open or delete another day.
+and otherwise *kept in Samples, under Your drafts*, under the name it was
+saved as or as "Before the last pick" (only where the browser refuses to store
+it does the line fall back to *comes back if you reload*). For more than one
+piece of work, the samples browser has **Your drafts** at the top: name what
+is open, save it, and it is listed there — in this browser — to open or delete
+another day.
+
+**Compare and Reset to original.** Code that was opened from something — a
+sample, a share link, `?src=`, a gist, a saved draft — has an original, and
+**±** beside Source shows your changes against it, file by file, in a diff;
+**⟲** puts every file back as it was opened, as one edit per file that Ctrl+Z
+takes back (a file you added goes to Your drafts). Where there is nothing to
+compare with — the last session restored, or what an AI wrote — they say so
+instead.
 
 **Share** puts every open file in the URL fragment, deflated: a 2500-character
 class becomes a link of about 700 characters. Being a fragment, it never leaves
@@ -410,7 +444,13 @@ naming the app, how to start it and the link this code came from. Import it
 offline with abapGit, or push it as it stands. **Gist** writes the open files
 to a secret GitHub gist with your token (held for the visit, never stored) and
 hands back a `?gist=<id>` link; once code from a link has run in the page, it
-asks you to tick that you know before it takes a token.
+asks you to tick that you know before it takes a token. **Open in Layout
+Editor** hands the app class to the
+[abap2UI5 layout editor](https://abap2ui5.github.io/layout-editor/), to design
+its view by drag and drop and export the class back: a class still exactly as
+it came from GitHub opens there by its address; anything else is copied to
+your clipboard to paste into *Open ABAP class* there, and rides in the link as
+well, for a layout editor that reads it.
 
 **Light or dark.** The page follows the system until the switch in the menu
 behind the bar's last button says otherwise — the same menu the

@@ -797,3 +797,62 @@ Four things nothing documents, each found the hard way (`src/editor/tables.mjs`,
 
 A data element (`ROLLNAME`) a field names must exist in the corpus, or the
 transpiler types the field as `VoidType` and the table cannot be created.
+
+### Findings from isolating the app frame
+
+What putting the AI pages' app frame on an opaque origin (`sandbox` without
+`allow-same-origin`, [runtime.md](runtime.md)) ran into. Each is in the code
+it shaped.
+
+1. **An opaque-origin iframe is uncacheable in Chromium** (measured). Its
+   requests are keyed on a one-off network isolation key, so nothing it
+   fetches is served from - or stays in - the HTTP cache the page primed, and
+   no service worker controls it. That is why the isolation stops at the two
+   AI pages, why `boot()` skips the warm-up there (`frameIsolated`), and why
+   their frame is online-only ([load-time.md](load-time.md)).
+2. **`localStorage`, `sessionStorage` and `document.cookie` THROW there** (a
+   `SecurityError` on access), and UI5 and an app's code read them where they
+   do not expect that. `Window.localStorage` is a configurable accessor, so
+   `frontend-bridge.js` shims all three in memory for the document's
+   lifetime. `history.replaceState` still works. `location.origin` is the
+   URL's origin while `self.origin` is `"null"` - so the frame can still post
+   to its parent BY NAME (`postMessage(m, location.origin)`), while the page
+   has to post to `"*"` and therefore sends nothing secret.
+3. **The abap2UI5 frontend's fallback error view writes into an inner
+   sandboxed iframe's `contentDocument`**, which is `null` inside an opaque
+   frame; the frontend then writes the error into its main document instead,
+   which is what an isolated frame shows.
+4. **A parent may `location.replace( )` a cross-origin child** (one of the
+   two things it may do to it), so `navigate( )` in `frame-link.mjs` keeps
+   Run from pushing history entries on an isolated frame too; reading the
+   child's `location.href` throws, which is why the frame REPORTS its href
+   (`state`) and the page reads that.
+5. **The isolated frame's XHRs and fonts are cross-origin requests**: GitHub
+   Pages answers with `access-control-allow-origin: *` (checked 2026-10-17),
+   and `tools/serve.mjs` sends the same so the tests see what production does.
+   Load-bearing; a host without it breaks the AI pages' frame.
+6. **A worker's `caches`, `indexedDB`, `Worker` and `SharedWorker` live on
+   the global's prototype chain**, not on `self` itself, so
+   `src/runtime/lockdown.mjs` deletes them wherever the chain defines them
+   (the browser's accessors go with the properties) and then pins each on
+   `self` as `undefined`, read-only and non-configurable, so nothing later
+   can define them again.
+7. **A cache name is no secret**: `caches.keys()` lists it to any
+   same-origin script, so an unguessable name was refused and the service
+   worker hashes a cached hit before serving it (`verifiedHit( )` in
+   `sw.js`) - 70-210 ms of WebCrypto for ~20 MB, off the page's thread.
+
+### Findings from the guides, Compare and the layout editor hand-over
+
+1. **A chunk that imports a shell module splits the shell.** esbuild gives
+   every set of entry points that reaches a module a chunk of its own, so
+   `first-steps.mjs` importing `insight.mjs`, or `compare-dialog.mjs`
+   importing `file-sets.mjs`, moved those out of `assets/shell.mjs` into new
+   shared chunks - one more request on every page, and a shell budget that
+   measured less than the shell. What a chunk needs is handed to its setup
+   function instead ([load-time.md](load-time.md)).
+2. **Monaco's diff editor wants a worker the page does not give it.** Its
+   `IEditorWorkerService.computeDiff` posts to Monaco's editor worker, which
+   this page never starts; `showDiff( )` in `monaco-editor.mjs` replaces that
+   method with Monaco's own lines diff computer run on the page
+   (`linesDiffComputers`), which is fast enough for a class.

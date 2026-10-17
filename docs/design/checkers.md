@@ -19,6 +19,17 @@
   are off here (`settingsFor( )`): the buffer is not a serialised file, and the
   abapGit zip normalises all three on the way out (`src/shell/export.mjs`).
 
+**The bar's UI5 select** ("UI5", after Auto; "Check against UI5" in the
+phone's ⋯ menu - `src/shell/ui5-floor.mjs`, `tests/ui5-floor.spec.js`) is the
+linter's floor, offered as 1.71, 1.84, 1.96, 1.108, 1.120 and `latest
+(<UI5_VERSION>)`, the release this site carries; a floor typed into the tab
+that is not on the list is shown as itself. It is the SAME setting the
+**abap2UI5 lint** tab edits as JSON (`ui5`), not a second one: a change goes
+through `applyLinterSettings( )` and is kept by `keepLinterSettings( )` exactly
+as an Apply in the tab is, and each face follows what the other applied
+(`onLinterSettings( )` in `abap2ui5-lint.mjs`). Default 1.71; hidden on embeds
+and app-only pages.
+
 Both configurations are live in the panel's **abaplint** and **abap2UI5 lint**
 tabs (`src/shell/insight-config.mjs`); the defaults stay the curated lists. Every
 Problems row links the page that explains its rule (`rule ↗`, outside the row's
@@ -95,9 +106,17 @@ carried was called `zcl_playground.clas.abap`, so `setFiles()` reused the model
 and the reader's work stayed one Ctrl+Z away. The samples come out of
 abap2UI5/samples now and bring their own class names, so the model the work was
 in is disposed with its file and Undo cannot reach it. `replaceWith()` in
-`main.mjs` works out which of the two happened and the status line says the true
-one — *one Undo away* or *comes back if you reload* — and the stored draft is
-what makes the second sentence true.
+`file-sets.mjs` works out which happened, and where Undo cannot reach the work
+it keeps it in the Drafts list (`keepReplaced( )` in `drafts.mjs`: under the
+name it is already saved as when it is one of the drafts unchanged, otherwise
+in the one slot "Before the last pick"). The status line, after the run, says
+the true one — *running - your draft is one Undo away*, or *running - your
+draft is kept in Samples, under Your drafts, as "…"*. Only where storage
+refuses the list does it fall back to *comes back if you reload*, which the
+stored draft makes true (it used to be the only sentence, and read as advice
+to reload the page). A share link, `?src=`, `?gist=`, a sample or a named
+draft opened is not work until it is changed (`openedFiles( )`,
+`isAsOpened( )`), so nothing is kept for those.
 
 ## Fix them
 
@@ -106,7 +125,10 @@ fixes to everything open: abaplint's structural fixes first, then the linter's,
 each in a bounded loop because one fix uncovers the next — both a round trip
 to the worker per file, guarded so a file typed into meanwhile is left alone. The rewrite is
 written back through `pushEditOperations` as **one edit per file**, so a single
-Ctrl+Z takes the whole thing back. Nothing without a correct answer is guessed
+Ctrl+Z takes the whole thing back. Four operations keep that contract:
+Format, Fix them, a View edit, and **Reset to original** (`original.mjs`,
+through `replaceWith( )`: each file still open is rewritten in its model as
+one edit; a file added since goes to Your drafts with the rest of the work). Nothing without a correct answer is guessed
 at — an icon that does not exist stays reported. Keep all of that true when
 changing anything near it.
 
