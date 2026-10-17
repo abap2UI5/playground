@@ -127,6 +127,10 @@ test("the toggle folds the panel away, and the choice survives a reload", async 
   const toggle = page.locator("#insight-toggle");
   await expect(body).toBeVisible();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  // A tab with something in it: an empty one is a line tall already, and
+  // there would be nothing for folding to give back.
+  await page.locator('[data-insight="outline"]').click();
+  await expect(page.locator(".insight-row").first()).toBeVisible();
 
   const editorBefore = (await page.locator("#editor").boundingBox()).height;
   await toggle.click();
@@ -217,6 +221,10 @@ test("the panel can be dragged taller, and the height survives a reload", async 
 
   await page.reload();
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  // Measured on a tab with something to show: Problems is empty here, and an
+  // empty tab is the strip and one line, whatever height is stored.
+  await page.locator('[data-insight="outline"]').click();
+  await expect(page.locator(".insight-row").first()).toBeVisible();
   const restored = (await page.locator("#insight").boundingBox()).height;
   expect(Math.abs(restored - after), "the height came back").toBeLessThan(8);
 });
@@ -703,4 +711,97 @@ test("what the app WRITEs is listed in the Console tab under the roundtrip that 
   await tab.click();
   await expect(page.locator(".console .console-body")).toHaveCount(1);
   await expect(page.locator(".console .console-body")).toHaveText("started");
+});
+
+// A tab with nothing to show takes one line, not the panel's height - and
+// the height it had is there again the moment there is something to show.
+test("an empty tab shrinks the panel to one line, and its height comes back with content", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await open(page);
+  const panel = page.locator("#insight");
+  await expect(page.locator("#insight-body")).toHaveText("Nothing to report.");
+  expect((await panel.boundingBox()).height, "the strip and one line").toBeLessThan(80);
+
+  await page.locator('[data-insight="outline"]').click();
+  await expect(page.locator(".insight-row").first()).toBeVisible();
+  const full = (await panel.boundingBox()).height;
+  expect(full, "a tab with rows has its height").toBeGreaterThan(150);
+
+  // From the editor, the panel grows once the typing has settled.
+  await page.locator('[data-insight="problems"]').click();
+  await setSource(page, (await getSource(page)).replace("PUBLIC SECTION.", "PUBLIC SECTION.\n    DATA broken TYPE zcl_does_not_exist."));
+  await expect(page.locator(".insight-row.is-error").first()).toBeVisible({ timeout: 20000 });
+  await expect.poll(async () => (await panel.boundingBox()).height).toBeGreaterThan(full - 8);
+
+  // A drag on an empty tab is a request for the room, and is not taken back.
+  await page.locator('[data-insight="log"]').click();
+  await expect(panel).toHaveClass(/is-empty/);
+  const grip = await page.locator("#insight-grip").boundingBox();
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + grip.width / 2, grip.y - 200, { steps: 6 });
+  await page.mouse.up();
+  expect((await panel.boundingBox()).height, "dragged open").toBeGreaterThan(200);
+});
+
+// At 1440 by 900 the default height ended above Apply and Reset.
+test("the config tabs keep Apply and Reset on screen", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await open(page);
+  for (const tab of ["abaplint", "abap2ui5"]) {
+    await page.locator(`[data-insight="${tab}"]`).click();
+    const apply = page.locator(".config-row .primary");
+    await expect(apply).toBeVisible();
+    const box = await apply.boundingBox();
+    const body = await page.locator("#insight-body").boundingBox();
+    expect(box.y + box.height, `${tab}: Apply inside the panel`).toBeLessThanOrEqual(body.y + body.height + 1);
+    expect(box.y + box.height, `${tab}: Apply inside the window`).toBeLessThanOrEqual(900);
+    // And still there with the tab scrolled to its end.
+    await page.locator("#insight-body").evaluate((el) => { el.scrollTop = el.scrollHeight; });
+    const after = await apply.boundingBox();
+    expect(after.y + after.height).toBeLessThanOrEqual(body.y + body.height + 1);
+    expect(after.y, "not scrolled away above").toBeGreaterThanOrEqual(body.y);
+  }
+});
+
+// A phone holds three of the tabs; the rest scroll, and the strip says so.
+test("on a phone the tab strip says it scrolls, and the open tab is scrolled into view", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page);
+  const strip = page.locator(".insight-tablist");
+  await expect(strip).toHaveClass(/has-more-after/);
+  await expect(strip).not.toHaveClass(/has-more-before/);
+
+  // A failure opens the Log, which is off the end of the strip.
+  await setSource(page, (await getSource(page)).replaceAll(MAIN_CLASS, "zcl_renamed"));
+  await page.locator("#run").click();
+  await expect(page.locator(".log-body")).toBeVisible({ timeout: 30000 });
+  const tab = await page.locator('[data-insight="log"]').boundingBox();
+  const box = await strip.boundingBox();
+  expect(tab.x, "the Log tab is in view").toBeGreaterThanOrEqual(box.x);
+  expect(tab.x + tab.width).toBeLessThanOrEqual(box.x + box.width);
+  await expect(strip).toHaveClass(/has-more-before/);
+});
+
+// Deleting a full stop runs two statements into one, which abaplint reports
+// as a statement that does not exist - at the first line, named by its first
+// word. The playground asks about the full stop and points at its line.
+test("a missing full stop is asked about, and the problem points at its line", async ({ page }) => {
+  await open(page);
+  const source = await getSource(page);
+  const lines = source.split("\n");
+  const at = lines.findIndex((l) => /^\s*DATA name\s+TYPE string\.\s*$/.test(l));
+  expect(at, "the sample declares NAME").toBeGreaterThan(-1);
+  lines[at] = lines[at].replace(/\.\s*$/, "");
+  await setSource(page, lines.join("\n"));
+
+  const row = page.locator(".insight-row", { hasText: "full stop" }).first();
+  await expect(row).toBeVisible({ timeout: 20000 });
+  await expect(row).toContainText(`is the full stop missing at the end of line ${at + 1}?`);
+  await expect(row).toContainText("ABAP version (or a parser error)");
+  await expect(row.locator(".insight-where")).toHaveText(`line ${at + 1}`);
+  await row.click();
+  const pos = await page.evaluate(() => window.monaco.editor.getEditors()[0].getPosition());
+  expect(pos.lineNumber).toBe(at + 1);
+  expect(pos.column, "at the end of the line, where the full stop goes").toBe(lines[at].trimEnd().length + 1);
 });

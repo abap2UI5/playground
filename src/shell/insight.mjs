@@ -89,6 +89,7 @@ export function setUpInsight() {
   tabs = [...panel.querySelectorAll("[data-insight]")];
 
   setUpResize();
+  setUpStrip();
 
   connectPanel({ view: () => view, render, update: updateInsight });
 
@@ -120,6 +121,7 @@ export function setUpInsight() {
       }
       expand();
       remember(false);
+      if (tab.dataset.insight !== view) sized = false;
       view = tab.dataset.insight;
       render();
     });
@@ -205,6 +207,7 @@ function setUpResize() {
     // Opened by hand is a request to have it open, as the toggle's is.
     if (panel.classList.contains("is-collapsed")) remember(false);
     expand();
+    unfit();
     grip.classList.add("is-dragging");
     e.preventDefault();
   });
@@ -235,6 +238,7 @@ function setUpResize() {
     e.preventDefault();
     if (panel.classList.contains("is-collapsed")) remember(false);
     expand();
+    unfit();
     writeStored(HEIGHT_KEY, String(apply(panel.getBoundingClientRect().height + step)));
   });
 }
@@ -244,6 +248,7 @@ function setUpResize() {
 export function showInsight(which) {
   if (!panel || !VIEWS[which]) return;
   expand();
+  if (which !== view) sized = false;
   view = which;
   render();
 }
@@ -254,7 +259,7 @@ export function updateInsight(problems) {
   setProblems(problems);
   // The config views hold half-typed text somebody is in the middle of - a
   // rerender under their hands would throw it away on every keystroke.
-  if (view === "problems" || view === "outline" || view === "view") render();
+  if (view === "problems" || view === "outline" || view === "view") render({ settle: true });
 }
 
 // Each tab, by its data-insight name, and the function that draws it.
@@ -274,12 +279,21 @@ const VIEWS = {
 // redraws Problems, Outline and View, twice - keeps the reader's place.
 let rendered;
 
-function render() {
+// `settle` is for a redraw the editor caused (updateInsight( )): see fit( ).
+function render({ settle = false } = {}) {
   if (!panel) return;
   for (const tab of tabs) {
     const active = tab.dataset.insight === view;
     tab.classList.toggle("is-active", active);
     tab.setAttribute("aria-selected", String(active));
+  }
+  showActiveTab();
+  const node = (VIEWS[view] ?? problemsTab)();
+  const nothing = node.classList?.contains("insight-empty") ?? false;
+  clearTimeout(growing);
+  if (settle && !nothing && panel.classList.contains("is-empty") && !panel.classList.contains("is-collapsed")) {
+    growing = setTimeout(() => render(), SETTLE_MS);
+    return;
   }
   // A reader working down a long problem list or outline was thrown back
   // up it and lost the focused row on every keystroke in the editor. The
@@ -303,8 +317,9 @@ function render() {
   const caret = kept instanceof HTMLTextAreaElement
     ? { start: kept.selectionStart, end: kept.selectionEnd, direction: kept.selectionDirection, top: kept.scrollTop }
     : undefined;
-  body.replaceChildren((VIEWS[view] ?? problemsTab)());
+  body.replaceChildren(node);
   rendered = view;
+  fit(nothing);
   if (kept && kept !== document.activeElement && body.contains(kept)) {
     kept.focus({ preventScroll: true });
     if (caret) {
@@ -321,4 +336,91 @@ function render() {
   } else if (keyed !== undefined) {
     [...body.querySelectorAll("[data-focus]")].find((el) => el.dataset.focus === keyed)?.focus({ preventScroll: true });
   }
+}
+
+// ---------------------------------------------------------------- fitting
+
+// A panel with nothing to say says it in one line, and gives the editor the
+// rest: "Nothing to report." used to sit at the top of 176 pixels, which at
+// 900 pixels of window was a fifth of what the editor could have had.
+// `is-empty` lets go of the panel's height (shell.css), and the height it had
+// - stored, dragged, or the default - comes back with the first thing to
+// show, because it was never touched: the class only outranks it.
+//
+// Growing again is held back while the editor is the cause. Typing a
+// statement is an abaplint error until its full stop, and a panel that grew
+// at every pause and shrank at every full stop took the last lines of the
+// editor - the ones being typed in - away and back. So a change from the
+// editor that turns nothing into something waits until the typing has
+// settled (the badge on the tab says it at once), and anything else - a tab
+// opened, a Run that failed, a roundtrip - draws at once.
+const SETTLE_MS = 1200;
+let growing;
+
+// Set by a hand on the grip: dragging or stepping the panel's height is
+// asking for that height, so it is not taken away again for having nothing
+// in it - until another tab is opened, which is a new question.
+let sized = false;
+
+function fit(nothing) {
+  const was = panel.classList.contains("is-empty");
+  panel.classList.toggle("is-empty", nothing && !sized);
+  if (was && !panel.classList.contains("is-empty")) refit();
+}
+
+// The panel at its own height again, for a hand about to change it - so the
+// drag starts from what the reader sees once it is open, and the keyboard's
+// step is taken from the real height rather than from the one line.
+function unfit() {
+  sized = true;
+  clearTimeout(growing);
+  if (panel.classList.contains("is-empty")) {
+    panel.classList.remove("is-empty");
+    refit();
+  }
+}
+
+// ------------------------------------------------------------------ strip
+
+// On a phone the strip holds about three of its tabs, and the rest scroll
+// under the toggle. Two things say so: the active tab is scrolled into view
+// whenever it changes (a failure that opens the Log, a Run that brings the
+// Tests forward - the reader is not left looking at a strip with nothing lit
+// in it), and a fade at whichever edge has more beyond it - the tab cut off
+// at "Roundtr" with nothing to say the strip scrolled was taken for its end.
+let shownTab;
+
+function showActiveTab() {
+  const list = panel.querySelector(".insight-tablist");
+  const active = tabs.find((t) => t.dataset.insight === view);
+  if (!list || !active || shownTab === view) return;
+  shownTab = view;
+  // By hand rather than scrollIntoView( ), which scrolls every ancestor that
+  // can - the page included, on a phone with the address bar sliding away.
+  const left = active.offsetLeft - list.offsetLeft;
+  const right = left + active.offsetWidth;
+  const edge = 24; // the width of the fade, so the tab is not left under it
+  if (left - edge < list.scrollLeft) list.scrollLeft = Math.max(0, left - edge);
+  else if (right + edge > list.scrollLeft + list.clientWidth) list.scrollLeft = right + edge - list.clientWidth;
+  paintEdges(list);
+}
+
+function paintEdges(list) {
+  const more = list.scrollWidth - list.clientWidth;
+  list.classList.toggle("has-more-before", list.scrollLeft > 1);
+  list.classList.toggle("has-more-after", more > 1 && list.scrollLeft < more - 1);
+}
+
+function setUpStrip() {
+  const list = panel.querySelector(".insight-tablist");
+  if (!list) return;
+  list.addEventListener("scroll", () => paintEdges(list), { passive: true });
+  // The strip changes width with the window and the splitter, and its tabs
+  // with their badges; either can start or end an overflow.
+  if (typeof ResizeObserver === "function") {
+    const observer = new ResizeObserver(() => paintEdges(list));
+    observer.observe(list);
+    for (const tab of tabs) observer.observe(tab);
+  }
+  paintEdges(list);
 }
