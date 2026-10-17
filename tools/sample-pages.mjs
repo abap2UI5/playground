@@ -79,6 +79,7 @@ import { stripHtmlComments, withPolicy } from "./html.mjs";
 import path from "path";
 import { isSapui5Only } from "../src/shell/ui5-libs.mjs";
 import { githubUrlOf, rawUrlOf } from "../src/shell/catalogue-urls.mjs";
+import { MARKS, marksOf } from "../src/shell/sample-marks.mjs";
 import { highlightAbapLines } from "./abap-highlight.mjs";
 import { fetchSampleSources } from "./sample-sources.mjs";
 import { MENU_SCRIPT, PAGE_SCRIPT, SEARCH_SCRIPT, SITE, THEME_SCRIPT, bar, foot } from "./sample-frame.mjs";
@@ -384,6 +385,16 @@ function samplePage(row, ctx) {
       : `${esc(row.needs || "does not run here")} — it opens for reading instead`,
   ]);
   if (row.runsOn) facts.push(["Runs on", esc(row.runsOn)]);
+  /* The marker the repository's own title carries, and what it means - the
+   * one place on the page the two letters are still printed, beside their
+   * legend, because a reader who meets "(A,C)" in SAMPLES.md should be able
+   * to find out here what it said. */
+  if (row.marks.length) {
+    facts.push([
+      "Marked",
+      `<code>(${esc(row.marks.join(","))})</code> — ${row.marks.map((m) => esc(MARKS[m].title)).join("; ")}`,
+    ]);
+  }
   if (docs) {
     facts.push([
       "Documentation",
@@ -497,11 +508,23 @@ function samplePage(row, ctx) {
   <h1>${esc(title)}</h1>
   ${lede ? `<p class="lede">${esc(lede)}</p>` : ""}
   <p class="who">${esc(row.class.toUpperCase())}</p>
+  ${
+    /* RUN IT HERE, UNDER THE TITLE. The demo box is below the facts, the
+       controls and the libraries - on a laptop a screen and a half down, on a
+       phone three - and a reader who came to see the sample run had to know
+       to scroll for it. This is the way there, where the reader is looking:
+       a link to the box's own heading, so it works with the script blocked,
+       and with it the box is started as well (setUpRunJump( ) in
+       src/catalogue/run-jump.mjs), so one press is one press. Only where the
+       box exists - a sample that cannot run here has no box to go to. */
+    row.runs ? `<p class="head-run"><a class="run-jump" href="#run-it-here">▶ Run it here</a></p>` : ""
+  }
 
   <div class="badges">
     ${source ? `<span class="badge">${esc(source.title)}</span>` : ""}
     ${row.group ? `<span class="badge">${esc(row.group)}</span>` : ""}
     <span class="badge">UI5 ${esc(row.minUi5)}</span>
+    ${row.marks.map((m) => `<span class="badge mark" title="${esc(MARKS[m].title)}">${esc(MARKS[m].label)}</span>`).join("")}
     ${row.needs ? `<span class="badge needs">${esc(row.needs)}</span>` : ""}
   </div>
 
@@ -768,15 +791,21 @@ export async function prepareSamplePages(index) {
      * dialog can link to a page without knowing which entries got one. The
      * index is written after this runs (tools/build-catalogue.mjs). */
     entry.page = `${dir}/`;
+    /* "(A,C)" off the end of a title or a note, and said in words on the
+     * page instead (src/shell/sample-marks.mjs): two letters in brackets are
+     * a code nothing on this site explains, in a heading, a browser tab and a
+     * search result alike. The index keeps the text as it was written. */
+    const { texts: [title, note], marks } = marksOf(String(entry.title || entry.class), String(entry.note || ""));
     rows.push({
       ...entry,
       raw,
       github,
       dir,
       class: String(entry.class),
-      title: String(entry.title || entry.class),
-      note: String(entry.note || ""),
-      summary: String(entry.summary || entry.note || ""),
+      title,
+      note,
+      marks,
+      summary: String(entry.summary || note),
       group: String(entry.group || ""),
       minUi5: String(entry.minUi5 || floor),
       stageTitle: stages.get(`${entry.source}:${entry.stage}`),
@@ -953,7 +982,9 @@ text. A page that swaps content without reloading calls
 ## Read it as data
 
 - [apps.json](${SITE}samples/apps.json): the whole index, one object per sample
-  under \`entries\`: \`class\`, \`title\`, \`summary\`, \`source\` (which repository -
+  under \`entries\`: \`class\`, \`title\`, \`note\` (its one line; a title or note
+  ending in \`(A)\` performs a frontend action, \`(C)\` uses an abap2UI5 custom
+  control, \`(A,C)\` both), \`summary\`, \`source\` (which repository -
   its GitHub name is under \`sources\`), \`file\` (the class's path in it, on
   \`branch\` where that is not main - so the ABAP is at
   \`https://raw.githubusercontent.com/<repo>/<branch>/<file>\` and its page at

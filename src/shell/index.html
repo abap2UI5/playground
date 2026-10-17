@@ -553,13 +553,30 @@
           <label><input type="checkbox" data-filter="controls" checked> Controls</label>
           <label><input type="checkbox" data-filter="stack" checked> Stack</label>
         </span>
-        <!-- "Only what runs here" drops what needs a system or a library this
-             build has not got; "OpenUI5 only" drops what needs SAPUI5; "newer
-             than 1.71" off drops what needs a UI5 above the floor abap2UI5
-             holds its shipped apps to. -->
-        <label class="examples-filter"><input type="checkbox" data-filter="runsonly"> Only what runs here</label>
-        <label class="examples-filter"><input type="checkbox" data-filter="openui5only"> OpenUI5 only</label>
-        <label class="examples-filter"><input type="checkbox" data-filter="newer" checked> newer than 1.71</label>
+        <!-- Each label says what its tick DOES, because two of them used to
+             be a fact rather than an instruction ("OpenUI5 only", "newer than
+             1.71" - ticked by default, and nobody could say whether the tick
+             kept those samples or took them away). The title is the long
+             reading on hover, and aria-description is the same sentence for
+             a screen reader. The first two narrow and start off: a sample
+             that cannot run here is still listed, struck through and saying
+             what it needs, because one somebody cannot find is worse than one
+             they cannot run. data-floor is filled from the index. -->
+        <label class="examples-filter"
+               title="Leave out the samples that need a real SAP system, SAPUI5 or a UI5 library this site does not carry. Unticked they are listed too, struck through, with what they need beside them.">
+          <input type="checkbox" data-filter="runsonly"
+                 aria-description="Leaves out the samples that need a real SAP system, SAPUI5 or a UI5 library this site does not carry. Unticked they are listed too, struck through, with what they need beside them.">
+          Only samples that run in this browser</label>
+        <label class="examples-filter"
+               title="SAPUI5 is SAP's own distribution of UI5, with libraries OpenUI5 does not have. This site runs OpenUI5, so these samples only run on a system.">
+          <input type="checkbox" data-filter="openui5only"
+                 aria-description="SAPUI5 is SAP's own distribution of UI5, with libraries OpenUI5 does not have. This site runs OpenUI5, so these samples only run on a system.">
+          Leave out samples that need SAPUI5</label>
+        <label class="examples-filter"
+               title="abap2UI5 supports systems as old as UI5 1.71. Untick to keep only what renders there - this page runs a newer UI5, so the others still run here.">
+          <input type="checkbox" data-filter="newer" checked
+                 aria-description="abap2UI5 supports systems as old as UI5 1.71. Untick to keep only what renders there - this page runs a newer UI5, so the others still run here.">
+          Include samples that need a UI5 newer than <span data-floor>1.71</span></label>
       </div>
       <!-- The two questions the sample repositories' own catalogues cannot
            answer, which is why the index carries the linter's derived facts:

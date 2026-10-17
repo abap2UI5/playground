@@ -26,6 +26,7 @@ import { cmpVersion } from "../shell/ui5-libs.mjs";
 import { githubUrlOf } from "../shell/catalogue-urls.mjs";
 import { foldCase, termsOf, matchesTerms } from "../shell/search-terms.mjs";
 import { rememberHere, keepSiteLinksCurrent } from "../shell/site-memory.mjs";
+import { MARKS, marksOf } from "../shell/sample-marks.mjs";
 
 const $ = (id) => document.getElementById(id);
 
@@ -110,15 +111,23 @@ function prepare(data) {
   const names = data.controls || [];
   return (data.entries || []).map((entry) => {
     const controls = (entry.controls || []).map((i) => names[i]).filter(Boolean);
+    /* "(A,C)" off the end of the text and said as words - see
+     * src/shell/sample-marks.mjs. The words are searched too, so "custom
+     * control" finds what the two letters only hinted at. */
+    const { texts: [title, note], marks } = marksOf(entry.title, entry.note);
     return {
       ...entry,
+      title,
+      note,
+      marks,
       controlNames: controls,
       /* Searched as one lowercase string. The control names are in it, so
        * typing "wizard" finds a port that BUILDS a Wizard as well as the one
        * named after it - which is the whole difference between this and
        * scrolling SAMPLES.md. */
       haystack: foldCase([
-        entry.title, entry.note, entry.summary, entry.class, entry.group,
+        title, note, entry.summary, entry.class, entry.group,
+        ...marks.map((m) => MARKS[m].label),
         entry.entity, entry.sample, entry.runsOn,
         (entry.keywords || []).join(" "),
         controls.join(" "),
@@ -179,6 +188,11 @@ function card(row) {
   if (source) badges.append(text("span", "badge", source.title));
   if (row.group) badges.append(text("span", "badge", row.group));
   if (row.minUi5 && row.minUi5 !== index.minUi5) badges.append(text("span", "badge", `UI5 ${row.minUi5}`));
+  for (const m of row.marks) {
+    const mark = text("span", "badge mark", MARKS[m].label);
+    mark.title = MARKS[m].title;
+    badges.append(mark);
+  }
   if (row.needs) {
     const needs = text("span", "badge needs", row.needs);
     /* The long half: what a stack sample's system must have, which libraries
