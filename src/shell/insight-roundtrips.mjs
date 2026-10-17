@@ -15,8 +15,8 @@ import { paintConsoleCount } from "./insight-console.mjs";
 // the numbering over and clears this (the onRoundtrip listener below).
 let openedRoundtrip;
 
-// The two tabs drawn off the roundtrips, this one and the Console.
-const FED = ["roundtrips", "console"];
+// The tabs drawn off the roundtrips: this one, the Console and the State.
+const FED = ["roundtrips", "console", "state"];
 
 // A roundtrip landing while its tab is open is listed as it lands; the badges
 // count them whichever tab is open. `body` is the panel's body, where a

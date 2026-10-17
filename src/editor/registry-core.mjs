@@ -26,6 +26,7 @@ import * as abaplint from "@abaplint/core";
 // once for every open file instead.
 import { Diagnostics } from "@abaplint/core/build/src/lsp/diagnostics.js";
 import { parseName, sidecarFor, uriFor } from "./files.mjs";
+import { isSeedFile, isTableFile, parseSeed, readTable } from "./tables.mjs";
 
 // v750 is the release abap2UI5 lints itself against, so the playground holds
 // the user to the same bar - and the transpiler accepts everything up to it.
@@ -147,17 +148,48 @@ let held = new Map();
 let versions = new Map();
 export const holdsVersion = (name, version) => version !== undefined && versions.get(name) === version;
 
+// Whether abaplint is handed a file at all. A table's rows are not an object
+// abaplint knows (tables.mjs reads them), and a table definition that is not
+// whole yet - a field with no type, half typed - is kept from it: abaplint
+// throws on one from inside its parse, which would take every check of every
+// file with it. Such a definition is reported by tableProblems( ) instead,
+// and handed over the moment it is whole.
+function forAbaplint(file) {
+  if (isSeedFile(file.name)) return false;
+  if (isTableFile(file.name)) return readTable(file.source).problems.length === 0;
+  return true;
+}
+
 function addFile(reg, file) {
+  if (!forAbaplint(file)) return;
   reg.addFile(new abaplint.MemoryFile(uriFor(file.name), file.source));
   const sidecar = sidecarFor(file.name);
   if (sidecar) reg.addFile(new abaplint.MemoryFile(uriFor(sidecar.name), sidecar.source));
 }
 
 function removeFile(reg, name) {
-  reg.removeFile(reg.getFileByName(uriFor(name)));
+  const held = reg.getFileByName(uriFor(name));
+  if (held) reg.removeFile(held);
   const sidecar = sidecarFor(name);
   const xml = sidecar && reg.getFileByName(uriFor(sidecar.name));
   if (xml) reg.removeFile(xml);
+}
+
+// What the playground itself has to say about a table's two files, as
+// diagnostics in the language server's shape: a definition abaplint was not
+// handed (forAbaplint above), a seed file that is not rows.
+function tableProblems(name, source) {
+  let problems = [];
+  if (isTableFile(name)) problems = readTable(source).problems;
+  else if (isSeedFile(name)) problems = parseSeed(source).problems;
+  return problems.map((p) => ({
+    range: { start: { line: p.line - 1, character: p.column - 1 }, end: { line: p.line - 1, character: p.column } },
+    message: p.message,
+    severity: 1,
+    code: "table",
+    source: "playground",
+    fixable: false,
+  }));
 }
 
 // Builds the registry and parses it. `onProgress(done, total)` is called as it
@@ -296,7 +328,15 @@ export function updateFiles(files) {
       addFile(registry, { name, source });
       moved.add(name);
     } else if (held.get(name) !== source) {
-      registry.updateFile(new abaplint.MemoryFile(uriFor(name), source));
+      // A table definition goes in and out of the registry as it becomes
+      // whole and stops being so (forAbaplint), so it is taken out and put
+      // in again rather than updated in place.
+      if (isTableFile(name)) {
+        removeFile(registry, name);
+        addFile(registry, { name, source });
+      } else if (forAbaplint({ name, source })) {
+        registry.updateFile(new abaplint.MemoryFile(uriFor(name), source));
+      }
       moved.add(name);
     }
     held.set(name, source);
@@ -334,6 +374,9 @@ export function analyseFiles(files) {
     // would repair - "1 warning", not "1 of these" over three errors it
     // would leave alone.
     if (diagnostics[name] !== undefined) diagnostics[name].push({ ...Diagnostics.mapDiagnostic(issue), fixable: fix });
+  }
+  for (const file of files) {
+    if (isTableFile(file.name) || isSeedFile(file.name)) diagnostics[file.name].push(...tableProblems(file.name, held.get(file.name) ?? ""));
   }
   return { diagnostics, fixable };
 }
@@ -642,6 +685,9 @@ export function documentSymbols(fileName) {
   // { textDocument: { uri } }. Passing the first shape to the second throws
   // inside abaplint rather than returning nothing, which is easy to mistake
   // for "this file has no symbols".
+  // A table's two files have none to list - and the rows are not in the
+  // registry at all.
+  if (isTableFile(fileName) || isSeedFile(fileName)) return [];
   return new abaplint.LanguageServer(registry).documentSymbol({ textDocument: { uri: uriFor(fileName) } });
 }
 

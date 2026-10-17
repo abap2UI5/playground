@@ -20,6 +20,7 @@ import { fileShown, viewTab } from "./insight-view.mjs";
 import { testsTab } from "./insight-tests.mjs";
 import { followRoundtrips, roundtripsTab } from "./insight-roundtrips.mjs";
 import { consoleTab } from "./insight-console.mjs";
+import { stateTab } from "./insight-state.mjs";
 import { logTab, paintLogDot } from "./insight-log.mjs";
 import { abaplintTab, linterTab } from "./insight-config.mjs";
 
@@ -269,6 +270,7 @@ const VIEWS = {
   view: viewTab,
   tests: testsTab,
   roundtrips: roundtripsTab,
+  state: stateTab,
   console: consoleTab,
   log: logTab,
   abaplint: abaplintTab,

@@ -474,7 +474,8 @@ select:disabled { opacity: .5; }
   border-radius: 3px;
 }
 
-.file-add {
+.file-add,
+.file-add-table {
   border: none;
   border-radius: 0;
   background: none;
@@ -483,6 +484,8 @@ select:disabled { opacity: .5; }
   font-size: 15px;
   line-height: 1;
 }
+/* "+ table" beside the bare "+": a word, so a size that reads as one. */
+.file-add-table { font-size: 12px; white-space: nowrap; }
 
 .editor { flex: 1; min-height: 0; }
 /* On a phone every line of a class is wider than the editor, so Monaco's
@@ -1378,6 +1381,37 @@ button.insight-row {
 .roundtrip-did { color: var(--fg-dim); font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .roundtrip-detail { width: 100%; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .roundtrip-body { max-height: 16rem; }
+
+/* ------------------------------------------------------------------ state */
+
+/* One row per attribute, field or table row: the opener, the name, the type
+   and the value in four columns, indented a step per level. What changed
+   since the roundtrip before is tinted with the accent and says so in words,
+   for whoever cannot tell a tint. */
+.state-list { list-style: none; margin: 0; padding: .2rem 0; font-family: var(--font-mono); font-size: 12px; }
+.state-row {
+  display: grid;
+  grid-template-columns: 1.2rem minmax(6rem, max-content) minmax(5rem, max-content) minmax(0, 1fr);
+  gap: .7rem;
+  align-items: baseline;
+  padding: .12rem .6rem .12rem calc(.6rem + var(--depth, 0) * 1.1rem);
+}
+.state-row.is-changed { background: color-mix(in srgb, var(--accent) 13%, transparent); }
+.state-toggle { border: none; background: none; padding: 0; color: var(--fg-dim); font: inherit; cursor: pointer; }
+.state-name { color: var(--fg); }
+.state-type { color: var(--fg-dim); }
+.state-value { min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.state-value.is-initial,
+.state-value.is-summary { color: var(--fg-dim); }
+.state-value.has-change::after { content: " •"; color: var(--accent); }
+.state-changed { color: var(--accent); font-family: var(--font-ui); font-size: 11px; }
+.state-more { display: block; color: var(--fg-dim); }
+.state-note { margin: .3rem .6rem; color: var(--fg-dim); font-size: 12px; }
+@media (max-width: 820px) {
+  /* On a phone the type goes under the name rather than taking a column. */
+  .state-row { grid-template-columns: 1.2rem minmax(0, 1fr) minmax(0, 1fr); row-gap: 0; }
+  .state-type { grid-column: 2 / -1; grid-row: 2; font-size: 11px; }
+}
 
 /* ------------------------------------------------------------------- log */
 
