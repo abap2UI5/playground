@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
 import { MONACO_CSS, abap2ui5LinterPlugin, monacoCssPlugin, nodeStubPlugin } from "./esbuild-plugins.mjs";
 import { SAMPLE_LIST, SAMPLE_REPO } from "../src/editor/sample-list.mjs";
+import { rawUrlOf } from "../src/shell/catalogue-urls.mjs";
 import { writeCatalogueDocument, writeIndex } from "./site-documents.mjs";
 import { chunks, writeServiceWorker } from "./service-worker.mjs";
 
@@ -306,6 +307,41 @@ function writeSamples() {
       `\n};\n`,
   );
   log(`samples: ${index.length} from ${SAMPLE_REPO}, ${copied.size} file(s), ${first.files.length} in the bundle`);
+  writeLessons(catalogue);
+}
+
+// The lessons the playground steps through (src/shell/learn-path.mjs): the
+// first stage of that repository's learning path - "Start here", which its
+// own blurb calls "the ones to read first, in order" - and only that one.
+// The later stages are topics whose entries are grouped by category rather
+// than ordered, so "Lesson 34 of 129" would be a number with no teaching
+// behind it. The order is the catalogue's own; nothing is sorted here.
+//
+// A file of its own rather than more fields in index.json: half of the
+// lessons are not carried by the page (they open over `?src=`), and the
+// path is read by a chunk the shell asks for after boot, not by the shell.
+// Each lesson carries its raw URL, made here by the samples browser's own
+// template (catalogue-urls.mjs), so the page has no second copy of it.
+// A catalogue with no learning path writes an empty list, and the page then
+// shows no lesson bar - it is a guide, not something to fail a build over.
+function writeLessons(catalogue) {
+  const stage = (catalogue.learningPath || [])[0];
+  const sources = [{ id: "learn", repo: SAMPLE_REPO }];
+  const lessons = stage
+    ? (catalogue.samples || [])
+        .filter((s) => s.stage === stage.id && typeof s.class === "string")
+        .map((s) => ({
+          class: s.class.toLowerCase(),
+          title: String(s.title || s.class),
+          raw: rawUrlOf({ source: "learn", file: s.file }, sources),
+        }))
+        .filter((l) => l.raw !== undefined)
+    : [];
+  fs.writeFileSync(
+    path.join(BUILD_SAMPLES, "lessons.json"),
+    JSON.stringify({ stage: stage ? String(stage.title || stage.id) : "", repo: SAMPLE_REPO, lessons }, null, 2) + "\n",
+  );
+  log(`samples: ${lessons.length} lesson(s) on the learning path`);
 }
 
 writeSamples();

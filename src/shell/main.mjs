@@ -64,6 +64,7 @@ import { reflectCodeErrors, sayBriefly } from "./run-status.mjs";
 import { keepDraft, loadDraft, loadLinked, loadSample, linkedFiles, markOpened } from "./file-sets.mjs";
 import { AI_STORAGE_KEY, carriedFiles, offerFrameBridge, setUpPilotHooks, setUpStudio } from "./agent-hooks.mjs";
 import { discardCachedSite, keepAssetsForNextTime, servedFromCache } from "./site-cache.mjs";
+import { lessonChanged, startGuides } from "./guides.mjs";
 
 const runButton = document.getElementById("run");
 const autorunButton = document.getElementById("autorun");
@@ -483,6 +484,16 @@ async function boot() {
   // an embedding page revealing the frame any earlier would reveal a blank one.
   announceReady();
 
+  // Guided first steps (guides.mjs): the hint strip on a first visit and the
+  // lesson bar on the learning path, each a chunk asked for only now - after
+  // the first run, so the boot never waits on them. A lesson opens the way
+  // the samples browser opens it.
+  startGuides(starting, {
+    openSample: examplesHandlers.openSample,
+    openLinked: examplesHandlers.openLinked,
+    openSamples: openExamples,
+  });
+
   // After the first run, not before: run() opens with a clear of the output
   // panel, so a message shown earlier would be wiped by the very next line.
   if (starting.declined) {
@@ -601,6 +612,7 @@ function remember(files) {
   renderFiles();
   showSourceLink();
   reflectHistory();
+  lessonChanged();
   autorunAfterChange();
   // The editor has already re-checked by the time this runs (both hang off the
   // same debounce), and the analysis is kept under a key made of the models'
