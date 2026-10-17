@@ -1,3 +1,4 @@
+// @ts-check
 // What "the code" is, now that it can be more than one class.
 //
 // A playground holds a small set of ABAP source files, exactly as abapGit names
@@ -108,8 +109,9 @@ export function sidecarFor(fileName) {
 
 // A skeleton for a file that was just added, so it is a valid object from the
 // moment it exists rather than a page of red underlines.
+// The name has passed nameProblem( ) by then, so parseName( ) answers.
 export function skeletonFor(fileName) {
-  const { object, kind, include } = parseName(fileName);
+  const { object, kind, include } = /** @type {NonNullable<ReturnType<typeof parseName>>} */ (parseName(fileName));
   const name = object.toLowerCase();
 
   if (include === "testclasses") {

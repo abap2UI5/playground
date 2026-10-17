@@ -1,3 +1,4 @@
+// @ts-check
 // localStorage, for a browser that may not have one.
 //
 // Everything the playground stores is a convenience - a dragged height, a

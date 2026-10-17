@@ -1,3 +1,4 @@
+// @ts-check
 // The abaplint registry the playground thinks with.
 //
 // One registry holds the whole corpus - abap2UI5 and the open-abap standard
@@ -209,6 +210,7 @@ export async function buildRegistry(corpus, filesReady, onProgress) {
 // exactly where the page is next waiting on it. A message posted to
 // ourselves has no timer behind it either, and it takes its turn: whatever
 // was queued before it runs first.
+/** @returns {Promise<void>} */
 const yieldToBrowser = () =>
   new Promise((resolve) => {
     const channel = new MessageChannel();

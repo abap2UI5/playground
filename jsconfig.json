@@ -1,0 +1,30 @@
+// Type checking for the JavaScript - `npm run typecheck`.
+//
+// OPT IN, FILE BY FILE: checkJs is off, so tsc reports only on a module that
+// starts with `// @ts-check`. Those are the pure ones (the builder chain read,
+// written and patched, share links, the zip, gists, the analysis and the
+// worker cores) - code with real shapes worth holding, and no DOM juggling
+// that would need a cast on every line. A module joins by adding the comment
+// and passing; nothing is emitted, esbuild still does the bundling.
+//
+// Strict, except for implicit `any`: an unannotated parameter is the norm
+// here and JSDoc on every one would be noise. A caught error is `any` too,
+// the way the code treats it (`e?.message ?? e`).
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": [],
+    "allowJs": true,
+    "checkJs": false,
+    "strict": true,
+    "noImplicitAny": false,
+    "useUnknownInCatchVariables": false,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/shell/*.mjs", "src/editor/*.mjs"],
+  "exclude": ["node_modules", "deps", "build", "dist", "src/vendor"]
+}

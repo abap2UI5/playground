@@ -57,7 +57,7 @@ export function createDriver() {
           reject(new Error("the app did not send the roundtrip - restart_app starts it again"));
         }, 15000);
         request = { body, resolve, reject, settled: () => clearTimeout(gaveUp) };
-        let sent = false;
+        let sent;
         try {
           sent = frameApi()?.roundtrip() === true;
         } catch {

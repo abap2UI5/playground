@@ -1,3 +1,4 @@
+// @ts-check
 // One analysis of everything open, and everybody's answer to it.
 //
 // Three questions are asked of the same text, from three places, on every
@@ -32,6 +33,15 @@ import { analyse as analyseInWorker } from "./registry.mjs";
 // (`markers(name, owner, list)` - a no-op where there is nothing to underline
 // in), and a file's shape for a transpiler problem to be clamped to
 // (`lineCount(name)`, `lineMaxColumn(name, line)`).
+/**
+ * @typedef {object} AnalysisHost
+ * @property {() => { name: string, source: string }[]} files
+ * @property {() => string} key
+ * @property {(name: string, owner: string, list: object[]) => void} markers
+ * @property {(name: string) => number} lineCount
+ * @property {(name: string, line: number) => number} lineMaxColumn
+ */
+/** @type {AnalysisHost} */
 let host = {
   files: () => [],
   key: () => "",
@@ -39,6 +49,7 @@ let host = {
   lineCount: () => 1,
   lineMaxColumn: () => 1,
 };
+/** @param {AnalysisHost} next */
 export function useHost(next) {
   host = next;
 }
@@ -59,6 +70,7 @@ export const OWNERS = [ABAPLINT_OWNER, LINT_OWNER, TRANSPILER_OWNER];
 // code's link as a plain string. Monaco's host maps them to its own.
 const LSP_SEVERITY = { 1: "error", 2: "warning", 3: "info", 4: "hint" };
 
+/** @type {{ key: string | undefined, problems: any[], fixable: number, lint: Record<string, any> }} */
 let analysis = { key: undefined, problems: [], fixable: 0, lint: {} };
 
 // Throws the kept answer away. For the one caller whose change is invisible to
@@ -290,6 +302,7 @@ export function fixableNow() {
 // goes away the moment the text changes, because the next Run will say again
 // whatever is still true. Until then it is underlined and listed, so "the
 // transpiler cannot compile this" points at a line rather than at the Log.
+/** @type {any[]} */
 let transpilerProblems = [];
 let transpilerKey;
 

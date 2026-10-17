@@ -148,7 +148,7 @@ export async function fetchSampleSources(rows) {
       const inRepo = at === -1 ? file.name : file.name.slice(at + 1);
       const url = wanted.get(inRepo);
       if (url === undefined) continue;
-      sources.set(url, file.body.toString("utf8").replace(/^﻿/, "").replace(/\r\n/g, "\n"));
+      sources.set(url, file.body.toString("utf8").replace(/^\uFEFF/, "").replace(/\r\n/g, "\n"));
       found += 1;
     }
     log(`${repo}@${ref}: ${found}/${wanted.size} classes read out of the tarball`);

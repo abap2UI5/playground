@@ -1,3 +1,4 @@
+// @ts-check
 // Files the reader adds to a message in the AI Pilot's chat (src/shell/pilot.mjs),
 // turned into what the Messages API takes - in this browser, sent nowhere
 // but with the message to api.anthropic.com:
@@ -45,7 +46,10 @@ const extensionOf = (name) => (/\.([^.]+)$/.exec(name)?.[1] ?? "").toLowerCase()
 const clipText = (text, max = MAX_TEXT) =>
   text.length <= max ? text : `${text.slice(0, max)}\n… (${text.length - max} more characters cut)`;
 
-/** What kind of file this is, or why it is not taken. */
+/** @typedef {{ error?: string, kind?: string, mediaType?: string, sent?: boolean }} FileKind */
+
+/** What kind of file this is, or why it is not taken.
+ *  @returns {FileKind} */
 export function kindOf(file) {
   const ext = extensionOf(file.name);
   if (file.size > MAX_FILE_BYTES) return { error: `${file.name} is larger than ${MAX_FILE_BYTES / 1024 / 1024} MB` };
@@ -94,6 +98,11 @@ export async function attachmentBlocks(files) {
   return { blocks, errors };
 }
 
+/**
+ * @param {File} file
+ * @param {FileKind} kindOfFile
+ * @param {{ left: number }} budget
+ */
 async function blocksOf(file, { kind, mediaType }, budget) {
   const textDocument = (title, text) => {
     const max = Math.min(MAX_TEXT, budget.left);

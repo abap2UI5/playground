@@ -1,3 +1,4 @@
+// @ts-check
 // What the playground keeps of the editor between visits: the files that
 // were open, and which of them was on screen.
 //

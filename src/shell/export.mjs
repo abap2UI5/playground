@@ -1,3 +1,4 @@
+// @ts-check
 // The open files as an abapGit package - what somebody takes to a system.
 //
 // A playground draft used to end at the clipboard: copy the class out of the

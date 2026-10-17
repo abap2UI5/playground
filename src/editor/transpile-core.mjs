@@ -1,3 +1,4 @@
+// @ts-check
 // ABAP in the editor to JavaScript the runtime can execute.
 //
 // The transpiler compiles a whole registry, and this registry holds the entire
@@ -15,7 +16,7 @@
 // marking them dirty, findIssues checking them) are called with the proxy as
 // their receiver, so they iterate the filtered list too. That is what keeps a
 // compile from marking the whole corpus dirty and forcing a reparse.
-import { Transpiler } from "@abaplint/transpiler";
+import { Transpiler, UnknownTypesEnum } from "@abaplint/transpiler";
 import { entryClass, getRegistry, hasEntryClass, updateFiles, userObjects } from "./registry-core.mjs";
 
 // Runs in the registry worker, beside the registry it compiles against; the
@@ -71,11 +72,11 @@ export async function compile(files) {
       // Matches how the framework itself was built: a name the transpiler
       // cannot resolve becomes an error when the code runs, not when it
       // compiles.
-      unknownTypes: "runtimeError",
+      unknownTypes: UnknownTypesEnum.runtimeError,
       keywords: ["return", "in", "class", "for", "delete", "var", "with"],
     }).run(view);
   } catch (e) {
-    const error = new Error(transpilerMessage(e));
+    const error = /** @type {Error & { problems?: unknown }} */ (new Error(transpilerMessage(e)));
     // The same lines, structured, for the editor to underline - see
     // reportTranspilerProblems( ) in editor.mjs.
     error.problems = transpilerProblems(e);

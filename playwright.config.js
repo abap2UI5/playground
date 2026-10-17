@@ -8,8 +8,15 @@ const PORT = Number(process.env.PORT || 8080);
 // playground has no meaningful behaviour outside one, and the pieces that
 // could be tested under Node (the transpile, the shim) behave differently
 // there than they do on a page. So: one target, the thing that ships.
+//
+// Bar tests/node/: `node --test` over the pure modules (the chain reader and
+// writer, share links, the zip, the search matcher), which need no build and
+// no browser - `npm run test:unit`. Their names match Playwright's default
+// pattern, and node:test runs a file's tests as it is imported, so they are
+// kept out of here by name.
 export default defineConfig({
   testDir: "tests",
+  testIgnore: "node/**",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

@@ -237,7 +237,7 @@ export function createOperator({ app, mirror, ui = {}, halted = () => false }) {
   async function settled() {
     const until = performance.now() + 5000;
     while (performance.now() < until) {
-      let busy = false;
+      let busy;
       try {
         busy = host.frame()?.busy() === true;
       } catch {
@@ -272,7 +272,7 @@ export function createOperator({ app, mirror, ui = {}, halted = () => false }) {
   // its event went out without the value while the frame went on showing it.
   async function current() {
     await catchUpWithFrame();
-    let typed = {};
+    let typed;
     try {
       typed = host.frame()?.pending?.() ?? {};
     } catch {
