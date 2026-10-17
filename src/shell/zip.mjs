@@ -1,3 +1,4 @@
+// @ts-check
 // A zip file, written by hand.
 //
 // The one thing the playground downloads is an abapGit package: a handful of

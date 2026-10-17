@@ -23,7 +23,7 @@ let versions = new Map();
 let generation = 0;
 let shown;
 let onChange;
-let onShown = [];
+const onShown = [];
 let connected = false;
 
 const indexOf = (name) => files.findIndex((f) => f.name === name);

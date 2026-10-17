@@ -1,3 +1,4 @@
+// @ts-check
 // Named drafts: the work of more than one sitting.
 //
 // The playground keeps one draft on its own - whatever was last in the

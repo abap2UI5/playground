@@ -1,3 +1,4 @@
+// @ts-check
 // XML, one element per line, for reading.
 //
 // The linter reconstructs a view as a single line, which is right for a

@@ -1,3 +1,4 @@
+// @ts-check
 // Putting an edited view back as an edit, rather than as a new chain.
 //
 // `chain-write.mjs` writes a whole chain from a tree, and that is the honest
