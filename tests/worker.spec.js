@@ -294,25 +294,25 @@ test("the worker is served under a project path as well as at the root", async (
   expect([...served]).toContain("/under-a-subpath/assets/shell.mjs");
 });
 
-test("a cached runtime from another build is thrown away, not waited on forever", async ({ page }) => {
+test("a runtime from another build is thrown away with the cached site, not waited on forever", async ({ page, context }) => {
   // Several playground boots in one test: three times the time budget.
   test.slow();
-  // The failure a deploy used to leave behind: a service worker cache holding
-  // the new shell beside an old framework - the old one a page module that,
-  // started as a worker, loads cleanly and never says a word. Put that shape
-  // into the cache by hand, then visit again.
+  // The failure a deploy used to leave behind: a page the worker serves,
+  // beside an old framework - a page module that, started as a worker,
+  // loads cleanly and never says a word. It can no longer come out of the
+  // worker's cache (a cached hit is hashed against the build before it is
+  // served, see verifiedHit( ) in sw.js), so it comes the way it still can:
+  // the worker misses and the wire answers with the old bytes (the CDN after
+  // a deploy) - a context route, which answers the worker's own fetch.
   await open(page);
   expect(await workerReady(page)).toBe(true);
   await page.evaluate(async () => {
     const [name] = await caches.keys();
-    const cache = await caches.open(name);
-    await cache.put(
-      new URL("runtime/framework.mjs", document.baseURI),
-      new Response("// a framework from another build: loads, says nothing\n", {
-        headers: { "content-type": "text/javascript" },
-      }),
-    );
+    await (await caches.open(name)).delete(new URL("runtime/framework.mjs", document.baseURI));
   });
+  await context.route("**/runtime/framework.mjs", (route) =>
+    route.fulfill({ contentType: "text/javascript", body: "// a framework from another build: loads, says nothing\n" }),
+  );
 
   // Seconds of patience rather than the minute a visitor gets, so the test
   // does not wait a minute to prove it.
@@ -331,7 +331,42 @@ test("a cached runtime from another build is thrown away, not waited on forever"
       worker: (await navigator.serviceWorker.getRegistration()) !== undefined,
     })),
   ).toEqual({ caches: [], worker: false });
+  await context.unroute("**/runtime/framework.mjs");
   await open(page);
+});
+
+test("a script somebody else put into the worker's cache is not served: it is dropped and fetched again", async ({ page }) => {
+  test.slow();
+  // The cache can be opened by any script of this origin - the playground's
+  // app frame is one - so a cached hit is hashed against the build on its
+  // way out (verifiedHit( ) in sw.js). A forged shell bundle, served
+  // cache-first, would have run on every later visit; the AI pages' too.
+  await open(page);
+  expect(await workerReady(page)).toBe(true);
+  const forged = "window.__forgedShell = true; // not this build's\n";
+  await page.evaluate(async (body) => {
+    const [name] = await caches.keys();
+    const cache = await caches.open(name);
+    const chunk = (await cache.keys()).map((r) => new URL(r.url).pathname).find((p) => /\/assets\/[\w-]+-[\w]+\.mjs$/.test(p));
+    for (const rel of ["assets/shell.mjs", chunk.replace(/^\//, "")]) {
+      await cache.put(new URL(rel, document.baseURI), new Response(body, { headers: { "content-type": "text/javascript" } }));
+    }
+  }, forged);
+  const { served } = watch(page);
+  await open(page);
+  expect(await page.evaluate(() => window.__forgedShell)).toBeUndefined();
+  // Answered by the worker - from the network, the forged copy dropped - and
+  // kept again, since those bytes match.
+  expect(served.has("/assets/shell.mjs")).toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const [name] = await caches.keys();
+        const hit = await (await caches.open(name)).match(new URL("assets/shell.mjs", document.baseURI));
+        return hit ? (await hit.text()).includes("not this build's") : null;
+      }),
+    )
+    .toBe(false);
 });
 
 test("a core asset the worker fetches on a miss is hashed against the build, and kept when it matches", async ({ page }) => {

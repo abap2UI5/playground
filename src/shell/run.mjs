@@ -27,6 +27,7 @@ import { hideOutput, setStatus, showOutput } from "./ui.mjs";
 import { appOnly, frame, pilotPage } from "./page.mjs";
 import { fromALink } from "./starting-files.mjs";
 import { cancelAutorun, reflectRunButton } from "./autorun.mjs";
+import { linkOf, navigate, tellFrames } from "./frame-link.mjs";
 import { clearAppStale, markAppStale, runStarting, sayRunning } from "./run-status.mjs";
 
 // What run( ) needs of the page that boot( ) only knows later: the AI Pilot's
@@ -41,12 +42,12 @@ export const setRunContext = (given) => {
 // slots, routing state, the UI5 component itself. The frontend's component
 // tears all of that down in its exit( ) now (it is built to be re-launched
 // in a living page), so a frame that is up is told to restart in place
-// (__z2ui5PlaygroundRestart in frontend-bridge.js): the component destroyed
+// (restart( ) in frontend-bridge.js, asked by message): the component destroyed
 // and created again on the new Run's address, the UI5 core, the libraries
 // and the theme kept - which is most of what a Run used to wait for. The
-// first Run, and any frame that is not on this origin, not booted or on an
-// older bridge, loads the document as before; so does one whose restart
-// fails. The counter in the address is the same either way: it is what a
+// first Run, and any frame whose bridge has not spoken (an error page), not
+// booted, or not yet loaded, loads the document as before; so does one
+// whose restart fails. The counter in the address is the same either way: it is what a
 // late roundtrip from the app being replaced is refused by.
 let running = false;
 // The files the last run started from, as text - see autorunAfterChange( ).
@@ -69,19 +70,11 @@ export const uiTheme = () => (isDark() ? "sap_horizon_dark" : "sap_horizon");
 // A theme change - the switch in the bar, or the sun going down on a page that
 // follows the system - must not restart the app: somebody has a half-filled
 // form open. UI5 can swap its theme at runtime, so the running frame is told
-// rather than reloaded.
+// rather than reloaded - every app frame of the page, by message (a frame
+// that is mid-load keeps the theme its address gave it; the next Run picks
+// the current one up).
 export function applyFrameTheme() {
-  try {
-    const ui5 = frame.contentWindow?.sap?.ui;
-    // UI5 1.x and 2.x name this differently, and neither exists until the
-    // component has booted.
-    const theming = ui5?.require?.("sap/ui/core/Theming");
-    if (theming?.setTheme) theming.setTheme(uiTheme());
-    else ui5?.getCore?.()?.applyTheme?.(uiTheme());
-  } catch {
-    // A frame that is mid-load, or a UI5 that does not expose this, keeps the
-    // theme it started with. The next Run picks the current one up.
-  }
+  tellFrames({ type: "theme", theme: uiTheme() });
 }
 
 // Run, once the run under way (if any) has finished. A sample opened while
@@ -182,36 +175,26 @@ function structuralProblem(files) {
 
 // Asks the frame to start the new Run's app without reloading its document
 // - see frontend-bridge.js. Answers false wherever that cannot be asked: the
-// first Run (no document yet), a frame on another origin (an error page),
-// one that never booted UI5, an older bridge without the function; and false
+// first Run (no document yet), a frame whose bridge never spoke (an error
+// page), one that never booted UI5 or has not finished loading; and false
 // again when the frame refused or took too long, after which the caller
-// reloads it as before. Thirty seconds, like the load it stands in for.
+// reloads it as before. Thirty seconds, like the load it stands in for. What
+// the frame last reported is what decides (frame-link.mjs).
 async function restartInPlace(frame, src) {
-  let restart;
+  const link = linkOf(frame);
+  const was = link.state;
   try {
-    const win = frame.contentWindow;
-    if (!win || !win.sap?.ui || new URL(win.location.href).pathname !== src.pathname) return false;
-    if (win.document?.readyState !== "complete") return false;
-    restart = win.__z2ui5PlaygroundRestart;
+    if (!was?.ui5 || !was.restarts || was.readyState !== "complete" || new URL(was.href).pathname !== src.pathname) return false;
   } catch {
     return false;
   }
-  if (typeof restart !== "function") return false;
-  let gaveUp;
   try {
-    await Promise.race([
-      restart(src.href),
-      new Promise((_, reject) => {
-        gaveUp = setTimeout(() => reject(new Error("the frame did not restart the app in time")), 30000);
-      }),
-    ]);
+    await link.call("restart", [src.href], 30000);
     frame.dataset.src = src.href;
     return true;
   } catch (e) {
     showOutput("Run", `The app frame could not restart in place and is reloaded instead: ${String(e?.message ?? e)}`);
     return false;
-  } finally {
-    clearTimeout(gaveUp);
   }
 }
 
@@ -240,12 +223,10 @@ function loadFrame(src) {
     const started = Date.now();
     let gaveUp;
     const check = () => {
-      let arriving = false;
-      try {
-        arriving = frame.contentWindow.location.href === src.href && frame.contentDocument?.readyState !== "complete";
-      } catch {
-        // Another origin (an error page): not arriving.
-      }
+      // What the frame's bridge last said of itself (an error page says
+      // nothing: not arriving).
+      const now = linkOf(frame).state;
+      const arriving = now?.href === src.href && now.readyState !== "complete";
       if (arriving && Date.now() - started < 180000) {
         gaveUp = setTimeout(check, 10000);
         return;
@@ -255,25 +236,12 @@ function loadFrame(src) {
     };
     gaveUp = setTimeout(check, 30000);
     frame.addEventListener("load", loaded, { once: true });
-    // The address of this run, readable whatever navigated the frame.
-    frame.dataset.src = src.href;
-    // A REPLACE, not a navigation that pushes: setting `src` on an iframe
-    // adds an entry to the TAB's history, so after a few Runs the Back
-    // button stepped through old app frames instead of leaving the page,
-    // and past Chromium's fifty entries the page the reader came from -
-    // the one the bar's step back returns to - fell off the end. The
-    // first load has nothing to replace; it sets `src` as before.
-    const current = frame.contentWindow;
-    let replaced = false;
-    try {
-      if (current && current.location.href !== "about:blank") {
-        current.location.replace(src.href);
-        replaced = true;
-      }
-    } catch {
-      // A frame on another origin (an error page) - set src instead.
-    }
-    if (!replaced) frame.src = src.href;
+    // A REPLACE, not a navigation that pushes (navigate( ) in
+    // frame-link.mjs): past Chromium's fifty entries of old app frames the
+    // page the reader came from - the one the bar's step back returns to -
+    // fell off the end of the tab's history. The address of this run goes
+    // into data-src, readable whatever navigated the frame.
+    navigate(frame, src.href);
   });
 }
 
@@ -356,7 +324,7 @@ export async function run({ quiet = false } = {}) {
     // defined - a dump about a missing class, in place of the real cause.
     //
     // The Run is counted here, the moment the classes change: the
-    // window.__z2ui5Playground roundtrip refuses a frame of an earlier Run by
+    // frames' roundtrip (agent-hooks.mjs) refuses a frame of an earlier Run by
     // this number, and counted only before the database reset it let the old
     // app's timer run the NEW classes through the whole test phase - a dump
     // that was not the new app's, left on screen after it started. Counted
@@ -435,12 +403,9 @@ export async function run({ quiet = false } = {}) {
     // frame's document arrived from the HTTP cache but sap-ui-core.js did
     // not, or Chrome's own error page loaded - both fire `load`, and the
     // status said "running" over a blank frame.
-    let booted = false;
-    try {
-      booted = Boolean(frame.contentWindow.sap?.ui);
-    } catch {
-      // An error page is another origin: not booted.
-    }
+    // The frame's bridge says so once UI5 is up; an error page says nothing,
+    // and is given five seconds to.
+    const booted = await linkOf(frame).up(5000);
     if (!booted) throw new Error("The app frame loaded without UI5 - is the network down? Run again once it is back.");
     // An app is on screen: whatever placeholder stood over the frame goes -
     // after boot's first run, or in the AI Studio, after the first app the

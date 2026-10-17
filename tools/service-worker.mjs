@@ -68,11 +68,18 @@ export function writeServiceWorker({ metafile, monacoCss }) {
     ...unhashed.filter((rel) => !rel.startsWith("assets/")),
   ];
   const hashes = {};
+  // And every file under assets/ - the chunks too, hashed in their names or
+  // not - by the hash of its bytes, for the worker to check a cached copy
+  // against before it serves it (ASSET_HASHES in sw.js): a cache entry is
+  // something any script on this origin can write.
+  const assetHashes = {};
   for (const rel of core) {
     const bytes = fs.readFileSync(path.join(DIST, rel));
     id.update(rel);
     id.update(bytes);
-    if (unhashed.includes(rel)) hashes[rel] = crypto.createHash("sha256").update(bytes).digest("hex");
+    const sha = crypto.createHash("sha256").update(bytes).digest("hex");
+    if (unhashed.includes(rel)) hashes[rel] = sha;
+    if (rel.startsWith("assets/")) assetHashes[rel] = sha;
   }
   for (const entry of listing(path.join(DIST, "app")).sort()) id.update(entry);
   /* And the BYTES of everything outside app/resources/: the frontend's own
@@ -100,7 +107,7 @@ export function writeServiceWorker({ metafile, monacoCss }) {
   }
 
   const source = fs.readFileSync(path.join(SHELL, "sw.js"), "utf8");
-  for (const marker of ["__BUILD_ID__", "__CHUNKS__", "__APP_FIRST_LOAD__", "__CORE__", "__DOCS__"]) {
+  for (const marker of ["__BUILD_ID__", "__CHUNKS__", "__APP_FIRST_LOAD__", "__CORE__", "__DOCS__", "__ASSET_HASHES__"]) {
     if (!source.includes(marker)) {
       console.error(`build-site: ERROR src/shell/sw.js no longer has a ${marker} to substitute`);
       process.exit(1);
@@ -121,7 +128,8 @@ export function writeServiceWorker({ metafile, monacoCss }) {
       .replace("__CHUNKS__", JSON.stringify([...chunks().filter((c) => precached.has(c)), monacoCss]))
       .replace("__APP_FIRST_LOAD__", JSON.stringify(firstLoad))
       .replace("__CORE__", JSON.stringify(hashes))
-      .replace("__DOCS__", JSON.stringify(docs)),
+      .replace("__DOCS__", JSON.stringify(docs))
+      .replace("__ASSET_HASHES__", JSON.stringify(assetHashes)),
   );
   log(`sw.js (build ${build})`);
 }

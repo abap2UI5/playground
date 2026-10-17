@@ -2,7 +2,12 @@
 // Static file server for dist/ - used by the Playwright tests and for local
 // development. GitHub Pages serves the same tree, so anything that needs a
 // server header to work would work here and break there; this deliberately
-// sets nothing beyond content types.
+// sets nothing beyond content types - and the one header Pages sends on
+// every file, `access-control-allow-origin: *` (checked 2026-10-17 on
+// documents, scripts and the frame's .properties). The AI pages' app frame
+// is on an opaque origin (src/shell/frame-link.mjs): its XHRs (UI5's message
+// bundles) and its fonts are cross-origin requests from "null", and work on
+// Pages because of that header. Without it here they would fail here alone.
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
@@ -113,7 +118,10 @@ const server = http.createServer((req, res) => {
       notFound(res);
       return;
     }
-    res.writeHead(200, { "content-type": TYPES[path.extname(file)] || "application/octet-stream" });
+    res.writeHead(200, {
+      "content-type": TYPES[path.extname(file)] || "application/octet-stream",
+      "access-control-allow-origin": "*",
+    });
     res.end(data);
   });
 });

@@ -68,3 +68,24 @@ export const catalogueQuery = (() => {
 // The app frame on the right - Run's, and on the Pilot's page the first of
 // its tabs.
 export const frame = document.getElementById("app");
+
+// Whether the app frames of this page run on an OPAQUE origin - an iframe
+// sandbox without allow-same-origin (src/shell/frame-link.mjs) - so that an
+// app's own script cannot reach into this page. On the AI Studio's and the
+// AI Pilot's pages: that is where the reader's API key is typed and held,
+// and where a link's code (the Pilot's) runs beside it.
+//
+// Not on the playground, the embeds and ?view=app, and for a measured
+// reason: a document on an opaque origin gets no HTTP cache in Chromium
+// (its requests carry a one-off network isolation key) and is controlled by
+// no service worker. The frame's first load - UI5's core, the library
+// preloads, the theme, the fonts - was then downloaded in full for every
+// frame document on every visit (served by tools/serve.mjs with a ten-minute
+// max-age, a reload of an isolated frame asked the server for all of it
+// again, a frame that is not isolated for none of it), warm-up.mjs warmed a
+// cache the frame could not read, and the installed playground could not
+// start an app offline at all. A documentation page with five embedded demos
+// would download UI5 five times. Those pages hold no key; the playground's
+// one secret, the Gist token, is behind the question linked-code.mjs asks.
+// The bridge speaks the same messages either way, so this is the one switch.
+export const frameIsolated = aiPage || pilotPage;

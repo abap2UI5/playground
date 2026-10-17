@@ -16,10 +16,12 @@
 // The key is the reader's own Anthropic API key. It is held in this page's
 // memory for as long as the page is open, and sent to api.anthropic.com and
 // nowhere else. It is NOT kept in localStorage any more: the playground runs
-// ABAP from any link it is handed, in this same origin - a view's core:HTML
-// in the app frame, a `WRITE '@KERNEL …'` in the runtime worker - and both
-// can read this origin's storage. A key stored there was one shared link
-// away from somebody else's account. A key typed again per visit is the
+// ABAP from any link it is handed, and on the playground's own page the app
+// frame is this same origin (page.mjs, frameIsolated) - a view's core:HTML
+// there can read this origin's localStorage. A key stored there was one
+// shared link away from somebody else's account. On this page the frame is
+// on an opaque origin and talks to the page only by message
+// (frame-link.mjs): an app here reaches neither the key form nor the key. A key typed again per visit is the
 // price; one that was stored by an earlier version is removed on load. An embedded playground never shows the chat at all: a demo in
 // somebody's documentation page is not where a reader types a key.
 import { isUntouchedStarter } from "./ai-starter.mjs";
@@ -27,6 +29,8 @@ import { listenForFileDrops } from "./attach-ui.mjs";
 import { createChatRoom, narrow } from "./chat-ui.mjs";
 import { abapGitZip, download } from "./export.mjs";
 import { createDriver } from "./frame-drive.mjs";
+import { frameApi as apiOf } from "./frame-link.mjs";
+import { frame } from "./page.mjs";
 import { readStored, removeStored, writeStored } from "./storage.mjs";
 import { setStatus } from "./ui.mjs";
 
@@ -53,7 +57,7 @@ let room;
 // mirror; the mirror needs the chunk and is made with the agent.
 const driver = createDriver();
 let mirror;
-const frameApi = () => document.getElementById("app")?.contentWindow?.__z2ui5PlaygroundPilot;
+const frameApi = () => apiOf(frame);
 let open = false;
 let el;
 // The conversation as text, for the export: { role, text } per line.

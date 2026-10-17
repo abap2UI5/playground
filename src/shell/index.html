@@ -549,8 +549,9 @@
 </dialog>
 
 <!-- Code a link carries, on the AI Pilot's page (src/shell/linked-code.mjs):
-     it runs in the app frame, in this same origin, beside the API key the
-     reader types into this page - so it is only opened once they said so. -->
+     its app runs in a frame kept apart from this page and its ABAP in a
+     worker that holds no storage, but the app is what the model reads and
+     acts on - so it is only opened once the reader said so. -->
 <dialog id="linked-dialog" class="about linked" aria-labelledby="linked-title">
   <form method="dialog" class="about-head">
     <h2 id="linked-title">This link brings code with it</h2>
@@ -558,8 +559,9 @@
   </form>
   <div class="about-body">
     <p id="linked-what"></p>
-    <p>It runs in your browser, on this page - next to the API key you type into the chat. Code written by somebody
-      you do not know could read what you type here. Open it only if you trust where the link came from.</p>
+    <p>It runs in your browser, kept apart from this page and the API key you type into the chat. But Claude reads and
+      acts on what the app shows, and an app written by somebody you do not know can try to steer what Claude does here.
+      Open it only if you trust where the link came from.</p>
     <form method="dialog" class="linked-actions">
       <button type="submit" value="cancel">Open the sample instead</button>
       <button type="submit" value="open" class="primary">Open the linked code</button>
