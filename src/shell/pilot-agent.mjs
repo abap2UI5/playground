@@ -22,7 +22,7 @@
 // with the AI Studio; what is here is the conversation and its tools.
 import { AgentError } from "../vendor/agent/appclient.mjs";
 import { createOperator, fitSnapshot, MAX_ERROR_TEXT } from "./ai-operator.mjs";
-import { addUsage, catalogueEntries, DEFAULT_SPEED, followStream, isAbort, providerFor, rankEntries, SPEEDS } from "./ai-common.mjs";
+import { catalogueEntries, clip as clipTo, count, DEFAULT_SPEED, echo, isAbort, providerFor, rankEntries, runTurnLoop, str } from "./ai-common.mjs";
 import { attachmentBlocks } from "./attachments.mjs";
 
 export { explainError, usageText } from "./ai-common.mjs";
@@ -32,14 +32,7 @@ export { createMirror, describeMirror, fitSnapshot } from "./ai-operator.mjs";
 export { kindOf, MAX_FILES, MAX_MESSAGE_BYTES } from "./attachments.mjs";
 
 const MAX_TOOL_TEXT = 30000;
-const clip = (text, max = MAX_TOOL_TEXT) =>
-  text.length <= max ? text : `${text.slice(0, max)}\n… (${text.length - max} more characters cut)`;
-const str = (v) => (typeof v === "string" ? v : undefined);
-// An argument as an error or a chat row repeats it: at most 80 characters.
-const echo = (v) => {
-  const t = String(v);
-  return t.length > 80 ? `${t.slice(0, 80)}...` : t;
-};
+const clip = (text, max = MAX_TOOL_TEXT) => clipTo(text, max);
 // What all the screens one message carries may take together.
 const MAX_SCREENS_TEXT = 60000;
 
@@ -365,123 +358,71 @@ export function createPilot({ apiKey, workspace, provider: settings, host, ui, s
     return { stopped };
   }
 
-  async function loop() {
-    let jsonRetries = 0;
-    let cuts = 0;
-    while (!stopped) {
-      ui.assistantStart();
-      const settings = SPEEDS[speed()] ?? SPEEDS[DEFAULT_SPEED];
-      const model = provider.modelFor(settings);
-      stream = provider.stream({ system: SYSTEM, tools: TOOLS, messages, maxTokens: 16000, speed: settings });
-      const started = followStream(stream, ui, pendingText);
+  // The turn loop is ai-common.mjs's, the studio's as well; what is the
+  // Pilot's is the request and what its tool calls do.
+  const loop = () =>
+    runTurnLoop({
+      provider,
+      messages,
+      total,
+      ui,
+      speed,
+      request: () => ({ system: SYSTEM, tools: TOOLS, maxTokens: 16000 }),
+      pendingText,
+      halted: () => stopped,
+      onStream: (s) => {
+        stream = s;
+      },
+      runTools,
+      // An act cut off half way could be a shorter, valid act - one value
+      // fewer. Never run.
+      cutText: "Not run: the answer was cut off and this input may be incomplete.",
+    });
 
-      let message;
+  // One answer's tool calls, run in order.
+  async function runTools(uses) {
+    const results = [];
+    // The screens the model wrote this batch for: an event is pressed only
+    // on the screen it saw. Two "act a1" in one answer pressed NEXT and
+    // then whatever a1 was on the next screen (DELETE_ALL); a click of
+    // the reader's while the model thought did the same.
+    shownAt = new Map([...told].map(([id, state]) => [id, state.split("|")[0]]));
+    for (const use of uses) {
+      if (stopped) {
+        ui.tool({ id: use.id, summary: `not run: ${use.name} (stopped)`, error: true });
+        results.push({ type: "tool_result", tool_use_id: use.id, is_error: true, content: "Stopped by the person." });
+        continue;
+      }
+      ui.toolPending({ id: use.id, text: pendingText(use.name, use.input ?? {}) });
+      let result;
+      const work = execute(use.name, use.input ?? {});
       try {
-        message = await stream.finalMessage();
-        jsonRetries = 0;
-      } catch (err) {
-        stream.abort();
-        // Billed all the same - the input from the moment it started.
-        addUsage(total, stream.currentMessage?.usage, model);
-        ui.usage({ ...total });
-        if (stopped) return;
-        // Only a tool input that could not be parsed is asked for again, as
-        // in the studio (ai-agent.mjs): a stream whose connection dropped half
-        // way is a plain AnthropicError too, and was sent again twice - three
-        // billed requests, attachments and all, and three half answers.
-        const unparsable = /Unable to parse tool parameter JSON/.test(String(err?.message ?? ""));
-        if (!unparsable || provider.isApiError(err) || jsonRetries++ >= 2) throw err;
-        // The rows of the attempt thrown away - asked again, the calls come
-        // back under new ids (as in the studio).
-        for (const s of started) ui.tool({ id: s.id, summary: `${s.name}: the input was unreadable - asked again`, error: true });
-        continue;
+        result = await Promise.race([
+          work,
+          stopping.then(() => ({ stoppedWhileRunning: true, error: "Stopped by the person while this was running - it may still finish on screen." })),
+        ]);
+      } catch (e) {
+        result = { error: String(e?.message ?? e) };
       }
-
-      addUsage(total, message.usage, message.model ?? model);
-      ui.usage({ ...total });
-
-      if (message.stop_reason === "refusal") {
-        for (const u of message.content.filter((b) => b.type === "tool_use")) {
-          ui.tool({ id: u.id, summary: `not run: ${u.name}`, error: true });
-        }
-        messages.push({ role: "assistant", content: [{ type: "text", text: "(The request was declined.)" }] });
-        ui.notice("The model declined this request.");
-        return;
+      if (result.stoppedWhileRunning) {
+        // What it still does lands on screen after the model was told
+        // "stopped" - and reading a screen marks it told: every screen
+        // goes with the next message instead.
+        work.catch(() => {}).finally(() => told.clear());
       }
-      if (message.stop_reason === "pause_turn") {
-        messages.push({ role: "assistant", content: message.content });
-        continue;
-      }
-      const uses = message.content.filter((b) => b.type === "tool_use");
-      const full = message.stop_reason === "model_context_window_exceeded";
-      const cut = message.stop_reason === "max_tokens" || full;
-      messages.push({ role: "assistant", content: message.content });
-      if (uses.length === 0) {
-        if (full) ui.notice("The conversation has filled the model's context - New chat starts a fresh one.");
-        else if (cut) ui.notice("The answer was cut off - it ran out of room.");
-        return;
-      }
-      if (cut) {
-        // An act cut off half way could be a shorter, valid act - one value
-        // fewer. Never run it.
-        messages.push({
-          role: "user",
-          content: uses.map((u) => {
-            ui.tool({ id: u.id, summary: `not run: ${u.name} (cut off)`, error: true });
-            return { type: "tool_result", tool_use_id: u.id, is_error: true, content: "Not run: the answer was cut off and this input may be incomplete." };
-          }),
-        });
-        if (full || ++cuts >= 2) {
-          ui.notice(full ? "The conversation has filled the model's context - New chat starts a fresh one." : "The answer ran out of room twice in a row - ask for a smaller step, or New chat.");
-          return;
-        }
-        continue;
-      }
-      cuts = 0;
-
-      const results = [];
-      // The screens the model wrote this batch for: an event is pressed only
-      // on the screen it saw. Two "act a1" in one answer pressed NEXT and
-      // then whatever a1 was on the next screen (DELETE_ALL); a click of
-      // the reader's while the model thought did the same.
-      shownAt = new Map([...told].map(([id, state]) => [id, state.split("|")[0]]));
-      for (const use of uses) {
-        if (stopped) {
-          ui.tool({ id: use.id, summary: `not run: ${use.name} (stopped)`, error: true });
-          results.push({ type: "tool_result", tool_use_id: use.id, is_error: true, content: "Stopped by the person." });
-          continue;
-        }
-        ui.toolPending({ id: use.id, text: pendingText(use.name, use.input ?? {}) });
-        let result;
-        const work = execute(use.name, use.input ?? {});
-        try {
-          result = await Promise.race([
-            work,
-            stopping.then(() => ({ stoppedWhileRunning: true, error: "Stopped by the person while this was running - it may still finish on screen." })),
-          ]);
-        } catch (e) {
-          result = { error: String(e?.message ?? e) };
-        }
-        if (result.stoppedWhileRunning) {
-          // What it still does lands on screen after the model was told
-          // "stopped" - and reading a screen marks it told: every screen
-          // goes with the next message instead.
-          work.catch(() => {}).finally(() => told.clear());
-        }
-        ui.tool({ id: use.id, summary: result.summary ?? result.error ?? "", error: Boolean(result.error) });
-        results.push({
-          type: "tool_result",
-          tool_use_id: use.id,
-          ...(result.error ? { is_error: true } : {}),
-          content: clip(result.error ?? result.text),
-        });
-      }
-      // Not every screen is marked told here: a tool that read no screen
-      // (read_source, find_apps) let the reader's click meanwhile pass as
-      // told, and the next message carried no <screen>. snapshotText( )
-      // marks each app as its screen is read.
-      messages.push({ role: "user", content: results });
+      ui.tool({ id: use.id, summary: result.summary ?? result.error ?? "", error: Boolean(result.error) });
+      results.push({
+        type: "tool_result",
+        tool_use_id: use.id,
+        ...(result.error ? { is_error: true } : {}),
+        content: clip(result.error ?? result.text),
+      });
     }
+    // Not every screen is marked told here: a tool that read no screen
+    // (read_source, find_apps) let the reader's click meanwhile pass as
+    // told, and the next message carried no <screen>. snapshotText( )
+    // marks each app as its screen is read.
+    return results;
   }
 
   async function execute(name, input) {
@@ -648,15 +589,6 @@ export function createPilot({ apiKey, workspace, provider: settings, host, ui, s
       stream?.abort();
     },
   };
-}
-
-/* row and max_rows: a whole number, or a string of digits - num( ) dropped
- * "2" without a word, and the client then asked for the row that was sent. */
-function count(v, name) {
-  if (v === undefined || v === null) return undefined;
-  const n = typeof v === "number" ? v : typeof v === "string" && /^\s*\d+\s*$/.test(v) ? Number(v) : NaN;
-  if (!Number.isInteger(n) || n < 0) throw new AgentError(`${name} is a whole number, not ${echo(JSON.stringify(v))}`);
-  return n;
 }
 
 // What a tool call is doing while it is under way.
