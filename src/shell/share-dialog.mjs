@@ -14,14 +14,19 @@
 // and whether the reader said they know code from a link ran in this page.
 import { abapGitZip, download, endingInOneNewline } from "./export.mjs";
 import { createGist } from "./gist.mjs";
+import { layoutEditorSection } from "./layout-editor.mjs";
 import { linkedCodeRan } from "./linked-code.mjs";
 import { copyToClipboard } from "./share.mjs";
 import { closeOnBackdrop, setStatus } from "./ui.mjs";
 
 let dialog;
 let body;
+// What the shell knows about where a file came from (unchangedRawUrl( ) in
+// original.mjs), for the Layout editor section.
+let rawUrlOf = () => undefined;
 
-export function setUpShareDialog() {
+export function setUpShareDialog(hooks = {}) {
+  if (hooks.unchangedRawUrl) rawUrlOf = hooks.unchangedRawUrl;
   dialog = document.getElementById("share-dialog");
   body = document.getElementById("share-body");
   // A click on the backdrop closes it, the way a modal is expected to.
@@ -184,6 +189,7 @@ export function openShare(files, url, copied = false) {
   git.append(head, blurb, row);
   frag.append(git);
   frag.append(gistSection(files));
+  frag.append(layoutEditorSection(files, rawUrlOf(files[0])));
 
   body.replaceChildren(frag);
   // Share awaits the link and the clipboard before it gets here, so a second

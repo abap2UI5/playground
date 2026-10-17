@@ -28,6 +28,19 @@ let openingAsOpened = false;
  *  not the reader's work until they change it. */
 export const markOpened = () => {
   opened = JSON.stringify(getFiles());
+  openedChanged?.();
+};
+
+// The files as they were opened, for Compare and Reset (original.mjs), or
+// undefined when what is on screen was not opened from anything - a restored
+// draft, the AI's writes.
+export const openedFiles = () => (opened === undefined ? undefined : JSON.parse(opened));
+// Whether the editor still holds exactly what was opened.
+export const isAsOpened = (files) => opened !== undefined && JSON.stringify(files) === opened;
+// Told whenever `opened` moves, so the bar's Compare and Reset follow it.
+let openedChanged;
+export const onOpenedChange = (fn) => {
+  openedChanged = fn;
 };
 
 // Which pick in the samples browser is the latest. A catalogue example is
@@ -93,6 +106,7 @@ export function replaceWith(files, { asOpened = true } = {}) {
     openingAsOpened = false;
   }
   opened = asOpened ? JSON.stringify(getFiles()) : undefined;
+  openedChanged?.();
   renderFiles();
   if (!hadDraft) return undefined;
   if (undoable) return { how: "undo" };

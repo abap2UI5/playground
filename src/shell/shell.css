@@ -3340,3 +3340,24 @@ body.is-pilot button.pilot-attach:hover { border-color: var(--pl-signal); }
   background: var(--bg-sunken); color: var(--fg-dim); font-size: 12px; white-space: nowrap;
 }
 .lesson-step { font-size: 15px; line-height: 1; padding: .1rem .45rem; }
+
+/* ------------------------------------------- original, compare, UI5 floor */
+
+/* Compare / Reset (original.mjs) and the linter's UI5 floor (ui5-floor.mjs).
+   Not inside somebody else's page: an embedding has its own Reset, and the
+   floor there is the one its readers' systems have. Nor over an app on its
+   own, which has no editor to compare in. */
+.is-embedded #compare,
+.is-embedded #reset-original,
+.is-embedded .ui5-floor,
+.is-app-only #compare,
+.is-app-only #reset-original,
+.is-app-only .ui5-floor { display: none; }
+.ui5-floor { display: inline-flex; align-items: center; gap: .35rem; color: var(--fg-dim); font-size: 12px; }
+.ui5-floor select { padding: .2rem .3rem; font-size: 12px; }
+.toolbar-menu .ui5-floor { justify-content: space-between; padding: .3rem .8rem; color: var(--fg); font-size: inherit; }
+.about.compare { max-width: 90rem; height: min(48rem, calc(100vh - 2rem)); max-height: none; overflow: hidden; }
+.about.compare[open] { display: flex; flex-direction: column; }
+.compare-bar { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; padding: .5rem 1rem; border-bottom: 1px solid var(--line); }
+.compare-said { flex: 1; color: var(--fg-dim); font-size: 12px; }
+.compare-diff { flex: 1; min-height: 0; }

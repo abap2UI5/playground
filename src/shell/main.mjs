@@ -65,6 +65,9 @@ import { keepDraft, loadDraft, loadLinked, loadSample, linkedFiles, markOpened }
 import { AI_STORAGE_KEY, carriedFiles, offerFrameBridge, setUpPilotHooks, setUpStudio } from "./agent-hooks.mjs";
 import { discardCachedSite, keepAssetsForNextTime, servedFromCache } from "./site-cache.mjs";
 import { lessonChanged, startGuides } from "./guides.mjs";
+// Compare/Reset against the original, and the bar's UI5 floor (their own modules).
+import { reflectOriginal, setUpOriginal, unchangedRawUrl } from "./original.mjs";
+import { setUpUi5Floor } from "./ui5-floor.mjs";
 
 const runButton = document.getElementById("run");
 const autorunButton = document.getElementById("autorun");
@@ -98,7 +101,7 @@ let shareChunk = null;
 // The Share dialog, set up when it is first opened (share( ) below).
 const shareReady = () =>
   (shareChunk ??= import("./share-dialog.mjs").then((m) => {
-    m.setUpShareDialog();
+    m.setUpShareDialog({ unchangedRawUrl });
     return m;
   }));
 
@@ -390,6 +393,8 @@ async function boot() {
   // itself - autorun may already have it.
   markBooted();
   showSourceLink();
+  setUpOriginal();
+  setUpUi5Floor();
 
   if (chat) setUpStudio(chat);
   if (pilot) setUpPilotHooks(pilot, { openSamples: () => openExamples() });
@@ -613,6 +618,7 @@ function remember(files) {
   showSourceLink();
   reflectHistory();
   lessonChanged();
+  reflectOriginal();
   autorunAfterChange();
   // The editor has already re-checked by the time this runs (both hang off the
   // same debounce), and the analysis is kept under a key made of the models'
