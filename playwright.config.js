@@ -1,5 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// PORT moves the server and the tests together, so two checkouts can test at
+// once without one reusing the other's server (reuseExistingServer below).
+const PORT = Number(process.env.PORT || 8080);
+
 // Everything is tested through a real browser against the built dist/ - the
 // playground has no meaningful behaviour outside one, and the pieces that
 // could be tested under Node (the transpile, the shim) behave differently
@@ -23,7 +27,7 @@ export default defineConfig({
   // and the registry's are idle for most of a test.
   workers: process.env.CI ? 2 : undefined,
   use: {
-    baseURL: "http://localhost:8080",
+    baseURL: `http://localhost:${PORT}`,
     // In CI only for a retried test: a trace on every attempt recorded a
     // screencast and every network body for 300 tests that passed. A failure
     // that reproduces is retried (retries: 1) and gets its trace there.
@@ -62,7 +66,7 @@ export default defineConfig({
   ],
   webServer: {
     command: "node tools/serve.mjs",
-    url: "http://localhost:8080/index.html",
+    url: `http://localhost:${PORT}/index.html`,
     reuseExistingServer: !process.env.CI,
     timeout: 30000,
   },
