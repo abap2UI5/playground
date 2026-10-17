@@ -124,6 +124,7 @@ export default [
         __APP_FIRST_LOAD__: "readonly",
         __CORE__: "readonly",
         __DOCS__: "readonly",
+        __ASSET_HASHES__: "readonly",
       },
     },
     rules: { "no-implicit-globals": "off" },
