@@ -742,6 +742,10 @@
           <button type="submit" class="primary">Save</button>
           <button type="button" id="chat-key-remove" class="ghost" hidden>Remove</button>
         </div>
+        <!-- Where the key goes, whenever that is not the provider's own default
+             (src/shell/llm-form.mjs) - the base URL is remembered, and a stored
+             one may not be the reader's. -->
+        <p class="chat-key-note chat-key-target" id="chat-key-target" role="status" hidden></p>
         <div id="chat-workspace">
           <label for="chat-workspace-input">Workspace ID <span class="chat-key-optional">- only for a key that is not tied to a workspace</span></label>
           <div class="chat-key-row">
@@ -864,6 +868,10 @@
         <button type="submit" class="primary">Use key</button>
         <button type="button" id="pilot-key-remove" class="ghost" hidden>Remove</button>
       </div>
+      <!-- Where the key goes, whenever that is not the provider's own default
+           (src/shell/llm-form.mjs) - the base URL is remembered, and a stored
+           one may not be the reader's. -->
+      <p class="pilot-key-note pilot-key-target" id="pilot-key-target" role="status" hidden></p>
       <div id="pilot-workspace">
         <label for="pilot-workspace-input">Workspace ID <span class="pilot-key-optional">- only for a key that is not tied to a workspace</span></label>
         <div class="pilot-key-row">

@@ -64,14 +64,17 @@ export const BASE_URL_EXAMPLES = [
 export const SETTINGS_KEY = "abap2ui5-playground:llm";
 
 /** What the form last saved, completed with the defaults; the default
- *  provider when nothing is stored or what is stored makes no sense. */
+ *  provider when nothing is stored or what is stored makes no sense - and
+ *  the default base URL for one that is not an http(s) URL. The setting is
+ *  in localStorage, which a link's ABAP can write (linked-code.mjs): what
+ *  comes back out of it is checked, never followed as it stands. */
 export function readProviderSettings(stored = readStoredJson(SETTINGS_KEY)) {
   const provider = PROVIDERS[stored?.provider] ? stored.provider : DEFAULT_PROVIDER;
   if (provider === "anthropic") return { provider };
   const defaults = PROVIDERS.openai;
   return {
     provider,
-    baseUrl: normaliseBaseUrl(typeof stored?.baseUrl === "string" ? stored.baseUrl : "") || defaults.baseUrl,
+    baseUrl: httpUrl(normaliseBaseUrl(typeof stored?.baseUrl === "string" ? stored.baseUrl : "")) || defaults.baseUrl,
     model: (typeof stored?.model === "string" ? stored.model.trim() : "") || defaults.model,
   };
 }
@@ -89,6 +92,31 @@ export function writeProviderSettings(settings) {
 export function normaliseBaseUrl(url) {
   return String(url ?? "").trim().replace(/\/+$/, "").replace(/\/chat\/completions$/, "");
 }
+
+/** The URL when it is an http(s) one, "" otherwise - a `javascript:` or a
+ *  `data:` URL is no server to send a key to. */
+export function httpUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? url : "";
+  } catch {
+    return "";
+  }
+}
+
+/** Where a key sent with these settings goes, when that is anywhere but the
+ *  provider's own default server: the host, or undefined. */
+export function keyHost(settings) {
+  if (settings.provider !== "openai" || !settings.baseUrl) return undefined;
+  if (settings.baseUrl === PROVIDERS.openai.baseUrl) return undefined;
+  try {
+    const url = new URL(settings.baseUrl);
+    return { host: url.host, plain: url.protocol === "http:" && !LOCAL_HOSTS.has(url.hostname) };
+  } catch {
+    return undefined;
+  }
+}
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 export const chatCompletionsUrl = (baseUrl) => `${normaliseBaseUrl(baseUrl)}/chat/completions`;
 

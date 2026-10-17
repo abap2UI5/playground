@@ -4,6 +4,7 @@ import {
   createProvider,
   explainOpenAIError,
   fromOpenAIMessages,
+  keyHost,
   OpenAIError,
   parseArguments,
   readProviderSettings,
@@ -228,6 +229,21 @@ test("the settings default to Anthropic, keep a base URL without its slash, and 
   expect(readProviderSettings({ provider: "openai", baseUrl: " http://localhost:11434/v1/chat/completions ", model: " local-model ", apiKey: "sk" }))
     .toEqual({ provider: "openai", baseUrl: "http://localhost:11434/v1", model: "local-model" });
   expect(chatCompletionsUrl("http://localhost:1234/v1/")).toBe("http://localhost:1234/v1/chat/completions");
+  // Only an http(s) URL is a base URL: anything else read back is the default.
+  for (const baseUrl of ["javascript:alert(1)", "data:text/plain,x", "ftp://example.com/v1", "not a url"]) {
+    expect(readProviderSettings({ provider: "openai", baseUrl }).baseUrl).toBe("https://api.openai.com/v1");
+  }
+});
+
+test("where a key goes is said whenever it is not the provider's own server", () => {
+  expect(keyHost({ provider: "anthropic" })).toBeUndefined();
+  expect(keyHost(readProviderSettings({ provider: "openai" }))).toBeUndefined();
+  expect(keyHost(readProviderSettings({ provider: "openai", baseUrl: "http://localhost:11434/v1" })))
+    .toEqual({ host: "localhost:11434", plain: false });
+  expect(keyHost(readProviderSettings({ provider: "openai", baseUrl: "http://10.0.0.5:8000/v1" })))
+    .toEqual({ host: "10.0.0.5:8000", plain: true });
+  expect(keyHost(readProviderSettings({ provider: "openai", baseUrl: "https://collector.example/v1" })))
+    .toEqual({ host: "collector.example", plain: false });
 });
 
 test("the Anthropic provider sends the request it always sent", () => {
