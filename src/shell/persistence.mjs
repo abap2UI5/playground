@@ -7,7 +7,7 @@
 // src/editor/monaco-editor.mjs), so a reload a moment after the last
 // keystroke still finds it. It is what the playground comes back on after a
 // reload, under the one key tests/shell.spec.js and the studio's spec read
-// by name. A link outranks it (startingFiles( ) in main.mjs) - a share
+// by name. A link outranks it (startingFiles( ), starting-files.mjs) - a share
 // link's fragment, a ?src= or a ?gist= - so the stored work is never opened
 // over something somebody was sent, and it stays stored for the next plain
 // visit. Beside it, the file that was shown, so a reload lands on the test

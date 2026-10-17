@@ -6,6 +6,14 @@
 // frontend-bridge.js); the page hands it to the framework, which runs in a
 // worker of this page's (src/shell/runtime-client.mjs), and the frame is only
 // a screen.
+//
+// This module is the boot and the bar. What boot( ) puts together lives
+// beside it: which page this is (page.mjs), what the editor opens on
+// (starting-files.mjs), Run and the app frame (run.mjs) with what the status
+// line rests on between runs (run-status.mjs), the Auto switch and the Run
+// button's state (autorun.mjs), what goes into the editor over what is there
+// and what is kept of it (file-sets.mjs), the frame's roundtrips and the AI
+// rooms' hooks (agent-hooks.mjs), and the service worker (site-cache.mjs).
 import "./shell.css";
 
 import {
@@ -14,7 +22,6 @@ import {
   connectRegistry,
   createEditor,
   currentFile,
-  focusProblem,
   format,
   getFiles,
   invalidateAnalysis,
@@ -23,53 +30,40 @@ import {
   redo,
   refresh,
   refreshNow,
-  reportTranspilerProblems,
   setEditorTheme,
-  setFiles,
   undo,
   whenAnalysed,
   analysisPending,
 } from "../editor/editor.mjs";
-import { buildRegistry, corpusLanded, declaredObjectName, entryClass, startRegistry } from "../editor/registry.mjs";
+import { buildRegistry, corpusLanded, startRegistry } from "../editor/registry.mjs";
 import { loadLinter } from "../editor/abap2ui5-lint.mjs";
-import { compile } from "../editor/transpile.mjs";
-import { checkFileSet, MAIN_FILE, parseName } from "../editor/files.mjs";
-import {
-  fetchLinkedFiles,
-  followNavigation,
-  humanUrl,
-  linkedSources,
-  REPOSITORY_HOSTS,
-  forgetOrigins,
-  originOf,
-  setOrigin,
-} from "./deep-link.mjs";
-import { fetchGist, gistIdFrom } from "./gist.mjs";
-import { readSession, writeDraft, writeOpenFile } from "./persistence.mjs";
-import { carriedSampleFiles, DEFAULT_FILES, isSample, loadSampleFiles } from "../editor/samples.mjs";
+import { loadSampleFiles } from "../editor/samples.mjs";
+import { humanUrl, originOf } from "./deep-link.mjs";
+import { writeOpenFile } from "./persistence.mjs";
 import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
-import { setTestResults, setUpInsight, showInsight, updateInsight } from "./insight.mjs";
+import { setUpInsight, updateInsight } from "./insight.mjs";
 import { restoreCheckerSettings } from "./checker-settings.mjs";
-import { setUpSplitter, setUpTabs } from "./layout.mjs";
+import { setUpSplitter, setUpTabs, setUpToolbarMenu } from "./layout.mjs";
 import { keepSiteLinksCurrent, rememberHere } from "./site-memory.mjs";
 import { setUpSearch } from "./search-box.mjs";
-import { announceAppHeight, announceEdited, announceReady, setUpEmbeddedEditor, startEmbedMessages } from "./embed.mjs";
-import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
-
-import { clearRoundtrips, recordRoundtrip, roundtripList } from "./roundtrips.mjs";
-import { AI_FILE, AI_STARTER, isUntouchedStarter } from "./ai-starter.mjs";
-import { confirmLinkedCode, markLinkedCodeRan } from "./linked-code.mjs";
+import { announceEdited, announceReady, setUpEmbeddedEditor, startEmbedMessages } from "./embed.mjs";
+import { appUrl, copyToClipboard, shareUrl } from "./share.mjs";
+import { isUntouchedStarter } from "./ai-starter.mjs";
 import { state } from "./state.mjs";
-import { RUNAWAY, STALLED, startRuntime } from "./runtime-client.mjs";
-import { readStored, readStoredJson, removeStored, writeStored, writeStoredJson } from "./storage.mjs";
+import { STALLED, startRuntime } from "./runtime-client.mjs";
+import { removeStored, writeStoredJson } from "./storage.mjs";
 import { isDark, onThemeChange, setUpTheme } from "./theme.mjs";
 import { setUpExtra } from "./extra.mjs";
-import { closeOnBackdrop, currentLog, describeError, hideOutput, setStatus, showOutput } from "./ui.mjs";
+import { closeOnBackdrop, describeError, setStatus, showOutput } from "./ui.mjs";
 import { warmUpAppFrame } from "./warm-up.mjs";
-
-// The playground's own draft is persistence.mjs's (DRAFT_KEY).
-// The AI Studio's last build (see the draft handler, and chat.mjs).
-const AI_STORAGE_KEY = "abap2ui5-playground:ai-files";
+import { aiPage, appOnly, cameFromCatalogue, catalogueQuery, embedded, keepsDrafts, params, pilotPage } from "./page.mjs";
+import { FROM_LAST_SESSION, startingFiles } from "./starting-files.mjs";
+import { autorunAfterChange, markBooted, setUpAutorun } from "./autorun.mjs";
+import { applyFrameTheme, isRunning, isRunWaiting, lastRun, run, setRunContext, uiTheme } from "./run.mjs";
+import { reflectCodeErrors, sayBriefly } from "./run-status.mjs";
+import { keepDraft, loadDraft, loadLinked, loadSample, linkedFiles, markOpened } from "./file-sets.mjs";
+import { AI_STORAGE_KEY, carriedFiles, offerFrameBridge, setUpPilotHooks, setUpStudio } from "./agent-hooks.mjs";
+import { discardCachedSite, keepAssetsForNextTime, servedFromCache } from "./site-cache.mjs";
 
 const runButton = document.getElementById("run");
 const autorunButton = document.getElementById("autorun");
@@ -79,27 +73,6 @@ const formatButton = document.getElementById("format");
 const shareButton = document.getElementById("share");
 const fullscreenButton = document.getElementById("fullscreen");
 const examplesButton = document.getElementById("examples");
-const frame = document.getElementById("app");
-
-// Embedded in somebody else's page: no chrome, no sample menu, just the code it
-// was given and the app it produces. `?embed=1` in the query, the code in the
-// fragment as usual.
-const params = new URLSearchParams(window.location.search);
-const embedded = params.get("embed") === "1";
-
-// The AI Studio's page (ai/index.html, written by tools/build-site.mjs from
-// this document): the studio opens on its own, on the minimal class of
-// ai-starter.mjs, and what is built there is neither restored from nor stored
-// over the playground's own draft. The playground itself has no way into the studio while it is being
-// built - its address is the door.
-const aiPage = document.documentElement.dataset.page === "ai";
-
-// The AI Pilot's page (pilot/index.html, written the same way): a chat in
-// which Claude operates the running app while the reader watches - see
-// src/shell/pilot.mjs. It opens on what a link carries, else on the default
-// sample, and like the studio it neither restores nor stores the
-// playground's draft.
-const pilotPage = document.documentElement.dataset.page === "pilot";
 
 // FOUR CHUNKS THE SHELL DOES NOT CARRY. The studio's room (src/shell/chat.mjs)
 // and the Pilot's (src/shell/pilot.mjs) are wanted on their own pages and
@@ -128,129 +101,6 @@ const shareReady = () =>
     return m;
   }));
 
-/* Opened from the sample catalogue - see showSourceLink( ). `back` is that
- * page's own query string, passed through so the reader lands on the search
- * they had narrowed the list to. It is rebuilt through URLSearchParams rather
- * than pasted into the href, so nothing a link carries escapes into the
- * markup: what comes back out is a query string and only ever that. */
-const cameFromCatalogue = params.get("from") === "catalogue";
-const catalogueQuery = (() => {
-  const back = params.get("back") || "";
-  if (back === "") return "";
-  const clean = new URLSearchParams(back).toString();
-  return clean === "" ? "" : `?${clean}`;
-})();
-
-// The app and nothing else - no editor, and no bar over it either, so what is
-// on screen is the app rather than a playground showing one. Two names for it,
-// because they are two different asks with the same answer: `?view=full` is
-// what the Full screen button opens, and `?view=app` is the paragraph in a
-// documentation page that wants to show the result rather than the code that
-// produced it. The code is still what runs; it is just not on screen, so the
-// page stays a playground rather than a screenshot.
-//
-// The bar used to stay in `?view=app` on the theory that a demo which cannot
-// be restarted is a screenshot. It is not: an embedded demo runs by itself,
-// and everything the bar offered next to it - Run again, the source, undo -
-// is a click away in "Open in the playground", which the page around the
-// frame already prints. What it did instead was put a strip of somebody
-// else's furniture across the top of a documentation page. The one thing that
-// still brings it back is trouble (`has-trouble`): in this view the status
-// line is the only channel there is, so a link that could not be followed has
-// to have somewhere to say so.
-const appOnly = params.get("view") === "app" || params.get("view") === "full";
-
-// Set when a ?src= link could not be followed, or the code in a shared link
-// could not be read, so boot can say so once the page is far enough along to
-// have somewhere to say it.
-let linkFailure;
-// The Pilot's reader said no to a link's code (startingFiles).
-let linkDeclined = false;
-
-// Where the editor starts, in order of how deliberate the choice was: a link is
-// what somebody was sent, a stored draft is what they were last working on, and
-// the sample is the fallback. An embedded playground never restores a draft -
-// it shows what the page that embedded it asked for.
-async function startingFiles() {
-  if (aiPage) return { files: [{ name: AI_FILE, source: AI_STARTER }], from: "a minimal class" };
-  // On the Pilot's page a link's code runs beside the API key the reader
-  // types (src/shell/linked-code.mjs): opened only once they said so, and
-  // the sample otherwise - said in the status line, like a link that failed.
-  const trusted = async (what) => {
-    if (!pilotPage) return true;
-    if (await confirmLinkedCode(what)) return true;
-    linkDeclined = true;
-    return false;
-  };
-  try {
-    const shared = await filesFromLocation(MAIN_FILE);
-    if (shared) {
-      const files = checkFileSet(shared);
-      if (await trusted(`A shared link with ${files.length === 1 ? files[0].name : `${files.length} files, ${files[0].name} first`}.`)) {
-        return { files, from: "a shared link" };
-      }
-      return { files: DEFAULT_FILES, from: "sample" };
-    }
-  } catch (e) {
-    // A fragment that will not decode is somebody else's link or a truncated
-    // paste. Opening on the sample beats an error page nobody can act on -
-    // and saying so beats opening on the sample as if that were the link:
-    // the Share dialog promises the sender that a torn link "says so".
-    linkFailure = new Error(
-      `The code in this link could not be read - a pasted link may have been cut short. ${e?.message || e}`,
-    );
-  }
-
-  // ?src=<url> - what a documentation page links when it wants to show one of
-  // its examples running. Failing here is worth saying out loud: somebody
-  // followed a link expecting particular code and did not get it.
-  if (linkedSources(params).length > 0) {
-    try {
-      if (!(await trusted(`A link to ${linkedSources(params).join(", ")}.`))) return { files: DEFAULT_FILES, from: "sample" };
-      // No gist on the Pilot's page: a gist is anybody's (REPOSITORY_HOSTS).
-      const linked = checkFileSet(await fetchLinkedFiles(params, pilotPage ? { hosts: REPOSITORY_HOSTS } : {}));
-      // An app that calls another app is only half an app on its own. The
-      // classes it instantiates are looked for next to it and opened too, so a
-      // link to a sample that navigates somewhere actually navigates.
-      const alongside = await followNavigation(linked);
-      return { files: checkFileSet([...linked, ...alongside]), from: "a link" };
-    } catch (e) {
-      linkFailure = e;
-    }
-  }
-  // ?gist=<id> - a gist the Share dialog wrote (src/shell/gist.mjs), read
-  // from api.github.com without a token. Beside ?src= and below it: a link
-  // that carries both is a documentation link first. Never on the Pilot's
-  // page, where a link's code runs beside the reader's key and a gist is
-  // anybody's (REPOSITORY_HOSTS).
-  if (params.has("gist") && linkedSources(params).length === 0) {
-    const id = gistIdFrom(params.get("gist"));
-    try {
-      if (pilotPage) throw new Error("The AI Pilot opens no gist - open it in the playground instead.");
-      if (!id) throw new Error(`${params.get("gist")} is not a gist id.`);
-      const files = checkFileSet(await fetchGist(id));
-      for (const f of files) setOrigin(f.name, `https://gist.github.com/${id}`);
-      return { files, from: "a gist" };
-    } catch (e) {
-      linkFailure = e;
-    }
-  }
-  if (!embedded && !pilotPage) {
-    try {
-      // A draft that will not parse, or a storage that will not answer, is a
-      // draft that is gone - readStoredJson says so with undefined. What is
-      // still worth catching here is checkFileSet( ) refusing what it read.
-      const stored = readSession();
-      if (stored) return { files: checkFileSet(stored.files), openFile: stored.openFile, from: "your last session" };
-    } catch {
-      // A stored draft the editor cannot hold - a name that stopped being
-      // valid, a first file that is not a class. Opening on the sample beats
-      // refusing to start.
-    }
-  }
-  return { files: DEFAULT_FILES, from: "sample" };
-}
-
 // Keeps a promise from being an unhandled rejection while nothing is awaiting
 // it yet. The ones in boot( ) below are started at the top of it and awaited
 // several statements later, and a failure in that window - a corpus that 404s,
@@ -275,6 +125,7 @@ async function boot() {
   // The room of this page, if it has one - see the four chunks above.
   if (chatChunk) chat = await chatChunk;
   if (pilotChunk) pilot = await pilotChunk;
+  setRunContext({ pilot });
   if (embedded) document.body.classList.add("is-embedded");
   if (appOnly) document.body.classList.add("is-app-only");
   // Where the playground is furniture in somebody else's page, the panel stays
@@ -349,6 +200,8 @@ async function boot() {
   // The menu the switch is in opens on its own, being a <details>; this only
   // closes it on a click anywhere else and on Escape (extra.mjs).
   setUpExtra();
+  // The toolbar's own overflow menu, which only a phone shows (layout.mjs).
+  setUpToolbarMenu();
   // Samples and Documentation in the bar, pointed at the page each of those
   // sites was last left on, and at how far down it the reader was
   // (site-memory.mjs) - now, and again whenever that can have moved while this
@@ -367,12 +220,12 @@ async function boot() {
   }
   // ...and this page written down as well, which it did not used to be. A
   // reader who opens a SAMPLE here has code that is not a draft - a sample
-  // that was picked and read is deliberately not stored (see remember( )
-  // below) - so pressing Documentation and then Playground threw it away and
-  // started them on the default sample. The URL is what carries it, so the URL
-  // is what is written: on the way out, which is when it is final, and again
-  // when the tab is hidden, because pagehide is not promised on every route
-  // out of a page.
+  // that was picked and read is deliberately not stored (see keepDraft( ) in
+  // file-sets.mjs) - so pressing Documentation and then Playground threw it
+  // away and started them on the default sample. The URL is what carries it,
+  // so the URL is what is written: on the way out, which is when it is final,
+  // and again when the tab is hidden, because pagehide is not promised on
+  // every route out of a page.
   //
   // Not when embedded (furniture in somebody else's page) and not in an
   // app-only view (a running app, not a place to come back to).
@@ -395,7 +248,13 @@ async function boot() {
   // hidden there, and a restored Auto ran the model's half-finished turn on
   // every pause (a slow read_sample after a write_file) - a second compile
   // and frame reload for each change, with no way for the reader to see why.
-  setUpAutorun({ restore: !embedded && !pilotPage && !aiPage });
+  setUpAutorun({
+    restore: !embedded && !pilotPage && !aiPage,
+    run,
+    running: isRunning,
+    waiting: isRunWaiting,
+    lastRunText: lastRun,
+  });
   setUpSplitter();
   setUpAbout();
   const tabs = setUpTabs(appOnly);
@@ -420,14 +279,15 @@ async function boot() {
     })(),
   );
 
-  const { files, from, openFile: shownBefore } = await startingReady;
-  startedFrom = from;
+  const starting = await startingReady;
+  const { files, from, openFile: shownBefore } = starting;
+  setRunContext({ startedFrom: from });
   await createEditor(document.getElementById("editor"), files, { onChange: remember, dark: isDark(), editor: !appOnly });
   // A restored draft opens on the file that was on screen (persistence.mjs).
   if (shownBefore) openFile(shownBefore);
   // What a link or the default sample put in is not the reader's work until
-  // they change it (see `opened`); a restored draft is.
-  if (from !== "your last session") opened = JSON.stringify(getFiles());
+  // they change it (see file-sets.mjs); a restored draft is.
+  if (from !== FROM_LAST_SESSION) markOpened();
   // Embed hook (src/shell/embed.mjs): ?readonly=1, ?lines= and the code the
   // embedding page gave, kept for its "edited" message and its Reset.
   if (embedded) setUpEmbeddedEditor(params, { run: () => run() });
@@ -447,8 +307,8 @@ async function boot() {
   setUpInsight();
   // The registry answers from a worker, so what remember( ) and fileOpened( )
   // show is what was last known; this is how the fresh answer reaches the
-  // panel, the badge and the fix bar.
-  whenAnalysed((problems) => updateInsight(problems));
+  // panel, the badge and the fix bar - and the status line.
+  whenAnalysed((problems) => checked(problems));
   // The examples browser hands back either a built-in sample's id or the raw
   // URL of a catalogued class; the URL goes through the same code a ?src=
   // link goes through. It is the one way to a sample - there is no sample
@@ -484,90 +344,7 @@ async function boot() {
     await registryReady;
     await runtime.whenReady();
     state.runtime = runtime;
-    // What the frontend in the app frame reaches for: the roundtrip it would
-    // otherwise POST to a backend, and whether the shell has a dialog open -
-    // see src/shell/frontend-bridge.js for what the frame does with that.
-    // The AI room of this page, if it has one, as the frame's other party.
-    const room = pilot ?? chat;
-    window.__z2ui5Playground = {
-      // Every roundtrip is kept for the Roundtrips tab on its way through -
-      // see src/shell/roundtrips.mjs. Timed around the worker's answer, so
-      // the number is the ABAP plus the message hops and not the render.
-      roundtrip: async (body, from) => {
-        // An app from a Run that has been replaced: a timer or a click in the
-        // old frame in the moment before the new document arrives ran against
-        // the new Run's fresh database, and was listed as the new Run's first
-        // roundtrip. Refused instead - that frame is on its way out. A frame
-        // that says nothing (an older bridge script) is served as before.
-        const run = from ? new URL(from, document.baseURI).searchParams.get("run") : null;
-        if (run !== null && run !== String(state.runCounter)) {
-          // A step of the AI Pilot parked for this frame goes with it: left
-          // parked, it was handed to the new document's app start and sent
-          // in its place - an event on a draft the fresh database never held.
-          room?.takePilotRequest(from)?.reject(new Error("the app was restarted before this step reached it - look again"));
-          throw new Error("this app was replaced by a newer Run");
-        }
-        // The AI's act (src/shell/pilot.mjs, src/shell/chat.mjs - whichever
-        // room this page is): the frame was made to send a roundtrip so that
-        // it renders the answer, and what goes to the framework is the
-        // model's request in place of the frame's. Every answer, the
-        // reader's clicks included, is shown to the model after.
-        let parked = room?.takePilotRequest(from) ?? null;
-        // Only ever in place of a request on a running app: an app start (no
-        // draft id - the frame reloaded, or a Run) is the frame's own.
-        if (parked && !draftOf(body)) {
-          parked.reject(new Error("the app started again before this step reached it - look again"));
-          parked = null;
-        }
-        if (parked) body = parked.body;
-        const started = performance.now();
-        try {
-          const response = await state.runtime.roundtrip(body);
-          recordRoundtrip({ request: body, response, ms: performance.now() - started });
-          room?.sawRoundtrip(body, response, from);
-          parked?.resolve(response);
-          if (response.location) pointAtDump(response.location, firstLine(response.body), caretMayMove());
-          return response;
-        } catch (e) {
-          // A JavaScript error out of the transpiled code, rather than an
-          // ABAP exception the framework turned into a dump: the frame's
-          // fetch rejects, and the line is still worth pointing at.
-          parked?.reject(e);
-          // Listed like an answer that failed: the AI's run waits for the
-          // first roundtrip and read "none arrived within ten seconds",
-          // with nothing in the status or the Log to say why.
-          const failed = { status: 500, body: `${e?.name === RUNAWAY ? "" : "JavaScript error in the app: "}${String(e?.message ?? e)}` };
-          if (e?.console) failed.console = e.console;
-          recordRoundtrip({ request: body, response: failed, ms: performance.now() - started });
-          // And to the AI Pilot's mirror of that tab, which otherwise never
-          // heard of the start and waited half a minute for it.
-          room?.sawRoundtrip(body, failed, from);
-          if (e?.location) pointAtDump(e.location, String(e.message ?? e), caretMayMove());
-          // ABAP that did not finish, stopped by the runtime's watchdog: the
-          // frame only sees a failed request, so the page says what happened.
-          if (e?.name === RUNAWAY) {
-            setStatus("the app was stopped - its ABAP did not finish", true);
-            showOutput("Run", String(e.message));
-          }
-          throw e;
-        }
-      },
-      // Whether the frame should leave the focus alone right now: the
-      // frontend asks before every focus( ) (frontend-bridge.js). While a
-      // dialog is open - the bar's search panel counts: it is modal too
-      // (search-box.mjs makes the page under it inert), and an app rendering
-      // while it was open took the focus and the rest of the search with it.
-      // And while somebody is typing on this page: an app's first render
-      // focuses a field of its own, so the app autorun started, or the one
-      // the AI ran, took the editor's or the chat's next keystrokes. Once the
-      // reader is in the app the frame holds the focus, and nothing here
-      // stops it.
-      dialogOpen: () => document.querySelector("dialog[open], .search-scrim:not([hidden])") !== null || typingHere(),
-      // Files dropped on the app in a frame, on the AI Pilot's page or the AI
-      // Studio's: they go to that page's chat (pilot.mjs, chat.mjs).
-      // Elsewhere a frame keeps the browser's own answer to a drop.
-      dropFiles: pilotPage ? (files) => pilot?.pilotDropped(files) : aiPage ? (files) => chat?.chatDropped(files) : undefined,
-    };
+    offerFrameBridge({ room: pilot ?? chat, chat, pilot });
     const version = `abap2UI5 ${state.runtime.abapVersion()}`;
     document.getElementById("versions").textContent = version;
     document.getElementById("about-versions").textContent = version;
@@ -581,14 +358,14 @@ async function boot() {
       .then(async () => {
         invalidateAnalysis();
         // The fresh answer, not the emptied one invalidateAnalysis( ) left.
-        updateInsight(await refreshNow());
+        checked(await refreshNow());
       })
       .catch((e) => showOutput("abap2UI5 lint", `The abap2UI5 linter could not be loaded: ${String(e?.message ?? e)}`));
   } catch (e) {
     // Only where a service worker serves the page is there a cached copy to
     // throw away; without one, saying it was discarded was untrue and the
     // reload asked for changed nothing.
-    if (e?.name === STALLED && navigator.serviceWorker?.controller) {
+    if (e?.name === STALLED && servedFromCache()) {
       // A runtime that loaded and never spoke is a copy from another build,
       // and the copy lives in this browser: the service worker's cache, or
       // the worker itself, which would serve the same bytes again on every
@@ -610,78 +387,11 @@ async function boot() {
   }
   // Run is the one control with more than "the page has started" to say about
   // itself - autorun may already have it.
-  booted = true;
-  reflectRunButton();
+  markBooted();
   showSourceLink();
 
-  // The AI chat (src/shell/chat.mjs, src/shell/ai-agent.mjs): the model works
-  // on the same editor and presses the same Run, through these. Only on the
-  // studio's own page - the playground carries no way into it.
-  if (chat) {
-    chat.setUpChat(
-      {
-        files: () => getFiles(),
-        // Through replaceWith( ), like a sample: written into the models that
-        // are open (undoable), the strip redrawn, the draft stored by the
-        // change handler. checkFileSet( ) refuses a set the editor cannot hold.
-        // Not "as opened": what the model wrote is work, and is stored like
-        // typed code.
-        setFiles: (files) => replaceWith(checkFileSet(files), { asOpened: false }),
-        run: () => runForAgent(),
-        show: (name) => openFile(name),
-        // The last build this browser stored, for the welcome's "open it
-        // again" - checked the way a draft is, so a set the editor cannot
-        // hold is no build to offer.
-        lastBuild: () => {
-          try {
-            const stored = readStoredJson(AI_STORAGE_KEY);
-            return stored ? checkFileSet(stored) : undefined;
-          } catch {
-            return undefined;
-          }
-        },
-        forgetLastBuild: () => removeStored(AI_STORAGE_KEY),
-      },
-      // The studio is the page: it opens at once, and there is no playground
-      // under it to leave to.
-      { startOpen: true },
-    );
-  }
-
-  // The AI Pilot (src/shell/pilot.mjs): the model operates the app in the
-  // frame. It opens the samples the way the samples browser does and
-  // restarts the app the way Run does - these, and nothing else.
-  if (pilot) {
-    pilot.setUpPilot({
-      files: () => getFiles(),
-      run: () => runForAgent(),
-      // A catalogued class by its raw URL, and the classes it needs beside it -
-      // the ?src= path, as loadLinked( ) takes it.
-      fetchLinked: (url) => linkedFiles(url),
-      // Further apps, beside the one Run starts: their files go into the
-      // editor beside the others and everything is compiled and defined
-      // again - WITHOUT a fresh database and without counting a Run, so the
-      // apps already open keep their state and their frames stay current.
-      addFiles: (files, options) => addAppFiles(files, options),
-      // The address a Pilot frame loads an app from - Run's own, plus the
-      // frame's name, which tells the bridge whose roundtrip it is.
-      frameSrc: (cls, params = {}) => {
-        const src = new URL("app/index.html", document.baseURI);
-        src.searchParams.set("app_start", cls);
-        src.searchParams.set("run", String(state.runCounter));
-        for (const [key, value] of Object.entries(params)) src.searchParams.set(key, value);
-        src.searchParams.set("sap-ui-theme", uiTheme());
-        return src.href;
-      },
-      mainFrame: frame,
-      // One of the samples the page carries, by its class - no network; a
-      // promise of its files, since the sample's chunk may not have landed.
-      carried: (cls) => carriedSampleFiles(cls),
-      openSamples: () => openExamples(),
-      frame: () => frame.contentWindow?.__z2ui5PlaygroundPilot,
-      appClass: () => entryClass(getFiles()),
-    });
-  }
+  if (chat) setUpStudio(chat);
+  if (pilot) setUpPilotHooks(pilot, { openSamples: () => openExamples() });
 
   // A click on Run is a request to see the app, so on a narrow screen it brings
   // the app forward - the same move picking a sample makes, and at desk width
@@ -775,61 +485,29 @@ async function boot() {
 
   // After the first run, not before: run() opens with a clear of the output
   // panel, so a message shown earlier would be wiped by the very next line.
-  if (linkDeclined) {
+  if (starting.declined) {
     setStatus("the linked code was not opened - showing the sample instead");
   }
-  if (linkFailure) {
+  if (starting.failure) {
     // What is on screen instead is the stored draft when there is one, not
     // always the sample - the sentence used to say "the sample" regardless.
     setStatus(
-      `the link could not be followed - showing ${startedFrom === "your last session" ? "your last session" : "the sample"} instead`,
+      `the link could not be followed - showing ${from === FROM_LAST_SESSION ? "your last session" : "the sample"} instead`,
       true,
     );
-    showOutput("Link", String(linkFailure.message || linkFailure));
+    showOutput("Link", String(starting.failure.message || starting.failure));
   }
 
   keepAssetsForNextTime();
 }
 
-// Registers the service worker that makes a second visit cheap - see
-// src/shell/sw.js for what it keeps and what it deliberately leaves alone.
-//
-// Last, once the page is up and the app is running. The worker fills its cache
-// by fetching the heavy assets itself, and every one of them is in the
-// browser's cache by now because this page has just downloaded them - so doing
-// it here costs almost nothing, where doing it during boot would have put those
-// fetches next to the ones the visitor is actually waiting on. Nothing on the
-// page depends on any of this working.
-function keepAssetsForNextTime() {
-  if (!("serviceWorker" in navigator)) return;
-  // No scope given: a worker's default scope is the directory it was served
-  // from, which is the site's own directory at an origin root and under a
-  // GitHub Pages project path alike.
-  navigator.serviceWorker.register(new URL("sw.js", document.baseURI)).catch(() => {
-    // A browser that will not have one - a private window, a policy, an origin
-    // that is not secure - loses the second visit's head start and nothing
-    // else. There is nothing here to tell anybody about.
-  });
-}
-
-// The opposite of keepAssetsForNextTime( ): every cache this site wrote and
-// the worker that serves from them, gone, so the next load fetches the site
-// as it is now. Nothing here can fail in a way worth reporting - a browser
-// without either has nothing to discard.
-async function discardCachedSite() {
-  try {
-    const registration = await navigator.serviceWorker?.getRegistration();
-    await registration?.unregister();
-  } catch {
-    // No worker, or no permission to ask - nothing to throw away.
-  }
-  try {
-    for (const name of await caches.keys()) {
-      if (name.startsWith("abap2ui5-playground-")) await caches.delete(name);
-    }
-  } catch {
-    // No Cache API, or a storage that refuses - the reload fetches fresh anyway.
-  }
+// A fresh analysis of the code on screen: the panel, the badge and the fix
+// bar - and the status line, which says so when the code no longer compiles
+// while the app from before the change goes on running (run-status.mjs). Not
+// on the Pilot's page, whose code is not on screen.
+function checked(problems) {
+  updateInsight(problems);
+  if (!pilotPage) reflectCodeErrors(problems);
 }
 
 // The credits, and what this is. Wired outside boot()'s try/catch and before
@@ -853,30 +531,14 @@ function setUpAbout() {
   closeOnBackdrop(dialog);
 }
 
-const uiTheme = () => (isDark() ? "sap_horizon_dark" : "sap_horizon");
-
-function applyFrameTheme() {
-  try {
-    const ui5 = frame.contentWindow?.sap?.ui;
-    // UI5 1.x and 2.x name this differently, and neither exists until the
-    // component has booted.
-    const theming = ui5?.require?.("sap/ui/core/Theming");
-    if (theming?.setTheme) theming.setTheme(uiTheme());
-    else ui5?.getCore?.()?.applyTheme?.(uiTheme());
-  } catch {
-    // A frame that is mid-load, or a UI5 that does not expose this, keeps the
-    // theme it started with. The next Run picks the current one up.
-  }
-}
-
 // A different file is now on screen: the outline is about that file, and so is
 // the link to where it came from, and so is what Undo has to take back.
 function fileOpened() {
   // Which file is on screen is part of the draft, kept where the draft is.
-  if (!embedded && !pilotPage && !aiPage) writeOpenFile(currentFile(), getFiles());
+  if (keepsDrafts) writeOpenFile(currentFile(), getFiles());
   showSourceLink();
   reflectHistory();
-  updateInsight(refresh());
+  checked(refresh());
 }
 
 // Undo and Redo follow the open file's history: live while there is an edit
@@ -892,23 +554,26 @@ function reflectHistory() {
 //
 // Two origins, and they want different destinations. A link somebody pasted
 // leads to the file on GitHub: the repository around it, the neighbouring
-// files, the history. A row on the sample catalogue leads back to the
-// CATALOGUE, because somebody who came from a list of 770 samples to run one
-// of them is not done with the list - and `back` carries the filters they had
-// narrowed it to, so they land on their search rather than at the top of it.
-// The catalogue sets both parameters (src/catalogue/catalogue.mjs).
+// files, the history - and so does a sample the page carries, which is a file
+// in abap2UI5/samples (starting-files.mjs, file-sets.mjs). A row on the sample
+// catalogue leads back to the CATALOGUE, because somebody who came from a list
+// of 770 samples to run one of them is not done with the list - and `back`
+// carries the filters they had narrowed it to, so they land on their search
+// rather than at the top of it. The catalogue sets both parameters
+// (src/catalogue/catalogue.mjs).
 //
-// Live only for files that actually came from a link: over a draft or a
-// sample of this page's own it would be a link to somebody else's page with no
-// relation to what is on screen - so there it stays in the bar, inactive,
-// rather than disappearing and having the controls beside it shift.
+// Live only for files that actually came from somewhere: over a draft, a
+// shared link or the AI's code there is no page with any relation to what is
+// on screen - so there it stays in the bar, inactive, rather than
+// disappearing and having the controls beside it shift. And it says why when
+// pointed at: it used to look merely broken.
 export function showSourceLink() {
   const link = document.getElementById("source-link");
   const origin = originOf(currentFile());
   if (origin === undefined) {
     link.removeAttribute("href");
     link.setAttribute("aria-disabled", "true");
-    link.title = "Only code that came from GitHub has a page to go to";
+    link.title = "No source to open - only a sample or a file opened from GitHub has a page there";
     link.textContent = "Source";
     return;
   }
@@ -928,6 +593,8 @@ export function showSourceLink() {
   link.title = `Open ${currentFile()} where it lives`;
 }
 
+// The editor's change handler: every debounced change to the ABAP - a
+// keystroke, a file added or closed, a set of files opened over the old one.
 function remember(files) {
   // Embed hook: tells an embedding page when its example has been changed.
   if (embedded) announceEdited(files ?? getFiles());
@@ -945,7 +612,7 @@ function remember(files) {
   // drew it twice (three times with Outline open) per pause in the typing -
   // the first time with the problems from before the change.
   const known = refresh();
-  if (!analysisPending()) updateInsight(known);
+  if (!analysisPending()) checked(known);
   // Neither an embedding nor the AI Studio keeps a draft: the one shows what
   // its page asked for, the other starts on the same minimal class every time and
   // must not write over the playground's own work. The AI Pilot neither: it
@@ -961,27 +628,7 @@ function remember(files) {
     if (!built.every(isUntouchedStarter)) writeStoredJson(AI_STORAGE_KEY, built);
     return;
   }
-  // A sample that was picked and read is not a draft, and is forgotten rather
-  // than stored - the rule the checker settings already follow. Kept, it pinned
-  // the reader to a frozen copy: the sample was improved in a later deploy and
-  // they went on being opened on the old one, findings and all, labelled as
-  // their own last session. One keystroke makes it a draft again.
-  const current = files ?? getFiles();
-  // A sample that was picked and read is not a draft and is not stored. What
-  // was stored BEFORE it is left where it is: a sample brings its own class
-  // name now, so opening one disposes the model the reader's work was in and
-  // Undo cannot reach it any more. The stored copy is then the only way back,
-  // and deleting it here threw away the very thing the status line promises.
-  // One keystroke in the sample makes it a draft and takes its place.
-  // Nor are files exactly as a link or the samples browser put them in: a
-  // catalogued sample is not one isSample( ) knows, and opening one from the
-  // browser used to write it straight over the stored draft - while the
-  // status line promised that draft "comes back if you reload".
-  // While replaceWith( ) is putting them in: setFiles( ) reports the change
-  // before `opened` can be set to what it put there, and a catalogued sample
-  // or a named draft was stored over the draft in that one call.
-  const pristine = openingAsOpened || (opened !== undefined && JSON.stringify(current) === opened);
-  if (!isSample(current) && !pristine) writeDraft(current);
+  keepDraft(files ?? getFiles());
   // A fragment in the address bar is a claim about what the editor holds, and
   // it just stopped being true. Left there, it would also win over this draft
   // on the next reload (a link outranks stored code in startingFiles), quietly
@@ -998,226 +645,6 @@ function remember(files) {
   if (window.location.hash || linked) {
     const rest = query.toString();
     history.replaceState(null, "", window.location.pathname + (rest ? `?${rest}` : ""));
-  }
-}
-
-// Which pick in the samples browser is the latest. A catalogue example is
-// fetched, so a slow one picked first could land AFTER a sample picked
-// second - and replace it in the editor and run it, the reader having asked
-// for the other. Each pick takes a number; a fetch that comes back to find a
-// newer one drops what it fetched.
-let latestPick = 0;
-
-// One of the samples the page carries, chosen in the samples browser. Its
-// files are a chunk (src/editor/samples.mjs), so this waits for them - and a
-// newer pick made meanwhile wins, like a linked class that arrives late.
-async function loadSample(id, tabs) {
-  const pick = ++latestPick;
-  let files;
-  try {
-    files = await loadSampleFiles(id);
-  } catch (e) {
-    setStatus("the sample could not be loaded", true);
-    showOutput("Samples", String(e?.message ?? e));
-    return;
-  }
-  if (!files || pick !== latestPick) return;
-  forgetOrigins();
-  const keptHow = replaceWith(files);
-  // Picking a sample is a request to see it, so it runs without a second click.
-  runWhenFree().then((started) => {
-    if (!started) return;
-    tabs.show("right");
-    if (keptHow) sayDraftIsKept(keptHow);
-  });
-}
-
-// A named draft, chosen in the samples browser - the same move as a sample,
-// with the same word about the draft it replaced.
-function loadDraft(files, tabs) {
-  let checked;
-  try {
-    checked = checkFileSet(files);
-  } catch (e) {
-    setStatus("the draft could not be opened", true);
-    showOutput("Drafts", String(e.message || e));
-    return;
-  }
-  latestPick++;
-  forgetOrigins();
-  const keptHow = replaceWith(checked);
-  runWhenFree().then((started) => {
-    if (!started) return;
-    tabs.show("right");
-    if (keptHow) sayDraftIsKept(keptHow);
-  });
-}
-
-// Puts a set of files in the editor in place of what is there, and answers what
-// happened to what was there: whether it was somebody's own work - a draft
-// rather than a sample as it was opened - and whether Undo can still reach it.
-//
-// It can only reach a file that is still open. setFiles( ) writes the new
-// source into a model whose file it can reuse, which is an undoable edit; a
-// file that is not in the new set is disposed, and its history with it. That
-// used to be the rare case, because every sample the playground carried was
-// called zcl_playground.clas.abap. The samples come out of abap2UI5/samples
-// now and bring their own class names, so it is the ordinary one - which is
-// why the sentence below is chosen rather than fixed, and why remember( )
-// leaves a stored draft alone when a sample goes in over it.
-function replaceWith(files, { asOpened = true } = {}) {
-  const before = getFiles();
-  // Somebody's own work - not a sample, and not files left exactly as they
-  // were opened.
-  const hadDraft = !isSample(before) && JSON.stringify(before) !== opened;
-  const undoable = before.every((f) => files.some((n) => n.name === f.name));
-  openingAsOpened = asOpened;
-  try {
-    setFiles(files.map((f) => ({ ...f })));
-  } finally {
-    openingAsOpened = false;
-  }
-  opened = asOpened ? JSON.stringify(getFiles()) : undefined;
-  renderFiles();
-  return hadDraft && (undoable ? "undo" : "reload");
-}
-
-// The files as the last load put them in, as text - a sample, a catalogued
-// class, a named draft, a link. Until they are changed they are not a draft
-// of the reader's, and remember( ) does not store them over the one there is.
-let opened;
-// Set while replaceWith( ) writes files that are "as opened" into the
-// editor - see remember( ).
-let openingAsOpened = false;
-// Where the editor's starting files came from (startingFiles( )).
-let startedFrom;
-// The answers of startingFiles( ) that are somebody else's code.
-const FROM_A_LINK = new Set(["a shared link", "a link", "a gist"]);
-
-// Run, once the run under way (if any) has finished. A sample opened while
-// another one was still starting went into the editor, and its run returned
-// at once because one was under way: the editor held one sample and the
-// frame ran the other, with "running" in the status line.
-//
-// Calls that wait share one run: two picks while a run is under way both
-// find the editor holding the second, and each waiting to run it on its own
-// ran the same text twice - the app the reader had started using reset under
-// them by a run nobody asked for. Both still hear how that one run went, so
-// the first pick's word about the draft it replaced is still said.
-let waitingRun;
-function runWhenFree() {
-  if (!running) return run();
-  waitingRun ??= (async () => {
-    while (running) await new Promise((resolve) => setTimeout(resolve, 100));
-    waitingRun = undefined;
-    return run();
-  })();
-  return waitingRun;
-}
-
-// Said after the run, because run( ) ends by writing "running" over the
-// status line - and said at all because a click that replaced an hour's work
-// is the one moment the reader has to be told the work is not gone. Only
-// after a run that started: one that stopped on an abaplint error or a
-// transpiler refusal has said so in red, and "running - ..." over it was
-// both untrue and the end of the only sentence that mattered.
-function sayDraftIsKept(how) {
-  setStatus(
-    how === "undo" ? "running - your draft is one Undo away" : "running - your draft comes back if you reload",
-  );
-}
-
-// A catalogued example, chosen in the examples browser. The URL goes down the
-// same path a ?src= link goes down - fetched and checked by deep-link.mjs, the
-// classes it needs looked for beside it, the first file the app - just without
-// the page reload a link would cost, because the registry this page has
-// already built serves the new files as well as it served the old.
-async function loadLinked(url, tabs) {
-  const pick = ++latestPick;
-  try {
-    setStatus("fetching the example…");
-    const linked = checkFileSet(await fetchLinkedFiles(new URLSearchParams([["src", url]])));
-    const alongside = await followNavigation(linked);
-    if (pick !== latestPick) return;
-    const keptHow = replaceWith(checkFileSet([...linked, ...alongside]));
-    if (await runWhenFree()) {
-      tabs.show("right");
-      if (keptHow) sayDraftIsKept(keptHow);
-    }
-  } catch (e) {
-    if (pick !== latestPick) return;
-    // The catalogue said the class is there and it was not, or the fetch
-    // failed under way. Somebody clicked expecting particular code, so this
-    // failure is said out loud - unlike a catalogue that never loaded.
-    setStatus("the example could not be opened", true);
-    showOutput("Samples", String(e.message || e));
-  }
-}
-
-// One of the samples the page carries, by the raw URL the samples browser
-// hands over for its catalogue row: the AI Pilot opens the copy the page
-// carries rather than fetching it (a promise of the files, or undefined).
-const carriedFiles = (url) => carriedSampleFiles(String(url).split("/").pop().replace(/\.clas\.abap$/, ""));
-
-// A catalogued class by its raw URL and the classes it needs beside it, as
-// files - the ?src= path without the run.
-async function linkedFiles(url) {
-  const linked = checkFileSet(await fetchLinkedFiles(new URLSearchParams([["src", url]])));
-  return checkFileSet([...linked, ...(await followNavigation(linked))]);
-}
-
-// The AI Pilot's further apps (src/shell/pilot.mjs): `files` go into the
-// editor beside what is there (a file of the same name is replaced), `first`
-// names the file Run is to start from now on, and the whole set is checked,
-// compiled and defined - the same steps as run( ) up to the classes, and not
-// one step further: no fresh database, no Run counted, no frame reloaded. The
-// runtime defines a set of classes as a whole (defineClasses( ) puts back what
-// the last set shadowed), which is why the apps already open are compiled
-// again with the new one rather than the new one alone.
-async function addAppFiles(files, { first } = {}) {
-  while (running) await new Promise((resolve) => setTimeout(resolve, 100));
-  running = true;
-  reflectRunButton();
-  // The set as it was, put back when the new one does not compile: left in,
-  // the broken files made every later open and every Restart fail the same
-  // way, on a page whose editor is hidden - only a reload got out of it.
-  const before = getFiles().map((f) => ({ ...f }));
-  const putBack = async () => {
-    try {
-      replaceWith(before, { asOpened: false });
-      updateInsight(await refreshNow());
-    } catch {
-      // the old set was accepted once and is accepted again
-    }
-  };
-  try {
-    let next = getFiles().map((f) => ({ ...f }));
-    for (const file of files) {
-      const at = next.findIndex((f) => f.name === file.name);
-      if (at === -1) next.push({ ...file });
-      else next[at] = { ...file };
-    }
-    if (first) {
-      const lead = next.find((f) => f.name === first);
-      if (lead) next = [lead, ...next.filter((f) => f !== lead)];
-    }
-    replaceWith(checkFileSet(next), { asOpened: false });
-    const problems = await refreshNow();
-    updateInsight(problems);
-    const errors = problems.filter((i) => i.severity === 1 && i.source === "abaplint");
-    if (errors.length > 0) {
-      await putBack();
-      return { started: false, status: `${errors.length} error${errors.length > 1 ? "s" : ""} in the ABAP`, problems };
-    }
-    const { chunks } = await compile(getFiles());
-    await state.runtime.defineClasses(chunks.map(({ name, js, lines }) => ({ name, js, lines })));
-    return { started: true, status: "running", problems };
-  } catch (e) {
-    await putBack();
-    return { started: false, status: String(e?.message ?? e), problems: [] };
-  } finally {
-    running = false;
-    reflectRunButton();
   }
 }
 
@@ -1244,7 +671,7 @@ async function openFullScreen() {
       return;
     }
     tab.location.replace(url);
-    setStatus("the app is opening in a new tab");
+    sayBriefly("the app is opening in a new tab");
   } catch (e) {
     tab?.close();
     setStatus("the app could not be opened in a new tab", true);
@@ -1254,563 +681,21 @@ async function openFullScreen() {
 
 // The link first - copied and in the address bar before anything else is on
 // screen, because that is what most presses are for - and then the dialog
-// with the other ways out (src/shell/share-dialog.mjs).
+// with the other ways out (src/shell/share-dialog.mjs). The status line
+// says it only for a moment (run-status.mjs): left standing, "link copied"
+// read as the state of the page until the next thing anybody did.
 async function share() {
   try {
     const files = getFiles();
     const url = await shareUrl(files);
     history.replaceState(null, "", url);
     const copied = await copyToClipboard(url);
-    setStatus(copied ? "link copied to the clipboard" : "link is in the address bar");
+    sayBriefly(copied ? "link copied to the clipboard" : "link is in the address bar");
     (await shareReady()).openShare(files, url, copied);
   } catch (e) {
     setStatus("the link could not be built", true);
     showOutput("Share", String(e.message || e));
   }
-}
-
-// A dump, at the line it was raised at. The framework has already answered
-// the frontend with the dump and the frame is showing it; this is the half
-// the frame cannot do - underline the line in the editor, list it under
-// Problems as a runtime error, and put the cursor there - the way a
-// transpiler error is pointed at. It goes away with the next edit, like
-// that one.
-function pointAtDump(location, message, moveCaret = true) {
-  const said = `${location.exception ? `${location.exception}: ` : ""}${message || "the app dumped here"}`;
-  reportTranspilerProblems([{ file: location.file, line: location.line, message: said }], "runtime");
-  updateInsight(refresh());
-  showInsight("problems");
-  if (moveCaret) focusProblem(location.file, location.line, 1);
-  setStatus(`the app dumped - ${location.file} line ${location.line}`, true);
-}
-
-// Whether the focus is somewhere text is typed into on this page - a field,
-// a textarea, the editor (Monaco's own input is inside .monaco-editor).
-const NOT_TYPED_INTO = new Set(["button", "checkbox", "radio", "submit", "reset", "range", "color", "file", "image"]);
-function typingHere() {
-  const at = document.activeElement;
-  if (!(at instanceof HTMLElement)) return false;
-  if (at instanceof HTMLTextAreaElement || at.isContentEditable || at.closest(".monaco-editor")) return true;
-  return at instanceof HTMLInputElement && !NOT_TYPED_INTO.has(at.type);
-}
-
-// Whether a dump may take the caret to its line. Not when it is the answer to
-// the first roundtrip of an app autorun started: that roundtrip is the app
-// starting, while the reader is still typing in the editor (see run( )). A
-// dump from a click in the app later on is the reader's own doing, and is
-// pointed at as always.
-const caretMayMove = () => !(quietRun !== undefined && quietRun === state.runCounter && roundtripList().length <= 1);
-
-// The first line of a dump that says something - the framework's dump
-// starts with a heading and the request it failed in, and the sentence a
-// reader wants is the exception's own text, a few lines down.
-function firstLine(body) {
-  const lines = String(body ?? "")
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l !== "" && !l.startsWith("---") && !l.startsWith("Request failed in app"));
-  return lines[0] ?? "";
-}
-
-// What has to be true before the transpiler is worth asking. Each of these
-// would otherwise surface as an abaplint message about a filename, which means
-// nothing to somebody looking at an editor.
-function structuralProblem(files) {
-  if (files.length === 0) return "There is nothing to run.";
-  const first = parseName(files[0].name);
-  if (first?.kind !== "clas" || first.include) {
-    return `The playground starts the class in the first file, and ${files[0].name} is not a class.`;
-  }
-  for (const file of files) {
-    const parsed = parseName(file.name);
-    // A test include declares local test classes, not the object; abaplint
-    // checks what is in it. A table's two files are no ABAP at all.
-    if (parsed?.include || parsed?.kind === "tabl") continue;
-    const expected = parsed?.object;
-    const declared = declaredObjectName(file.source);
-    if (declared === undefined) {
-      return `${file.name} declares no global class or interface.`;
-    }
-    if (declared !== expected) {
-      return `${file.name} has to declare ${expected}, not ${declared} - the name and the file go together.`;
-    }
-  }
-  return undefined;
-}
-
-// ------------------------------------------------------------------ autorun
-//
-// Run, pressed for you. Off by default; the switch beside Run says which it
-// is, and while it is on Run itself is inactive - there is nothing left for
-// it to do - and every change to the ABAP starts the app again once the
-// typing has stopped.
-//
-// Off by default because a run is not free and not invisible: a compile, a
-// fresh database and a full reload of the app frame, which throws away
-// whatever was on screen. Somebody halfway through a form in their own app
-// does not want that on a keystroke; somebody watching a view take shape
-// wants nothing else. So it is a choice, and it is one click.
-//
-// Stored only while it differs from the default, and neither restored in nor
-// stored from an embedded playground - the rule the theme and the checker
-// settings follow (src/shell/theme.mjs), for the same reason: a demo in somebody's
-// documentation page has to read the same to every reader.
-const AUTORUN_KEY = "abap2ui5-playground:autorun";
-
-// Long enough that a word being typed is one run rather than six, short
-// enough that a pause reads as "and now show me". The editor's own change
-// debounce is 150ms and hangs off the same keystrokes, so what this waits for
-// is the analysis having settled as well.
-const AUTORUN_DELAY = 700;
-
-let autorun = false;
-let autorunTimer;
-// Until boot( ) has finished there is no runtime to run against, and Run has
-// been disabled since index.html was parsed. It is one of three reasons the
-// button may be inactive, which is why they are decided together below.
-let booted = false;
-
-function setUpAutorun({ restore }) {
-  autorun = restore && readStored(AUTORUN_KEY) === "on";
-  autorunButton.addEventListener("click", () => {
-    autorun = !autorun;
-    // Nor kept from one: the documentation embeds this page on the same
-    // origin, and a demo's Auto switched on there was the full playground's
-    // Auto on the reader's next visit - the rule checker-settings.mjs keeps.
-    if (!embedded) {
-      if (autorun) writeStored(AUTORUN_KEY, "on");
-      else removeStored(AUTORUN_KEY);
-    }
-    reflectAutorun();
-    // Switching it on is a request to see the code as it stands - whatever was
-    // typed while it was off has not been run, and a switch that shows nothing
-    // until the next keystroke looks like a switch that does nothing. Off, the
-    // change already waiting is dropped rather than run behind the reader's
-    // back.
-    // During a Run, run( ) only returns - and the change waiting was dropped
-    // with Run left disabled ("autorun has the job"). autorunAfterChange( )
-    // waits for the Run to end and runs it then.
-    if (autorun) {
-      if (running) autorunAfterChange();
-      else run();
-    } else clearTimeout(autorunTimer);
-  });
-  reflectAutorun();
-}
-
-function reflectAutorun() {
-  autorunButton.setAttribute("aria-checked", String(autorun));
-  const said = autorun
-    ? "Autorun is on - every change runs by itself"
-    : "Autorun: run every change as it is typed";
-  autorunButton.title = said;
-  autorunButton.setAttribute("aria-label", said);
-  runButton.title = autorun ? said : "Run (Ctrl+Enter)";
-  reflectRunButton();
-}
-
-// Three reasons Run may be inactive - the page has not started, a run is
-// already under way, autorun has the job - and one button. Decided in one
-// place, because they used to be written by whichever of them moved last: a
-// run finishing under autorun handed the button back.
-function reflectRunButton() {
-  runButton.disabled = !booted || running || autorun;
-}
-
-// Every debounced change to the ABAP comes through remember( ), which calls
-// this: a keystroke, a file added or closed, a set of files opened over the
-// old one.
-//
-// Not before boot( ) has finished: there is no runtime to run against yet,
-// and boot's own first run takes whatever was typed meanwhile. And not for
-// text that has just been run - opening a sample or a draft writes the
-// models, the editor's change debounce fires during the run that opening
-// started, and without the comparison that one change was a second compile,
-// database reset and frame reload of the same text 700ms later.
-function autorunAfterChange() {
-  if (!autorun || !booted) return;
-  clearTimeout(autorunTimer);
-  autorunTimer = setTimeout(() => {
-    // A run already under way owns the frame and the database, and run( )
-    // would answer a second one by returning. So the change that arrived
-    // during it is run after it rather than dropped - and so is one a run
-    // already waits for (a sample picked during it, runWhenFree( )): this
-    // timer firing in the moment between the two used to start the same
-    // text first, and the waiting run then started it again.
-    if (running || waitingRun) autorunAfterChange();
-    else if (JSON.stringify(getFiles()) !== lastRunText) run({ quiet: true });
-  }, AUTORUN_DELAY);
-}
-
-// Starts what is in the editor: compile it, register it with the runtime, then
-// a new database and a new app in the frame.
-//
-// The frame used to be reloaded on every Run, because a reload was the only
-// thing that reset everything the frontend keeps outside the model - view
-// slots, routing state, the UI5 component itself. The frontend's component
-// tears all of that down in its exit( ) now (it is built to be re-launched
-// in a living page), so a frame that is up is told to restart in place
-// (__z2ui5PlaygroundRestart in frontend-bridge.js): the component destroyed
-// and created again on the new Run's address, the UI5 core, the libraries
-// and the theme kept - which is most of what a Run used to wait for. The
-// first Run, and any frame that is not on this origin, not booted or on an
-// older bridge, loads the document as before; so does one whose restart
-// fails. The counter in the address is the same either way: it is what a
-// late roundtrip from the app being replaced is refused by.
-let running = false;
-// The files the last run started from, as text - see autorunAfterChange( ).
-let lastRunText;
-// The Run autorun started on its own, by its number, while it is the current
-// one - see run( ) and caretMayMove( ).
-let quietRun;
-// What the last run's unit tests said, for runForAgent( ).
-let lastTestResults = [];
-
-// Asks the frame to start the new Run's app without reloading its document
-// - see frontend-bridge.js. Answers false wherever that cannot be asked: the
-// first Run (no document yet), a frame on another origin (an error page),
-// one that never booted UI5, an older bridge without the function; and false
-// again when the frame refused or took too long, after which the caller
-// reloads it as before. Thirty seconds, like the load it stands in for.
-async function restartInPlace(frame, src) {
-  let restart;
-  try {
-    const win = frame.contentWindow;
-    if (!win || !win.sap?.ui || new URL(win.location.href).pathname !== src.pathname) return false;
-    if (win.document?.readyState !== "complete") return false;
-    restart = win.__z2ui5PlaygroundRestart;
-  } catch {
-    return false;
-  }
-  if (typeof restart !== "function") return false;
-  let gaveUp;
-  try {
-    await Promise.race([
-      restart(src.href),
-      new Promise((_, reject) => {
-        gaveUp = setTimeout(() => reject(new Error("the frame did not restart the app in time")), 30000);
-      }),
-    ]);
-    frame.dataset.src = src.href;
-    return true;
-  } catch (e) {
-    showOutput("Run", `The app frame could not restart in place and is reloaded instead: ${String(e?.message ?? e)}`);
-    return false;
-  } finally {
-    clearTimeout(gaveUp);
-  }
-}
-
-// `quiet` is a run nobody asked for: autorun's, 700ms after the typing
-// stopped. It says what it found like any other - the status line, the
-// underlines, the Problems list - but it leaves the caret where the reader is
-// typing. Moving it to the first error, as a pressed Run does, sent the next
-// keystrokes there: an unfinished statement is an abaplint error, so every
-// pause in the middle of one pulled the caret out of the line being written
-// (to the top of the file, or into another file) and typed the rest into it.
-export async function run({ quiet = false } = {}) {
-  // Ctrl+Enter and the sample menu call this too, so the guard cannot be the
-  // Run button being disabled: two runs would race on the frame's src and on
-  // the one-shot load listener, and the second reset would land under a frame
-  // that is still booting the first.
-  if (running) return;
-  running = true;
-  // Whatever the last run's tests said is not about this one: a run that
-  // stops before its tests (an abaplint error, a transpiler refusal) used to
-  // hand runForAgent( ) the results of the run before it.
-  lastTestResults = [];
-  // A run supersedes the one autorun was about to start - pressing Run (or
-  // opening a sample, which runs on its own) while the timer is counting down
-  // must not be followed by a second run of the same text.
-  clearTimeout(autorunTimer);
-  reflectRunButton();
-  // Whatever the last run had to say about itself is no longer true.
-  hideOutput();
-  try {
-    const files = getFiles();
-    lastRunText = JSON.stringify(files);
-
-    const structural = structuralProblem(files);
-    if (structural) {
-      setStatus("the playground cannot start this", true);
-      showOutput("ABAP", structural);
-      return;
-    }
-
-    // abaplint only: its errors mean the ABAP does not compile, so there is
-    // nothing to start. An abap2UI5 finding means the opposite - the app runs
-    // and is wrong somewhere - and the fastest way to understand one of those
-    // is to look at the app it produced. Blocking Run on it would hide the
-    // evidence. They are underlined in the editor and listed under Problems.
-    // Waited for, not read back: Run decides on the text as it is now, and
-    // the registry answers from a worker.
-    const problems = await refreshNow();
-    updateInsight(problems);
-    const errors = problems.filter((i) => i.severity === 1 && i.source === "abaplint");
-    if (errors.length > 0) {
-      setStatus(`${errors.length} error${errors.length > 1 ? "s" : ""} in the ABAP - fix them and run again`, true);
-      // The errors are already in the panel, one clickable row each, saying
-      // which checker spoke. Writing them into the Log as well would put the
-      // same list twice into one panel and show the poorer copy - so this
-      // brings the reader to the list instead of retyping it.
-      showInsight("problems");
-      if (!quiet) focusProblem(errors[0].file, errors[0].range.start.line + 1, errors[0].range.start.character + 1);
-      return;
-    }
-
-    setStatus("compiling…");
-    const { chunks, tests } = await compile(files);
-    // Waited for: the worker evaluates each chunk with `new Function`, and a
-    // chunk V8 refuses, or one that throws while defining itself, is the
-    // error to show. Left unawaited it was an "Uncaught (in promise)" in the
-    // console, and the run went on to start an app whose class was never
-    // defined - a dump about a missing class, in place of the real cause.
-    //
-    // The Run is counted here, the moment the classes change: the
-    // window.__z2ui5Playground roundtrip refuses a frame of an earlier Run by
-    // this number, and counted only before the database reset it let the old
-    // app's timer run the NEW classes through the whole test phase - a dump
-    // that was not the new app's, left on screen after it started. Counted
-    // after compile, so code that does not compile leaves the old app working.
-    state.runCounter += 1;
-    quietRun = quiet ? state.runCounter : undefined;
-    // The page started on code a link brought, and this is where it starts
-    // to run: from here on the page is not a safe place for a secret
-    // (src/shell/linked-code.mjs). For the visit - a script it started
-    // outlives the files being replaced.
-    if (FROM_A_LINK.has(startedFrom)) markLinkedCodeRan();
-    await state.runtime.defineClasses(chunks.map(({ name, js, lines }) => ({ name, js, lines })));
-
-    // The unit tests in the test includes, before the app: a run is compile,
-    // test, start - the order a developer works in - and a failing test is
-    // no reason to withhold the app, which is the fastest way to see what
-    // the test is about. The results go to the Tests tab; failures bring it
-    // forward and are said in the status line after the app is up.
-    let testsFailed = 0;
-    if (tests.length > 0) {
-      setStatus("running the tests…");
-      let results;
-      try {
-        results = await state.runtime.runUnitTests(tests);
-      } catch (e) {
-        // A JavaScript error out of a test - a read through an initial
-        // reference - stopped the runner itself, and took the whole run with
-        // it: no Tests row, no app. The tests are reported as not run, the
-        // Log says why, and the app starts, as it does for a failed test.
-        if (e?.name === RUNAWAY) throw e;
-        results = tests.flatMap((t) =>
-          t.methods.map((method) => ({
-            class: t.class.toUpperCase(),
-            testclass: t.testclass,
-            method,
-            passed: false,
-            status: "ERROR",
-            expected: "",
-            actual: "",
-            message: String(e?.message ?? e),
-            microseconds: 0,
-            frame: "",
-            location: e?.location,
-          })),
-        );
-        showOutput("Tests", `The tests could not be run to the end: ${String(e?.message ?? e)}`);
-      }
-      setTestResults(results);
-      lastTestResults = results;
-      testsFailed = results.filter((r) => !r.passed).length;
-    } else {
-      setTestResults([]);
-      lastTestResults = [];
-    }
-
-    setStatus("starting the app…");
-    // (The Run was counted before the classes were defined - see above - so
-    // the old app cannot reach the database while it is being reset either.)
-    await state.runtime.resetDatabase();
-    // A run is a fresh app; what the last one said to its frontend is over.
-    clearRoundtrips();
-
-    const src = new URL("app/index.html", document.baseURI);
-    src.searchParams.set("app_start", entryClass(files));
-    src.searchParams.set("run", String(state.runCounter));
-    // UI5 reads sap-ui-* from the query and it wins over the bootstrap tag, so
-    // the app follows the same light or dark the rest of the page does. Both
-    // themes are built into dist/app; a third would have to be added there.
-    src.searchParams.set("sap-ui-theme", uiTheme());
-
-    // In place where the frame can: same document, same origin, UI5 up, the
-    // bridge offering it. The address of the Run is recorded the same way,
-    // and `src` is the reload's fallback below when the restart is refused.
-    const restarted = await restartInPlace(frame, src);
-    // Bounded, because everything in run() hangs off this one event: if the
-    // frame never fires it, `running` would stay true and Run would be dead
-    // until a full reload. Thirty seconds is an eternity for a same-origin
-    // document - reaching it means the load is not coming.
-    if (!restarted) await new Promise((resolve, reject) => {
-      const loaded = () => {
-        clearTimeout(gaveUp);
-        resolve();
-      };
-      // Taken off again when it gives up, or the next run's load would fire
-      // this one as well - one more stale listener per timed-out run.
-      //
-      // Thirty seconds, unless the frame is visibly still arriving: on a slow
-      // first visit (Slow 3G, nothing cached) the frame's first load is two
-      // megabytes, the run gave up on it at thirty seconds and the app came
-      // up forty-five seconds later under "the app could not be started".
-      // A frame that is on this run's address and still loading is given
-      // more time, ten seconds at a turn, up to three minutes in all.
-      const started = Date.now();
-      let gaveUp;
-      const check = () => {
-        let arriving = false;
-        try {
-          arriving = frame.contentWindow.location.href === src.href && frame.contentDocument?.readyState !== "complete";
-        } catch {
-          // Another origin (an error page): not arriving.
-        }
-        if (arriving && Date.now() - started < 180000) {
-          gaveUp = setTimeout(check, 10000);
-          return;
-        }
-        frame.removeEventListener("load", loaded);
-        reject(new Error("The app frame did not load."));
-      };
-      gaveUp = setTimeout(check, 30000);
-      frame.addEventListener("load", loaded, { once: true });
-      // The address of this run, readable whatever navigated the frame.
-      frame.dataset.src = src.href;
-      // A REPLACE, not a navigation that pushes: setting `src` on an iframe
-      // adds an entry to the TAB's history, so after a few Runs the Back
-      // button stepped through old app frames instead of leaving the page,
-      // and past Chromium's fifty entries the page the reader came from -
-      // the one the bar's step back returns to - fell off the end. The
-      // first load has nothing to replace; it sets `src` as before.
-      const current = frame.contentWindow;
-      let replaced = false;
-      try {
-        if (current && current.location.href !== "about:blank") {
-          current.location.replace(src.href);
-          replaced = true;
-        }
-      } catch {
-        // A frame on another origin (an error page) - set src instead.
-      }
-      if (!replaced) frame.src = src.href;
-    });
-    // A load is not an app. Offline on a first visit (no worker yet) the
-    // frame's document arrived from the HTTP cache but sap-ui-core.js did
-    // not, or Chrome's own error page loaded - both fire `load`, and the
-    // status said "running" over a blank frame.
-    let booted = false;
-    try {
-      booted = Boolean(frame.contentWindow.sap?.ui);
-    } catch {
-      // An error page is another origin: not booted.
-    }
-    if (!booted) throw new Error("The app frame loaded without UI5 - is the network down? Run again once it is back.");
-    // An app is on screen: whatever placeholder stood over the frame goes -
-    // after boot's first run, or in the AI Studio, after the first app the
-    // model built.
-    document.getElementById("app-placeholder")?.setAttribute("hidden", "");
-    if (testsFailed > 0) {
-      const total = tests.reduce((n, t) => n + t.methods.length, 0);
-      setStatus(`running - ${testsFailed} of ${total} test${total === 1 ? "" : "s"} failed`, true);
-      showInsight("tests");
-    } else {
-      setStatus("running");
-    }
-    // After the load event, so the app has rendered and has a height to report.
-    if (appOnly) announceAppHeight(frame);
-    // The AI Pilot's further apps start again with this Run - same fresh
-    // database, new Run number (src/shell/pilot.mjs).
-    pilot?.pilotRan();
-    // Answered rather than returned blank, because on a narrow screen the
-    // caller brings the app forward - and every path out of here above this
-    // line is one where there is no app to bring: nothing compiled, or the
-    // problems list is what the reader now needs to be looking at.
-    return true;
-  } catch (e) {
-    setStatus("the app could not be started", true);
-    showOutput("Run", String(e.message || e));
-    // What the transpiler refused, at the lines it named: underlined and in
-    // the Problems list, the way the checkers' findings are - the Log has
-    // the full text, but a line is where somebody looks.
-    if (e.problems?.length > 0) {
-      reportTranspilerProblems(e.problems);
-      const problems = refresh();
-      updateInsight(problems);
-      const first = problems.find((p) => p.source === "transpiler");
-      if (first) {
-        showInsight("problems");
-        if (!quiet) focusProblem(first.file, first.range.start.line + 1, 1);
-      }
-    }
-  } finally {
-    running = false;
-    reflectRunButton();
-  }
-}
-
-// Run, for the AI chat - and everything a person would look at afterwards,
-// as data: the status line, the problems, the tests, the roundtrips the app
-// started with, and the Log. ai-agent.mjs turns it into what the model reads.
-//
-// A run already under way (autorun, set off by the very edit the model just
-// made) is waited out rather than skipped, so the report is about the code
-// as it is now. After the frame has loaded, the first roundtrip is waited for
-// as well: that is the app's start, and the dump the model needs to see, if
-// there is one, arrives with it.
-// The draft id a frame's request is on - none for an app start.
-function draftOf(body) {
-  try {
-    return JSON.parse(body)?.value?.S_FRONT?.ID || null;
-  } catch {
-    return null;
-  }
-}
-
-async function runForAgent() {
-  while (running) await new Promise((resolve) => setTimeout(resolve, 100));
-  const started = await run();
-  // Up to thirty seconds, as the Pilot waits for a tab (pilot.mjs): the
-  // studio's first app is a whole UI5 boot after the placeholder, and ten
-  // seconds on a slow machine read as "none arrived" - an error that was
-  // none, and the model spent turns fixing it. Over once the frame has
-  // rendered (the bridge's busy( ) says so) or an answer is in.
-  let starting = false;
-  if (started) {
-    const until = performance.now() + 30000;
-    const rendering = () => {
-      try {
-        return frame.contentWindow?.__z2ui5PlaygroundPilot?.busy() !== false;
-      } catch {
-        return true;
-      }
-    };
-    while (roundtripList().length === 0 && performance.now() < until) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    starting = roundtripList().length === 0 && rendering();
-  }
-  const status = document.getElementById("status");
-  return {
-    started: Boolean(started),
-    // Still booting when the wait ran out - not an app that answered nothing.
-    starting,
-    status: status.textContent,
-    // Waited for: a run that stopped before its own refreshNow( ) (a
-    // structural problem) left refresh( ) answering for the text from before
-    // the model's change, and the model chased problems that were gone.
-    problems: await refreshNow(),
-    tests: lastTestResults,
-    // Only a run that started has roundtrips of its own: one that stopped
-    // before the fresh database left the LAST run's list in place, and the
-    // model read "first roundtrip: HTTP 200" and the old app's view under a
-    // status saying this one did not start.
-    roundtrips: started ? roundtripList() : [],
-    log: currentLog(),
-  };
 }
 
 // The net under boot( ).
@@ -1832,7 +717,7 @@ async function runForAgent() {
 // page nothing is serving from a cache keeps its message and its stack, and
 // says nothing about a cache it does not have.
 boot().catch(async (e) => {
-  if (navigator.serviceWorker?.controller) {
+  if (servedFromCache()) {
     await discardCachedSite();
     setStatus("the playground could not start - the site's cached copy was discarded, please reload", true);
   } else {

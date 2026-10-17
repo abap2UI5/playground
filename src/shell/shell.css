@@ -210,7 +210,36 @@ body {
   background: var(--bg);
   flex: none;
   flex-wrap: wrap;
+  /* Over the panes, for the phone's menu that hangs from it (below). */
+  position: relative;
+  z-index: 4;
 }
+
+/* The phone's menu (setUpToolbarMenu( ) in layout.mjs): what the one row has
+   no room for, moved in - nothing at desk width, where the button is not
+   shown. In it the glyph buttons say their word ("Format", "About"), which a
+   row of icons does not need and a list of choices does. */
+.toolbar-more { display: none; }
+.menu-word { display: none; }
+.toolbar-menu {
+  position: absolute; top: 100%; right: .4rem; margin-top: 2px;
+  display: flex; flex-direction: column; gap: .25rem;
+  min-width: 11rem; padding: .35rem;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / .18);
+}
+.toolbar-menu[hidden] { display: none; }
+.toolbar-menu > * { text-align: left; }
+.toolbar-menu .icon-glyph { display: none; }
+.toolbar-menu .menu-word { display: inline; }
+.toolbar-menu button.icon { font-size: inherit; line-height: inherit; }
+.toolbar-menu .about-button {
+  width: auto; height: auto; border: 1px solid var(--line); border-radius: 5px;
+  font: inherit; color: var(--fg); background: var(--bg);
+}
+/* A Source with nowhere to go says so in the menu, where there is no pointer
+   to hover for its title. */
+.toolbar-menu .source-link[aria-disabled="true"]::after { content: " - none for this code"; }
 
 /* Laid out as the catalogue's brand is (src/catalogue/catalogue.css): the
    mark, then the name, closed by a hairline 16px from it (8 of the gap, 8 of
@@ -503,6 +532,21 @@ select:disabled { opacity: .5; }
   background: var(--bg); color: var(--fg-dim);
 }
 .app-placeholder[hidden] { display: none; }
+
+/* The last app that ran, under code that did not (run-status.mjs): dimmed,
+   and labelled at its top - but neither covered nor blocked, because the old
+   app is still worth clicking through. The label lets every pointer through
+   to the app under it. */
+.app-frame.is-stale iframe { opacity: .55; filter: grayscale(.6); transition: opacity .2s, filter .2s; }
+.app-stale {
+  position: absolute; top: .6rem; left: .6rem; right: .6rem; z-index: 2;
+  width: fit-content; margin: 0 auto; padding: .3rem .8rem;
+  font-size: 12px; text-align: center; color: var(--fg);
+  background: var(--bg-sunken); border: 1px solid var(--danger); border-radius: 999px;
+  box-shadow: 0 2px 10px rgb(0 0 0 / .15);
+  pointer-events: none;
+}
+.app-stale[hidden] { display: none; }
 .app-placeholder p { margin: 0; max-width: 34rem; }
 .app-placeholder-what { color: var(--fg); font-size: 1rem; }
 .app-placeholder-status { font-variant-numeric: tabular-nums; }
@@ -1102,7 +1146,10 @@ button.insight-row {
   background: var(--bg);
 }
 .source-link:hover { border-color: var(--accent); }
-.source-link[aria-disabled="true"] { opacity: .5; pointer-events: none; }
+/* Inactive, but still answering a pointer: with no pointer events its title -
+   which says WHY there is nowhere to go - never showed, and the link only
+   looked broken. No href, so there is nothing to follow. */
+.source-link[aria-disabled="true"] { opacity: .5; cursor: help; }
 
 /* ----------------------------------------------------- the rest of the bar */
 
@@ -1450,14 +1497,23 @@ button.insight-row {
      before the editor or the app got any of it. So what is said twice goes:
      the brand, which the About dialog carries as well as the version line,
      and the version line itself. What is left is packed tighter, and the
-     spacer that holds the right-hand group at the edge goes, so it stops
-     pushing the last control onto a row of its own. Two rows of controls
-     is what fits a 390px phone; tests/shell.spec.js holds the height. */
+     spacer that holds the right-hand group at the edge goes. Even so the
+     controls wrapped to two rows, with the About button alone on the second,
+     so the row now keeps what makes something run and hands the rest to a
+     menu (below); tests/shell.spec.js holds the height. */
   .toolbar { gap: .3rem; padding: .3rem .4rem; }
   .toolbar button, .toolbar .source-link { padding: .3rem .5rem; }
   .toolbar button.icon { padding: .2rem .45rem; }
   .versions,
   .spacer { display: none; }
+  /* ONE row, not two: what the row has no room for is in the menu behind its
+     last button (layout.mjs moves it there; until it has, it is kept off the
+     row here, so the row does not wrap first and snap back after). The
+     status line takes what is left and ends in an ellipsis. */
+  .toolbar { flex-wrap: nowrap; }
+  .toolbar > [data-overflow] { display: none; }
+  .toolbar-more { display: block; margin-left: auto; flex: none; }
+  .toolbar > button { flex: none; }
   /* The marks at the far end go the way the catalogue drops its own below
      620px - the nav went at 1280. The menu stays: the theme switch is in it,
      and GitHub is one of its rows. The search goes with them, and only on
@@ -1518,10 +1574,9 @@ button.insight-row {
 }
 
 /* 360 and 375px - most Android phones, the small iPhones - are a few pixels
-   short of the two rows the 390px phone above gets, and the About button
-   wrapped onto a third row of its own. A little less air between and inside
-   the controls is what it takes; tests/shell.spec.js holds the header at 360
-   as well as at 390. */
+   short of what the 390px phone above gets: a little less air between and
+   inside the controls leaves the status line room to say a word;
+   tests/shell.spec.js holds the header at 360 as well as at 390. */
 @media (max-width: 380px) {
   .toolbar { gap: .2rem; padding: .25rem .3rem; }
   .toolbar button, .toolbar .source-link { padding: .25rem .38rem; }
