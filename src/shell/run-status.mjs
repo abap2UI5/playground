@@ -32,11 +32,14 @@ let appRunning = false;
 let codeErrors = 0;
 // The sentence this module wrote, so it is only ever replaced by itself.
 let saidErrors;
+// The errors sentence waiting for a word of the moment to be read.
+let errorsTimer;
 
 const errorsSentence = (n) => `running - the code on screen has ${n} error${n === 1 ? "" : "s"}`;
 
 /** A run has started: until it says how it went, no app is the resting one. */
 export function runStarting() {
+  clearTimeout(errorsTimer);
   appRunning = false;
   saidErrors = undefined;
 }
@@ -61,13 +64,28 @@ export const abaplintErrors = (problems) =>
  *  which is the more urgent of the two - and takes them away again. */
 export function reflectCodeErrors(problems) {
   codeErrors = abaplintErrors(problems);
+  clearTimeout(errorsTimer);
   if (!appRunning) return;
   const el = statusEl();
   const ours = saidErrors !== undefined && el.textContent === saidErrors;
   if (codeErrors > 0) {
     if (!ours && el.classList.contains("error")) return;
-    saidErrors = errorsSentence(codeErrors);
-    setStatus(saidErrors);
+    // Over the resting sentence or its own at once; over a word of the
+    // moment ("formatted 2 files - Ctrl+Z takes it back") only once that has
+    // been read - the analysis lands a moment after every edit, Format's
+    // included, and wiped the word before anybody saw it.
+    if (ours || el.textContent === resting.text || el.textContent === "") {
+      saidErrors = errorsSentence(codeErrors);
+      setStatus(saidErrors);
+    } else {
+      const word = el.textContent;
+      errorsTimer = setTimeout(() => {
+        if (statusEl().textContent !== word || statusEl().classList.contains("error")) return;
+        if (!appRunning || codeErrors === 0) return;
+        saidErrors = errorsSentence(codeErrors);
+        setStatus(saidErrors);
+      }, BRIEFLY_MS);
+    }
   } else if (ours) {
     saidErrors = undefined;
     setStatus(resting.text, resting.isError);

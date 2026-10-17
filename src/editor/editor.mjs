@@ -71,3 +71,6 @@ export const redo = () => impl.redo();
 export const canUndo = () => impl.canUndo();
 export const canRedo = () => impl.canRedo();
 export const applyFixes = () => impl.applyFixes();
+// Compare with the original: Monaco's diff editor, from Monaco's chunk.
+export const showDiff = (container, name, originalSource) => impl.showDiff(container, name, originalSource);
+export const closeDiff = () => impl.closeDiff();

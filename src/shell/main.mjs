@@ -64,6 +64,10 @@ import { reflectCodeErrors, sayBriefly } from "./run-status.mjs";
 import { keepDraft, loadDraft, loadLinked, loadSample, linkedFiles, markOpened } from "./file-sets.mjs";
 import { AI_STORAGE_KEY, carriedFiles, offerFrameBridge, setUpPilotHooks, setUpStudio } from "./agent-hooks.mjs";
 import { discardCachedSite, keepAssetsForNextTime, servedFromCache } from "./site-cache.mjs";
+import { lessonChanged, startGuides } from "./guides.mjs";
+// Compare/Reset against the original, and the bar's UI5 floor (their own modules).
+import { reflectOriginal, setUpOriginal, unchangedRawUrl } from "./original.mjs";
+import { setUpUi5Floor } from "./ui5-floor.mjs";
 
 const runButton = document.getElementById("run");
 const autorunButton = document.getElementById("autorun");
@@ -97,7 +101,7 @@ let shareChunk = null;
 // The Share dialog, set up when it is first opened (share( ) below).
 const shareReady = () =>
   (shareChunk ??= import("./share-dialog.mjs").then((m) => {
-    m.setUpShareDialog();
+    m.setUpShareDialog({ unchangedRawUrl });
     return m;
   }));
 
@@ -391,6 +395,8 @@ async function boot() {
   // itself - autorun may already have it.
   markBooted();
   showSourceLink();
+  setUpOriginal();
+  setUpUi5Floor();
 
   if (chat) setUpStudio(chat);
   if (pilot) setUpPilotHooks(pilot, { openSamples: () => openExamples() });
@@ -484,6 +490,16 @@ async function boot() {
   // Said once the playground has something to show, not once it has loaded -
   // an embedding page revealing the frame any earlier would reveal a blank one.
   announceReady();
+
+  // Guided first steps (guides.mjs): the hint strip on a first visit and the
+  // lesson bar on the learning path, each a chunk asked for only now - after
+  // the first run, so the boot never waits on them. A lesson opens the way
+  // the samples browser opens it.
+  startGuides(starting, {
+    openSample: examplesHandlers.openSample,
+    openLinked: examplesHandlers.openLinked,
+    openSamples: openExamples,
+  });
 
   // After the first run, not before: run() opens with a clear of the output
   // panel, so a message shown earlier would be wiped by the very next line.
@@ -603,6 +619,8 @@ function remember(files) {
   renderFiles();
   showSourceLink();
   reflectHistory();
+  lessonChanged();
+  reflectOriginal();
   autorunAfterChange();
   // The editor has already re-checked by the time this runs (both hang off the
   // same debounce), and the analysis is kept under a key made of the models'

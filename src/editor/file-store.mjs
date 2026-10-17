@@ -130,6 +130,9 @@ export function setFiles(next) {
 }
 
 export function focusProblem() {}
+// No editor on screen, so no Compare either.
+export function showDiff() {}
+export function closeDiff() {}
 export async function format() {
   return { formatted: 0, files: [] };
 }

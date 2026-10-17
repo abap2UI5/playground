@@ -36,6 +36,13 @@ import "monaco-editor/editor/contrib/contextmenu/browser/contextmenu.js";
 import "monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching.js";
 // Ctrl+M (Ctrl+Shift+M on a Mac): Tab moves the focus instead of indenting.
 import "monaco-editor/editor/contrib/toggleTabFocusMode/browser/toggleTabFocusMode.js";
+// The diff editor's arithmetic, on this thread - see showDiff( ) below. All
+// three are already in this chunk: the standalone editor carries the diff
+// editor, and the editor-worker service carries the diff computer for the
+// fallback it runs when there is no worker.
+import { StandaloneServices } from "monaco-editor/editor/standalone/browser/standaloneServices.js";
+import { IEditorWorkerService } from "monaco-editor/editor/common/services/editorWorker.js";
+import { linesDiffComputers } from "monaco-editor/editor/common/diff/linesDiffComputers.js";
 import { dependentsOf, uriFor } from "./files.mjs";
 import { isSeedFile, isTableFile } from "./tables.mjs";
 import { registerProviders } from "./providers.mjs";
@@ -679,4 +686,85 @@ function writeSource(name, source, { sameStep = false } = {}) {
 
 function closeUndoSteps() {
   for (const model of orderedModels()) model.pushStackElement();
+}
+
+// ---------------------------------------------------------------- compare
+
+// Compare with the original (src/shell/original.mjs): Monaco's own diff
+// editor, read-only, the text as it was opened on the left and the open
+// model on the right - the live one, so the markers are there too.
+//
+// The diff editor asks the editor-worker service for its diff, and this
+// page gives Monaco no worker (MonacoEnvironment above): the request waited
+// for an answer that never came, and the editor showed two panes and no
+// difference. Rather than give the whole service a worker - or let it fall
+// back to its main-thread copy, which would also switch on word-based
+// suggestions in the ABAP editor - the one method the diff editor needs is
+// answered here, with the same diff computer the worker would have run. Two
+// files of a few hundred lines take milliseconds.
+let diffPatched = false;
+function diffOnThisThread() {
+  if (diffPatched) return;
+  diffPatched = true;
+  const service = StandaloneServices.get(IEditorWorkerService);
+  service.computeDiff = async (originalUri, modifiedUri, options, algorithm) => {
+    const original = monaco.editor.getModel(originalUri);
+    const modified = monaco.editor.getModel(modifiedUri);
+    if (!original || !modified) return null;
+    const computer = algorithm === "legacy" ? linesDiffComputers.getLegacy() : linesDiffComputers.getDefault();
+    const result = computer.computeDiff(original.getLinesContent(), modified.getLinesContent(), options);
+    return {
+      identical: result.changes.length === 0 && original.getValue() === modified.getValue(),
+      quitEarly: result.hitTimeout,
+      changes: result.changes,
+      moves: result.moves,
+    };
+  };
+}
+
+let diffEditor;
+// Models the diff made for itself - the original's text, and an empty one
+// for a file that is no longer open - disposed with it. Not file: URIs, so
+// the analysis, the strip and getFiles( ) never see them.
+let diffModels = [];
+
+export function showDiff(container, name, originalSource) {
+  closeDiff();
+  diffOnThisThread();
+  const language = languageOf(name);
+  const scratch = (scheme, text) => {
+    const model = monaco.editor.createModel(text, language, monaco.Uri.parse(`${scheme}:/${name}`));
+    diffModels.push(model);
+    return model;
+  };
+  const original = scratch("original", originalSource ?? "");
+  const modified = modelFor(name) ?? scratch("removed", "");
+  diffEditor = monaco.editor.createDiffEditor(container, {
+    readOnly: true,
+    originalEditable: false,
+    automaticLayout: true,
+    minimap: { enabled: false },
+    scrollBeyondLastLine: false,
+    renderOverviewRuler: false,
+    // Side by side where there is room, one column on a phone.
+    useInlineViewWhenSpaceIsLimited: true,
+    renderSideBySideInlineBreakpoint: 700,
+    fontSize: 13,
+    tabSize: 2,
+  });
+  diffEditor.setModel({ original, modified });
+  // Opened on the first change rather than on line 1: the edit is what was
+  // asked about, and a class is longer than the dialog.
+  const first = diffEditor.onDidUpdateDiff(() => {
+    first.dispose();
+    diffEditor?.revealFirstDiff();
+  });
+  return diffEditor;
+}
+
+export function closeDiff() {
+  diffEditor?.dispose();
+  diffEditor = undefined;
+  for (const model of diffModels) model.dispose();
+  diffModels = [];
 }

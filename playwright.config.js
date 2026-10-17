@@ -44,6 +44,20 @@ export default defineConfig({
     // while the test is acting, and a reload was answered by the network or
     // the worker depending on whether that install had finished.
     serviceWorkers: "block",
+    // Every test starts as somebody who has closed the first steps already
+    // (src/shell/first-steps.mjs): almost every test opens the playground on
+    // a fresh profile, which is a first visit, and a strip over the editor's
+    // last lines is not what any of them is about. Here rather than in
+    // tests/helpers.mjs because most specs open the page with page.goto( )
+    // and not through a helper. tests/onboarding.spec.js empties it again;
+    // a context a test makes for itself (browser.newContext( )) starts empty.
+    storageState: {
+      cookies: [],
+      origins: [{
+        origin: `http://localhost:${PORT}`,
+        localStorage: [{ name: "abap2ui5-playground:first-steps", value: "closed" }],
+      }],
+    },
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
