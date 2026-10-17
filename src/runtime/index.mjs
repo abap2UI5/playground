@@ -10,6 +10,7 @@
 // when the framework moves.
 import "../../build/output/init.mjs";
 import { resetDatabase as reopenEmpty } from "./db-setup.mjs";
+import { snapshot } from "./app-state.mjs";
 
 // A fresh database: the empty image again (db-setup.mjs), and in it the
 // user's own tables with the rows they start with (createUserTables( ) below).
@@ -42,6 +43,7 @@ export async function resetDatabase() {
 // too, on the error - what was written before the crash is the clue to it.
 export async function roundtrip(body) {
   lastDump = undefined;
+  lastState = undefined;
   // A dialog step starts with the current time in SY, as it does on a system.
   // The runtime sets sy-datum and sy-uzeit only when it starts and as a side
   // effect of GET TIME (STAMP) - which the framework calls while saving the
@@ -69,8 +71,38 @@ export async function roundtrip(body) {
   }
   const written = takeConsole();
   if (written) answer.console = written;
+  // The app's attributes as this roundtrip left them, for the State tab
+  // (watchAppState( ) below) - none when the roundtrip never got that far.
+  if (lastState) answer.state = lastState;
   return answer;
 }
+
+// The app as the last roundtrip left it (app-state.mjs), taken by the hook
+// below and handed out with the answer.
+let lastState;
+
+// The handler's last step of a roundtrip saves the app it ran into a draft
+// (main_end_save, which every successful roundtrip reaches - a sticky app's
+// included, where the save itself is skipped). That is the moment the app's
+// attributes are what the reader just caused, and the handler holds the app,
+// so the step is wrapped to read them first-hand: the same move as
+// keepDumpsLocatable( ) below, and the same answer when the framework
+// moves the method - no State tab, never a broken roundtrip.
+function watchAppState() {
+  const handler = globalThis.abap?.Classes?.["Z2UI5_CL_UI5_HANDLER"];
+  const original = handler?.prototype?.main_end_save;
+  if (typeof original !== "function") return;
+  handler.prototype.main_end_save = async function (...args) {
+    const result = await original.apply(this, args);
+    try {
+      lastState = snapshot(this.mo_action?.get?.()?.mo_app?.get?.()?.mo_app?.get?.());
+    } catch {
+      lastState = undefined;
+    }
+    return result;
+  };
+}
+watchAppState();
 
 // What WRITE has put into the console since it was last emptied, and empty
 // it. Trailing blanks per line go: WRITE pads a field to its length, and a
