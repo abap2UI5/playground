@@ -315,8 +315,8 @@ test("the app frame lets itself be framed from another origin", async ({ page })
 
 // ----------------------------------------------- read-only, lines and reset
 //
-// Three additions to the public surface (README "Live demos", AGENTS.md "The
-// public surfaces"): `data-readonly` / `?readonly=1`, `data-lines` /
+// Three additions to the public surface (README "Live demos",
+// docs/design/public-surfaces.md): `data-readonly` / `?readonly=1`, `data-lines` /
 // `?lines=`, and the `edited` message with the loader's `abap2ui5-edited`
 // event and its `data-reset` button.
 

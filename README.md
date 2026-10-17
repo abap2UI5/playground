@@ -43,13 +43,18 @@ pipeline and moves the last step into the browser.
   diagnostics against the actual framework, hover, go to definition, rename,
   references and quick fixes. **Format** ({ } in the bar, and Shift+Alt+F, which does the same) is
   abaplint's pretty printer with its layout fixes in front of it — indentation
-  and keyword case, and also the tab, the trailing space, the double space, the
-  space before the full stop and the two statements sharing a line — over every
+  and keyword case, and also the tab, the trailing space, the double space
+  after a keyword, an `=` or a bracket (padding in front of a token is kept, as
+  alignment), the space before the full stop and the two statements sharing a
+  line — over every
   file that is open, as one edit that Ctrl+Z takes back. It never reflows a
   builder chain and never changes what the code does. Under the editor, a
   resizable panel with the view your chain builds, every problem, an outline of
-  the class, the conversation between the app and the ABAP, the log, and the
-  configuration of each checker — editable, so "why is it not warning here?"
+  the class, the unit tests, the conversation between the app and the ABAP,
+  the app's **State** after each roundtrip (its attributes, with what changed
+  marked — the debugger's variables view for a program that runs a roundtrip
+  at a time), the **Console** (what the app `WRITE`s, per roundtrip), the log,
+  and the configuration of each checker — editable, so "why is it not warning here?"
   has an answer you can try rather than only read.
 - **A second opinion.** The [abap2UI5 linter](https://www.npmjs.com/package/@abap2ui5/linter)
   runs beside abaplint and answers a different question: abaplint says whether
@@ -99,11 +104,23 @@ Where it stops:
 
 - **A few classes, not a package.** The playground holds several ABAP files,
   named as abapGit names them, and **the first one is the app** - the playground
-  starts the class it declares. What it does not have is anything else a package
-  brings: no database tables of your own, no message classes, no CDS.
-- **No database of your own, no RFC, no files.** There is a database, but it
-  holds the framework's own tables. `SELECT` from a business table has nothing to
-  select from, and nothing can reach outside the browser.
+  starts the class it declares. What it does not have is most of what else a
+  package brings: no message classes, no CDS.
+- **Tables of your own, but nobody else's.** A table is two files beside the
+  classes: `<name>.tabl.xml`, the abapGit TABL definition, and optionally
+  `<name>.tabu.json`, the rows it starts with — a JSON array of objects keyed
+  by field name (either case), at most 1000. `SELECT`, `INSERT`, `UPDATE` and
+  `DELETE` work against it. **+ table** in the file strip adds a starter pair,
+  `zproducts` with five rows. The table is created afresh with its rows at
+  every Run, and nothing an app writes outlives the Run. A field typed by a
+  data element needs that data element to exist in the framework corpus; a
+  `MANDT` the rows leave out is the current client; a table may not reuse a
+  name the framework or open-abap already has. `?src=` still opens ABAP only;
+  a gist carries both files, and **Download for abapGit** puts the table in
+  `src/` and its rows in `data/`, abapGit's own data layout.
+- **No business tables, no RFC, no files.** The database holds the
+  framework's own tables and yours. `SELECT` from a business table has nothing
+  to select from, and nothing can reach outside the browser.
 - **Only what the transpiler implements.** It covers a lot, and abap2UI5's whole
   CI depends on it, but it is not an ABAP kernel. Anything it cannot compile is
   reported in the output panel rather than failing silently.
@@ -114,7 +131,8 @@ Where it stops:
   `src/shell/ui5-libraries.mjs`, the one list the UI5 build, the examples
   browser and the sample catalogue all read.
 - **State lives in the tab.** Reloading the page starts over, and so does
-  pressing Run. Your code is kept in local storage; the app's data is not.
+  pressing Run — your tables included. Your code is kept in local storage; the
+  app's data is not.
 
 Both halves follow your system's light or dark setting — the editor through
 Monaco, the app through UI5's Horizon themes. Changing it while an app is
@@ -147,8 +165,15 @@ abaplint error means the ABAP does not compile, so Run stops and says so. An
 abap2UI5 finding means the app runs and is wrong somewhere — and the fastest
 way to understand one is to look at the app it produced, so Run goes ahead.
 
-**Fix them** appears over the list when something is repairable and says how
-many — abaplint's own fixes and the linter's, applied together. It goes in as
+**A missing full stop** is said as one. abaplint reports a statement it cannot
+parse as *"Statement does not exist in the configured ABAP version (or a parser
+error)"*, and the commonest reason is a full stop that is not there — two lines
+read as one statement. Where the shape says so, the Problems row asks whether a
+full stop is missing and sits on the line that wants it.
+
+**Fix them** appears over the list when something is repairable and says what
+— how many errors, warnings and hints it can repair, and which errors it
+leaves — abaplint's own fixes and the linter's, applied together. It goes in as
 one edit per file, so Ctrl+Z takes the whole rewrite back rather than unpicking
 it fix by fix. Nothing that has no correct answer is guessed at: an icon that
 does not exist stays reported rather than invented.
@@ -183,7 +208,9 @@ with abapGit.
   [Anthropic API key](https://console.anthropic.com/settings/keys). It is held
   in the page's memory for the visit, never stored — the playground runs ABAP
   from any link, and stored it would be readable by that code — and sent to
-  `api.anthropic.com` and nowhere else; there is still nothing behind this page. Usage is billed to that key;
+  `api.anthropic.com` and nowhere else — or, with an OpenAI-compatible server
+  picked in the key form (OpenAI, Ollama, LM Studio), to that server, which
+  the form names; there is still nothing behind this page. Usage is billed to that key;
   the chat's header counts the tokens. A key that is not tied to a workspace
   (the API answers *"This API key is not scoped to a workspace"*) also needs
   the workspace ID (`wrkspc_…`, in the Console under Settings → Workspaces),
@@ -296,7 +323,9 @@ time. **The filters live in the URL**, so a search is a link you can send:
 
 **A row is a link to that sample's page**, and that is all it is: what a
 sample builds, what it needs, the ABAP itself, and a box that runs the sample
-in that page are all on the page it opens. Most samples run in your
+in that page are all on the page it opens — **▶ Run it here** under its title
+starts it. A title's `(A)` and `(C)` markers are shown as *frontend action* and
+*custom control* badges, which a search finds. Most samples run in your
 browser with nothing installed. What cannot — a stack sample, which needs a
 real system; a port whose library only SAPUI5 has — is listed all the same,
 says what it needs, and opens for reading instead: a sample you cannot find is
@@ -324,17 +353,22 @@ This replaced three separate GitHub Pages sites, one per sample repository.
 
 **Samples** in the bar is the same list without leaving the editor, and it
 takes the screen while it is open: a full-size window over the playground, the
-filters down its side, the rows in as many columns as fit. Drafts you saved,
-the samples the page carries, and everything the catalogue holds — searched by
-several words in any order, over titles, summaries, class names and the controls
-a sample builds, and narrowed by the same facets the catalogue page has: the
-control it uses, the library, the release your system runs, plus repository,
-"only what runs here", "OpenUI5 only" and "newer than 1.71". Every row says
+filters down its side, the rows in as many columns as fit. **Your drafts**
+is one folded line at the top, with how many there are (it stays open or
+closed as you left it, and a search that matches a draft opens it); under it
+everything the catalogue holds — "N of M samples", the same count as the
+catalogue page — searched by several words in any order, over titles,
+summaries, class names, badges and the controls a sample builds, and narrowed
+by the same facets the catalogue page has: the control it uses, the library,
+the release your system runs, plus the repositories, "Only samples that run in
+this browser", "Leave out samples that need SAPUI5" and "Include samples that
+need a UI5 newer than 1.71". Every row says
 what it is, what group it belongs to, what release it needs and — where it
 cannot run here — what it needs instead, and links to its ABAP on GitHub and to
-its documentation page. The ones the page carries too, which are entries of
-[abap2UI5/samples](https://github.com/abap2UI5/samples) like every other row and
-link to the same files. A chosen entry opens through the same
+its documentation page. A sample the page carries is listed once, as its
+row of [abap2UI5/samples](https://github.com/abap2UI5/samples), and opens the
+copy the page carries; "In the page" lists only a carried sample the index
+does not have. A chosen entry opens through the same
 path a `?src=` link takes — the raw URL of its class, fetched, checked and run
 — so it arrives with the **Source** link back to where it lives.
 
@@ -373,7 +407,10 @@ laid out as a repository rather than as a bag of files: the sources and their
 metadata under `src/`, the `.abapgit.xml` that says so (the shape
 [app-template](https://github.com/abap2UI5/app-template) carries), and a README
 naming the app, how to start it and the link this code came from. Import it
-offline with abapGit, or push it as it stands.
+offline with abapGit, or push it as it stands. **Gist** writes the open files
+to a secret GitHub gist with your token (held for the visit, never stored) and
+hands back a `?gist=<id>` link; once code from a link has run in the page, it
+asks you to tick that you know before it takes a token.
 
 **Light or dark.** The page follows the system until the switch in the menu
 behind the bar's last button says otherwise — the same menu the
@@ -435,6 +472,12 @@ the frame, and a bar over a demo is this site's furniture in somebody else's
 page. It comes back if something goes wrong, because the status line it carries
 is the only channel either view has left.
 
+Two more parameters work only in an embedded playground: **`?readonly=1`**
+takes the typing away — and Format, Undo, Redo, Fix them and the View tab's
+Edit with it — while Run still runs, and **`?lines=12-18,25`** marks those
+lines of the app's file and scrolls to the first (`L42-L58` reads the same, the
+shape a sample page's line links have).
+
 ## Live demos in a documentation page
 
 `embed/abap2ui5-embed.js` turns an empty element into a running example:
@@ -447,7 +490,11 @@ is the only channel either view has left.
 
 `data-src` takes one URL or several (the first is the app), `data-code` carries
 ABAP that lives only in that page, `data-view="app"` hides the editor,
-`data-height` sets the starting height and `data-label` the button text. For a
+`data-height` sets the starting height and `data-label` the button text.
+`data-readonly` shows an example to read and run but not to change,
+`data-lines="12-18,25"` marks and scrolls to those lines, and `data-reset`
+shows a **Reset example** button under the demo once the reader has edited it,
+which puts the page's code back (as an edit Ctrl+Z takes back) and runs it. For a
 documentation framework that swaps pages without reloading, call
 `window.abap2ui5Embed.setUp()` after each navigation.
 
@@ -462,6 +509,8 @@ itself:
 ```js
 const href = await window.abap2ui5Embed.url({ code, view: "app" });
 ```
+
+`url()` takes `readonly` and `lines` as well.
 
 That matters more than it looks: a fragment the playground cannot read is
 replaced by the sample the page opens on, with the status line and the Log
@@ -486,9 +535,15 @@ app that is in the DOM, correct and invisible, under a status bar saying
 "running". What is unprotected is a demo compiled from code the embedding page
 supplied, with no session and nobody's credentials.
 
-An embedded playground posts three kinds of message to the page that framed it —
+An embedded playground posts four kinds of message to the page that framed it —
 `ready` once it has something to show, `status` for each line its status bar
-shows, and `height` for what an app-only demo wants to be. `embed/` on the
+shows, `height` for what an app-only demo wants to be, and `edited`
+(`{ edited: true|false }`, only when it changes) — and the loader turns the
+last into a bubbling `abap2ui5-edited` event on the demo's element
+(`event.detail.edited`), so a page can tell whether its example was changed.
+One message goes the other way: `{ source: "abap2ui5-embed", type: "reset" }`,
+accepted only from the window that framed the playground, which is what
+`data-reset`'s button sends. `embed/` on the
 published site is a worked example of all of it, and is what the tests drive.
 
 ## Development
@@ -498,22 +553,24 @@ npm ci
 npm run build     # pins deps, builds the framework, builds UI5, assembles dist/
 npm run serve     # serves dist/ on http://localhost:8080
 npm test          # Playwright, against a freshly built dist/
+npm run check     # build -> size budget -> tests, in the order that cannot go wrong
+npm run lint      # ESLint; with typecheck and test:unit: no build, no browser
+npm run typecheck # tsc over the modules that start with // @ts-check
+npm run test:unit # node:test over the pure modules in tests/node/
 ```
+
+`PORT=8091 npm test` moves the test server and the tests together, so two
+checkouts can test at once.
 
 The first build takes a few minutes: the downport is three of them and the UI5
 build one, and the two run at the same time because neither reads what the
 other writes. Both are cached by a hash of their inputs, so the second build is
 seconds.
 
-| | |
-|---|---|
-| `tools/build.mjs` | what `npm run build` runs: the five below, the middle two together |
-| `tools/fetch-deps.mjs` | pins abap2UI5, its frontend, open-abap-core and abap2UI5/samples by commit under `deps/` |
-| `tools/build-framework.mjs` | downport → transpile → `dist/runtime/framework.mjs`, the worker the page runs the framework in |
-| `tools/build-ui5.mjs` | the abap2UI5 frontend built against OpenUI5 → `dist/app/` |
-| `tools/build-catalogue.mjs` | the six committed catalogues of the three sample repositories, joined into `dist/samples/apps.json` |
-| `tools/build-site.mjs` | the page bundle and its chunks, the catalogue page, the ABAP corpus the editor uses, the samples the page carries (resolved out of the pinned abap2UI5/samples), and the service worker |
-| `tools/check-size.mjs` | the budget for what a visitor downloads |
+The five steps — fetch the pins, build the framework, build UI5, build the
+sample catalogue, assemble the site — and what each one caches are described
+in [docs/design/build-pipeline.md](docs/design/build-pipeline.md);
+`tools/check-size.mjs` is the budget for what a visitor downloads.
 
 `PG_DEBUG=1` builds the page and framework bundles unminified and with source
 maps; without it neither ships one.
@@ -524,7 +581,8 @@ Monaco and abaplint (the registry in a worker of its own),
 `/samples/` (a second document with a bundle of its own), `src/abap` is the one
 class of ABAP the playground adds to the framework - the bridge into the request
 handler - and `src/examples` is ABAP served as static files so `?src=` has
-something to point at. There are no samples here: the ones the page carries are
+something to point at; [AGENTS.md](AGENTS.md) lists every module. There are no
+samples here: the ones the page carries are
 named by class in `src/editor/sample-list.mjs` and come out of the pinned
 [abap2UI5/samples](https://github.com/abap2UI5/samples) at build time, so the
 playground holds no copy of a sample that can drift from the one upstream
@@ -558,11 +616,16 @@ branch and pull request.
 
 ## Where the work is written down
 
-[PLAYGROUND_PLAN.md](PLAYGROUND_PLAN.md) is the plan this was built from, phase
-by phase, with what each phase turned out to cost and the traps found on the way
-— the transpiler flag without which nothing links, the bundler option without
-which ABAP's own type system stops working, the caches that have to be dropped
-when a class is redefined. Read it before changing the build.
+[AGENTS.md](AGENTS.md) is the short version for anyone changing the code: the
+layout, the commands, the CI gates, the rules and the deliberate limits. Each
+area's reasoning — with its measurements and what was tried and refused — is
+in [docs/design/](docs/design/), and
+[docs/design/build-traps.md](docs/design/build-traps.md) holds the traps found
+while building it — the transpiler flag without which nothing links, the
+bundler option without which ABAP's own type system stops working, the caches
+that have to be dropped when a class is redefined. Read it before changing the
+build. The plan the playground was built from, phase by phase, is kept in
+[docs/history/PLAYGROUND_PLAN.md](docs/history/PLAYGROUND_PLAN.md).
 
 ## License
 

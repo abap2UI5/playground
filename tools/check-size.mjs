@@ -98,7 +98,8 @@ const TRANSFERRED = [
 // never downloaded whole - so this guards the Pages artifact, not the visitor.
 //
 // It moved from 200 MB when every line of every printed class got an id and a
-// numbered link (#L42 and #L42-L58 on a sample's page, AGENTS.md says why):
+// numbered link (#L42 and #L42-L58 on a sample's page,
+// docs/design/sample-catalogue.md says why):
 // 191,000 lines of markup is 16 MB, and the sample pages went from 39 MB to
 // 55. That is the accepted cost, written here as this file asks for it to be -
 // deliberately, in the commit that spends it - and what is left above it is
