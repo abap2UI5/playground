@@ -1942,7 +1942,7 @@ button.chat-suggestion {
   border-radius: var(--radius-surface);
 }
 /* The model's answer is rendered from its markdown (renderMarkdown( ) in
-   chat.mjs - built as nodes, never as HTML), so it is laid out as blocks
+   markdown.mjs - built as nodes, never as HTML), so it is laid out as blocks
    rather than kept as typed. */
 .chat-assistant { align-self: flex-start; white-space: normal; }
 .chat-assistant > :first-child { margin-top: 0; }
