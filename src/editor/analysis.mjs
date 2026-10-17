@@ -27,6 +27,7 @@
 import { libraryOf, isCarried } from "../shell/ui5-libs.mjs";
 import { ruleUrl } from "./abap2ui5-lint.mjs";
 import { analyse as analyseInWorker } from "./registry.mjs";
+import { explainDiagnostic } from "./parser-hint.mjs";
 
 // What the host provides: the open files (`files( )`), what they are right
 // now as a string (`key( )`), the underlines for one file under one owner
@@ -126,13 +127,23 @@ async function analyseKey(key) {
     // them a second time to build the Problems list from. The marker shape is
     // theirs, code and all - what is gone is the duplicate parse and the
     // duplicate analysis.
-    const found = told.diagnostics[file.name] ?? [];
+    //
+    // Each message as the page says it (parser-hint.mjs): a statement that
+    // does not exist asks whether a full stop is missing, and its Problems
+    // row goes to the line that wants one. The underline stays where
+    // abaplint put it, on the statement it could not read.
+    let lines;
+    const found = (told.diagnostics[file.name] ?? []).map((d) => {
+      lines ??= file.source.split(/\r?\n/);
+      const said = explainDiagnostic({ ...d, message: typeof d.message === "string" ? d.message : d.message.value }, lines);
+      return { ...d, message: said.message, at: said.start };
+    });
     host.markers(
       file.name,
       ABAPLINT_OWNER,
       found.map((d) => ({
         severity: LSP_SEVERITY[d.severity] ?? "error",
-        message: typeof d.message === "string" ? d.message : d.message.value,
+        message: d.message,
         code: { value: typeof d.code === "string" ? d.code : "", href: d.codeDescription?.href || "" },
         startLineNumber: d.range.start.line + 1,
         startColumn: d.range.start.character + 1,
@@ -140,8 +151,8 @@ async function analyseKey(key) {
         endColumn: d.range.end.character + 1,
       })),
     );
-    for (const issue of found) {
-      problems.push({ file: file.name, source: "abaplint", ...issue });
+    for (const { at, ...issue } of found) {
+      problems.push({ file: file.name, source: "abaplint", ...issue, ...(at ? { range: { start: at, end: at } } : {}) });
     }
 
     // The linter's findings, computed once in the worker and used three times
@@ -177,6 +188,8 @@ async function analyseKey(key) {
         message: f.message,
         rule: f.type,
         url: ruleUrl(f),
+        // the linter's own test (isFixable) is whether a finding carries fixes
+        fixable: (f.fixes?.length ?? 0) > 0,
         range: { start: { line: f.line - 1, character: f.column - 1 } },
       });
     }

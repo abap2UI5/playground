@@ -102,3 +102,29 @@ test("linked code offers the way back to GitHub, and only linked code does", asy
   // which the unit-level check below covers.
   await expect(link).toHaveAttribute("href", /zcl_linked_example\.clas\.abap$/);
 });
+
+// "1 of these can be fixed automatically" over a list of errors read as one
+// of the errors - and the one was a warning, with every error still there
+// after the press. The bar says what it would repair, and what it would not.
+test("the fix bar says what it can fix, and which errors it leaves", async ({ page }) => {
+  await open(page);
+
+  await page.locator('[data-insight="abaplint"]').click();
+  const box = page.locator(".config-text");
+  const config = JSON.parse(await box.inputValue());
+  config.rules.sequential_blank = { severity: "Warning", lines: 4 };
+  await box.fill(JSON.stringify(config));
+  await page.locator(".config-row .primary").click();
+  await expect(page.locator(".config-said")).toContainText("applied", { timeout: 30000 });
+
+  const source = (await getSource(page))
+    .replace(/ENDCLASS\.\n+CLASS/, "ENDCLASS.\n\n\n\n\n\n\nCLASS")
+    .replace("PUBLIC SECTION.", "PUBLIC SECTION.\n    DATA broken TYPE zcl_does_not_exist.");
+  await setSource(page, source);
+
+  await page.locator('[data-insight="problems"]').click();
+  const bar = page.locator(".insight-fixbar");
+  await expect(bar).toBeVisible({ timeout: 30000 });
+  await expect(page.locator(".insight-row.is-error").first()).toBeVisible();
+  await expect(bar.locator("span")).toHaveText(/^1 warning can be fixed automatically - the \d+ errors? cannot$/);
+});
