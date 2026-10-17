@@ -23,8 +23,9 @@
 export const GIST_API = "https://api.github.com/gists";
 
 // The files a gist may bring into the editor - the same three kinds a
-// ?src= link may name (deep-link.mjs).
-const ABAP_FILE = /\.(clas|intf)\.abap$|\.clas\.testclasses\.abap$/i;
+// ?src= link may name (deep-link.mjs), and a table's two files beside them
+// (src/editor/tables.mjs): a gist is the whole file set, rows and all.
+const ABAP_FILE = /\.(clas|intf)\.abap$|\.clas\.testclasses\.abap$|\.tabl\.xml$|\.tabu\.json$/i;
 
 /** The gist id in whatever the reader pasted: a bare id, a gist.github.com
  *  URL (with or without the user), an api.github.com/gists URL, or a

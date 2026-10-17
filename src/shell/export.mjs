@@ -22,6 +22,7 @@
 // notes in the framework repository, where each of those has cost somebody
 // an afternoon.
 import { parseName, sidecarFor } from "../editor/files.mjs";
+import { dataConfig } from "../editor/tables.mjs";
 import { zipStored } from "./zip.mjs";
 
 // The repository settings, in the shape abap2UI5/app-template carries them:
@@ -108,13 +109,19 @@ function readme(files, url) {
   for (const file of files) {
     const parsed = parseName(file.name);
     if (!parsed) continue;
+    if (parsed.include === "tabu") {
+      lines.push(`- \`data/${file.name}\` - the rows of ${parsed.object}, as abapGit keeps table contents`);
+      continue;
+    }
     const what = parsed.include
       ? "unit tests"
-      : parsed.kind === "intf"
-        ? "interface"
-        : file === files[0]
-          ? "the app"
-          : "class";
+      : parsed.kind === "tabl"
+        ? "database table"
+        : parsed.kind === "intf"
+          ? "interface"
+          : file === files[0]
+            ? "the app"
+            : "class";
     lines.push(`- \`src/${file.name}\` - ${parsed.object}, ${what}`);
   }
   lines.push(
@@ -122,6 +129,16 @@ function readme(files, url) {
     "Each source has the `.xml` sidecar beside it that abapGit reads, and",
     "`.abapgit.xml` at the root says the sources live under `src/`.",
     "",
+  );
+  if (files.some((f) => parseName(f.name)?.include === "tabu")) {
+    lines.push(
+      "A table's rows are under `data/`, with the `.conf.json` that names the",
+      "table - abapGit's data support (Advanced → Data Config) reads both and",
+      "fills the table when the repository is pulled.",
+      "",
+    );
+  }
+  lines.push(
     "## Getting it running",
     "",
     "1. Install the [abap2UI5 framework](https://github.com/abap2UI5/abap2UI5)",
@@ -177,7 +194,23 @@ export function abapGitEntries(files, url) {
     // Every file with a name this understands; a test include has no sidecar
     // of its own (its class carries the one XML) and travelled with the
     // README's word for it and nothing else until this said so.
-    if (!parseName(file.name)) continue;
+    const parsed = parseName(file.name);
+    if (!parsed) continue;
+    // A table's rows go where abapGit keeps table contents: under /data/,
+    // beside the configuration that names the table (src/editor/tables.mjs).
+    if (parsed.include === "tabu") {
+      const base = file.name.replace(/\.tabu\.json$/, "");
+      entries.push({ name: `data/${file.name}`, data: normalisedSource(file.source) });
+      entries.push({ name: `data/${base}.conf.json`, data: dataConfig(base) });
+      continue;
+    }
+    // A table's definition is an XML file abapGit wrote, so it starts with
+    // the byte order mark every XML file abapGit writes starts with - see the
+    // sidecars below.
+    if (parsed.kind === "tabl") {
+      entries.push({ name: `src/${file.name}`, data: `\uFEFF${normalisedSource(file.source.replace(/^\uFEFF/, ""))}` });
+      continue;
+    }
     entries.push({ name: `src/${file.name}`, data: normalisedSource(file.source) });
     const sidecar = sidecarFor(file.name);
     if (!sidecar) continue;

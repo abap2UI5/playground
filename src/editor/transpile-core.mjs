@@ -18,6 +18,7 @@
 // compile from marking the whole corpus dirty and forcing a reparse.
 import { Transpiler, UnknownTypesEnum } from "@abaplint/transpiler";
 import { entryClass, getRegistry, hasEntryClass, updateFiles, userObjects } from "./registry-core.mjs";
+import { isSeedFile, isTableFile, parseSeed, readTable } from "./tables.mjs";
 
 // Runs in the registry worker, beside the registry it compiles against; the
 // page reaches it through compile( ) in src/editor/registry.mjs. The
@@ -57,6 +58,12 @@ export async function compile(files) {
   // or every check after the first compile would be answered under the
   // transpiler's rules. Setting it through the proxy is what keeps the restore
   // from dirtying the entire corpus.
+  // A table's files are checked by the analysis too, and an error there stops
+  // Run before it gets here - but the AI Pilot defines a set without that
+  // gate, and a definition abaplint was never handed would otherwise be a
+  // SELECT from a table nobody created.
+  const seeds = tableSeeds(files);
+
   const view = onlyTheUsersObjects(reg);
   const editorConfig = reg.getConfig();
 
@@ -74,6 +81,10 @@ export async function compile(files) {
       // compiles.
       unknownTypes: UnknownTypesEnum.runtimeError,
       keywords: ["return", "in", "class", "for", "delete", "var", "with"],
+      // The CREATE TABLE of the user's own tables is wanted (below); the
+      // rows the transpiler would insert into the system tables for each
+      // object - TADIR, the source in REPOSRC, the SEOSUBCO* - are not.
+      populateTables: { reposrc: false, seosubco: false, seosubcodf: false, seosubcotx: false, tadir: false, wwwparams: false },
     }).run(view);
   } catch (e) {
     const error = /** @type {Error & { problems?: unknown }} */ (new Error(transpilerMessage(e)));
@@ -86,6 +97,7 @@ export async function compile(files) {
     reg.parse();
   }
 
+  const creates = createStatements(output.databaseSetup?.schemas?.sqlite ?? []);
   const chunks = ordered(output.objects.filter((o) => o.chunk)).map((o) => {
     const before = prologue(o);
     return {
@@ -95,7 +107,7 @@ export async function compile(files) {
       // says zcl_x.clas.mjs:LINE rather than <anonymous>:LINE, and LINE can
       // be looked up in `lines` - see locate( ) in src/runtime/index.mjs.
       name: baseName(o.filename),
-      js: before + o.chunk.getCode(),
+      js: before + o.chunk.getCode() + tableSetup(o, creates, seeds),
       lines: lineTable(o.chunk, before),
     };
   });
@@ -193,10 +205,64 @@ function ordered(objects) {
   return result;
 }
 
-// Interfaces, then classes, then test includes - a test include reaches for
-// its class through abap.Classes at call time, but it reads better defined
-// after the thing it tests, and its prologue never binds it (same object).
-const rank = (o) => (o.object.type === "INTF" ? 0 : String(o.filename).includes(".testclasses.") ? 2 : 1);
+// Tables, then interfaces, then classes, then test includes - a table first
+// because a class may be typed with it while it is being defined (a static
+// attribute of TYPE ztab); a test include reaches for its class through
+// abap.Classes at call time, but it reads better defined after the thing it
+// tests, and its prologue never binds it (same object).
+const rank = (o) =>
+  o.object.type === "TABL" ? -1 : o.object.type === "INTF" ? 0 : String(o.filename).includes(".testclasses.") ? 2 : 1;
+
+// The rows of every table in the set, by table name, read out of its seed
+// file (tables.mjs) - or the error a Run reports, with the lines it is about,
+// when a definition or a seed file is not usable.
+function tableSeeds(files) {
+  const rows = new Map();
+  const problems = [];
+  for (const file of files) {
+    if (isTableFile(file.name)) {
+      for (const p of readTable(file.source).problems) problems.push({ file: file.name, line: p.line, message: p.message });
+    } else if (isSeedFile(file.name)) {
+      const seed = parseSeed(file.source);
+      for (const p of seed.problems) problems.push({ file: file.name, line: p.line, message: p.message });
+      rows.set(file.name.replace(/\.tabu\.json$/, "").toUpperCase(), seed.rows);
+    }
+  }
+  if (problems.length > 0) {
+    const error = /** @type {Error & { problems?: unknown }} */ (
+      new Error(`The tables cannot be set up:\n${problems.map((p) => `${p.message} (${p.file} line ${p.line})`).join("\n")}`)
+    );
+    error.problems = problems;
+    throw error;
+  }
+  return rows;
+}
+
+// The transpiler's CREATE TABLE for SQLite, by table name: it writes one per
+// transparent table of the objects it was handed, which is the user's tables
+// and nothing else (onlyTheUsersObjects).
+function createStatements(statements) {
+  const out = new Map();
+  for (const sql of statements) {
+    const name = /^CREATE TABLE '([^']+)'/.exec(sql)?.[1];
+    if (name) out.set(name.toUpperCase(), sql);
+  }
+  return out;
+}
+
+// What a table's chunk carries beside its DDIC type: the CREATE TABLE and the
+// rows to insert, on the DDIC entry the chunk has just made - which is how
+// the runtime knows the table by name, and where src/runtime/index.mjs finds
+// both at every Run. JSON is JavaScript, so the rows are written as they are.
+// A table that is not transparent (a structure) has no CREATE and gets none.
+function tableSetup(o, creates, seeds) {
+  if (o.object.type !== "TABL") return "";
+  const name = o.object.name.toUpperCase();
+  const create = creates.get(name);
+  if (create === undefined) return "";
+  const setup = { create, rows: seeds.get(name) ?? [] };
+  return `\nabap.DDIC[${JSON.stringify(name)}].playground = ${JSON.stringify(setup)};\n`;
+}
 
 const baseName = (uri) => String(uri).replace(/^.*\//, "");
 

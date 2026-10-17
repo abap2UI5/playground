@@ -16,6 +16,7 @@
 // is hidden on the pages this serves, and a page that had them would have
 // created the real editor instead.
 import * as analysis from "./analysis.mjs";
+import { dependentsOf } from "./files.mjs";
 import { refresh } from "./analysis.mjs";
 
 let files = [];
@@ -105,8 +106,8 @@ export function closeFile(name) {
   const i = indexOf(name);
   // The first file is the app; see monaco-editor.mjs for the rest of the rule.
   if (i <= 0) return;
-  const tests = name.endsWith(".clas.abap") ? name.replace(/\.clas\.abap$/, ".clas.testclasses.abap") : undefined;
-  const gone = (n) => n === name || n === tests;
+  const dependents = dependentsOf(name);
+  const gone = (n) => n === name || dependents.includes(n);
   const remaining = files.filter((f) => !gone(f.name));
   if (remaining.length === 0) return;
   files = remaining;

@@ -18,6 +18,11 @@
 // abaplint has no API for - see abapNameCompletion below.
 import * as monaco from "monaco-editor/editor/editor.api.js";
 import "monaco-editor/languages/definitions/abap/register.js";
+// A table's two files (tables.mjs): the definition is XML, the rows JSON -
+// coloured as JavaScript, which JSON is a part of; Monaco's own JSON is a
+// language service with a worker of its own, for a file of a few rows.
+import "monaco-editor/languages/definitions/xml/register.js";
+import "monaco-editor/languages/definitions/javascript/register.js";
 import "monaco-editor/editor/contrib/hover/browser/hoverContribution.js";
 import "monaco-editor/editor/contrib/find/browser/findController.js";
 import "monaco-editor/editor/contrib/format/browser/formatActions.js";
@@ -31,7 +36,8 @@ import "monaco-editor/editor/contrib/contextmenu/browser/contextmenu.js";
 import "monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching.js";
 // Ctrl+M (Ctrl+Shift+M on a Mac): Tab moves the focus instead of indenting.
 import "monaco-editor/editor/contrib/toggleTabFocusMode/browser/toggleTabFocusMode.js";
-import { uriFor } from "./files.mjs";
+import { dependentsOf, uriFor } from "./files.mjs";
+import { isSeedFile, isTableFile } from "./tables.mjs";
 import { registerProviders } from "./providers.mjs";
 import { applyAbaplintFixes, applyLinterFixes, formatFiles, knownObjectNames } from "./registry.mjs";
 import * as analysis from "./analysis.mjs";
@@ -299,9 +305,11 @@ export function setSourceOf(name, source) {
   refresh();
 }
 
+const languageOf = (name) => (isTableFile(name) ? "xml" : isSeedFile(name) ? "javascript" : "abap");
+
 function createModel(file) {
   modelGeneration += 1;
-  const model = monaco.editor.createModel(file.source, "abap", monaco.Uri.parse(uriFor(file.name)));
+  const model = monaco.editor.createModel(file.source, languageOf(file.name), monaco.Uri.parse(uriFor(file.name)));
   let pending;
   model.onDidChangeContent(() => {
     // A keystroke is cheap to react to (a few milliseconds), but reacting to
@@ -411,14 +419,15 @@ export function closeFile(name) {
   if (files[0]?.name === name) return;
   // A class's test include goes with it: left open alone it was a file set
   // nothing could hold - the reload, the share link and the named draft all
-  // refused it, and the stored draft was lost behind the refusal.
-  const tests = name.endsWith(".clas.abap") ? name.replace(/\.clas\.abap$/, ".clas.testclasses.abap") : undefined;
-  const gone = (n) => n === name || n === tests;
+  // refused it, and the stored draft was lost behind the refusal. A table's
+  // rows go with the table the same way.
+  const dependents = dependentsOf(name);
+  const gone = (n) => n === name || dependents.includes(n);
   const remaining = files.filter((f) => !gone(f.name));
   if (remaining.length === 0) return;
   if (gone(currentFile())) openFile(remaining[0].name);
   fileOrder = fileOrder.filter((n) => !gone(n));
-  if (tests) modelFor(tests)?.dispose();
+  for (const dependent of dependents) modelFor(dependent)?.dispose();
   model.dispose();
   modelGeneration += 1;
   if (connected) refresh();
