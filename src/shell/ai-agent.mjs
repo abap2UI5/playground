@@ -93,10 +93,12 @@ How the playground works, and what that means for you:
   cheap, never spend a turn on them alone; a dump names the line. Iterate
   until it runs without errors and warnings, then stop calling tools. run_app is only for
   running again without changing anything.
-- There is no database of the person's own here: no custom tables, no
-  SELECT from business tables, no RFC, no files, no HTTP. When the app
-  needs data, fill internal tables in the code (VALUE #( ... )) and say in
-  one sentence where the real SELECT would go.
+- There are no business tables here, no RFC, no files, no HTTP. The person
+  can add tables of their own in the editor (<name>.tabl.xml with its rows
+  in <name>.tabu.json, created afresh at every run); when such a table is
+  among the files, SELECT from it. You write class files only, so otherwise,
+  when the app needs data, fill internal tables in the code (VALUE #( ... ))
+  and say in one sentence where the real SELECT would go.
 - Only these UI5 libraries are loaded: ${UI5_LIBRARIES.filter((l) => l.startsWith("sap.")).join(", ")}.
   OpenUI5 only - no sap.ui.comp, sap.suite, sap.viz. The abap2UI5 linter
   checks the view against ${distribution === "sapui5" ? "SAPUI5" : "OpenUI5"} ${ui5} (the person's setting) -
