@@ -334,11 +334,12 @@ test("picking a sample replaces the draft, and says how to get it back", async (
   // Kept in the Drafts list as well, which is where the sentence points: it
   // used to say the draft "comes back if you reload", which read as advice to
   // reload the page.
-  await expect(page.locator("#status")).toHaveText('running - your draft is kept in Samples, as "Before the last pick"', {
+  await expect(page.locator("#status")).toHaveText('running - your draft is kept in Samples, under Your drafts, as "Before the last pick"', {
     timeout: 60000,
   });
   await page.locator("#examples").click();
-  await expect(page.locator('.example-row[data-draft="Before the last pick"]')).toBeVisible();
+  // Listed there - in the drafts group, which the dialog may show folded.
+  await expect(page.locator('.example-row[data-draft="Before the last pick"]')).toHaveCount(1);
   await page.keyboard.press("Escape");
   await page.reload();
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });

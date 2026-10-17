@@ -111,7 +111,7 @@ function sayDraftIsKept(kept) {
     kept.how === "undo"
       ? "running - your draft is one Undo away"
       : kept.how === "drafts"
-        ? `running - your draft is kept in Samples, as "${kept.name}"`
+        ? `running - your draft is kept in Samples, under Your drafts, as "${kept.name}"`
         : "running - your draft comes back if you reload",
   );
 }
