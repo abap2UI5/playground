@@ -1238,6 +1238,22 @@ button.insight-row {
    the marks in one line - it used to be four rules and a wrapper. */
 .is-embedded .bar { display: none; }
 
+/* A read-only embedded example (?readonly=1, `data-readonly` on the loader's
+   element - src/shell/embed.mjs): everything that rewrites the source goes
+   with the typing, so no button is left on screen that would do nothing. Run
+   stays. */
+.is-read-only #format,
+.is-read-only #undo,
+.is-read-only #redo,
+.is-read-only #view-edit,
+.is-read-only .insight-fixbar { display: none; }
+
+/* The lines an embedding page points at (?lines=12-18,25 - markLines( ) in
+   src/editor/monaco-editor.mjs): a tint behind the text and a bar in the
+   gutter, the accent at a strength that reads in both themes. */
+.monaco-editor .line-marked { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.monaco-editor .line-marked-gutter { background: var(--accent); width: 3px !important; margin-left: 3px; }
+
 /* ------------------------------------------------------------------ view */
 
 .view-preview { display: flex; flex-direction: column; min-height: 100%; }

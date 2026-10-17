@@ -53,7 +53,7 @@ import { restoreCheckerSettings } from "./checker-settings.mjs";
 import { setUpSplitter, setUpTabs } from "./layout.mjs";
 import { keepSiteLinksCurrent, rememberHere } from "./site-memory.mjs";
 import { setUpSearch } from "./search-box.mjs";
-import { announceAppHeight, announceReady, startEmbedMessages } from "./embed.mjs";
+import { announceAppHeight, announceEdited, announceReady, setUpEmbeddedEditor, startEmbedMessages } from "./embed.mjs";
 import { appUrl, copyToClipboard, filesFromLocation, shareUrl } from "./share.mjs";
 
 import { clearRoundtrips, recordRoundtrip, roundtripList } from "./roundtrips.mjs";
@@ -428,6 +428,9 @@ async function boot() {
   // What a link or the default sample put in is not the reader's work until
   // they change it (see `opened`); a restored draft is.
   if (from !== "your last session") opened = JSON.stringify(getFiles());
+  // Embed hook (src/shell/embed.mjs): ?readonly=1, ?lines= and the code the
+  // embedding page gave, kept for its "edited" message and its Reset.
+  if (embedded) setUpEmbeddedEditor(params, { run: () => run() });
   // A theme change - the switch in the bar, or the sun going down on a page
   // that follows the system - must not restart the app: somebody has a
   // half-filled form open. UI5 can swap its theme at runtime, so the running
@@ -926,6 +929,8 @@ export function showSourceLink() {
 }
 
 function remember(files) {
+  // Embed hook: tells an embedding page when its example has been changed.
+  if (embedded) announceEdited(files ?? getFiles());
   renderFiles();
   showSourceLink();
   reflectHistory();

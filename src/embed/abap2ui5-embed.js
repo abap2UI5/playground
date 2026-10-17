@@ -26,13 +26,28 @@
 //                at and the one thing worth setting per demo.
 //   data-label   the text on the button (default "Run this example").
 //   data-origin  where the playground is served from, if not this script's own.
+//   data-readonly  present (or "1") for an example to be read and run but not
+//                changed: the editor takes no typing, Format and Fix them are
+//                gone, Run stays. "0" or absent leaves it editable.
+//   data-lines   lines to mark and scroll to, "12-18,25" - or "L42-L58", the
+//                address a sample page's line links write. In the app, the
+//                first file.
+//   data-reset   present to show a "Reset example" button under the demo once
+//                the reader has changed the code; it puts the page's code back
+//                (the change stays a Ctrl+Z away) and runs it.
+//
+// One event on the element: `abap2ui5-edited`, bubbling, with
+// `detail.edited` true when the reader's code stops being the page's and
+// false when it is the page's again (undone, or Reset). Fired on the change,
+// not per keystroke - for a page that wants its own "you changed this" note.
 //
 // Two functions on `window.abap2ui5Embed`:
 //
 //   setUp(root)  pick up the demos in `root` (or the whole document). Call it
 //                after each navigation in a framework that swaps pages without
 //                reloading - Docusaurus, VitePress and friends.
-//   url(opts)    the playground URL for `{ src, code, view, origin }`, for a
+//   url(opts)    the playground URL for `{ src, code, view, origin, readonly,
+//                lines }`, for a
 //                page that wants its own "open this in the playground" link
 //                rather than a frame. It is what mounting uses, so a link built
 //                with it cannot disagree with what the frame shows.
@@ -40,6 +55,8 @@
   "use strict";
 
   const SOURCE = "abap2ui5-playground";
+  // This script's name on the one message it sends INTO a frame (Reset).
+  const HOST = "abap2ui5-embed";
   const script = document.currentScript;
 
   // The playground lives wherever this file was served from - so a fork that
@@ -54,10 +71,12 @@
   // is what a page links when it wants "open this in the playground" next to
   // its own Run button, and it cannot get the fragment format wrong by writing
   // it itself.
-  async function playgroundUrl({ src, code, view, origin }) {
+  async function playgroundUrl({ src, code, view, origin, readonly, lines }) {
     const url = new URL(origin || defaultOrigin, window.location.href);
     url.searchParams.set("embed", "1");
     if (view === "app") url.searchParams.set("view", "app");
+    if (readonly) url.searchParams.set("readonly", "1");
+    if (lines) url.searchParams.set("lines", String(lines).trim());
     for (const one of (src || "").split(/\s+/).filter(Boolean)) {
       url.searchParams.append("src", new URL(one, window.location.href).href);
     }
@@ -67,11 +86,18 @@
     return url.href;
   }
 
+  // `data-readonly` is on when it is there at all - `<div data-readonly>` -
+  // except written as "0" or "false", which a template filling the attribute
+  // from a flag produces.
+  const flag = (value) => value !== undefined && value !== "0" && value !== "false";
+
   const urlFor = (el) => playgroundUrl({
     src: el.dataset.src,
     code: el.dataset.code,
     view: el.dataset.view,
     origin: el.dataset.origin,
+    readonly: flag(el.dataset.readonly),
+    lines: el.dataset.lines,
   });
 
   // What the ABAP has to be called. abapGit names a file after the object in
@@ -156,10 +182,26 @@
 
     el.replaceChildren(frame);
 
-    // Only app-only demos are resized. With an editor beside it the height is
-    // whatever the page decided the editor deserves, and no message from inside
-    // improves on that.
-    if (!appOnly) return;
+    // Reset, under the frame rather than over it: over it, it would sit on
+    // the playground's own Run or on the app. Hidden until there is something
+    // to reset. It asks the frame - the one message that goes in, see
+    // src/shell/embed.mjs - rather than loading the frame again, which would
+    // boot a whole runtime to show code the frame already holds.
+    let reset;
+    if (flag(el.dataset.reset) && !appOnly && !flag(el.dataset.readonly)) {
+      reset = document.createElement("button");
+      reset.type = "button";
+      reset.className = "abap2ui5-demo-reset";
+      reset.textContent = "Reset example";
+      reset.hidden = true;
+      reset.style.cssText = "margin:.4rem;font:inherit;cursor:pointer";
+      const playground = new URL(frame.src).origin;
+      reset.addEventListener("click", () => {
+        frame.contentWindow?.postMessage({ source: HOST, type: "reset" }, playground);
+      });
+      el.append(reset);
+    }
+
     const onMessage = (e) => {
       // A frame the page has since dropped (a navigation in a single-page
       // documentation site) lets go of its listener at the next message.
@@ -167,8 +209,15 @@
       if (e.source !== frame.contentWindow) return;
       const data = e.data;
       if (!data || data.source !== SOURCE) return;
-      if (data.type === "height" && Number.isFinite(data.height)) {
+      // Only app-only demos are resized. With an editor beside it the height
+      // is whatever the page decided the editor deserves, and no message from
+      // inside improves on that.
+      if (appOnly && data.type === "height" && Number.isFinite(data.height)) {
         frame.style.height = `${Math.max(120, Math.min(1200, data.height))}px`;
+      }
+      if (data.type === "edited" && typeof data.edited === "boolean") {
+        if (reset) reset.hidden = !data.edited;
+        el.dispatchEvent(new CustomEvent("abap2ui5-edited", { bubbles: true, detail: { edited: data.edited } }));
       }
     };
     window.addEventListener("message", onMessage);

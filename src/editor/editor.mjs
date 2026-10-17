@@ -51,6 +51,8 @@ export async function createEditor(container, files, options = {}) {
 
 export const setEditorTheme = (dark) => impl.setEditorTheme(dark);
 export const setEditorReadOnly = (readOnly) => impl.setEditorReadOnly(readOnly);
+export const lockEditor = () => impl.lockEditor();
+export const markLines = (ranges) => impl.markLines(ranges);
 export const setSourceOf = (name, source) => impl.setSourceOf(name, source);
 export const connectRegistry = () => impl.connectRegistry();
 export const fileVersion = (name) => impl.fileVersion(name);

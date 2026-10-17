@@ -226,14 +226,74 @@ export function setEditorTheme(dark) {
 // source back and takes the caret away, the way a disabled control reads.
 // Typing was already refused; this is so nobody has to try it to find out.
 export function setEditorReadOnly(readOnly) {
-  editor?.updateOptions({ readOnly });
+  editor?.updateOptions({ readOnly: readOnly || locked });
   editorContainer?.classList.toggle("is-readonly", readOnly);
+}
+
+// Read-only for good: an embedded example whose page asked for it
+// (`data-readonly` on the loader's element, `?readonly=1` on the playground -
+// src/shell/embed.mjs). A floor under setEditorReadOnly( ) above rather than a
+// call of it, because the View tab's edit mode hands typing back when it
+// closes, and must not hand back what the embedding page took away.
+//
+// Not greyed like the View tab's lock: there the source is momentarily not the
+// thing being written, here it is the example a page is printing, and it reads
+// at full strength. Monaco says so itself when somebody types anyway (the
+// message below). Format and Fix them go with it - both rewrite the source -
+// so they answer "nothing done" here, and the shell hides their buttons.
+let locked = false;
+export function lockEditor() {
+  locked = true;
+  editor?.updateOptions({
+    readOnly: true,
+    readOnlyMessage: { value: "This example is read-only - open it in the playground to change it." },
+  });
+}
+
+// Lines an embedding page points at (`data-lines`, `?lines=` - the same
+// addresses a sample page takes in #L42-L58): marked in the file they belong
+// to, which is the app, the first file, and the first of them scrolled to.
+//
+// On the model rather than through the editor's decorations collection, which
+// clears itself whenever the editor shows another model - a reader clicking
+// into a second file and back would have found the marks gone. Whole-line
+// decorations move with the text, so a reader typing above them keeps them on
+// the lines they were put on. Called again with the same ranges after a Reset,
+// which writes the file back and with it the lines.
+let markedOn;
+let marked = [];
+export function markLines(ranges) {
+  const name = orderedModels()[0] && nameOf(orderedModels()[0]);
+  const model = name && modelFor(name);
+  if (!model) return;
+  if (markedOn && !markedOn.isDisposed()) markedOn.deltaDecorations(marked, []);
+  const last = model.getLineCount();
+  const decorations = [];
+  for (const { from, to } of ranges) {
+    if (from > last) continue;
+    decorations.push({
+      range: new monaco.Range(from, 1, Math.min(to, last), 1),
+      options: {
+        isWholeLine: true,
+        className: "line-marked",
+        linesDecorationsClassName: "line-marked-gutter",
+        overviewRuler: { color: "rgba(10, 110, 209, .6)", position: monaco.editor.OverviewRulerLane.Full },
+      },
+    });
+  }
+  markedOn = model;
+  marked = model.deltaDecorations([], decorations);
+  const first = decorations[0]?.range.startLineNumber;
+  if (!first) return;
+  if (currentFile() !== name) openFile(name);
+  editor.revealLineNearTop(first);
 }
 
 // Replaces one file's text as an edit somebody can undo, which is what makes
 // a view rewritten out of the View tab a Ctrl+Z away from what it replaced.
 // Same door the fixers use; see writeSource( ) at the bottom of this file.
 export function setSourceOf(name, source) {
+  if (locked) return;
   writeSource(name, source);
   closeUndoSteps();
   refresh();
@@ -419,7 +479,7 @@ export function focusProblem(file, line, column = 1) {
 // through pushEditOperations, one edit per file, so Ctrl+Z takes the whole
 // thing back the way it takes an autofix back.
 export async function format() {
-  if (!connected) return { formatted: 0, files: [] };
+  if (!connected || locked) return { formatted: 0, files: [] };
   const unchanged = versionGuard();
   const result = await formatFiles(getFiles());
   const files = result.files.filter((file) => unchanged(file.name));
@@ -558,7 +618,7 @@ function abapNameCompletion() {
 // the wrong place) and the abap2UI5 linter reads the builder chain, which is
 // easier to read correctly once the ABAP around it parses.
 export async function applyFixes() {
-  if (!connected) return 0;
+  if (!connected || locked) return 0;
   let fixed = 0;
 
   const unchanged = versionGuard();
