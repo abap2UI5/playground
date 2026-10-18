@@ -148,6 +148,9 @@ test("the documents are answered from the network first, and the cache is only t
         // The abap2UI5 linter, which the registry worker loads at run time -
         // a core asset like the worker itself.
         entry === "/editor/lint.mjs" ||
+        // What the frame's files hash to, which the worker checks a cached
+        // copy under app/ against - precached, so it holds offline too.
+        entry === "/app-hashes.json" ||
         entry.startsWith("/app/"),
       `${entry} is in the cache and is not on the allow list`,
     ).toBe(true);
@@ -367,6 +370,50 @@ test("a script somebody else put into the worker's cache is not served: it is dr
       }),
     )
     .toBe(false);
+});
+
+test("a frame file somebody else put into the worker's cache is not served either", async ({ page }) => {
+  test.slow();
+  // The same, under app/: the playground's frame is this origin, and a link's
+  // view could put its own UI5 or bridge into the cache, to run before
+  // anything else on every later visit. Checked against app-hashes.json -
+  // forged too, to match the forged scripts, which the worker refuses
+  // because the file is not the one APP_HASHES names.
+  await open(page);
+  expect(await workerReady(page)).toBe(true);
+  const forged = "parent.__forgedFrame = true; // not this build's\n";
+  const planted = await page.evaluate(async (body) => {
+    const [name] = await caches.keys();
+    const cache = await caches.open(name);
+    const paths = (await cache.keys()).map((r) => new URL(r.url).pathname.replace(/^\//, ""));
+    const core = paths.find((p) => p.endsWith("resources/sap-ui-core.js"));
+    const bridge = paths.find((p) => p.endsWith("app/frontend-bridge.js"));
+    const sha = async (text) =>
+      [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)))]
+        .map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
+    const map = {};
+    for (const rel of [core, bridge]) {
+      await cache.put(new URL(rel, location.origin), new Response(body, { headers: { "content-type": "text/javascript" } }));
+      map[rel.slice(rel.indexOf("app/"))] = await sha(body);
+    }
+    await cache.put(new URL("app-hashes.json", document.baseURI), new Response(JSON.stringify(map)));
+    return [core, bridge];
+  }, forged);
+  expect(planted.every(Boolean)).toBe(true);
+  await open(page);
+  await expect(page.frameLocator("#app").getByText(MAIN_MARK)).toBeVisible({ timeout: 60000 });
+  expect(await page.evaluate(() => window.__forgedFrame)).toBeUndefined();
+  // Fetched again and kept, since those bytes match.
+  await expect
+    .poll(() =>
+      page.evaluate(async (paths) => {
+        const [name] = await caches.keys();
+        const cache = await caches.open(name);
+        const texts = await Promise.all(paths.map(async (p) => (await cache.match(new URL(p, location.origin)))?.text()));
+        return texts.map((t) => (t === undefined ? "missing" : t.includes("not this build's") ? "forged" : "clean"));
+      }, planted),
+    )
+    .toEqual(["clean", "clean"]);
 });
 
 test("a core asset the worker fetches on a miss is hashed against the build, and kept when it matches", async ({ page }) => {

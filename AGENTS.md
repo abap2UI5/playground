@@ -241,7 +241,7 @@ Each bullet names the design doc that explains it. Keep them true.
 
 **Load time** ([load-time.md](docs/design/load-time.md))
 - Both workers start from the inline script in `index.html`; the preloads must match what the page actually fetches; `boot()`'s two orderings and `heard()` keep costs overlapping.
-- The service worker caches a core asset only if it hashes to the build, and a cached hit is verified before it is served (`verifiedHit()`); the documents and catalogue files are network-first; a new document must be added to `DOCUMENTS` in `sw.js` and to `writeServiceWorker()`.
+- The service worker caches a core asset only if it hashes to the build, and a cached hit is verified before it is served (`verifiedHit()`) - under `app/` against `dist/app-hashes.json`, which the worker knows by its hash; the documents and catalogue files are network-first; a new document must be added to `DOCUMENTS` in `sw.js` and to `writeServiceWorker()`.
 - A chunk never imports a shell module (`editor.mjs`, `insight.mjs`, `file-sets.mjs`, `deep-link.mjs`, …) — what it needs is handed to its setup function, or esbuild splits the shell.
 - The size budget sums `assets/*.mjs`; the shell entry and its static imports stay free of Monaco and `shell.css` free of Monaco's CSS; the corpus must parse in 256 KB of stack.
 - Never `window.prompt()`/`alert()` (dead in a cross-origin frame); never treat `blur` as cancel in a shell input (the app frame steals focus); every `localStorage` access through `storage.mjs` (bar `theme-boot.mjs`).

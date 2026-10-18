@@ -106,8 +106,15 @@ export function writeServiceWorker({ metafile, monacoCss }) {
     docs[rel] = crypto.createHash("sha256").update(bytes).digest("hex");
   }
 
+  /* And the frame's files by their bytes, for the worker to check a cached
+     copy of one against before it serves it - written beside the worker
+     rather than into it (see writeAppHashes( )), and named in it by the hash
+     of that file, which is therefore part of the build id too. */
+  const appHashes = writeAppHashes();
+  id.update(appHashes);
+
   const source = fs.readFileSync(path.join(SHELL, "sw.js"), "utf8");
-  for (const marker of ["__BUILD_ID__", "__CHUNKS__", "__APP_FIRST_LOAD__", "__CORE__", "__DOCS__", "__ASSET_HASHES__"]) {
+  for (const marker of ["__BUILD_ID__", "__CHUNKS__", "__APP_FIRST_LOAD__", "__CORE__", "__DOCS__", "__ASSET_HASHES__", "__APP_HASHES__"]) {
     if (!source.includes(marker)) {
       console.error(`build-site: ERROR src/shell/sw.js no longer has a ${marker} to substitute`);
       process.exit(1);
@@ -129,9 +136,44 @@ export function writeServiceWorker({ metafile, monacoCss }) {
       .replace("__APP_FIRST_LOAD__", JSON.stringify(firstLoad))
       .replace("__CORE__", JSON.stringify(hashes))
       .replace("__DOCS__", JSON.stringify(docs))
-      .replace("__ASSET_HASHES__", JSON.stringify(assetHashes)),
+      .replace("__ASSET_HASHES__", JSON.stringify(assetHashes))
+      .replace("__APP_HASHES__", appHashes),
   );
   log(`sw.js (build ${build})`);
+}
+
+// dist/app-hashes.json: every file under app/ that the frame runs or reads -
+// UI5, the frontend, the bridge - by the SHA-256 of its bytes, cut to 128
+// bits, for the worker to check a cached copy against (verifiedHit( ) in
+// sw.js). On the playground the app frame is this origin, and a script in a
+// link's view could write its own sap-ui-core.js into the worker's cache,
+// to run on every later visit; the worker now serves no copy under app/ it
+// cannot match to this file.
+//
+// Beside the worker and not in it: 6,900 files are 0.6 MB of JSON, which
+// written into sw.js would be parsed every time the browser starts the
+// worker - and it starts it for every visit - where this is fetched only
+// once a cached copy under app/ is about to be served, and kept for as long
+// as the worker runs. The images and fonts are left out: an <img> or a font
+// runs nothing, and they are a sixth of the files. app/index.html too - the
+// worker never caches it. Returns the hash of the file, which the worker
+// checks the file against in turn.
+//
+// Reading the whole UI5 tree costs the build under a second (measured
+// 2026-10-18, 6,904 files, 156 MB).
+const INERT = /\.(png|gif|jpe?g|ico|woff2?|ttf|eot)$/i;
+function writeAppHashes() {
+  const map = {};
+  for (const entry of listing(path.join(DIST, "app")).sort()) {
+    const rel = entry.slice(0, entry.lastIndexOf(":"));
+    if (rel === "index.html" || INERT.test(rel)) continue;
+    const bytes = fs.readFileSync(path.join(DIST, "app", rel));
+    map[`app/${rel}`] = crypto.createHash("sha256").update(bytes).digest("hex").slice(0, 32);
+  }
+  const text = JSON.stringify(map);
+  fs.writeFileSync(path.join(DIST, "app-hashes.json"), text);
+  log(`app-hashes.json (${Object.keys(map).length} files)`);
+  return crypto.createHash("sha256").update(text).digest("hex");
 }
 
 // The chunks the two AI pages load (src/shell/ai-agent.mjs, the AI Studio's
