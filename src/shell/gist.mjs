@@ -1,3 +1,4 @@
+// @ts-check
 // The open files as a GitHub gist, and a gist as the open files.
 //
 // A share link carries the code in its fragment and a zip takes it to a
@@ -22,8 +23,9 @@
 export const GIST_API = "https://api.github.com/gists";
 
 // The files a gist may bring into the editor - the same three kinds a
-// ?src= link may name (deep-link.mjs).
-const ABAP_FILE = /\.(clas|intf)\.abap$|\.clas\.testclasses\.abap$/i;
+// ?src= link may name (deep-link.mjs), and a table's two files beside them
+// (src/editor/tables.mjs): a gist is the whole file set, rows and all.
+const ABAP_FILE = /\.(clas|intf)\.abap$|\.clas\.testclasses\.abap$|\.tabl\.xml$|\.tabu\.json$/i;
 
 /** The gist id in whatever the reader pasted: a bare id, a gist.github.com
  *  URL (with or without the user), an api.github.com/gists URL, or a
@@ -56,8 +58,12 @@ export function playgroundUrlFor(id, base = globalThis.location?.href ?? "https:
   return url.href;
 }
 
+/** @typedef {{ name: string, source: string }} GistFile */
+
 /** The request body for POST /gists: the ABAP files by name, the
- *  description naming the app and the share link, secret unless asked. */
+ *  description naming the app and the share link, secret unless asked.
+ *  @param {GistFile[]} files
+ *  @param {{ description?: string, shareUrl?: string, isPublic?: boolean }} [options] */
 export function gistPayload(files, { description, shareUrl, isPublic = false } = {}) {
   const abap = files.filter((f) => ABAP_FILE.test(f.name));
   if (abap.length === 0) throw new Error("There is no ABAP file to put in a gist.");
@@ -118,14 +124,20 @@ export async function fetchGist(id, { fetch: doFetch = globalThis.fetch, signal 
   try {
     response = await doFetch(`${GIST_API}/${id}`, { headers: HEADERS, signal });
   } catch (e) {
-    if (e?.name === "TimeoutError") throw new Error("api.github.com did not answer within 20 seconds.");
-    throw new Error("api.github.com could not be reached - check the connection, or whether a proxy or extension blocks it.");
+    // The reader is told the sentence; the console and a debugger keep what
+    // fetch actually threw, as the cause.
+    if (e?.name === "TimeoutError") throw new Error("api.github.com did not answer within 20 seconds.", { cause: e });
+    throw new Error("api.github.com could not be reached - check the connection, or whether a proxy or extension blocks it.", {
+      cause: e,
+    });
   }
   if (!response.ok) throw await explain(response, "read");
   return filesFromGist(await response.json());
 }
 
-/** Writes a gist with the reader's token; answers { id, url, playgroundUrl }. */
+/** Writes a gist with the reader's token; answers { id, url, playgroundUrl }.
+ *  @param {GistFile[]} files
+ *  @param {{ token?: string, description?: string, shareUrl?: string, isPublic?: boolean, fetch?: typeof fetch }} [options] */
 export async function createGist(files, { token, description, shareUrl, isPublic = false, fetch: doFetch = globalThis.fetch } = {}) {
   if (!token?.trim()) throw new Error("A GitHub token is needed to create a gist.");
   const body = gistPayload(files, { description, shareUrl, isPublic });

@@ -45,6 +45,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The checks that need no build and no browser - ESLint, the type check,
+  # the node:test unit tests - as check.yml runs them, beside the shards.
+  # Deploy waits for this too: a push straight to main skipped check.yml.
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:unit
+
   # The tests, in the same four shards check.yml runs them in - the build
   # is two minutes with its caches warm and the tests seventeen on one
   # runner, so three runners each take a third of the Chromium specs
@@ -70,7 +87,7 @@ jobs:
 
   # The artefact that is published: the same build, once more, on a runner
   # of its own - a cache hit, and it runs beside the shards rather than after
-  # them. Deploy waits for all four.
+  # them. Deploy waits for all four, and for lint.
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -104,7 +121,7 @@ jobs:
           path: dist
 
   deploy:
-    needs: [test, build]
+    needs: [lint, test, build]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

@@ -114,14 +114,62 @@ const DOCUMENTS = ["index.html", "app/index.html", "ai/index.html", "pilot/index
 // the new worker takes over with its own.
 const DOC_HASHES = __DOCS__;
 
+// And every file under assets/ - the bundle's chunks included, whose names
+// carry esbuild's hash but nothing this worker could check - by the SHA-256
+// of the bytes this build wrote. Written in by the build like the two above.
+const ASSET_HASHES = __ASSET_HASHES__;
+
+const expectedHash = (rel) => CORE_HASHES[rel] ?? DOC_HASHES[rel] ?? ASSET_HASHES[rel];
+const hexOf = async (bytes) =>
+  [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((b) => b.toString(16).padStart(2, "0")).join("");
+
 async function matchesBuild(rel, response) {
-  const expected = CORE_HASHES[rel] ?? DOC_HASHES[rel];
-  // A chunk, or the frame's assets: named by a hash or pinned by version,
-  // nothing to check them against here.
+  const expected = expectedHash(rel);
+  // The frame's assets: pinned by version, nothing to check them against.
   if (expected === undefined) return true;
-  const digest = await crypto.subtle.digest("SHA-256", await response.arrayBuffer());
-  const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
-  return hex === expected;
+  return (await hexOf(await response.arrayBuffer())) === expected;
+}
+
+// A CACHED copy, checked on its way OUT as well as on its way in.
+//
+// What goes into this cache is checked against the build (matchesBuild( )
+// above), but the cache is not this worker's alone: every script of this
+// origin can open it by name - the name is in this file, and caches.keys( )
+// lists it anyway - and put what it likes under any URL. The playground's
+// app frame is this origin (src/shell/page.mjs says why), so a share link's
+// app could write a script of its own in place of assets/shell.mjs or a
+// chunk, and every later visit - the AI pages', where an API key is typed,
+// included - ran it from here, cache-first, without a request. (The runtime
+// worker, where a link's ABAP runs, cannot open the cache at all:
+// src/runtime/lockdown.mjs.)
+//
+// So a hit for anything this build has a hash for - the documents, the core
+// assets, every chunk and stylesheet under assets/ - is hashed before it is
+// served, and one that does not match is dropped and fetched again. That is
+// every script the playground's pages and workers run, about twenty
+// megabytes. Measured (2026-10-17, Chromium, WebCrypto, the four largest
+// files hashed in parallel as the requests arrive): 70 to 210 ms for all
+// twenty on a busy 4-core machine - off the page's thread, and spread over
+// requests the page makes side by side, so what a visit waits for is the
+// framework's share, a few tens of milliseconds, against the download it
+// would otherwise be.
+// An unguessable cache name was the cheaper idea and is no defence:
+// caches.keys( ) hands any script the names. The UI5 tree under app/ has no
+// hashes (it is pinned by version, and hashing its thousands of files into
+// this worker would double its size); it is only ever loaded by the app
+// frame, which on the AI pages is on an opaque origin that this worker
+// never serves.
+async function verifiedHit(cache, key, rel) {
+  const hit = await cache.match(key);
+  if (!hit) return undefined;
+  const expected = expectedHash(rel);
+  if (expected === undefined) return hit;
+  const bytes = await hit.arrayBuffer();
+  if ((await hexOf(bytes)) !== expected) {
+    await cache.delete(key).catch(() => {});
+    return undefined;
+  }
+  return new Response(bytes, { status: hit.status, statusText: hit.statusText, headers: hit.headers });
 }
 
 // Filled while the page that registered this worker is still open, rather than
@@ -301,19 +349,24 @@ self.addEventListener("fetch", (event) => {
 
 // Network first, so a deploy reaches the next visit the way it always has;
 // the cached copy only when the network has nothing to say - an installed
-// playground opened on a train. The copy kept is the last clean answer, under
+// playground opened on a train - or says only that it failed. The copy kept is the last clean answer, under
 // the bare name, and a 200 is the only thing worth keeping: an error page
 // cached as the document would be an error page forever.
 async function serveDocument(event, doc) {
   const cache = await caches.open(CACHE);
   const rel = new URL(doc.url ?? doc).pathname.slice(BASE.pathname.length);
-  const kept = await cache.match(doc);
+  const kept = await verifiedHit(cache, doc, rel);
   // Past the HTTP cache (revalidated - a 304 when nothing moved): Pages
   // keeps a document fresh for ten minutes, and in the minutes after a
   // deploy the old index.html answered beside the new build's cached
   // bundle, and was then written over the clean precached copy.
   const network = (async () => {
     const response = await fetch(event.request, { cache: "no-cache" });
+    // An answer that is not ok - a 503 while Pages is having a moment, a
+    // captive portal's error - is no better than no answer: with a good copy
+    // kept, that copy is the page. It used to be served over the copy, and a
+    // transient 5xx was the playground gone for as long as it lasted.
+    if (!response.ok) return kept ?? response;
     if (response.status !== 200) return response;
     if (rel in DOC_HASHES && !(await matchesBuild(rel, response.clone()))) {
       // Another build's document - see DOC_HASHES. The kept copy if there
@@ -343,7 +396,8 @@ async function serveDocument(event, doc) {
 
 async function serve(event) {
   const cache = await caches.open(CACHE);
-  const hit = await cache.match(event.request);
+  const rel = new URL(event.request.url).pathname.slice(BASE.pathname.length);
+  const hit = await verifiedHit(cache, event.request, rel);
   if (hit) return hit;
 
   const response = await fetch(event.request);
@@ -355,7 +409,6 @@ async function serve(event) {
   // write is handed to waitUntil so the browser does not stop the worker
   // half way through it.
   if (response.status === 200) {
-    const rel = new URL(event.request.url).pathname.slice(BASE.pathname.length);
     const kept = response.clone();
     event.waitUntil(
       matchesBuild(rel, response.clone())

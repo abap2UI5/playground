@@ -8,6 +8,7 @@ Check out the contribution guidelines [here.](https://abap2ui5.github.io/docs/re
 npm ci
 npx playwright install chromium   # the tests drive a real browser
 npm run check                     # build -> size budget -> tests, what check.yml runs
+npm run lint && npm run typecheck && npm run test:unit   # seconds, no build or browser
 ```
 
 `npm run build` is five cached steps and takes minutes the first time; after
@@ -23,4 +24,7 @@ a sample without a test is not possible.
 Two things worth reading before proposing a change: the **deliberate limits**
 in [AGENTS.md](AGENTS.md) — several obvious-looking improvements have already
 been considered and refused, with the reasons written down — and the size
-budget, since everything here ends up in a bundle a visitor downloads.
+budget, since everything here ends up in a bundle a visitor downloads. The
+reasoning behind each area, with its measurements, is in
+[docs/design/](docs/design/); AGENTS.md says which file goes with which part
+of the code.

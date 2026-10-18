@@ -1,3 +1,4 @@
+// @ts-check
 // What the playground knows about itself, beyond what the editor and the DOM
 // already hold. Two fields, on purpose: everything else about the current state
 // - which files are open, what is in them, which one is showing - is the

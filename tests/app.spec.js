@@ -101,7 +101,7 @@ test("a run loads only from this origin, and nothing 404s", async ({ page }) => 
   const missing = [];
   await page.route("**", (route) => {
     const url = new URL(route.request().url());
-    if (url.origin !== "http://localhost:8080") external.push(url.href);
+    if (url.origin !== `http://localhost:${process.env.PORT || 8080}`) external.push(url.href);
     return route.continue();
   });
   page.on("response", (r) => {

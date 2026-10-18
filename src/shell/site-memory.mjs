@@ -402,7 +402,7 @@ export function handOff(href) {
  * read would be a later navigation inheriting somebody else's destination.
  */
 export function restoreScroll() {
-  let record = null;
+  let record;
   try {
     record = JSON.parse(readStored(HANDOFF_KEY) || "null");
   } catch {

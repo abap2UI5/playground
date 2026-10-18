@@ -3,11 +3,21 @@
  * The frontend talks to its backend by POSTing JSON to its own URL and reading
  * JSON back (app/webapp/core/Server.js). There is no backend here, so this
  * replaces window.fetch for exactly that one request and hands the body to the
- * transpiled framework running in the page that owns this iframe. Everything
- * else - UI5 modules, themes, images - goes to the network untouched.
+ * transpiled framework, which runs for the page that owns this iframe.
+ * Everything else - UI5 modules, themes, images - goes to the network
+ * untouched.
  *
- * It also keeps this frame from taking the focus while that page has a dialog
- * open, for the reason at the second patch below.
+ * Everything between this frame and that page is a MESSAGE (postMessage),
+ * never a reference: this script does not touch window.parent beyond posting
+ * to it, and the page does not touch this document - see
+ * src/shell/frame-link.mjs, the page's half, for the protocol. That is what
+ * lets the page put the frame on an opaque origin (an iframe `sandbox`
+ * without allow-same-origin): an app's own script - a view's core:HTML, a
+ * script the app loads - then has no way into the page that holds the
+ * reader's API key, their GitHub token and the playground's storage. The
+ * same script runs in a frame that is NOT sandboxed (the playground proper,
+ * see frameIsolated in src/shell/page.mjs), and speaks the same messages
+ * there.
  *
  * Loaded as a plain script before the UI5 bootstrap, so the redirect is in place
  * before the component can send anything.
@@ -32,6 +42,88 @@
 
   var nativeFetch = window.fetch.bind(window);
   var self = new URL(window.location.href);
+  // Which page this frame belongs to - the page that framed it, on the same
+  // server: the frame's address is always the site's own app/index.html,
+  // whatever origin the browser gave the document (location.origin is the
+  // URL's; window.origin is "null" in a sandboxed frame). Messages go to
+  // that origin and no other, and are taken only from that window.
+  var parentOrigin = self.origin;
+  var framed = window.parent !== window;
+  // This document, among the ones the frame will hold: a Run that reloads
+  // the frame is a new document with a new bridge, and the page tells a late
+  // message of the old one from the new one's by this.
+  var doc = Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+  function post(message) {
+    if (!framed) return;
+    message.z2ui5Frame = 1;
+    message.doc = doc;
+    try {
+      window.parent.postMessage(message, parentOrigin);
+    } catch (e) {
+      // A value that cannot be cloned (it never should be) is not worth the
+      // app: the page's wait for it runs out instead.
+    }
+  }
+
+  // A sandboxed document without allow-same-origin has no storage: reading
+  // window.localStorage, sessionStorage or document.cookie THROWS a
+  // SecurityError. UI5 and an app's own code read them in places that do
+  // not expect that, so in such a frame each is replaced by a store that
+  // lives as long as the document - which is all storage in a frame the
+  // playground restarts on every Run was ever worth. A frame that has its
+  // storage keeps it.
+  function memoryStorage() {
+    var items = new Map();
+    return {
+      get length() {
+        return items.size;
+      },
+      key: function (i) {
+        var keys = Array.from(items.keys());
+        return i >= 0 && i < keys.length ? keys[i] : null;
+      },
+      getItem: function (k) {
+        return items.has(String(k)) ? items.get(String(k)) : null;
+      },
+      setItem: function (k, v) {
+        items.set(String(k), String(v));
+      },
+      removeItem: function (k) {
+        items.delete(String(k));
+      },
+      clear: function () {
+        items.clear();
+      },
+    };
+  }
+  ["localStorage", "sessionStorage"].forEach(function (name) {
+    try {
+      void window[name];
+    } catch (e) {
+      try {
+        Object.defineProperty(window, name, { value: memoryStorage(), configurable: true });
+      } catch (e2) {
+        // left throwing, as the browser has it
+      }
+    }
+  });
+  try {
+    void document.cookie;
+  } catch (e) {
+    try {
+      var jar = "";
+      Object.defineProperty(document, "cookie", {
+        get: function () {
+          return jar;
+        },
+        set: function () {},
+        configurable: true,
+      });
+    } catch (e2) {
+      // left throwing
+    }
+  }
 
   // The frontend refuses to send a roundtrip while navigator.onLine is false
   // ("No internet connection! Please reconnect to the server"), which is the
@@ -52,25 +144,32 @@
     return method === "POST" && url.origin === self.origin && url.pathname === self.pathname;
   }
 
-  // Same origin by construction, so this is a direct object reference and not
-  // postMessage. Undefined when the frontend is opened on its own, and also in
-  // the moment before the playground has its runtime - so every caller has to
-  // cope with not getting one.
-  function host() {
-    return window.parent !== window ? window.parent.__z2ui5Playground : undefined;
-  }
+  // The page's answers to this frame's roundtrips, by request id.
+  var nextId = 1;
+  var waiting = new Map();
 
-  function playground() {
-    // If the frontend is opened on its own it is not a playground at all, and
-    // saying so beats a TypeError from a missing property.
-    var host_ = host();
-    if (!host_) {
-      throw new Error(
-        "This page is the abap2UI5 frontend and has no backend of its own. " +
-          "Open the playground instead - it runs the framework and answers this frame.",
+  function askPage(body) {
+    if (!framed) {
+      // If the frontend is opened on its own it is not a playground at all,
+      // and saying so beats a request that is never answered.
+      return Promise.reject(
+        new Error(
+          "This page is the abap2UI5 frontend and has no backend of its own. " +
+            "Open the playground instead - it runs the framework and answers this frame.",
+        ),
       );
     }
-    return host_;
+    var id = nextId++;
+    return new Promise(function (resolve, reject) {
+      waiting.set(id, { resolve: resolve, reject: reject });
+      // What the Pilot reads of this frame goes first, so the page knows the
+      // app is busy before it hears of the request (see report( ) below).
+      report(true);
+      // Its own address goes along, which names the Run it belongs to
+      // (?run=): the old app is still alive for the moment between a new
+      // Run resetting the database and the new frame document arriving.
+      post({ type: "roundtrip", id: id, body: body, href: window.location.href });
+    });
   }
 
   // UI5 focuses a control every time it finishes rendering, and it does that in
@@ -87,10 +186,15 @@
   // for exactly as long as the shell has a dialog open. An app somebody is
   // actually working in is unaffected: no dialog is open over it then, and
   // this is the frontend's own focus() the rest of the time.
+  //
+  // The page says whether to hold back ("hold", see frame-link.mjs) - it
+  // cannot be asked at the moment of the focus( ), which is synchronous - and
+  // the hold only counts while the focus is not in this frame already: a
+  // reader who clicked into the app is in it, whatever the page last said.
+  var holdFocus = false;
   var nativeFocus = HTMLElement.prototype.focus;
   HTMLElement.prototype.focus = function () {
-    var host_ = host();
-    if (host_ && typeof host_.dialogOpen === "function" && host_.dialogOpen()) return;
+    if (holdFocus && !document.hasFocus()) return;
     return nativeFocus.apply(this, arguments);
   };
 
@@ -108,10 +212,7 @@
       body = await new Response(body).text();
     }
 
-    // Its own address goes along, which names the Run it belongs to (?run=):
-    // the old app is still alive for the moment between a new Run resetting
-    // the database and the new frame document arriving.
-    var result = await playground().roundtrip(body, window.location.href);
+    var result = await askPage(body);
     return new Response(result.body, {
       status: result.status,
       statusText: result.reason,
@@ -123,10 +224,14 @@
     });
   };
 
-  // The AI Pilot (src/shell/pilot.mjs) operates the app in this frame, and
-  // the reader watches it do so: these are the three things it needs of the
-  // frontend, and the one place the playground reaches into it rather than
-  // only through the fetch above. Everything is looked up when called, never
+  // The AI Pilot (src/shell/pilot.mjs) and the AI Studio operate the app in
+  // this frame, and the reader watches them do so: these are the things they
+  // need of the frontend, and the one place the playground reaches into it
+  // rather than only through the fetch above. The page asks for them by
+  // message ("call", answered by "reply" - see listen( ) below and
+  // src/shell/frame-link.mjs); what it reads without asking - busy, the
+  // slots, the reader's pending typing - this frame reports on its own
+  // ("state", report( ) below). Everything is looked up when called, never
   // kept, and every miss answers false - a frontend that moved its modules
   // makes the Pilot say "the app on screen could not be updated", which
   // tests/pilot.spec.js holds, rather than break the playground.
@@ -134,19 +239,20 @@
   //   roundtrip()           a roundtrip the frontend sends as if a control had
   //                         fired: busy, timers cancelled, the answer rendered
   //                         by its own code. The BODY is the Pilot's, put in
-  //                         its place by the page (main.mjs) - this only makes
-  //                         the frontend ask, so that it renders what comes back.
+  //                         its place by the page (agent-hooks.mjs) - this only
+  //                         makes the frontend ask, so that it renders what
+  //                         comes back.
   //   frontend(args)        a frontend-only wire, e.g. closing the popup
   //                         (["CONTROL_GLOBAL","VIEW_SLOTS","destroy","POPUP"])
   //   fill(slot, path, v)   a value typed into a field without an event: set in
   //                         the slot's model and marked changed, the way typing
   //                         marks it, so the next event carries it
-  //   slots()               the slots that hold a view now
+  //   slots()               the slots that hold a view now (reported)
   //   busy()                whether a roundtrip is still being answered or
   //                         rendered - the Pilot reads the screen only after.
   //                         An app's first answer is rendered without the
   //                         frontend ever saying busy, so a frame whose main
-  //                         view is not there yet counts as busy too
+  //                         view is not there yet counts as busy too (reported)
   function frontend() {
     var require_ = window.sap && sap.ui && sap.ui.require;
     if (!require_) return null;
@@ -165,29 +271,28 @@
     return { ctx: component.ctx, Server: Server, ViewSlots: ViewSlots };
   }
 
-  // A file dropped on the app, on a page that takes files (the AI Pilot's,
-  // see dropFiles in main.mjs): handed to that page rather than left to the
-  // browser, which opens a file dropped where nobody took it in a tab of its
-  // own. Listened for on the window, after the app's own controls had their
-  // turn - a drop an upload control took (preventDefault) stays the app's.
+  // A file dropped on the app, on a page that takes files (the AI Pilot's
+  // and the AI Studio's, see dropFiles in agent-hooks.mjs): handed to that
+  // page rather than left to the browser, which opens a file dropped where
+  // nobody took it in a tab of its own. Listened for on the window, after the
+  // app's own controls had their turn - a drop an upload control took
+  // (preventDefault) stays the app's. Whether the page takes files it says
+  // once this frame has spoken ("settings"); the files go over as File
+  // objects, which postMessage clones.
+  var takesFiles = false;
   function isFileDrag(e) {
     var types = e.dataTransfer && e.dataTransfer.types;
     return Boolean(types && Array.prototype.indexOf.call(types, "Files") !== -1);
   }
-  function takesFiles() {
-    var host_ = host();
-    return host_ && typeof host_.dropFiles === "function" ? host_ : null;
-  }
   window.addEventListener("dragover", function (e) {
-    if (e.defaultPrevented || !isFileDrag(e) || !takesFiles()) return;
+    if (e.defaultPrevented || !isFileDrag(e) || !takesFiles) return;
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
   });
   window.addEventListener("drop", function (e) {
-    var host_ = takesFiles();
-    if (e.defaultPrevented || !isFileDrag(e) || !host_) return;
+    if (e.defaultPrevented || !isFileDrag(e) || !takesFiles) return;
     e.preventDefault();
-    host_.dropFiles(Array.prototype.slice.call(e.dataTransfer.files));
+    post({ type: "drop", files: Array.prototype.slice.call(e.dataTransfer.files) });
   });
 
   // The topmost view that is open - the one whose model a request of the
@@ -215,7 +320,7 @@
     carried.paths[path] = true;
   }
 
-  window.__z2ui5PlaygroundPilot = {
+  var pilot = {
     roundtrip: function () {
       var f = frontend();
       if (!f) return false;
@@ -323,7 +428,7 @@
   // exists; rejects when it could not be created, and the page then falls
   // back to the reload.
   var restarting = null;
-  window.__z2ui5PlaygroundRestart = function (href) {
+  function restart(href) {
     if (restarting) return Promise.reject(new Error("a restart is already under way"));
     var require_ = window.sap && sap.ui && sap.ui.require;
     var Element = require_ && require_("sap/ui/core/Element");
@@ -388,7 +493,7 @@
       },
     );
     return restarting;
-  };
+  }
 
   // A LEAK IN UI5, worked around here until it is fixed there. sap.m.Shell's
   // init attaches a Theming "applied" listener (a bound function) and its exit
@@ -437,4 +542,211 @@
   var shellTimer = setInterval(function () {
     if (patchShellLeak() || ++shellProbes > 600) clearInterval(shellTimer);
   }, 100);
+
+  // ------------------------------------------------- what the page is told
+
+  // What the page reads of this frame without asking, sent whenever it
+  // changes: where the document is (its address, whether it has loaded,
+  // whether UI5 is up - what Run decides between a restart in place and a
+  // reload by, run.mjs), and what the Pilot reads before it acts (busy, the
+  // open slots, the reader's unsent typing). `seen` is the last call of the
+  // page's this frame has answered, so the page can tell a report from
+  // before its roundtrip( ) from one after it. Checked ten times a second,
+  // and at once wherever something is known to have changed; sent only
+  // when different, so an idle app costs nothing but the check.
+  var seen = 0;
+  var lastReport = "";
+  function state() {
+    var f = frontend();
+    var pending;
+    try {
+      pending = pilot.pending();
+    } catch (e) {
+      pending = {};
+    }
+    return {
+      href: window.location.href,
+      readyState: document.readyState,
+      ui5: Boolean(window.sap && sap.ui && sap.ui.require),
+      app: Boolean(f),
+      restarts: typeof window.__z2ui5PlaygroundRestart === "function",
+      busy: pilot.busy(),
+      slots: pilot.slots(),
+      pending: pending,
+      seen: seen,
+    };
+  }
+  function report(force) {
+    var now;
+    try {
+      now = state();
+    } catch (e) {
+      return;
+    }
+    var text = JSON.stringify(now);
+    if (!force && text === lastReport) return;
+    lastReport = text;
+    now.type = "state";
+    post(now);
+  }
+  setInterval(report, 100);
+  document.addEventListener("readystatechange", function () {
+    report();
+  });
+  window.addEventListener("load", function () {
+    report();
+  });
+  // Typing changes what is pending at once; the check runs after the model
+  // has heard of it.
+  ["input", "change", "keyup"].forEach(function (type) {
+    window.addEventListener(
+      type,
+      function () {
+        setTimeout(report, 0);
+      },
+      true,
+    );
+  });
+
+  // How tall the app would like to be, for an embedded ?view=app (embed.mjs
+  // decides what to do with it, and asks for it in "settings"): measured
+  // here, where the document is, and sent when it changes - the page cannot
+  // measure a document it cannot reach. Coalesced to one measurement a frame, and bounded per document
+  // like everything this frame says unasked.
+  var wantsHeight = false;
+  var lastHeight = 0;
+  var heightsSent = 0;
+  var measuring = 0;
+  function measure() {
+    measuring = 0;
+    if (!wantsHeight) return;
+    var root = document.documentElement;
+    var height = Math.ceil(Math.max(root ? root.scrollHeight : 0, document.body ? document.body.scrollHeight : 0));
+    if (height <= 0 || height === lastHeight || heightsSent >= 200) return;
+    lastHeight = height;
+    heightsSent += 1;
+    post({ type: "height", height: height });
+  }
+  function measureSoon() {
+    if (!measuring) measuring = requestAnimationFrame(measure);
+  }
+  if (typeof ResizeObserver === "function") {
+    var sizes = new ResizeObserver(measureSoon);
+    sizes.observe(document.documentElement);
+    document.addEventListener("DOMContentLoaded", function () {
+      if (document.body) sizes.observe(document.body);
+      measureSoon();
+    });
+  }
+
+  // ------------------------------------------------- what the page may ask
+
+  // UI5 1.x and 2.x name the theme switch differently, and neither exists
+  // until the core has booted: a frame that is mid-load keeps the theme its
+  // address gave it, and the next Run picks the current one up.
+  function setTheme(theme) {
+    try {
+      var require_ = window.sap && sap.ui && sap.ui.require;
+      var theming = require_ && require_("sap/ui/core/Theming");
+      if (theming && theming.setTheme) theming.setTheme(theme);
+      else if (sap.ui.getCore) sap.ui.getCore().applyTheme(theme);
+    } catch (e) {
+      // as above
+    }
+  }
+
+  // Both are also left on this window, under the names the page once read
+  // them by: the page does not any more (it cannot reach this window, and
+  // asks by message), but the tests look at them through Playwright, and a
+  // test takes the restart away to make a Run reload the frame. Nothing is
+  // given away by it - whoever can read this window is the app in it.
+  window.__z2ui5PlaygroundPilot = pilot;
+  window.__z2ui5PlaygroundRestart = restart;
+
+  var CALLS = {
+    roundtrip: function () {
+      return pilot.roundtrip();
+    },
+    frontend: function (args) {
+      return pilot.frontend(args);
+    },
+    fill: function (slot, path, value) {
+      return pilot.fill(slot, path, value);
+    },
+    carry: function (paths) {
+      return pilot.carry(paths);
+    },
+    restart: function (href) {
+      var restart_ = window.__z2ui5PlaygroundRestart;
+      if (typeof restart_ !== "function") throw new Error("this frame does not restart in place");
+      return restart_(href).then(function () {
+        return true;
+      });
+    },
+    // Nothing but a fresh report: the page asks before it reads the slots
+    // or the reader's typing for the model.
+    state: function () {
+      return true;
+    },
+  };
+
+  // From the page that framed this one, and from nobody else: not another
+  // frame, not a window this app opened, and not a page of another origin
+  // that framed the frontend by its address.
+  window.addEventListener("message", function (e) {
+    if (!framed || e.source !== window.parent || e.origin !== parentOrigin) return;
+    var m = e.data;
+    if (!m || typeof m !== "object" || m.z2ui5Frame !== 1 || typeof m.type !== "string") return;
+    if (m.type === "answer") {
+      var asked = waiting.get(m.id);
+      if (!asked) return;
+      waiting.delete(m.id);
+      if (typeof m.error === "string") asked.reject(new Error(m.error));
+      else asked.resolve({ status: Number(m.status) || 500, reason: String(m.reason || ""), body: String(m.body == null ? "" : m.body) });
+      return;
+    }
+    if (m.type === "hold") {
+      holdFocus = m.hold === true;
+      return;
+    }
+    if (m.type === "settings") {
+      takesFiles = m.takesFiles === true;
+      wantsHeight = m.height === true;
+      if (wantsHeight) measureSoon();
+      return;
+    }
+    if (m.type === "theme") {
+      if (typeof m.theme === "string") setTheme(m.theme);
+      return;
+    }
+    if (m.type === "call" && typeof m.id === "number" && Object.prototype.hasOwnProperty.call(CALLS, m.op)) {
+      var answer = function (ok, value, error) {
+        if (m.id > seen) seen = m.id;
+        // The report first, so what the call changed (busy, above all) is
+        // known to the page before it hears the call is done.
+        report(true);
+        post({ type: "reply", id: m.id, ok: ok, value: value, error: error });
+      };
+      try {
+        var value = CALLS[m.op].apply(null, Array.isArray(m.args) ? m.args : []);
+        if (value && typeof value.then === "function") {
+          value.then(
+            function (v) {
+              answer(true, v);
+            },
+            function (err) {
+              answer(false, undefined, String((err && err.message) || err));
+            },
+          );
+        } else {
+          answer(true, value);
+        }
+      } catch (err) {
+        answer(false, undefined, String((err && err.message) || err));
+      }
+    }
+  });
+
+  // Said at once, so the page knows this document is here before UI5 is.
+  report(true);
 })();

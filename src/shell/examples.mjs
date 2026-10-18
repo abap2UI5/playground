@@ -43,18 +43,27 @@
 // No error, no console noise of this module's making.
 import { SAMPLES } from "../editor/samples.mjs";
 import { githubUrlOf, rawUrlOf } from "./catalogue-urls.mjs";
+/* The one version comparison, shared with the catalogue page - a second copy
+ * here was the same twelve lines, ready to disagree on "1.9" against "1.71". */
+import { cmpVersion } from "./ui5-libs.mjs";
 import { foldCase, termsOf, matchesTerms } from "./search-terms.mjs";
 import { deleteDraft, draftNameProblem, listDrafts, saveDraft } from "./drafts.mjs";
 import { readStoredJson, writeStoredJson } from "./storage.mjs";
 import { closeOnBackdrop } from "./ui.mjs";
+import { MARKS, marksOf } from "./sample-marks.mjs";
 
 // The boxes, as the dialog's side names them - see index.html: the three
-// repositories (on), "Only what runs here" (off), "OpenUI5 only" (off - it
-// narrows, and the list is meant to be everything until somebody says
-// otherwise), and "newer than 1.71" (on - off, it hides what needs a UI5
-// newer than the floor). Kept between visits, together with the three facets
-// below: somebody who only ever wants what runs here on OpenUI5 should not
-// have to say so every time.
+// repositories (on), "Only samples that run in this browser" (off), "Leave out
+// samples that need SAPUI5" (off), and "Include samples that need a UI5 newer
+// than 1.71" (on). The two that narrow start OFF because the list is meant to
+// be everything until somebody says otherwise - a sample somebody cannot find
+// is worse than one they cannot run, and a row that cannot run here says so
+// and is struck through. The one about releases is worded the way it starts,
+// as an inclusion that is ticked: it used to read "newer than 1.71", ticked,
+// and a reader could not tell whether the tick kept those samples or took
+// them away. Kept between visits, together with the three facets below:
+// somebody who only ever wants what runs here on OpenUI5 should not have to
+// say so every time.
 const FILTERS_KEY = "abap2ui5-playground:samples-filters";
 const FILTERS = ["learn", "controls", "stack", "runsonly", "openui5only", "newer"];
 const PICKS = ["control", "library", "release"];
@@ -68,29 +77,23 @@ let picks = { control: "", library: "", release: "" };
  * exceed to count as "newer than 1.71". The index carries the number so this
  * does not restate it; the fallback is for an index too old to have it. */
 let floor = "1.71";
+// Where the side's label prints that number (index.html), to keep it the
+// index's rather than the markup's.
+let floorLabel = null;
 
 const str = (v) => (typeof v === "string" ? v : "");
 
-/** Compare two dotted UI5 versions numerically ("1.9" < "1.71" < "1.120"). */
-function cmpVersion(a, b) {
-  const pa = str(a).split(".").map(Number);
-  const pb = str(b).split(".").map(Number);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const d = (pa[i] || 0) - (pb[i] || 0);
-    if (d) return d;
-  }
-  return 0;
-}
-
 // Which entries the boxes and the facets let through.
 //
-// The samples the page carries and the reader's own drafts pass the BOXES:
-// every one of them is about which repository a row came from, and these came
-// with the page. They do not pass a FACET, because a facet asks something only
-// the index can answer - which control a class builds, which library that is,
+// The rows of "In the page" and the reader's own drafts pass the BOXES: every
+// one of them is about which repository a row came from, and these came with
+// the page. They do not pass a FACET, because a facet asks something only the
+// index can answer - which control a class builds, which library that is,
 // what release it needs - and a row that has no answer is not a match for one.
+// A carried sample the index ALSO lists is that index row (groupsFrom( )),
+// and is judged like every other one.
 function passes(entry) {
-  const own = entry.sampleId !== undefined || entry.draft !== undefined;
+  const own = entry.carried === true || entry.draft !== undefined;
   if (own) return picks.control === "" && picks.library === "" && picks.release === "";
   if (!filters[entry.source]) return false;
   if (filters.runsonly && !entry.runs) return false;
@@ -138,8 +141,18 @@ let indexMissing = false;
 // learning path in its own reading order first, then one group per library
 // for the ports, then one per technology for the stack samples. The ORDER
 // within a group is the index's, which is the repositories' own.
+//
+// A sample the page carries is ALSO an entry of the index - they are
+// abap2UI5/samples' own classes - and it used to be listed twice: under "In
+// the page" and again in its stage, "Start here" mostly, with two different
+// titles for one class. Now the index row is the row, and it opens the
+// carried copy (`sampleId`): the same class, with the classes it calls beside
+// it, and no network. "In the page" keeps what the index does not list, which
+// with a current index is nothing - that group is for a visit without one.
 function groupsFrom(data) {
   floor = str(data.minUi5) || floor;
+  if (floorLabel) floorLabel.textContent = floor;
+  inIndex = new Set();
   const names = data.controls || [];
   const sources = new Map((data.sources || []).map((s) => [s.id, s]));
   const stages = (data.stages || []).filter((s) => s.source === "learn");
@@ -156,9 +169,15 @@ function groupsFrom(data) {
   for (const entry of data.entries || []) {
     const controls = (entry.controls || []).map((i) => names[i]).filter(Boolean);
     const libraries = (entry.libraries || []).filter((l) => typeof l === "string");
+    /* "(A,C)" off the end of the text and said in words, as badges - see
+     * src/shell/sample-marks.mjs; the words are searched too. */
+    const { texts: [title, note], marks } = marksOf(str(entry.title) || str(entry.class), str(entry.note));
+    const carried = carriedByClass.get(str(entry.class).toLowerCase());
     const row = {
-      title: str(entry.title) || str(entry.class),
-      note: str(entry.note),
+      title,
+      note,
+      marks,
+      sampleId: carried?.id,
       who: str(entry.class),
       // From the entry's path and its repository (catalogue-urls.mjs) - the
       // index carries no URL; the helper refuses a path the build would.
@@ -183,11 +202,13 @@ function groupsFrom(data) {
       ].filter(Boolean),
       controlNames: controls,
       libraries,
-      haystack: foldCase(`${entry.title} ${entry.note} ${entry.summary || ""} ${entry.class} `
+      haystack: foldCase(`${title} ${note} ${entry.summary || ""} ${entry.class} `
         + `${entry.entity || ""} ${entry.sample || ""} ${entry.group || ""} ${entry.runsOn || ""} `
-        + `${(entry.keywords || []).join(" ")} ${libraries.join(" ")} ${controls.join(" ")}`),
+        + `${(entry.keywords || []).join(" ")} ${libraries.join(" ")} ${controls.join(" ")} `
+        + `${marks.map((m) => MARKS[m].label).join(" ")}`),
     };
     if (row.url === "") continue;
+    if (carried) inIndex.add(carried.id);
 
     if (row.source === "learn") {
       /* A stage the learning path does not name goes under "More", the way
@@ -227,32 +248,53 @@ let loading = false;
 // search and to open even when no catalogue can be reached. They come out of
 // abap2UI5/samples like every other row; what is different about them is only
 // that they travelled with the page (src/editor/sample-list.mjs).
-const builtIn = {
-  title: "In the page",
-  blurb: "A handful from abap2UI5/samples that the page carries, so it has something to open with no network.",
-  entries: SAMPLES.map((sample) => ({
-    title: sample.title,
-    note: sample.note,
+const carriedEntries = SAMPLES.map((sample) => {
+  const { texts: [title, note], marks } = marksOf(sample.title, sample.note);
+  return {
+    title,
+    note,
+    marks,
     who: "in the page",
     group: sample.group,
     docs: sample.docs,
-    haystack: foldCase(`${sample.title} ${sample.note} ${sample.group}`),
+    haystack: foldCase(`${title} ${note} ${sample.group} ${marks.map((m) => MARKS[m].label).join(" ")}`),
     sampleId: sample.id,
+    carried: true,
     runs: true,
     // The same file every catalogued row links to, in the same repository:
     // these ARE catalogue entries, carried with the page rather than fetched -
     // so they carry the same group badge and the same documentation link too.
     github: sample.github,
-  })),
-};
+  };
+});
+
+// The carried samples by class, which is what an index entry is known by: a
+// sample's first file is its app.
+const carriedByClass = new Map(SAMPLES.map((s) => [String(s.files[0]).replace(/\.clas\.abap$/, ""), s]));
+
+// The carried samples the index lists as well - empty until it has landed.
+let inIndex = new Set();
+
+/** "In the page": the carried samples the index does not list itself. */
+function builtInGroup() {
+  return {
+    title: "In the page",
+    blurb: "A handful from abap2UI5/samples that the page carries, so it has something to open with no network.",
+    entries: carriedEntries.filter((e) => !inIndex.has(e.sampleId)),
+  };
+}
 
 // The groups the index produced - empty until it has landed, and empty for
 // good when it could not be had.
 let loadedGroups = [];
 
-// The reader's own drafts, first in the list: what one saved is what one
-// is most likely to be looking for. Read on every render, because saving
-// and deleting happen in the same dialog. See src/shell/drafts.mjs.
+// The reader's own drafts, at the top of the list and FOLDED: one line saying
+// how many there are, opened with a click (and the click kept between
+// visits, with the filters). They used to be an open group with its save row
+// in front of every sample, so a phone opened the samples browser onto a
+// form - a whole first screen of "name this draft" for somebody who came for
+// a sample. Folded, they are still the first thing in the list and cost one
+// line; a search that finds one opens them by itself. See src/shell/drafts.mjs.
 // Read once per change to the drafts, not once per keystroke: listDrafts( )
 // parses every stored draft with its full sources, and the search redraws on
 // every character. Saving and deleting drop it.
@@ -278,8 +320,49 @@ function buildDraftsGroup() {
         ? "Nothing saved yet. Name what is in the editor and save it here to come back to it another day."
         : "Saved in this browser. Opening one replaces what is in the editor - the current draft stays one Undo away.",
     entries,
-    saveRow: true,
   };
+}
+
+// Whether the reader has the drafts open - kept with the filters, so somebody
+// who uses them finds them open next time and somebody who does not never
+// sees the form.
+let draftsOpen = false;
+
+// The drafts as a <details>: the group's heading in its summary, so the list
+// of headings still starts with "Your drafts", and the count beside it, so a
+// folded section still says whether there is anything in it.
+function draftsSection(group, entries, searching, naming) {
+  const section = document.createElement("details");
+  section.className = "examples-drafts";
+  section.open = draftsOpen || naming || (searching && entries.length > 0);
+  const summary = document.createElement("summary");
+  const head = document.createElement("h3");
+  head.className = "examples-group";
+  head.textContent = group.title;
+  const count = document.createElement("span");
+  count.className = "examples-drafts-count";
+  const saved = group.entries.length;
+  count.textContent = saved === 0 ? "none saved yet" : `${saved} saved in this browser`;
+  summary.append(head, count);
+  // The click, not the toggle event: a toggle also fires for the `open` set
+  // just above, and a search that opened the section for its hits is not the
+  // reader asking for it to stay open.
+  summary.addEventListener("click", () => {
+    draftsOpen = !section.open;
+    keep();
+  });
+  section.append(summary);
+  const blurb = document.createElement("p");
+  blurb.className = "examples-blurb";
+  blurb.textContent = group.blurb;
+  section.append(blurb, saveRow());
+  if (entries.length > 0) {
+    const list = document.createElement("ul");
+    list.className = "insight-list examples-list";
+    for (const entry of entries) list.append(rowFor(entry));
+    section.append(list);
+  }
+  return section;
 }
 
 // What is typed into the save row's name, kept outside it: the list is drawn
@@ -394,6 +477,9 @@ export function setUpExamples(handlers) {
   const stored = readStoredJson(FILTERS_KEY);
   for (const f of FILTERS) if (typeof stored?.[f] === "boolean") filters[f] = stored[f];
   for (const p of PICKS) if (typeof stored?.[p] === "string") picks[p] = stored[p];
+  if (typeof stored?.drafts === "boolean") draftsOpen = stored.drafts;
+  // The floor in the release box's label is the index's, once it is known.
+  floorLabel = dialog.querySelector("[data-floor]");
 
   for (const box of dialog.querySelectorAll("input[data-filter]")) {
     const f = box.dataset.filter;
@@ -427,7 +513,7 @@ export function setUpExamples(handlers) {
 
 /** The boxes and the picks, kept between visits. */
 function keep() {
-  writeStoredJson(FILTERS_KEY, { ...filters, ...picks });
+  writeStoredJson(FILTERS_KEY, { ...filters, ...picks, drafts: draftsOpen });
 }
 
 /** The controls, from the state - after a Clear. */
@@ -458,6 +544,7 @@ export function openExamples() {
           // An index in a shape this module does not know is treated like a
           // missing one - the next deploy of the playground writes both.
           loadedGroups = [];
+          inIndex = new Set();
         }
         // A stored pick is checked against the index's options in
         // fillFacets( ), and only there. Without an index it would stand
@@ -497,14 +584,23 @@ function render() {
   let shown = 0;
   let total = 0;
 
-  for (const group of [draftsGroup(), builtIn, ...loadedGroups]) {
+  // The name field is drawn again with the rest; somebody typing in it keeps
+  // the focus and the caret (its text is draftName) - and its section open.
+  const naming = document.activeElement?.matches?.(".drafts-save input") ? document.activeElement : null;
+  const caret = naming ? [naming.selectionStart, naming.selectionEnd, naming.selectionDirection] : undefined;
+
+  // The drafts stay on screen with none in them, because their save row is
+  // how the first one gets there - but not while a search or a facet is
+  // narrowing the list to something else.
+  const drafts = draftsGroup();
+  const draftHits = drafts.entries.filter((e) => passes(e) && hit(e));
+  const bare = terms.length === 0 && picks.control === "" && picks.library === "" && picks.release === "";
+  if (draftHits.length > 0 || bare) frag.append(draftsSection(drafts, draftHits, terms.length > 0, naming !== null));
+
+  for (const group of [builtInGroup(), ...loadedGroups]) {
     total += group.entries.length;
     const entries = group.entries.filter((e) => passes(e) && hit(e));
-    // The drafts group stays on screen with no drafts in it, because its
-    // save row is how the first one gets there - but not while a search or a
-    // facet is narrowing the list to something else.
-    const bare = terms.length === 0 && picks.control === "" && picks.library === "" && picks.release === "";
-    if (entries.length === 0 && !(group.saveRow && bare)) continue;
+    if (entries.length === 0) continue;
     shown += entries.length;
 
     const head = document.createElement("h3");
@@ -517,8 +613,6 @@ function render() {
       blurb.textContent = group.blurb;
       frag.append(blurb);
     }
-    if (group.saveRow) frag.append(saveRow());
-    if (entries.length === 0) continue;
 
     const list = document.createElement("ul");
     list.className = "insight-list examples-list";
@@ -531,7 +625,7 @@ function render() {
     note.className = "insight-empty";
     note.textContent = "looking in the sample repositories…";
     frag.append(note);
-  } else if (shown === 0) {
+  } else if (shown === 0 && draftHits.length === 0) {
     const note = document.createElement("p");
     note.className = "insight-empty";
     note.textContent = "Nothing here matches that.";
@@ -544,10 +638,6 @@ function render() {
     frag.append(note);
   }
 
-  // The name field is drawn again with the rest; somebody typing in it keeps
-  // the focus and the caret (its text is draftName).
-  const naming = document.activeElement?.matches?.(".drafts-save input") ? document.activeElement : null;
-  const caret = naming ? [naming.selectionStart, naming.selectionEnd, naming.selectionDirection] : undefined;
   body.replaceChildren(frag);
   body.scrollTop = 0;
   if (naming) {
@@ -556,9 +646,13 @@ function render() {
     again?.setSelectionRange(...caret);
   }
   // How much the search and the filters let through, so an empty-looking
-  // list says whether it is the words or the boxes.
+  // list says whether it is the words or the boxes. SAMPLES, and said so: the
+  // drafts are the reader's own and not counted in, and a carried sample the
+  // index lists is one row - this used to add the drafts and the carried
+  // samples on top of the index and say "813 of 813" beside a catalogue that
+  // said 804 samples, for the same list. Now the two agree.
   const count = document.getElementById("examples-count");
-  if (count) count.textContent = loading ? "" : `${shown} of ${total}`;
+  if (count) count.textContent = loading ? "" : `${shown} of ${total} samples`;
   if (clear) clear.hidden = !isNarrowed();
 }
 
@@ -630,12 +724,18 @@ function row(entry) {
   // The release, only where it is above the floor - "UI5 1.71" on seven
   // hundred rows says nothing that the floor does not already say.
   if (entry.minUi5 && cmpVersion(entry.minUi5, floor) > 0) badges.append(badge(`UI5 ${entry.minUi5}`));
+  // What "(A)" and "(C)" on the repository's title stood for, in words.
+  for (const m of entry.marks || []) {
+    const mark = badge(MARKS[m].label, "example-mark");
+    mark.title = MARKS[m].title;
+    badges.append(mark);
+  }
   if (entry.needs) {
     const needs = badge(entry.needs, "example-needs");
     if (entry.why && entry.why.length) needs.title = entry.why.join("\n");
     badges.append(needs);
     button.disabled = true;
-    button.title = `Does not run in the playground: ${entry.needs}`;
+    button.title = `Does not run in the playground: ${entry.needs}. Its ABAP is one click away on GitHub.`;
     item.classList.add("is-unavailable");
   }
   if (badges.childElementCount > 0) line.append(badges);

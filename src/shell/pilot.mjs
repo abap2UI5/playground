@@ -14,9 +14,9 @@
 // client, vendored unchanged into src/vendor/agent/ and run in the chunk
 // src/shell/pilot-agent.mjs. That client sends its requests through a
 // `transport`, and the transport here is the APP FRAME: the frame is made to
-// send a roundtrip (frontend-bridge.js, __z2ui5PlaygroundPilot.roundtrip),
-// the page puts the Pilot's request in place of the frame's (main.mjs, the
-// bridge's roundtrip( ) asks takePilotRequest( )), and the answer goes both
+// send a roundtrip (a "call" to frontend-bridge.js, through frame-link.mjs),
+// the page puts the Pilot's request in place of the frame's (agent-hooks.mjs,
+// the frames' roundtrip( ) asks takePilotRequest( )), and the answer goes both
 // to the client and to the frame, which renders it with its own code. So
 // what the model did is what the reader sees - a popup opens, a toast shows,
 // a table grows - and nothing is simulated.
@@ -30,23 +30,17 @@
 //
 // The key is the reader's, held in memory for the visit - the same rule, and
 // the same reason, as the AI Studio's (src/shell/chat.mjs).
-import { renderMarkdown } from "./chat.mjs";
-import { listenForFileDrops, listSentFiles, setUpAttaching } from "./attach-ui.mjs";
+import { listenForFileDrops } from "./attach-ui.mjs";
+import { createChatRoom, narrow } from "./chat-ui.mjs";
 import { createDriver } from "./frame-drive.mjs";
+import { frameApi as apiOf, isolate, linkOf, navigate, unlink } from "./frame-link.mjs";
+import { frameIsolated } from "./page.mjs";
 import { highlightJson } from "./highlight.mjs";
-import { keyTarget, setUpProviderForm } from "./llm-form.mjs";
-import { readProviderSettings } from "./llm-provider.mjs";
 import { readStored, removeStored, writeStored } from "./storage.mjs";
 import { setStatus } from "./ui.mjs";
 
-// Shared with the AI Studio: one workspace and one speed for the site's two
-// chats. The key itself is never stored, by either.
-const WORKSPACE_STORAGE = "abap2ui5-playground:anthropic-workspace";
-const SPEED_STORAGE = "abap2ui5-playground:ai-speed";
-const DEFAULT_SPEED = "balanced";
 // Whether "What Claude sees" was left open - a preference like a split.
 const SEES_STORAGE = "abap2ui5-playground:pilot-sees";
-const narrow = () => window.matchMedia("(max-width: 820px)").matches;
 
 const SUGGESTIONS = [
   "What can I do in this app?",
@@ -56,11 +50,10 @@ const SUGGESTIONS = [
 
 let host;
 let el;
-let sessionKey = null;
-// The provider half of the key form (llm-form.mjs).
-let providerForm;
-// Which server the key in memory was typed for (keyTarget in llm-form.mjs).
-let keyFor;
+// The chat itself - the log, the key (the same rule, and the same reason, as
+// the studio's), Send and Stop, a turn from message to answer - is
+// chat-ui.mjs, shared with the AI Studio; what is here is the Pilot.
+let room;
 // The chunk: the vendored client, the mirrors, the conversation and the SDK.
 // Asked for when the page starts, not on the first message - the mirrors
 // have to see each app's first roundtrip, and this page is the chat.
@@ -80,29 +73,17 @@ let nextTab = 2;
 // Whether the next pick in the samples browser opens beside the others (the
 // tab strip's +) or in place of the app on screen (Change app).
 let pickBeside = false;
-// The files going with the next message (attach-ui.mjs).
-let attaching;
-
-let agent;
-let active;
-let stopAsked = false;
-let generation = 0;
-let busy = false;
-let current;
-let raw = "";
-let note;
-const rows = new Map();
 let hudTimer;
 
 const tabById = (id) => tabs.find((t) => t.id === id);
 const visibleTab = () => tabById(visible) ?? tabs[0];
-const frameApi = (tab) => tab.frame.contentWindow?.__z2ui5PlaygroundPilot;
+const frameApi = (tab) => apiOf(tab.frame);
 const classOf = (files) => files[0].name.replace(/\.clas\.abap$/, "");
 
 // Which tab a roundtrip came from: the frame's own address names it
 // (?pilot=<tab>), and Run's frame names none.
 function tabFrom(from) {
-  let id = null;
+  let id;
   try {
     id = from ? new URL(from, document.baseURI).searchParams.get("pilot") : null;
   } catch {
@@ -113,20 +94,20 @@ function tabFrom(from) {
 
 // ------------------------------------------------------------- the bridge
 
-/** main.mjs, in the bridge's roundtrip( ): the Pilot's request parked for
+/** agent-hooks.mjs, in the frames' roundtrip( ): the Pilot's request parked for
  *  the frame that is asking, if there is one - taken, so it goes out once. */
 export function takePilotRequest(from) {
   const tab = host && tabFrom(from);
   return tab?.driver.take() ?? null;
 }
 
-/** main.mjs, after every answer the framework gave a frame. */
+/** agent-hooks.mjs, after every answer the framework gave a frame. */
 export function sawRoundtrip(body, response, from) {
   const tab = host && tabFrom(from);
   tab?.driver.saw(body, response);
 }
 
-/** main.mjs, after a Run: one fresh database for all of them, so every other
+/** run.mjs, after a Run: one fresh database for all of them, so every other
  *  app starts again too - or closes, when its class left the files. */
 export function pilotRan() {
   if (!host) return;
@@ -138,12 +119,12 @@ export function pilotRan() {
 }
 
 /** A file drop: on the page (setUpPilot) or on an app, handed over by its
- *  frame (main.mjs, the bridge's dropFiles). It goes to the chat, which a
- *  phone brings forward. */
+ *  frame (dropFiles in agent-hooks.mjs, a message through frame-link.mjs).
+ *  It goes to the chat, which a phone brings forward. */
 export function pilotDropped(files) {
-  if (!attaching || files.length === 0) return;
+  if (!room?.attaching || files.length === 0) return;
   setView("chat");
-  attaching.add(files);
+  room.attaching.add(files);
 }
 
 /** main.mjs: a pick in the samples browser - files, or a promise of them. */
@@ -182,18 +163,7 @@ function attachMirror(tab) {
 // (Re)loads a tab's frame on its class, at the current Run - Run's own frame
 // as well as the others, with the address run( ) builds.
 function loadFrame(tab) {
-  const src = host.frameSrc(tab.cls, tab.id === "1" ? {} : { pilot: tab.id });
-  tab.frame.dataset.src = src;
-  const win = tab.frame.contentWindow;
-  try {
-    if (win && win.location.href !== "about:blank") {
-      win.location.replace(src);
-      return;
-    }
-  } catch {
-    // another origin - set src instead
-  }
-  tab.frame.src = src;
+  navigate(tab.frame, host.frameSrc(tab.cls, tab.id === "1" ? {} : { pilot: tab.id }));
 }
 
 // Until the tab's app has started: its first answer folded, and rendered -
@@ -204,7 +174,7 @@ function loadFrame(tab) {
 async function started(tab, versionBefore) {
   const until = performance.now() + 30000;
   while (performance.now() < until) {
-    let rendering = true;
+    let rendering;
     try {
       rendering = frameApi(tab)?.busy() !== false;
     } catch {
@@ -239,6 +209,10 @@ async function openApp(files, { beside = false, tab: target } = {}) {
     const id = String(nextTab++);
     frame.title = `app ${id}`;
     frame.className = "pilot-frame";
+    // On the same origin as Run's frame, or on none (page.mjs), and heard
+    // from by the page the same way (frame-link.mjs) - before it loads.
+    if (frameIsolated) isolate(frame);
+    linkOf(frame);
     el.stage.querySelector(".app-frame").append(frame);
     tab = addTab(id, frame, cls);
   }
@@ -259,6 +233,7 @@ function closeTab(id) {
   if (!tab) return false;
   tabs.splice(tabs.indexOf(tab), 1);
   tab.driver.close();
+  unlink(tab.frame);
   tab.frame.remove();
   if (visible === id) visible = "1";
   showTab(visible);
@@ -321,7 +296,7 @@ function renderTabs() {
 // ---------------------------------------------------------------- the page
 
 /**
- * `pilotHost` is the page (main.mjs):
+ * `pilotHost` is the page (setUpPilotHooks( ) in agent-hooks.mjs):
  *   files()                   the open files, the app first
  *   run()                     Run, and its report (runForAgent)
  *   addFiles(files, {first})  files beside the open ones, compiled, no Run
@@ -405,94 +380,77 @@ export function setUpPilot(pilotHost) {
     else document.documentElement.requestFullscreen?.().catch(() => {});
   });
 
-  // The provider half of the form (llm-form.mjs), shared with the studio:
-  // Anthropic, or an OpenAI-compatible server with its base URL and model.
-  providerForm = setUpProviderForm("pilot");
-  reflectProvider(readProviderSettings());
-  el.keyForm.addEventListener("submit", (e) => {
-    e.preventDefault();
-    const key = el.keyInput.value.trim();
-    // A key goes only to the server it was typed for: another provider or
-    // base URL asks for its own (an Anthropic key sent as the bearer of
-    // somebody's OpenAI-compatible server is a key given away). The
-    // workspace can be added later on its own, to a key already held - and
-    // a local server needs no key at all.
-    const target = keyTarget(providerForm.read());
-    if (key === "" && keyFor !== target && providerForm.keyRequired()) {
-      sessionKey = null;
-      keyFor = undefined;
-      el.keyRemove.hidden = true;
-      el.keyInput.focus();
-      return;
-    }
-    if (key !== "" || keyFor !== target) {
-      sessionKey = key;
-      keyFor = target;
-    }
-    const workspace = el.workspaceInput.value.trim();
-    if (workspace === "") removeStored(WORKSPACE_STORAGE);
-    else writeStored(WORKSPACE_STORAGE, workspace);
-    reflectProvider(providerForm.save());
-    el.keyInput.value = "";
-    startOver();
-    showKeyForm(false);
-    el.input.focus();
-  });
-  el.keyRemove.addEventListener("click", () => {
-    sessionKey = null;
-    keyFor = undefined;
-    removeStored(WORKSPACE_STORAGE);
-    el.workspaceInput.value = "";
-    startOver();
-    showKeyForm(true);
-  });
-  el.keyButton.addEventListener("click", () => showKeyForm(el.keyForm.hidden));
-
-  el.compose.addEventListener("submit", (e) => {
-    e.preventDefault();
-    if (busy) stopTurn();
-    else submit();
-  });
-  // Files for the next message: the paperclip, a drop anywhere on the page,
-  // or a paste into the message (attach-ui.mjs, shared with the AI Studio).
-  attaching = setUpAttaching({
+  // The key form (the provider half shared with the studio: Anthropic, or an
+  // OpenAI-compatible server with its base URL and model), Send and Stop, New
+  // chat, the speed and the files for the next message (chat-ui.mjs).
+  room = createChatRoom({
     prefix: "pilot",
-    button: el.attach,
-    input: el.fileInput,
-    list: el.files,
-    textarea: el.input,
+    el,
+    onBusy: (busy) => document.body.classList.toggle("is-pilot-flying", busy),
+    showWelcome,
     rules: () => chunk,
-    refused: (text) => addLine("notice is-error", text),
+    turn: {
+      load: () => chunk,
+      createAgent: ({ mod: loaded, ...conversation }) =>
+        loaded.createPilot({
+          ...conversation,
+          host: {
+            files: host.files,
+            // Run, and then every other tab started again on the new Run as
+            // well: runForAgent( ) is answered by the first app's start, while
+            // the others are only just reloading - restart_app on tab 2 read
+            // its old screen, and the model was told the rows it had entered
+            // were still there in a database that was new.
+            run: async () => {
+              const before = new Map(tabs.map((tab) => [tab, tab.mirror?.version]));
+              const report = await host.run();
+              if (report?.started) {
+                await Promise.all(tabs.filter((tab) => before.has(tab) && tab.mirror).map((tab) => started(tab, before.get(tab))));
+              }
+              return report;
+            },
+            carried: host.carried,
+            fetchLinked: host.fetchLinked,
+            // The apps on the stage, as the conversation takes them.
+            apps: () =>
+              tabs.map((tab) => ({
+                id: tab.id,
+                visible: tab.id === visible,
+                mirror: tab.mirror,
+                cls: tab.cls,
+                frame: () => frameApi(tab),
+                drive: (body) => drive(tab, body),
+              })),
+            show: (id) => showTab(id),
+            openApp: (files, options) => openApp(files, options),
+            closeApp: (id) => closeTab(id),
+          },
+          speed: () => el.speed.value,
+        }),
+      working: "the Pilot is flying…",
+      done: "the Pilot is done",
+      ui: {
+        // The model is about to do something to the app: said over it, and
+        // on a phone the app comes forward so the reader sees it happen.
+        acting(t) {
+          showHud(t);
+          if (narrow()) setView("app");
+        },
+      },
+      // On a phone the model's acts brought the app forward; what it says
+      // at the end - an answer, a question, the key form - is in the chat.
+      settled() {
+        if (narrow()) setView("chat");
+      },
+    },
   });
+  // A drop anywhere on the page, or on an app (pilotDropped).
   listenForFileDrops({ highlight: el.chat, onFiles: (files) => pilotDropped(files) });
-
-  el.log.addEventListener("scroll", () => {
-    following = el.log.scrollHeight - el.log.scrollTop - el.log.clientHeight < 48;
-  }, { passive: true });
-  el.input.addEventListener("keydown", (e) => {
-    // keyCode 229: the Enter that commits an IME composition in Safari,
-    // which ends the composition before this keydown (as in the studio).
-    if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
-      e.preventDefault();
-      if (!busy) submit();
-    }
-  });
-  el.reset.addEventListener("click", () => {
-    startOver();
-    showWelcome();
-  });
-
-  const stored = readStored(SPEED_STORAGE);
-  if (stored && [...el.speed.options].some((o) => o.value === stored)) el.speed.value = stored;
-  el.speed.addEventListener("change", () => {
-    if (el.speed.value === DEFAULT_SPEED) removeStored(SPEED_STORAGE);
-    else writeStored(SPEED_STORAGE, el.speed.value);
-  });
 
   window.matchMedia("(max-width: 820px)").addEventListener("change", () => setView(document.body.dataset.view));
   setSees(readStored(SEES_STORAGE) === "open" && !narrow());
   showWelcome();
-  showKeyForm(true);
+  room.showKeyForm(true);
 }
 
 // On a phone the app and the chat take turns; at desk width both are on
@@ -540,7 +498,7 @@ function renderSees() {
   }
   // The reader's unsent typing is on the model's screen too - typing costs
   // no roundtrip, so it is looked for while the panel is open.
-  let typed = {};
+  let typed;
   try {
     typed = frameApi(tab)?.pending?.() ?? {};
   } catch {
@@ -569,55 +527,6 @@ function showHud(text) {
     el.hud.classList.remove("is-on");
     el.hud.hidden = true;
   }, 2600);
-}
-
-function flashStage() {
-  el.stage.classList.remove("is-flash");
-  void el.stage.offsetWidth;
-  el.stage.classList.add("is-flash");
-}
-
-function showKeyForm(show) {
-  el.keyForm.hidden = !show;
-  el.keyRemove.hidden = sessionKey === null;
-  if (show) {
-    el.workspaceInput.value = readStored(WORKSPACE_STORAGE) ?? "";
-    providerForm.fill();
-  }
-}
-
-// The speeds are Anthropic's models; an OpenAI-compatible server answers
-// with the one model the form named, so the select steps aside.
-function reflectProvider(settings) {
-  el.speed.hidden = settings.provider !== "anthropic";
-  el.keyButton.title = settings.provider === "openai"
-    ? `${settings.model} at ${settings.baseUrl} - your API key, and which model API answers`
-    : "Your API key, and which model API answers";
-}
-
-function stopTurn() {
-  stopAsked = true;
-  active?.stop();
-}
-
-function startOver() {
-  if (busy) stopTurn();
-  agent = undefined;
-  generation += 1;
-  finishRows();
-  // The old turn may still be inside a tool (an app opening, a restart) and
-  // only unwinds when that ends; the new conversation is not busy.
-  setBusy(false);
-  el.usage.textContent = "";
-  el.usage.title = "";
-}
-
-function finishRows() {
-  for (const row of rows.values()) {
-    row.className = "pilot-msg pilot-tool is-error";
-    row.textContent = `${row.textContent.replace(/…$/, "")} - not finished`;
-  }
-  rows.clear();
 }
 
 function showWelcome() {
@@ -649,15 +558,6 @@ function showWelcome() {
   el.log.append(intro);
 }
 
-function addLine(kind, text) {
-  const div = document.createElement("div");
-  div.className = `pilot-msg pilot-${kind}`;
-  div.textContent = text;
-  el.log.append(div);
-  scrollDown();
-  return div;
-}
-
 function addCard(text, tabId) {
   const card = document.createElement("button");
   card.type = "button";
@@ -669,193 +569,8 @@ function addCard(text, tabId) {
   card.addEventListener("click", () => {
     setView("app");
     if (tabId) showTab(tabId);
-    flashStage();
+    room.flashStage();
   });
   el.log.append(card);
-  scrollDown();
-}
-
-// The log follows the answer while the reader is at its end, and leaves them
-// where they are when they scrolled up to read (as in the studio).
-let following = true;
-function scrollDown(force = false) {
-  if (force) following = true;
-  if (following) el.log.scrollTop = el.log.scrollHeight;
-}
-
-function setBusy(value) {
-  busy = value;
-  el.send.textContent = busy ? "Stop" : "Send";
-  el.send.classList.toggle("primary", !busy);
-  el.chat.classList.toggle("is-busy", busy);
-  document.body.classList.toggle("is-pilot-flying", busy);
-  el.log.setAttribute("aria-busy", String(busy));
-}
-
-async function submit() {
-  const typed = el.input.value.trim();
-  // A file dropped a moment ago may still be being checked in.
-  await attaching.settled();
-  if (busy || (typed === "" && attaching.count === 0)) return;
-  // Files alone are a message too: the model is told they are what it is about.
-  const text = typed || "Here are the files.";
-  if (sessionKey === null) {
-    showKeyForm(true);
-    el.keyInput.focus();
-    return;
-  }
-  el.log.querySelector(".pilot-welcome")?.remove();
-  el.input.value = "";
-  const files = attaching.take();
-  listSentFiles(addLine("user", typed), files, "pilot-user-files");
-  scrollDown(true);
-  setBusy(true);
-  stopAsked = false;
-  current = undefined;
-  note = undefined;
-  raw = "";
-
-  const gen = generation;
-  const live = () => gen === generation;
-  let turn;
-  try {
-    await chunk;
-    if (stopAsked || !live()) {
-      if (live()) addLine("notice", "Stopped.");
-      setStatus("stopped");
-      return;
-    }
-    if (!agent) {
-      const ui = {
-        assistantStart() {
-          current = undefined;
-          note = undefined;
-        },
-        thinkingStart() {
-          note = undefined;
-        },
-        thinking(delta) {
-          current = undefined;
-          if (!note) note = addLine("progress", "");
-          note.textContent += delta;
-          scrollDown();
-        },
-        toolPending({ id, text: line }) {
-          current = undefined;
-          note = undefined;
-          let row = rows.get(id);
-          if (!row) {
-            row = addLine("tool is-pending", "");
-            rows.set(id, row);
-          }
-          row.textContent = line;
-          scrollDown();
-        },
-        text(delta) {
-          if (!current) {
-            current = addLine("assistant", "");
-            raw = "";
-          }
-          raw += delta;
-          renderMarkdown(current, raw);
-          scrollDown();
-        },
-        tool({ id, summary, error }) {
-          current = undefined;
-          note = undefined;
-          const row = rows.get(id) ?? addLine("tool", "");
-          rows.delete(id);
-          row.className = `pilot-msg pilot-tool${error ? " is-error" : ""}`;
-          row.textContent = summary;
-          scrollDown();
-        },
-        usage(total) {
-          const { text, title } = mod.usageText(total);
-          el.usage.textContent = text;
-          el.usage.title = title;
-        },
-        notice(t) {
-          current = undefined;
-          addLine("notice", t);
-        },
-        // The model is about to do something to the app: said over it, and
-        // on a phone the app comes forward so the reader sees it happen.
-        acting(t) {
-          showHud(t);
-          if (narrow()) setView("app");
-        },
-      };
-      const agentGen = generation;
-      const guarded = Object.fromEntries(
-        Object.entries(ui).map(([k, f]) => [k, (...args) => (agentGen === generation ? f(...args) : undefined)]),
-      );
-      agent = mod.createPilot({
-        apiKey: sessionKey,
-        workspace: readStored(WORKSPACE_STORAGE) ?? undefined,
-        provider: readProviderSettings(),
-        host: {
-          files: host.files,
-          // Run, and then every other tab started again on the new Run as
-          // well: runForAgent( ) is answered by the first app's start, while
-          // the others are only just reloading - restart_app on tab 2 read
-          // its old screen, and the model was told the rows it had entered
-          // were still there in a database that was new.
-          run: async () => {
-            const before = new Map(tabs.map((tab) => [tab, tab.mirror?.version]));
-            const report = await host.run();
-            if (report?.started) {
-              await Promise.all(tabs.filter((tab) => before.has(tab) && tab.mirror).map((tab) => started(tab, before.get(tab))));
-            }
-            return report;
-          },
-          carried: host.carried,
-          fetchLinked: host.fetchLinked,
-          // The apps on the stage, as the conversation takes them.
-          apps: () =>
-            tabs.map((tab) => ({
-              id: tab.id,
-              visible: tab.id === visible,
-              mirror: tab.mirror,
-              cls: tab.cls,
-              frame: () => frameApi(tab),
-              drive: (body) => drive(tab, body),
-            })),
-          show: (id) => showTab(id),
-          openApp: (files, options) => openApp(files, options),
-          closeApp: (id) => closeTab(id),
-        },
-        speed: () => el.speed.value,
-        ui: guarded,
-      });
-    }
-    turn = agent;
-    active = turn;
-    setStatus("the Pilot is flying…");
-    const { stopped } = await turn.send(text, files);
-    if (!live()) return;
-    if (stopped) addLine("notice", "Stopped.");
-    setStatus(stopped ? "stopped" : "the Pilot is done");
-  } catch (e) {
-    if (!live()) return;
-    const said = mod ? mod.explainError(e) : { text: `The AI part of the page could not be loaded: ${String(e?.message ?? e)}` };
-    addLine(said.stopped ? "notice" : "notice is-error", said.text);
-    setStatus(said.stopped ? "stopped" : "the AI request failed", !said.stopped);
-    if (said.key) {
-      // Never sent to a model, and a new key is a new conversation: the
-      // message and its files are put back to send again.
-      if (el.input.value === "") el.input.value = typed;
-      if (files.length > 0) attaching.add(files);
-      showKeyForm(true);
-      (said.workspace ? el.workspaceInput : el.keyInput).focus();
-    }
-  } finally {
-    if (active === turn) active = undefined;
-    if (live()) {
-      finishRows();
-      setBusy(false);
-      // On a phone the model's acts brought the app forward; what it says
-      // at the end - an answer, a question, the key form - is in the chat.
-      if (narrow()) setView("chat");
-    }
-  }
+  room.scrollDown();
 }

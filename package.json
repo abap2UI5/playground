@@ -18,7 +18,10 @@
     "check": "npm run build && npm run check:size && npm test",
     "test": "playwright test",
     "serve": "node tools/serve.mjs",
-    "build:catalogue": "node tools/build-catalogue.mjs"
+    "build:catalogue": "node tools/build-catalogue.mjs",
+    "lint": "eslint .",
+    "typecheck": "tsc -p jsconfig.json --noEmit",
+    "test:unit": "node --test \"tests/node/*.test.mjs\""
   },
   "devDependencies": {
     "@abap2ui5/linter": "0.9.0",
@@ -30,11 +33,16 @@
     "@abaplint/transpiler": "2.14.3",
     "@abaplint/transpiler-cli": "2.14.3",
     "@anthropic-ai/sdk": "0.133.0",
+    "@eslint/js": "10.0.1",
     "@playwright/test": "1.64.0",
     "@ui5/cli": "4.0.71",
+    "@xmldom/xmldom": "0.9.12",
     "buffer": "6.0.3",
     "esbuild": "0.28.2",
+    "eslint": "10.12.0",
+    "globals": "17.12.0",
     "monaco-editor": "0.57.0",
-    "sql.js": "1.14.2"
+    "sql.js": "1.14.2",
+    "typescript": "6.0.3"
   }
 }
