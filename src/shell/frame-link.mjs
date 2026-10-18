@@ -176,6 +176,12 @@ function createLink(frame) {
     post,
     call,
     settings,
+    /** Asks the frame for a fresh report and waits for it: true once
+     *  `state` is the frame's as of now, false when it did not answer. */
+    refresh: () => call("state", [], 5000).then(
+      () => true,
+      () => false,
+    ),
     get state() {
       return state;
     },

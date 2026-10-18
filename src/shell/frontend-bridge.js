@@ -428,20 +428,54 @@
   // exists; rejects when it could not be created, and the page then falls
   // back to the reload.
   var restarting = null;
+  // ComponentSupport's container, by the id the <div data-id> gave it, once
+  // it is placed - null before.
+  function placedContainer() {
+    var require_ = window.sap && sap.ui && sap.ui.require;
+    var Element = require_ && require_("sap/ui/core/Element");
+    var found = Element && Element.getElementById && Element.getElementById("container");
+    return found && found.getUIArea && found.getUIArea() ? found : null;
+  }
+  // Not there yet means ComponentSupport has not run: UI5 goes on booting
+  // after the document's load event, so a Run that came right behind the
+  // reload that brought this document (a sample picked while the one before
+  // was still starting) asked before it - and was refused, and reloaded the
+  // frame a second time. A second container placed now would be a second
+  // app beside the one on its way, so the restart waits for that one, a
+  // tenth of a second at a turn, and replaces it once it is placed. Ten
+  // seconds, inside the page's thirty for the whole call: a container that
+  // has not come by then is not coming, and the page reloads the frame as
+  // it always did.
+  function containerPlaced() {
+    var started = Date.now();
+    return new Promise(function (resolve, reject) {
+      (function look() {
+        var found = placedContainer();
+        if (found) resolve(found);
+        else if (Date.now() - started > 10000) reject(new Error("the frontend is not up to be restarted in place"));
+        else setTimeout(look, 100);
+      })();
+    });
+  }
   function restart(href) {
     if (restarting) return Promise.reject(new Error("a restart is already under way"));
     var require_ = window.sap && sap.ui && sap.ui.require;
-    var Element = require_ && require_("sap/ui/core/Element");
-    // ComponentSupport's container, by the id the <div data-id> gave it. Not
-    // there yet means ComponentSupport has not run (UI5 goes on booting
-    // after the document's load event): a second container placed now would
-    // be a second app beside the one on its way, so this is refused and the
-    // page reloads the frame as it always did.
-    var old = Element && Element.getElementById && Element.getElementById("container");
-    if (!old || !old.getUIArea || !old.getUIArea()) {
-      return Promise.reject(new Error("the frontend is not up to be restarted in place"));
-    }
-    restarting = new Promise(function (resolve, reject) {
+    if (!require_) return Promise.reject(new Error("the frontend is not up to be restarted in place"));
+    restarting = containerPlaced().then(function (old) {
+      return swap(old, href, require_);
+    });
+    restarting.then(
+      function () {
+        restarting = null;
+      },
+      function () {
+        restarting = null;
+      },
+    );
+    return restarting;
+  }
+  function swap(old, href, require_) {
+    return new Promise(function (resolve, reject) {
       // The modules the restart needs, loaded the asynchronous way: the
       // one-argument require only answers for a module that has been
       // required by name before, and the container's own module was not.
@@ -484,15 +518,6 @@
         reject,
       );
     });
-    restarting.then(
-      function () {
-        restarting = null;
-      },
-      function () {
-        restarting = null;
-      },
-    );
-    return restarting;
   }
 
   // A LEAK IN UI5, worked around here until it is fixed there. sap.m.Shell's
