@@ -179,9 +179,17 @@ function structuralProblem(files) {
 // page), one that never booted UI5 or has not finished loading; and false
 // again when the frame refused or took too long, after which the caller
 // reloads it as before. Thirty seconds, like the load it stands in for. What
-// the frame last reported is what decides (frame-link.mjs).
+// the frame reports when asked is what decides (frame-link.mjs).
 async function restartInPlace(frame, src) {
   const link = linkOf(frame);
+  // Asked, not taken from the last report: the frame reports on a 100ms
+  // tick, and right after a document load the last one can be from before
+  // UI5 or the bridge's restart were there - a frame that could restart
+  // would be reloaded. The bridge reports before it answers, so after this
+  // the state is the frame's as of now; a frame that does not answer is
+  // decided by what it last said.
+
+  await link.refresh();
   const was = link.state;
   try {
     if (!was?.ui5 || !was.restarts || was.readyState !== "complete" || new URL(was.href).pathname !== src.pathname) return false;

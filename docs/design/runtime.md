@@ -37,8 +37,9 @@ The drafts abap2UI5 keeps in a database live in an in-memory SQLite — sql.js,
 compiled to WebAssembly. Run means: a fresh database, then the app started
 again in the iframe on `?app_start=<CLASS>&run=<n>` — **in place** where the
 frame is up (the `restart` call to `frontend-bridge.js`, asked by
-`restartInPlace()` in `run.mjs` only when the frame's last `state` report
-says UI5 is up, the bridge restarts, the document is `complete` and on the
+`restartInPlace()` in `run.mjs` only when the frame's `state` report — asked
+for fresh with a `state` call, not the last one of its 100 ms tick — says UI5
+is up, the bridge restarts, the document is `complete` and on the
 same pathname): the ComponentContainer that
 ComponentSupport made is destroyed and made again on the new address. The
 bridge reports UI5 as up once its core is there, which is before
