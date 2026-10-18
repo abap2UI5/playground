@@ -429,40 +429,39 @@
   // back to the reload.
   var restarting = null;
   // ComponentSupport's container, by the id the <div data-id> gave it, once
-  // it is placed - null before.
-  function placedContainer() {
+  // it is in the page - null until then.
+  function containerUp() {
     var require_ = window.sap && sap.ui && sap.ui.require;
     var Element = require_ && require_("sap/ui/core/Element");
-    var found = Element && Element.getElementById && Element.getElementById("container");
-    return found && found.getUIArea && found.getUIArea() ? found : null;
+    var old = Element && Element.getElementById && Element.getElementById("container");
+    return old && old.getUIArea && old.getUIArea() ? old : null;
   }
   // Not there yet means ComponentSupport has not run: UI5 goes on booting
-  // after the document's load event, so a Run that came right behind the
-  // reload that brought this document (a sample picked while the one before
-  // was still starting) asked before it - and was refused, and reloaded the
-  // frame a second time. A second container placed now would be a second
-  // app beside the one on its way, so the restart waits for that one, a
-  // tenth of a second at a turn, and replaces it once it is placed. Ten
-  // seconds, inside the page's thirty for the whole call: a container that
-  // has not come by then is not coming, and the page reloads the frame as
-  // it always did.
-  function containerPlaced() {
-    var started = Date.now();
+  // after the document's load event, and this frame reports UI5 as up once
+  // its core is there - so a Run right after a reload asked for a restart in
+  // that gap, was refused, and reloaded the frame a second time. A second
+  // container placed now would be a second app beside the one on its way,
+  // so the restart waits for the first instead, as long as a boot takes;
+  // only then is it refused and the page reloads the frame as it always did.
+  var CONTAINER_WAIT_MS = 10000;
+  function whenContainerUp() {
+    var since = Date.now();
     return new Promise(function (resolve, reject) {
       (function look() {
-        var found = placedContainer();
-        if (found) resolve(found);
-        else if (Date.now() - started > 10000) reject(new Error("the frontend is not up to be restarted in place"));
-        else setTimeout(look, 100);
+        var old = containerUp();
+        if (old) resolve(old);
+        else if (Date.now() - since > CONTAINER_WAIT_MS) reject(new Error("the frontend is not up to be restarted in place"));
+        else setTimeout(look, 50);
       })();
     });
   }
+
   function restart(href) {
     if (restarting) return Promise.reject(new Error("a restart is already under way"));
     var require_ = window.sap && sap.ui && sap.ui.require;
     if (!require_) return Promise.reject(new Error("the frontend is not up to be restarted in place"));
-    restarting = containerPlaced().then(function (old) {
-      return swap(old, href, require_);
+    restarting = whenContainerUp().then(function (old) {
+      return restartFrom(old, require_, href);
     });
     restarting.then(
       function () {
@@ -474,7 +473,8 @@
     );
     return restarting;
   }
-  function swap(old, href, require_) {
+
+  function restartFrom(old, require_, href) {
     return new Promise(function (resolve, reject) {
       // The modules the restart needs, loaded the asynchronous way: the
       // one-argument require only answers for a module that has been
