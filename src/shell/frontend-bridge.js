@@ -428,20 +428,54 @@
   // exists; rejects when it could not be created, and the page then falls
   // back to the reload.
   var restarting = null;
+  // ComponentSupport's container, by the id the <div data-id> gave it, once
+  // it is in the page - null until then.
+  function containerUp() {
+    var require_ = window.sap && sap.ui && sap.ui.require;
+    var Element = require_ && require_("sap/ui/core/Element");
+    var old = Element && Element.getElementById && Element.getElementById("container");
+    return old && old.getUIArea && old.getUIArea() ? old : null;
+  }
+  // Not there yet means ComponentSupport has not run: UI5 goes on booting
+  // after the document's load event, and this frame reports UI5 as up once
+  // its core is there - so a Run right after a reload asked for a restart in
+  // that gap, was refused, and reloaded the frame a second time. A second
+  // container placed now would be a second app beside the one on its way,
+  // so the restart waits for the first instead, as long as a boot takes;
+  // only then is it refused and the page reloads the frame as it always did.
+  var CONTAINER_WAIT_MS = 10000;
+  function whenContainerUp() {
+    var since = Date.now();
+    return new Promise(function (resolve, reject) {
+      (function look() {
+        var old = containerUp();
+        if (old) resolve(old);
+        else if (Date.now() - since > CONTAINER_WAIT_MS) reject(new Error("the frontend is not up to be restarted in place"));
+        else setTimeout(look, 50);
+      })();
+    });
+  }
+
   function restart(href) {
     if (restarting) return Promise.reject(new Error("a restart is already under way"));
     var require_ = window.sap && sap.ui && sap.ui.require;
-    var Element = require_ && require_("sap/ui/core/Element");
-    // ComponentSupport's container, by the id the <div data-id> gave it. Not
-    // there yet means ComponentSupport has not run (UI5 goes on booting
-    // after the document's load event): a second container placed now would
-    // be a second app beside the one on its way, so this is refused and the
-    // page reloads the frame as it always did.
-    var old = Element && Element.getElementById && Element.getElementById("container");
-    if (!old || !old.getUIArea || !old.getUIArea()) {
-      return Promise.reject(new Error("the frontend is not up to be restarted in place"));
-    }
-    restarting = new Promise(function (resolve, reject) {
+    if (!require_) return Promise.reject(new Error("the frontend is not up to be restarted in place"));
+    restarting = whenContainerUp().then(function (old) {
+      return restartFrom(old, require_, href);
+    });
+    restarting.then(
+      function () {
+        restarting = null;
+      },
+      function () {
+        restarting = null;
+      },
+    );
+    return restarting;
+  }
+
+  function restartFrom(old, require_, href) {
+    return new Promise(function (resolve, reject) {
       // The modules the restart needs, loaded the asynchronous way: the
       // one-argument require only answers for a module that has been
       // required by name before, and the container's own module was not.
@@ -484,15 +518,6 @@
         reject,
       );
     });
-    restarting.then(
-      function () {
-        restarting = null;
-      },
-      function () {
-        restarting = null;
-      },
-    );
-    return restarting;
   }
 
   // A LEAK IN UI5, worked around here until it is fixed there. sap.m.Shell's

@@ -40,8 +40,13 @@ frame is up (the `restart` call to `frontend-bridge.js`, asked by
 `restartInPlace()` in `run.mjs` only when the frame's last `state` report
 says UI5 is up, the bridge restarts, the document is `complete` and on the
 same pathname): the ComponentContainer that
-ComponentSupport made is destroyed and made again on the new address, which
-is what the frontend's own `Component.exit()`/`init()` are built for (an FLP
+ComponentSupport made is destroyed and made again on the new address. The
+bridge reports UI5 as up once its core is there, which is before
+ComponentSupport has made that container, so a restart asked in the gap
+waits for the container (up to ten seconds, `whenContainerUp()`) rather
+than being refused: refused, a Run right after a reload loaded the frame a
+second time (`tests/run.spec.js`, two samples picked during a run).
+Destroying it and making it again is what the frontend's own `Component.exit()`/`init()` are built for (an FLP
 re-launch — every listener detached, the roundtrips in flight aborted, the
 timers cancelled, the popup slots and the context destroyed), with what UI5
 keeps in its static area outside any component closed by hand (a MessageBox,
