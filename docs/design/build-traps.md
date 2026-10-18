@@ -841,6 +841,14 @@ it shaped.
    same-origin script, so an unguessable name was refused and the service
    worker hashes a cached hit before serving it (`verifiedHit( )` in
    `sw.js`) - 70-210 ms of WebCrypto for ~20 MB, off the page's thread.
+8. **The frame's files are the same hole.** Leaving the UI5 tree under
+   `app/` unchecked because "only the frame loads it" missed that the
+   playground's frame is this origin: a link's view could write its own
+   `sap-ui-core.js` into the cache and run first on every later visit.
+   The hashes live in `app-hashes.json` beside the worker (6,030 files is
+   0.6 MB - too much to parse at every start of the worker), named in it by
+   its own hash, so a forged copy of the file is refused like a forged
+   script (`tests/worker.spec.js`).
 
 ### Findings from the guides, Compare and the layout editor hand-over
 

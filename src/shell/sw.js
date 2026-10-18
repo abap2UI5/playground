@@ -119,7 +119,17 @@ const DOC_HASHES = __DOCS__;
 // of the bytes this build wrote. Written in by the build like the two above.
 const ASSET_HASHES = __ASSET_HASHES__;
 
-const expectedHash = (rel) => CORE_HASHES[rel] ?? DOC_HASHES[rel] ?? ASSET_HASHES[rel];
+// And the frame's files - UI5, the frontend, the bridge - by their bytes too,
+// in a file of their own beside this worker (writeAppHashes( ) in
+// tools/service-worker.mjs says why there), which this worker knows by the
+// hash written in here.
+const APP_HASHES_FILE = "app-hashes.json";
+const APP_HASHES = "__APP_HASHES__";
+// What the frame loads that runs nothing: images and fonts, not in the file.
+const INERT = /\.(png|gif|jpe?g|ico|woff2?|ttf|eot)$/i;
+
+const expectedHash = (rel) =>
+  rel === APP_HASHES_FILE ? APP_HASHES : CORE_HASHES[rel] ?? DOC_HASHES[rel] ?? ASSET_HASHES[rel];
 const hexOf = async (bytes) =>
   [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((b) => b.toString(16).padStart(2, "0")).join("");
 
@@ -154,22 +164,77 @@ async function matchesBuild(rel, response) {
 // framework's share, a few tens of milliseconds, against the download it
 // would otherwise be.
 // An unguessable cache name was the cheaper idea and is no defence:
-// caches.keys( ) hands any script the names. The UI5 tree under app/ has no
-// hashes (it is pinned by version, and hashing its thousands of files into
-// this worker would double its size); it is only ever loaded by the app
-// frame, which on the AI pages is on an opaque origin that this worker
-// never serves.
+// caches.keys( ) hands any script the names.
+//
+// The frame's files under app/ are checked the same way, against
+// app-hashes.json. They were left out at first - pinned by version, and the
+// AI pages' frame is on an opaque origin this worker never serves - but the
+// playground's frame is this origin, so a link's view could put its own
+// sap-ui-core.js here, and every later visit to the playground ran it before
+// anything else: past the Gist caution, which only knows about the code of
+// THIS visit, and able to rewrite the stored provider settings the next
+// time. Their hashes are cut to 128 bits, which is still nothing anybody
+// forges. A copy under app/ that the file does not name is not served at
+// all; nor is any while the file cannot be had - the network answers
+// instead, which offline is no answer, and that is the safe way round.
 async function verifiedHit(cache, key, rel) {
   const hit = await cache.match(key);
   if (!hit) return undefined;
-  const expected = expectedHash(rel);
+  let expected = expectedHash(rel);
+  if (expected === undefined && rel.startsWith("app/") && !INERT.test(rel)) {
+    const hashes = await appHashes(cache);
+    expected = hashes?.[rel];
+    if (expected === undefined) return undefined;
+  }
   if (expected === undefined) return hit;
   const bytes = await hit.arrayBuffer();
-  if ((await hexOf(bytes)) !== expected) {
+  if ((await hexOf(bytes)).slice(0, expected.length) !== expected) {
     await cache.delete(key).catch(() => {});
     return undefined;
   }
   return new Response(bytes, { status: hit.status, statusText: hit.statusText, headers: hit.headers });
+}
+
+// app-hashes.json, read once for as long as this worker runs: from the cache
+// it was precached into, else from the network - each copy checked against
+// APP_HASHES, a copy somebody wrote into the cache included, and a good one
+// from the network kept for offline. Undefined when no copy passes; asked
+// again next time rather than remembered as missing.
+let appHashesRead;
+function appHashes(cache) {
+  appHashesRead ??= (async () => {
+    const url = new URL(APP_HASHES_FILE, BASE);
+    const sources = [
+      () => cache.match(url),
+      () => fetch(url, { credentials: "same-origin" }),
+      () => fetch(url, { credentials: "same-origin", cache: "reload" }),
+    ];
+    for (const [i, get] of sources.entries()) {
+      try {
+        const response = await get();
+        if (!response || response.status !== 200) continue;
+        const bytes = await response.arrayBuffer();
+        if ((await hexOf(bytes)) !== APP_HASHES) {
+          if (i === 0) await cache.delete(url).catch(() => {});
+          continue;
+        }
+        if (i > 0) {
+          await cache
+            .put(url, new Response(bytes, { headers: { "content-type": "application/json" } }))
+            .catch(() => {});
+        }
+        return JSON.parse(new TextDecoder().decode(bytes));
+      } catch {
+        // The next source; none left is no file.
+      }
+    }
+    return undefined;
+  })();
+  const read = appHashesRead;
+  read.then((hashes) => {
+    if (!hashes && appHashesRead === read) appHashesRead = undefined;
+  });
+  return read;
 }
 
 // Filled while the page that registered this worker is still open, rather than
@@ -200,13 +265,16 @@ async function verifiedHit(cache, key, rel) {
 // passes. Only a copy that fails the check goes to the network again - so the
 // megabyte or so of core bundle is not downloaded twice on every first visit.
 const RELOAD = (rel) =>
-  rel === "app/Component-preload.js" || rel === "app/frontend-bridge.js" || DOCUMENTS.includes(rel);
+  rel === "app/Component-preload.js" ||
+  rel === "app/frontend-bridge.js" ||
+  rel === APP_HASHES_FILE ||
+  DOCUMENTS.includes(rel);
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(CACHE);
       await Promise.allSettled(
-        [...CORE, ...APP_FIRST_LOAD, ...DOCUMENTS].map(async (rel) => {
+        [...CORE, ...APP_FIRST_LOAD, ...DOCUMENTS, APP_HASHES_FILE].map(async (rel) => {
           const url = new URL(rel, BASE);
           const get = (mode) => fetch(url, { credentials: "same-origin", cache: mode });
           let response = await get(RELOAD(rel) ? "reload" : "default");

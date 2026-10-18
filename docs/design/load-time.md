@@ -144,8 +144,20 @@ code:
   otherwise plant a script under the bundle's name for the next visit, the AI
   pages' included. Cost measured 2026-10-17: 70-210 ms of WebCrypto for the
   ~20 MB, off the page's thread. An unguessable cache name was refused
-  (`caches.keys()` lists it to any same-origin script). The UI5 tree under
-  `app/` is not covered (pinned by version, thousands of files). The runtime
+  (`caches.keys()` lists it to any same-origin script). The frame's files
+  under `app/` are checked too, against `dist/app-hashes.json`
+  (`writeAppHashes()` in `tools/service-worker.mjs`: every file but the
+  images, the fonts and `app/index.html`, SHA-256 cut to 128 bits; 6,030
+  files, 0.57 MB, 0.17 MB compressed). It is a file beside the worker, not
+  written into it, so the browser does not parse 0.6 MB each time it starts
+  the worker; the worker knows it by the hash in `APP_HASHES`, reads it once
+  per run of the worker (`appHashes()`), and precaches it so the check holds
+  offline. A cached copy under `app/` the file does not name, or any while
+  no good copy of the file can be had, is not served - the network answers.
+  Without it a link's view on the playground (same-origin frame) could
+  plant its own `sap-ui-core.js` to run on every later visit, past the Gist
+  caution, which only knows about the code of the current visit. Building
+  the file reads the whole UI5 tree: under a second (2026-10-18). The runtime
   worker cannot open the cache at all (`src/runtime/lockdown.mjs`). **A core asset goes into the cache only if
   it hashes to the build** — `build-site.mjs` writes the SHA-256 of each
   unhashed core file into the worker beside the build id, and install and
