@@ -131,6 +131,10 @@ test("the chat builds an app in the editor, runs it and tells the model what hap
   await page.locator('.studio-stage[data-stage="code"]').click();
   await expect(page.locator("#editor")).toBeVisible();
   await expect(page.locator("#app")).toBeHidden();
+  // The file strip without the playground's "+ table": the model writes
+  // classes only.
+  await expect(page.locator(".file-add")).toBeVisible();
+  await expect(page.locator(".file-add-table")).toBeHidden();
   // ...and the card brings the app back.
   await page.locator(".chat-card").click();
   await expect(page.locator("#app")).toBeVisible();
