@@ -2303,6 +2303,9 @@ body.is-studio .studio-bar { grid-column: 1 / -1; grid-row: 1; }
 body.is-studio .chat { grid-column: 1; grid-row: 2 / -1; }
 body.is-studio .pane-right { grid-column: 2; grid-row: 2 / -1; display: flex; border-left: 0; }
 body.is-studio .pane-left > .files { grid-column: 2; grid-row: 2; }
+/* No "+ table" in the studio: the model writes classes only, and a table
+   is the playground's tool for somebody writing ABAP by hand. */
+body.is-studio .file-add-table { display: none; }
 body.is-studio .pane-left > .editor { grid-column: 2; grid-row: 3; min-height: 0; }
 body.is-studio .pane-left > .insight { grid-column: 2; grid-row: 4; }
 
