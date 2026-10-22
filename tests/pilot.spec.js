@@ -695,3 +695,93 @@ test("a date cell comes as a date, a Word table as rows, and a deck as its slide
   expect(deck).toContain("--- slide 1 ---\nOrder app\nOne list\nOne form");
   expect(deck).toContain("--- slide 2 ---\nFields\nField\tType\nORDER_ID\tCHAR 10");
 });
+
+test("an act on an app opened in the same answer is refused: the model has not seen that screen", async ({ page }) => {
+  const requests = await answerWith(page, [
+    { tools: [
+      { name: "open_app", input: { class: "z2ui5_cl_smp_app_009", beside: true } },
+      { name: "act", input: { app: "2", event: "POPUP_TABLE_VALUE" } },
+    ] },
+    { text: "Opened." },
+  ]);
+  await openPilot(page);
+  await useKey(page);
+  await say(page, "Open the value help app and open its popup");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("Opened.", { timeout: 90000 });
+  const [opened, acted] = requests[1].body.messages.at(-1).content;
+  expect(opened.is_error).toBeUndefined();
+  expect(acted.is_error).toBe(true);
+  expect(acted.content).toContain("you have not seen the screen of app 2 yet");
+  expect(acted.content).toContain("The screen now:");
+  await expect(page.locator(".pilot-tab")).toHaveCount(2);
+});
+
+test("read_source cuts each class on its own, and an app that does not compile says which line", async ({ page }) => {
+  const cls = "z2ui5_cl_smpc_app_001";
+  await page.route(`https://raw.githubusercontent.com/**/${cls}.clas.abap`, (route) => route.fulfill({
+    status: 200,
+    body: `CLASS ${cls} DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    INTERFACES z2ui5_if_app.\nENDCLASS.\n\n`
+      + `CLASS ${cls} IMPLEMENTATION.\n  METHOD z2ui5_if_app~main.\n    DATA(x) = nothing_here.\n`
+      + "  ENDMETHOD.\nENDCLASS.\n",
+  }));
+  const requests = await answerWith(page, [
+    { tools: [{ name: "read_source", input: {} }, { name: "open_app", input: { class: cls } }] },
+    { text: "Read." },
+  ]);
+  await openPilot(page);
+  await useKey(page);
+  await say(page, "Read the source, then open the other one");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("Read.", { timeout: 90000 });
+  const [source, opened] = requests[1].body.messages.at(-1).content;
+  expect(source.is_error).toBeUndefined();
+  expect(source.content).toMatch(/^classes: z2ui5_cl_smp_app_494\.clas\.abap \(\d+ lines\) - the app/);
+  expect(source.content).toContain("=== z2ui5_cl_smp_app_494.clas.abap (the app) ===");
+  expect(opened.is_error).toBe(true);
+  expect(opened.content).toContain("did not start");
+  expect(opened.content).toMatch(new RegExp(`- ${cls}\\.clas\\.abap:8 `));
+  // The app on screen is untouched.
+  await expect(page.locator("#pilot-app-name")).toContainText("Z2UI5_CL_SMP_APP_494");
+});
+
+test("the conversation comes back after a reload, and the next message says the app started again", async ({ page }) => {
+  const requests = await answerWith(page, [{ text: "Greeted." }, { text: "Still here." }]);
+  await openPilot(page);
+  await useKey(page);
+  await say(page, "Greet Ann");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("Greeted.", { timeout: 60000 });
+
+  await page.reload();
+  await openPilot(page);
+  await expect(page.locator(".pilot-user")).toHaveText("Greet Ann");
+  await expect(page.locator(".pilot-assistant")).toHaveText("Greeted.");
+  await expect(page.locator(".pilot-notice").last()).toContainText("back from before the reload");
+
+  // The key typed again keeps it; the next request carries the history and
+  // the screen as changed, not as the first one.
+  await useKey(page);
+  await expect(page.locator(".pilot-assistant")).toHaveCount(1);
+  await say(page, "and now?");
+  await expect(page.locator(".pilot-assistant").last()).toContainText("Still here.", { timeout: 60000 });
+  await expect(page.locator("#pilot-usage")).toContainText("in");
+  const sent = requests.at(-1).body.messages;
+  expect(sent.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
+  expect(textOf(sent.at(-1))).toContain("Changed since your last step");
+  expect(textOf(sent.at(-1))).not.toContain("The screen right now");
+
+  // New chat forgets it.
+  await page.locator("#pilot-new").click();
+  await page.reload();
+  await openPilot(page);
+  await expect(page.locator(".pilot-welcome")).toBeVisible();
+  await expect(page.locator(".pilot-user")).toHaveCount(0);
+});
+
+test("without a key the welcome offers a model on the reader's own machine", async ({ page }) => {
+  await openPilot(page);
+  await page.locator(".pilot-local-open").click();
+  await expect(page.locator("#pilot-key")).toBeVisible();
+  await expect(page.locator("#pilot-provider")).toHaveValue("openai");
+  await expect(page.locator("#pilot-base-url")).toHaveValue("http://localhost:11434/v1");
+  await expect(page.locator("#pilot-key-target")).toContainText("localhost:11434");
+  await expect(page.locator("#pilot-sees")).toHaveText("What Claude sees");
+});

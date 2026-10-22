@@ -2616,8 +2616,10 @@ body.is-studio .chat-welcome h2 {
 body.is-studio .chat-suggestions { align-items: stretch; gap: .55rem; }
 .chat-resume { display: flex; align-items: center; gap: .6rem; margin-top: .9rem; }
 /* The welcome's way in without a key (chat.mjs, offerLocalModel). */
-.chat-local { margin: .9rem 0 0; font-size: 13px; }
-.chat-local-open { font-size: inherit; }
+.chat-local,
+.pilot-local { margin: .9rem 0 0; font-size: 13px; }
+.chat-local-open,
+.pilot-local-open { font-size: inherit; }
 .chat-checkpoint { align-self: flex-start; margin-left: 2.1rem; }
 .chat-checkpoint-restore { font-size: 12px; color: var(--fg-dim); }
 .chat-user { position: relative; }
@@ -2927,11 +2929,14 @@ body.is-pilot button.pilot-view[aria-selected="true"] { background: var(--pl-gra
 @media (max-width: 820px) {
   .pilot-bar { flex-wrap: wrap; gap: 8px; padding: 8px 2px; }
   .pilot-brand-name,
-  .pilot-status,
   .pilot-app { display: none; }
   .pilot-views { order: 3; flex: 1 1 100%; }
   body.is-pilot button.pilot-view { flex: 1; }
   .pilot-brand { margin-right: auto; }
+  /* The status on a row of its own while it says something (as the
+     studio's): "the app could not be opened" was never seen on a phone. */
+  .pilot-status { order: 4; flex: 1 1 100%; text-align: left; font-size: 11px; }
+  .pilot-status:empty { display: none; }
 }
 
 /* The stage: the app in a console bezel. */

@@ -267,7 +267,7 @@ Each bullet names the design doc that explains it. Keep them true.
 **AI** ([ai-chat.md](docs/design/ai-chat.md), [ai-pilot.md](docs/design/ai-pilot.md))
 - A key or token is held in memory for the visit and never stored; a key goes only to the server it was typed for. The Pilot opens a link's code only after asking (the app steers the model); the Gist section asks once a link's code has run (the playground's frame is same-origin).
 - The model's tools go through the same paths as the reader's (`replaceWith()`, `run()`); the conversation is append-only (bar `rewind()` of the last exchange); agent chunks stay out of the precache.
-- The studio's conversation is kept for the tab in sessionStorage (`keepConversation()` in `chat.mjs`), never the key; the files under `AI_STORAGE_KEY` in localStorage. Nothing of it asks for `beforeunload`.
+- Both rooms keep their conversation for the tab in sessionStorage (`keepConversation()` in `chat.mjs` and `pilot.mjs`), never the key; the studio's files under `AI_STORAGE_KEY` in localStorage. Nothing of it asks for `beforeunload`.
 - The studio's target system is abaplint's `version`, nothing of its own: the header sets it the way the Config tab does, and the model is told the release the check runs at, never another.
 - `src/vendor/agent/` is never edited here — change upstream and re-vendor.
 

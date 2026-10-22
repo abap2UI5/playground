@@ -395,24 +395,6 @@ function placeholderNotice() {
   keepConversation();
 }
 
-// No key? A model on the reader's own machine needs none: the key form,
-// turned to an OpenAI-compatible server at Ollama's address unless a base
-// URL is already set. The model's name is the reader's to type - nothing
-// here knows what they pulled.
-function offerLocalModel() {
-  room.showKeyForm(true);
-  const provider = document.getElementById("chat-provider");
-  const baseUrl = document.getElementById("chat-base-url");
-  const model = document.getElementById("chat-model");
-  provider.value = "openai";
-  provider.dispatchEvent(new Event("change"));
-  if (baseUrl.value.trim() === "" || baseUrl.value.trim() === "https://api.openai.com/v1") {
-    baseUrl.value = "http://localhost:11434/v1";
-    baseUrl.dispatchEvent(new Event("input"));
-  }
-  model.focus();
-}
-
 export const chatOpen = () => open;
 
 /** agent-hooks.mjs, in the frames' roundtrip( ): the model's request parked for
@@ -700,18 +682,9 @@ function showWelcome() {
   }
   intro.append(title, lead, list);
   // Without a key nothing here answers; a local model is the way in that
-  // costs nothing. Offered while no key is held.
-  if (!room.hasKey()) {
-    const local = document.createElement("p");
-    local.className = "chat-local";
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "ghost chat-local-open";
-    button.textContent = "Use a model on your own machine";
-    button.addEventListener("click", offerLocalModel);
-    local.append("No API key? ", button, " - Ollama or LM Studio, no key and no cost; it needs a model that can call tools.");
-    intro.append(local);
-  }
+  // costs nothing (chat-ui.mjs). Offered while no key is held.
+  const local = room.localModelOffer();
+  if (local) intro.append(local);
   const offer = resumeOffer();
   if (offer) intro.append(offer);
   el.log.append(intro);

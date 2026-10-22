@@ -35,6 +35,10 @@ const MAX_TOOL_TEXT = 30000;
 const clip = (text, max = MAX_TOOL_TEXT) => clipTo(text, max);
 // What all the screens one message carries may take together.
 const MAX_SCREENS_TEXT = 60000;
+// read_source: each class cut on its own, under a ceiling for all of them -
+// cut as one text at MAX_TOOL_TEXT, the second app's class was never seen.
+const MAX_FILE_TEXT = 24000;
+const MAX_FILES_TEXT = 90000;
 
 // ---------------------------------------------------------- instructions
 
@@ -217,8 +221,12 @@ const TOOLS = [
  *   host.closeApp(id)                 closes a tab (not the first)
  *   host.run()                        Run: every app again, on a fresh database
  *   host.carried(cls), host.fetchLinked(url), host.files()
+ *
+ * `resume` is a conversation's `state` from before a reload (pilot.mjs keeps
+ * it for the tab): the history and the usage, taken up where they were - the
+ * screens are told afresh, since the apps started again.
  */
-export function createPilot({ apiKey, workspace, provider: settings, host, ui, speed = () => DEFAULT_SPEED }) {
+export function createPilot({ apiKey, workspace, provider: settings, host, ui, speed = () => DEFAULT_SPEED, resume }) {
   // Which API answers - the key form's choice (llm-provider.mjs), Anthropic
   // unless it said otherwise.
   const provider = providerFor({ ...settings, apiKey, workspace });
@@ -257,7 +265,7 @@ export function createPilot({ apiKey, workspace, provider: settings, host, ui, s
     host.apps().map((a) => `${a.id} ${a.mirror?.state.app || a.cls?.toUpperCase()}${a.visible ? " (on screen)" : ""}`).join(", ");
   // Append-only, as in the studio: thinking blocks are bound to the history
   // they were written in.
-  const messages = [];
+  const messages = Array.isArray(resume?.messages) ? resume.messages : [];
   // Each app's mirror version the model was last told about - by a tool's
   // answer or by the screen sent with a message.
   const told = new Map();
@@ -283,7 +291,14 @@ export function createPilot({ apiKey, workspace, provider: settings, host, ui, s
   // ended on its own, up to half a minute later.
   let stopping;
   let stopNow = () => {};
-  const total = { input: 0, output: 0, cached: 0, written: 0, dollars: provider.priced ? 0 : undefined };
+  const total = {
+    input: resume?.total?.input ?? 0,
+    output: resume?.total?.output ?? 0,
+    cached: resume?.total?.cached ?? 0,
+    written: resume?.total?.written ?? 0,
+    dollars: provider.priced ? resume?.total?.dollars ?? 0 : undefined,
+  };
+  if (resume) ui.usage({ ...total });
 
   // A snapshot as the model reads it, with the tab it belongs to - and a
   // failed last answer (a dump of the reader's click), which the snapshot
@@ -306,7 +321,9 @@ export function createPilot({ apiKey, workspace, provider: settings, host, ui, s
     });
     const content = [];
     const toldBefore = new Map(told);
-    const first = told.size === 0;
+    // Taken up after a reload, the screen is not "right now" but changed:
+    // the apps started again on a fresh database.
+    const first = told.size === 0 && messages.length === 0;
     const changed = host.apps().filter((a) => told.get(a.id) !== stateOf(a));
     if (changed.length > 0) {
       const screens = [];
@@ -415,7 +432,8 @@ export function createPilot({ apiKey, workspace, provider: settings, host, ui, s
         type: "tool_result",
         tool_use_id: use.id,
         ...(result.error ? { is_error: true } : {}),
-        content: clip(result.error ?? result.text),
+        // read_source is cut per class already.
+        content: result.whole && !result.error ? result.text : clip(result.error ?? result.text),
       });
     }
     // Not every screen is marked told here: a tool that read no screen
@@ -452,12 +470,7 @@ export function createPilot({ apiKey, workspace, provider: settings, host, ui, s
       case "restart_app": {
         ui.acting?.("restarting the apps");
         const report = await host.run();
-        if (!report.started) {
-          const errors = (report.problems ?? []).filter((p) => p.severity === 1).slice(0, 10);
-          return {
-            error: `The app did not start: ${report.status}${errors.length ? `\n${errors.map((p) => `- ${p.file}:${(p.range?.start?.line ?? 0) + 1} ${p.message}`).join("\n")}` : ""}`,
-          };
-        }
+        if (!report.started) return { error: `The app did not start: ${notStarted(report)}` };
         const app = appOf(input.app);
         if (!app.visible) host.show(app.id);
         return { text: `Open apps: ${appList()}.\n${snapshotText(app, await operatorOf(app).look())}`, summary: "restarted the apps" };
@@ -477,10 +490,16 @@ export function createPilot({ apiKey, workspace, provider: settings, host, ui, s
       }
       case "read_source": {
         const files = host.files();
-        return {
-          text: files.map((f, i) => `=== ${f.name}${i === 0 ? " (the app)" : ""} ===\n${f.source}`).join("\n\n"),
-          summary: `read ${files[0]?.name ?? "the source"}`,
-        };
+        const list = files.map((f, i) => `${f.name} (${f.source.split("\n").length} lines)${i === 0 ? " - the app" : ""}`).join(", ");
+        let room = MAX_FILES_TEXT;
+        const parts = files.map((f, i) => {
+          const head = `=== ${f.name}${i === 0 ? " (the app)" : ""} ===`;
+          if (room <= 0) return `${head}\n… (not shown - the classes together are too long)`;
+          const text = clip(f.source, Math.min(MAX_FILE_TEXT, room));
+          room -= text.length;
+          return `${head}\n${text}`;
+        });
+        return { text: `classes: ${list}\n\n${parts.join("\n\n")}`, whole: true, summary: `read ${files[0]?.name ?? "the source"}` };
       }
       default: return { error: `There is no tool called ${echo(name)}.` };
     }
@@ -499,7 +518,13 @@ export function createPilot({ apiKey, workspace, provider: settings, host, ui, s
     const operator = operatorOf(app);
     try {
       const saw = shownAt.get(app.id);
-      if (event && saw !== undefined && String(app.mirror?.version) !== saw) {
+      // An app this answer was not written for - opened by open_app in the
+      // same answer, or by the reader's + App while the model thought - is
+      // a screen the model has not seen: the act was written blind.
+      if (event && saw === undefined) {
+        throw new AgentError(`you have not seen the screen of app ${app.id} yet - ${echo(event)} was not pressed${values ? " and nothing was typed" : ""}; act on the screen below`);
+      }
+      if (event && String(app.mirror?.version) !== saw) {
         throw new AgentError(`the screen changed since you saw it (the person used the app, or an earlier step of yours changed it) - ${echo(event)} was not pressed${values ? " and nothing was typed" : ""}; act on the screen below`);
       }
       // Brought on screen only for an act that can happen: an event the
@@ -540,6 +565,13 @@ export function createPilot({ apiKey, workspace, provider: settings, host, ui, s
     }
   }
 
+  // Why a run or an open did not start, with the first abaplint errors: the
+  // status alone ("1 error in the ABAP") left the model to guess which.
+  function notStarted(report) {
+    const errors = (report.problems ?? []).filter((p) => p.severity === 1).slice(0, 10);
+    return `${report.status}${errors.length ? `\n${errors.map((p) => `- ${p.file}:${(p.range?.start?.line ?? 0) + 1} ${p.message}`).join("\n")}` : ""}`;
+  }
+
   async function findApps(input) {
     const query = str(input.query)?.trim().toLowerCase();
     if (!query) return { error: "find_apps needs a query." };
@@ -572,7 +604,7 @@ export function createPilot({ apiKey, workspace, provider: settings, host, ui, s
     }
     ui.acting?.(`opening ${cls.toUpperCase()}${beside ? " beside" : ""}`);
     const report = await host.openApp(files, { beside, tab: target });
-    if (!report.started) return { error: `${cls} did not start: ${report.status}` };
+    if (!report.started) return { error: `${cls} did not start: ${notStarted(report)}` };
     const app = appOf(report.tab);
     const snapshot = await operatorOf(app).look();
     return {
@@ -587,6 +619,11 @@ export function createPilot({ apiKey, workspace, provider: settings, host, ui, s
       stopped = true;
       stopNow();
       stream?.abort();
+    },
+    /** What the conversation is made of, for keeping it over a reload
+     *  (pilot.mjs): the history and the usage. The key never. */
+    get state() {
+      return { messages, total: { ...total } };
     },
   };
 }

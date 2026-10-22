@@ -143,6 +143,39 @@ export function createChatRoom({ prefix, el, onBusy, onStartOver, showWelcome, r
     onStartOver?.();
   }
 
+  // No key? A model on the reader's own machine needs none: the key form,
+  // turned to an OpenAI-compatible server at Ollama's address unless a base
+  // URL is already set. The model's name is the reader's to type - nothing
+  // here knows what they pulled. Both welcomes offer it while no key is held.
+  function offerLocalModel() {
+    showKeyForm(true);
+    const provider = document.getElementById(`${prefix}-provider`);
+    const baseUrl = document.getElementById(`${prefix}-base-url`);
+    const model = document.getElementById(`${prefix}-model`);
+    provider.value = "openai";
+    provider.dispatchEvent(new Event("change"));
+    if (baseUrl.value.trim() === "" || baseUrl.value.trim() === "https://api.openai.com/v1") {
+      baseUrl.value = "http://localhost:11434/v1";
+      baseUrl.dispatchEvent(new Event("input"));
+    }
+    model.focus();
+  }
+
+  /** The welcome's way in without a key, as a paragraph (`${prefix}-local`),
+   *  or null while a key is held. The rooms remove it once a key is. */
+  function localModelOffer() {
+    if (sessionKey !== null) return null;
+    const local = document.createElement("p");
+    local.className = `${prefix}-local`;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `ghost ${prefix}-local-open`;
+    button.textContent = "Use a model on your own machine";
+    button.addEventListener("click", offerLocalModel);
+    local.append("No API key? ", button, " - Ollama or LM Studio, no key and no cost; it needs a model that can call tools.");
+    return local;
+  }
+
   function showKeyForm(show) {
     el.keyForm.hidden = !show;
     el.keyRemove.hidden = sessionKey === null;
@@ -440,6 +473,7 @@ export function createChatRoom({ prefix, el, onBusy, onStartOver, showWelcome, r
     scrollDown,
     flashStage,
     showKeyForm,
+    localModelOffer,
     startOver,
     // The tool rows still pending, by id - the studio's ✎ takes the
     // exchange out of the log, rows and all.
