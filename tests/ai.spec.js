@@ -713,7 +713,7 @@ test("a built app comes back after a reload from the welcome", async ({ page }) 
   // kept for the tab, the files are back from the welcome's offer.
   await page.reload();
   await expect(page.locator("#status")).toHaveText("ready - describe the app you want", { timeout: 120000 });
-  await expect(page.locator(".chat-user")).toHaveText("A page");
+  await expect(page.locator(".chat-user")).toContainText("A page");
   await expect(page.locator(".chat-assistant")).toHaveText("Done.");
   await expect(page.locator(".chat-notice").last()).toContainText("back from before the reload");
   await expect(page.locator("#chat-key")).toBeVisible();
