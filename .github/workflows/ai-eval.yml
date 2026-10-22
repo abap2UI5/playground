@@ -1,0 +1,88 @@
+name: ai-eval
+
+# How well the AI Studio builds apps, measured against the real model
+# (tests/ai-eval.spec.js, docs/design/ai-chat.md). The studio's rules carry
+# abap2UI5's own building-apps.md from the pinned commit, so every pin bump
+# changes what the model is told - and tests/ai.spec.js, which answers the
+# API itself, cannot see whether that made the apps better or worse. This
+# can: a real model builds the apps of tests/fixtures/ai-eval-tasks.json in
+# the real page, and the job summary shows each task clean or not.
+#
+# A measurement, not a gate: a model's answer varies from run to run, so a
+# task that did not end clean does not turn this red - the job is red only
+# when the measurement itself broke (no line written for a task). Compare
+# the summaries of several runs, not two numbers.
+#
+# It needs a key, billed for every run: the repository secret
+# ANTHROPIC_API_KEY. Without it the job says so in its summary and stops -
+# a fork, or a repository that never set it up, gets a green no-op.
+
+on:
+  # After a pin bump has merged: the guide in the prompt moved with it.
+  push:
+    branches: [main]
+    paths:
+      - tools/fetch-deps.mjs
+      - src/shell/ai-agent.mjs
+      - src/shell/ai-common.mjs
+      - src/shell/target-system.mjs
+      - tests/ai-eval.spec.js
+      - tests/fixtures/ai-eval-tasks.json
+  schedule:
+    - cron: '13 9 * * 1'   # Mondays 09:13 UTC - after bump-sources' 07:31
+  workflow_dispatch:
+    inputs:
+      speed:
+        description: The header's speed (fast, balanced, thorough)
+        default: balanced
+      only:
+        description: Task ids, separated by commas - empty for all
+        default: ""
+
+permissions:
+  contents: read
+
+# One at a time: the tasks share one key, and two runs at once measure the
+# rate limit rather than the studio.
+concurrency:
+  group: ai-eval
+  cancel-in-progress: false
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    # Eight tasks of up to thirteen minutes each, and the build.
+    timeout-minutes: 120
+    env:
+      AI_EVAL_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      AI_EVAL_SPEED: ${{ inputs.speed || 'balanced' }}
+      AI_EVAL_ONLY: ${{ inputs.only || '' }}
+      AI_EVAL_OUT: test-results/ai-eval.jsonl
+    steps:
+      - name: Without a key there is nothing to measure
+        if: env.AI_EVAL_KEY == ''
+        run: echo "Skipped - the repository has no ANTHROPIC_API_KEY secret." >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.AI_EVAL_KEY != ''
+      - uses: ./.github/actions/build
+        if: env.AI_EVAL_KEY != ''
+
+      # A task that did not end clean fails its test; that is the finding,
+      # not a broken job - the summary below says which.
+      - name: Have the model build the apps
+        if: env.AI_EVAL_KEY != ''
+        run: npm test -- ai-eval --project=chromium --workers=1 || true
+
+      - name: Summary
+        if: env.AI_EVAL_KEY != ''
+        run: node tools/ai-eval-summary.mjs "$AI_EVAL_OUT" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always() && env.AI_EVAL_KEY != ''
+        with:
+          name: ai-eval
+          path: |
+            test-results/ai-eval.jsonl
+            playwright-report/
+          retention-days: 90

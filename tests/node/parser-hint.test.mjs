@@ -4,7 +4,7 @@
 // same code through abaplint and the Problems list; these hold the shapes.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { codeOf, explainDiagnostic, missingFullStop } from "../../src/editor/parser-hint.mjs";
+import { borrowedSyntax, codeOf, explainDiagnostic, missingFullStop, statementAt } from "../../src/editor/parser-hint.mjs";
 
 const NOT_A_STATEMENT = 'Statement does not exist in the configured ABAP version(or a parser error), "DATA"';
 const at = (line) => ({ code: "parser_error", message: NOT_A_STATEMENT, range: { start: { line, character: 4 } } });
@@ -61,4 +61,37 @@ test("a quote inside a literal or a template is text, not a comment", () => {
   assert.equal(codeOf(`    lv = 'say "hi"'. " done`), `    lv = 'say "hi"'.`);
   assert.equal(codeOf('    lv = |a "b" { c }|'), '    lv = |a "b" { c }|');
   assert.equal(codeOf("* all comment."), "");
+});
+
+// What another language spells differently (borrowedSyntax( )): each shape
+// below is one abaplint refuses with a bare "Statement does not exist" -
+// the words a language model is most often stuck on.
+const refused = (line) => ({
+  code: "parser_error",
+  message: `Statement does not exist in the configured ABAP version(or a parser error), "${line.trim().split(/\s/)[0]}"`,
+  range: { start: { line: 0, character: 4 } },
+});
+
+test("CDS type notation, TOP and LIMIT, != , ++ and ELSE IF are each said in ABAP's words", () => {
+  const cases = [
+    ["    DATA lv_c TYPE abap.char(20).", /TYPE c LENGTH 20/],
+    ["    SELECT * FROM t100 INTO TABLE @DATA(lt) TOP 10.", /UP TO n ROWS/],
+    ["    SELECT * FROM t100 INTO TABLE @DATA(lt) LIMIT 5.", /no LIMIT n/],
+    ["    IF lv_a != lv_b.", /<> \(or NE\)/],
+    ["    lv_i++.", /no \+\+ or --/],
+    ["    ELSE IF lv_a = 2.", /ELSEIF as one word/],
+  ];
+  for (const [line, hint] of cases) assert.match(explainDiagnostic(refused(line), [line]).message, hint, line);
+});
+
+test("a statement over several lines is read to its full stop, and nothing inside a literal or comment counts", () => {
+  const lines = ["    SELECT *", "      FROM t100", "      INTO TABLE @DATA(lt)", "      TOP 10."];
+  assert.match(explainDiagnostic(refused(lines[0]), lines).message, /UP TO n ROWS/);
+  assert.equal(statementAt(["    lv = `a != b` \" a != b", "      && 'TOP 10'."], 0), "lv = '' && ''.");
+  for (const line of ["    lv = `x != y` foo.", "    lv = |abap.char( 20 )| bar.", '    lv = 1 " lv++']) {
+    assert.equal(borrowedSyntax(statementAt([line], 0)), undefined, line);
+  }
+  // The full stop comes first: a statement run into the next is asked about
+  // the full stop, not about a word in the next one.
+  assert.match(explainDiagnostic(refused("    DATA lv_a TYPE i"), ["    DATA lv_a TYPE i", "    lv_a++."]).message, /full stop/);
 });

@@ -80,7 +80,7 @@ read them before touching `tools/` or `src/runtime/`.
 | `chat.mjs` | AI Studio on screen (chunk, its page only) |
 | `ai-agent.mjs` | AI Studio's conversation and tools (`runTools()`), chunk on use |
 | `ai-starter.mjs` | The class the studio starts on |
-| `target-system.mjs` | The studio's target system: `TARGETS` (abaplint releases the header offers, the rules the model is told), `systemTodos()` (the `" TODO(system):` lines the download lists) |
+| `target-system.mjs` | The studio's target system: `TARGETS` (abaplint releases the header offers, the rules the model is told), `systemTodos()` (the `" TODO(system):` lines the download lists), `functionCalls()`/`uncheckedCallsText()` (every CALL FUNCTION - nothing else here reports one) |
 | `pilot.mjs` | AI Pilot on screen and the bridge's half (chunk) |
 | `pilot-agent.mjs` | AI Pilot's conversation, mirror and tools (chunk) |
 | `ai-operator.mjs` | The mirror and operator both rooms use on a frame |
@@ -103,7 +103,7 @@ read them before touching `tools/` or `src/runtime/`.
 | `file-store.mjs` | The other half: a plain file list for app-only pages |
 | `files.mjs` | File naming and checks (abapGit names, test includes, tables) |
 | `analysis.mjs` | One analysis, three readers; applies `parser-hint.mjs` |
-| `parser-hint.mjs` | The missing-full-stop question on abaplint's `parser_error` |
+| `parser-hint.mjs` | The missing-full-stop question on abaplint's `parser_error`, and `borrowedSyntax()`: the ABAP spelling of CDS/SQL/JavaScript shapes it refuses |
 | `tables.mjs` | Tables of your own: rows parser, table check, starter `zproducts`, abapGit data config |
 | `registry.mjs` | The page's client of the registry worker |
 | `registry-worker.mjs` | The worker's entry: abaplint, the corpus, the transpiler |
@@ -157,6 +157,7 @@ read them before touching `tools/` or `src/runtime/`.
 | `tools/check-size.mjs` | The size budget and the stack budget |
 | `tools/serve.mjs` | Dev/test server; mounts `dist/` three ways, answers misses with `404.html` |
 | `tools/vendor-agent.mjs` | Vendors and checks `src/vendor/agent/` |
+| `tools/ai-eval-summary.mjs` | The AI Studio's measurement (`ai-eval.jsonl`) as the job summary's table; fails on a task without a line |
 | `tests/*.spec.js` | Playwright against the built `dist/` (`bfcache.spec.js` reads rather than runs) |
 | `tests/node/*.test.mjs` | `node:test` over the pure modules; `dom.mjs` over `@xmldom/xmldom`; fixture from abap2UI5/samples `z2ui5_cl_smp_app_494` |
 | `tests/fixtures/` | Office/PDF files for the chats, unit-test ABAP |
@@ -198,6 +199,7 @@ npm run test:unit  # node:test over tests/node/*.test.mjs - no build, no browser
 | `check.yml` | Every non-main branch and PR: a `lint` job (lint, typecheck, test:unit) beside four test shards — Chromium `--shard=n/3` ×3 and WebKit on its own — each building with `.github/actions/build` (caches for `deps/`, `~/.ui5`, the downport) and checking the size budget. Two workers per runner, traces on retry, the service worker blocked except in `worker.spec.js` |
 | `pages.yml` | Pushes to `main` and **nightly**: the same lint job and four shards, a fifth runner building the artefact, deploy once all are green (`needs: [lint, test, build]`), then `notify-docs` dispatches `playground-published` to abap2UI5/docs (`DOCS_DISPATCH_TOKEN`) |
 | `upstream.yml` | Weekly: build and test against upstream `HEAD` without moving pins; opens or extends an issue on failure |
+| `ai-eval.yml` | Weekly, after a merge that moves the pins or the studio's rules, and by hand: `tests/ai-eval.spec.js` against the real model with the `ANTHROPIC_API_KEY` secret, the table in the job summary (`tools/ai-eval-summary.mjs`), the lines as an artifact. A measurement, not a gate - red only when a task wrote no line; without the secret a green no-op |
 | `bump-linter.yaml` | Weekly: pins `@abap2ui5/linter` to its latest release behind the full gate |
 | `bump-sources.yaml` | Weekly: `fetch-deps.mjs --update-pins` (runtime pins together, samples pin beside) behind the full gate |
 | `dependabot.yml` | Monthly npm and action pins, majors separated |

@@ -79,6 +79,15 @@ export function useAbaplintSettings(next) {
   settings = validated(next);
 }
 
+// Told when an applied configuration has taken over - the Config tab's
+// Apply or the AI Studio's target system - so whatever shows the release
+// (the studio's header) follows the one that changed it.
+const settingsListeners = new Set();
+export const onAbaplintSettings = (fn) => {
+  settingsListeners.add(fn);
+  return () => settingsListeners.delete(fn);
+};
+
 // Told when a stored setting turned out to name a rule abaplint no longer
 // has - which only the worker can know, at build - so the page can forget it.
 let settingsRejected = () => {};
@@ -235,6 +244,7 @@ export async function applyAbaplintSettings(next, progress) {
   onProgress = progress ?? (() => {});
   await call("applySettings", checked);
   settings = checked;
+  for (const fn of settingsListeners) fn(abaplintSettings());
 }
 
 // ---------------------------------------------------------------- questions

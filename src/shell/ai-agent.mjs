@@ -39,7 +39,7 @@ import { UI5_LIBRARIES } from "./ui5-libraries.mjs";
 import { AgentError } from "../vendor/agent/appclient.mjs";
 import { createOperator, describeMirror, fitSnapshot, MAX_ERROR_TEXT } from "./ai-operator.mjs";
 import { isUntouchedStarter } from "./ai-starter.mjs";
-import { DEFAULT_TARGET, TODO_MARK, targetRules } from "./target-system.mjs";
+import { DEFAULT_TARGET, TODO_MARK, targetRules, uncheckedCallsText } from "./target-system.mjs";
 import { attachmentBlocks } from "./attachments.mjs";
 
 // The mirror of the running app's screen, made by chat.mjs with this chunk
@@ -54,6 +54,15 @@ export { kindOf, MAX_FILES, MAX_MESSAGE_BYTES } from "./attachments.mjs";
 // The tools that change the editor, after which the page runs the app by
 // itself (see loop( )).
 const FILE_TOOLS = new Set(["write_file", "edit_file", "delete_file"]);
+
+// The rounds of tool calls one message may take (runTurnLoop's maxRounds).
+// A build with a few fixes and a try of the app is ten or so; thirty is a
+// model that is not getting anywhere, at the reader's expense.
+export const MAX_ROUNDS = 30;
+// Runs in a row that came back with the same problems before the turn ends:
+// the compiler's answer is not helping, and the benchmarks say another round
+// rarely does - the reader is asked instead.
+export const STUCK_RUNS = 3;
 
 // What applies here and not in a real system - the guide is written for a
 // project with abapGit, the linter on the command line and an SAP system
@@ -417,6 +426,8 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
   // `files` are the File objects the reader added to this message; they go in
   // front of its text, as the content blocks attachments.mjs makes of them.
   async function send(text, files = []) {
+    sameRuns = 0;
+    lastProblems = undefined;
     const seenBefore = seen;
     const seenFilesBefore = seenFiles;
     stopped = false;
@@ -459,6 +470,30 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
     return { stopped };
   }
 
+  // The runs of this message that came back with the problems of the run
+  // before (describeRun's problemKey): the model changed the code, and the
+  // compiler said the same again.
+  let lastProblems;
+  let sameRuns = 0;
+  function noteRun(report) {
+    const key = report.problemKey ?? "";
+    sameRuns = key && key === lastProblems ? sameRuns + 1 : key ? 1 : 0;
+    lastProblems = key;
+  }
+  // A run's report with the CALL FUNCTIONs the model did not mark - the
+  // one reference to the reader's system that no check here reports.
+  function withUnchecked(report) {
+    const unchecked = uncheckedCallsText(host.files());
+    return unchecked ? { ...report, text: `${report.text}\n${unchecked}` } : report;
+  }
+
+  function stuckOn() {
+    if (sameRuns < STUCK_RUNS) return undefined;
+    const n = lastProblems.split("\n").length;
+    return `The same ${n === 1 ? "problem" : `${n} problems`} came back ${sameRuns} runs in a row, so Claude stopped here rather than try again - ` +
+      "look at the Problems in the code, then say what to try, or fix it by hand and send again.";
+  }
+
   // The turn loop is ai-common.mjs's, the Pilot's as well; what is the
   // studio's is the request and what its tool calls do.
   const loop = () =>
@@ -475,6 +510,8 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
         stream = s;
       },
       runTools,
+      maxRounds: MAX_ROUNDS,
+      afterTools: stuckOn,
       // A file cut off half way would parse as a shorter, valid file. Never
       // written; the turn says why.
       cutText: "Not run: the answer hit max_tokens and this input may be cut off. Write smaller pieces (edit_file).",
@@ -545,7 +582,8 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
       let report;
       try {
         const ran = await untilStopped(host.run(), "the app was running");
-        report = ran.error ? { text: ran.error, summary: "run stopped" } : describeRun(ran);
+        report = ran.error ? { text: ran.error, summary: "run stopped" } : withUnchecked(describeRun(ran));
+        noteRun(report);
         if (report.started && !report.failed) report.text += await untilStopped(screenAfterRun(), "the screen was read").then((t) => (typeof t === "string" ? t : ""));
       } catch (e) {
         report = { text: `The automatic run failed: ${String(e?.message ?? e)}`, summary: "run failed" };
@@ -576,7 +614,8 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
         return { text: filesAsText(files, { all }), summary: `read ${names.length ? files.map((f) => f.name).join(", ") : `${files.length} file${files.length === 1 ? "" : "s"}`}` };
       }
       case "run_app": {
-        const report = describeRun(await host.run());
+        const report = withUnchecked(describeRun(await host.run()));
+        noteRun(report);
         if (report.started && !report.failed) report.text += await screenAfterRun();
         return report;
       }
@@ -876,7 +915,11 @@ export function describeRun(report) {
   // had the same ✓ as one that did.
   // `started` is the page's own word for it, so the chat need not read it
   // off the summary's text.
-  return { text: lines.join("\n"), summary, failed: !report.started || (first?.status ?? 0) >= 400, started: Boolean(report.started) };
+  // The problems without their positions - an edit above them moves the
+  // lines, not the problem - for telling a run that fixed nothing
+  // (stuckOn( ) in createAgent).
+  const problemKey = problems.map((p) => `${p.file} ${p.source} ${p.rule ?? ""} ${p.message}`).sort().join("\n");
+  return { text: lines.join("\n"), summary, failed: !report.started || (first?.status ?? 0) >= 400, started: Boolean(report.started), problemKey, problemCount: problems.length };
 }
 
 // ------------------------------------------------------------------ samples

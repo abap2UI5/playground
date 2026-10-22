@@ -205,7 +205,8 @@ talks to a model or needs a key.
   no inline declarations or constructor expressions and is told the guide's
   7.50 examples are to be translated, Cloud gets released APIs only. A
   release the Config tab set that the list does not carry is shown and told
-  as abaplint names it. abaplint at `Cloud` checks the language version, not
+  as abaplint names it, and the header follows a release applied there
+  (`onAbaplintSettings( )` in `registry.mjs`, `host.onAbapRelease( )`). abaplint at `Cloud` checks the language version, not
   whether an SAP object is released; the rules say that part is the model's.
   What this page cannot check at all - a SELECT from the reader's tables, a
   BAPI, class or CDS view the model assumed - the model marks with a
@@ -216,6 +217,29 @@ talks to a model or needs a key.
   stops a DATA( ) at v702, the rules in the request, kept over a reload) and
   the download's list; `tests/node/target-system.test.mjs` the releases and
   the matching.
+- **A turn that is not getting anywhere ends, and the reader is asked.**
+  Nothing ended a turn whose model kept calling tools, and every round is a
+  billed request with the whole conversation read again. Two limits, both
+  ended the way Stop ends a turn between rounds (the results are in the
+  conversation, the next message goes on from there): `MAX_ROUNDS` (30)
+  rounds of tool calls per message (`maxRounds` of `runTurnLoop( )`), and
+  `STUCK_RUNS` (3) runs in a row whose problems are the same
+  (`problemKey` of `describeRun( )` - file, checker, rule and message,
+  without the position, since an edit above a problem moves its line;
+  `afterTools: stuckOn` in `createAgent( )`). The benchmarks say compiler
+  feedback that did not help twice rarely helps the third time; the
+  reader, who sees the Problems, decides. The Pilot passes neither: working
+  through a list row by row is a long turn on purpose.
+- **A CALL FUNCTION is listed whether the model marked it or not**
+  (`functionCalls( )` in `target-system.mjs`). It is the one reference to
+  the reader's system that nothing here reports: SAP's tables and types are
+  abaplint errors (`errorNamespace` is `.`), but abaplint has no function
+  modules to look in, and the transpiled call fails only when it runs - on
+  a button the model may never press. So after every run the model is told
+  the calls without a `TODO(system)` line above them (`withUnchecked( )`,
+  `uncheckedCallsText( )`), and the download lists them beside the TODOs.
+  `tests/ai.spec.js` holds both, and the parser hint for `abap.char(20)`
+  (checkers.md) reaching the report.
 - **No key, no answer - so the welcome offers a local model.** While no key
   is held, the welcome carries "Use a model on your own machine": the key
   form turned to an OpenAI-compatible server at Ollama's address (unless a
@@ -232,6 +256,10 @@ talks to a model or needs a key.
   error or warning), the turns, the tool calls, the runs that stopped or had
   problems, the `TODO(system)` lines, the tokens and the seconds.
   `AI_EVAL_SPEED` picks the header's speed, `AI_EVAL_ONLY` a few tasks.
+  `.github/workflows/ai-eval.yml` runs it weekly and after every merge that
+  moves the pins (the guide in the prompt moves with them) or the studio's
+  rules, with the repository secret `ANTHROPIC_API_KEY`, and writes the
+  table into the job summary (`tools/ai-eval-summary.mjs`).
   Without a key the file holds no tests, so `npm test` and CI never reach a
   model. A change to the rules is judged over several runs of the set -
   one answer varies too much to compare two numbers.

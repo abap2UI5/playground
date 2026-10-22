@@ -5,7 +5,7 @@
 // the AI Studio (chat.mjs) and the AI Pilot (pilot.mjs) - which work on the
 // same editor and press the same Run through the hooks set up here.
 import { getFiles, invalidateAnalysis, openFile, refreshNow } from "../editor/editor.mjs";
-import { abaplintSettings, applyAbaplintSettings, entryClass } from "../editor/registry.mjs";
+import { abaplintSettings, applyAbaplintSettings, entryClass, onAbaplintSettings } from "../editor/registry.mjs";
 import { keepAbaplintSettings } from "./checker-settings.mjs";
 import { problemsChanged } from "./insight-common.mjs";
 import { compile } from "../editor/transpile.mjs";
@@ -274,6 +274,9 @@ export function setUpStudio(chat) {
       // it: the corpus parsed again, kept for the next visit, the problems
       // counted afresh.
       abapRelease: () => abaplintSettings().version,
+      // A release applied anywhere - the Config tab included - for the
+      // header to follow.
+      onAbapRelease: (fn) => onAbaplintSettings((now) => fn(now.version)),
       setAbapRelease: async (version, progress) => {
         const next = { ...abaplintSettings(), version };
         await applyAbaplintSettings(next, progress);

@@ -102,3 +102,81 @@ export function systemTodos(files) {
   }
   return todos;
 }
+
+// A CALL FUNCTION is the one reference to the reader's system the page
+// lets through without a word: abaplint has no function modules to look
+// in and does not report one it cannot find, and the transpiled call fails
+// only when it runs - on a button nobody pressed here. So every one is
+// listed, whether the model marked it or not: marked (a TODO(system) line
+// right above it) it is on the download's list already, unmarked it goes
+// to the model with the run's report and onto the list as a call.
+// The module's name in its quotes, or the variable of a dynamic call - read
+// off the line with its literals taken out ('§n' for the n-th; § is no
+// character of ABAP's outside a literal), so a literal that says
+// CALL FUNCTION is text, not a call.
+const CALL_FUNCTION = /\bCALL\s+FUNCTION\s+(?:'§(\d+)'|([\w/~-]+))/i;
+
+/**
+ * Every CALL FUNCTION in the files: { file, line (1-based), name, marked }.
+ * `name` is the module in its quotes, or the variable of a dynamic call.
+ * A line that is a comment, or a call after a `"`, does not count.
+ */
+export function functionCalls(files) {
+  const calls = [];
+  for (const file of files ?? []) {
+    const lines = String(file.source ?? "").split(/\r?\n/);
+    lines.forEach((text, i) => {
+      if (text.startsWith("*")) return;
+      const { code, literals } = codeOf(text);
+      const m = CALL_FUNCTION.exec(code);
+      if (!m) return;
+      let above = i - 1;
+      while (above >= 0 && lines[above].trim() === "") above -= 1;
+      calls.push({
+        file: file.name,
+        line: i + 1,
+        name: (m[1] !== undefined ? literals[Number(m[1])] : m[2]).toUpperCase(),
+        marked: above >= 0 && TODO_LINE.test(lines[above]),
+      });
+    });
+  }
+  return calls;
+}
+
+// The line up to its `"` comment, each '...' or `...` literal replaced by
+// '§n' and kept in `literals` - a `"` inside one is text.
+function codeOf(line) {
+  const literals = [];
+  let code = "";
+  let quote;
+  let text = "";
+  for (const c of line) {
+    if (quote) {
+      if (c === quote) {
+        code += `'§${literals.push(text) - 1}'`;
+        quote = undefined;
+      } else {
+        text += c;
+      }
+    } else if (c === "'" || c === "`") {
+      quote = c;
+      text = "";
+    } else if (c === '"') {
+      break;
+    } else {
+      code += c;
+    }
+  }
+  return { code, literals };
+}
+
+/** What the model is told after a run about the calls it did not mark -
+ *  empty when there are none. */
+export function uncheckedCallsText(files) {
+  const unmarked = functionCalls(files).filter((c) => !c.marked);
+  if (unmarked.length === 0) return "";
+  return [
+    `not checked here (${unmarked.length}) - this page has no function modules: abaplint cannot tell whether one exists, and the call fails only when it runs. Mark each with a ${TODO_MARK} line above it, or use local data instead:`,
+    ...unmarked.map((c) => `- ${c.file}:${c.line} CALL FUNCTION ${c.name}`),
+  ].join("\n");
+}

@@ -33,7 +33,7 @@ import { frameApi as apiOf } from "./frame-link.mjs";
 import { frame } from "./page.mjs";
 import { readStored, removeStored, writeStored } from "./storage.mjs";
 import { setStatus } from "./ui.mjs";
-import { DEFAULT_TARGET, TARGETS, systemTodos, targetLabel, targetOf } from "./target-system.mjs";
+import { DEFAULT_TARGET, TARGETS, functionCalls, systemTodos, targetLabel } from "./target-system.mjs";
 
 const KEY_STORAGE = "abap2ui5-playground:anthropic-key";
 // The stage the studio last showed - kept, the way a split is.
@@ -265,8 +265,14 @@ function setUpTarget() {
     option.title = target.title;
     el.target.append(option);
   }
-  if (!targetOf(now)) el.target.append(new Option(targetLabel(now), now));
-  el.target.value = now;
+  const show = (version) => {
+    if (![...el.target.options].some((o) => o.value === version)) el.target.append(new Option(targetLabel(version), version));
+    el.target.value = version;
+  };
+  show(now);
+  // The Config tab sets the same release: the header follows it, so it
+  // never names a check that is not the one running.
+  host.onAbapRelease?.(show);
   el.target.addEventListener("change", async () => {
     const version = el.target.value;
     const label = targetLabel(version);
@@ -296,10 +302,17 @@ function setUpTarget() {
 // about.
 function placeholderNotice() {
   const label = targetLabel(host.abapRelease?.() ?? DEFAULT_TARGET);
-  const todos = systemTodos(host.files());
+  // The TODO(system) lines, and the CALL FUNCTIONs nobody marked as one.
+  const files = host.files();
+  const order = (name) => files.findIndex((f) => f.name === name);
+  const todos = [
+    ...systemTodos(files),
+    ...functionCalls(files).filter((c) => !c.marked)
+      .map((c) => ({ file: c.file, line: c.line, text: `CALL FUNCTION ${c.name} - not checked here, it may not exist on your system` })),
+  ].sort((x, y) => order(x.file) - order(y.file) || x.line - y.line);
   const text = todos.length === 0
     ? `Checked against ${label}. Nothing in the code is marked as left to connect on your system - what stands in for SAP data or objects would carry a "TODO(system):" comment.`
-    : `Checked against ${label}. ${todos.length} place${todos.length === 1 ? " is" : "s are"} left to connect on your system (the "TODO(system):" comments in the code):`;
+    : `Checked against ${label}. ${todos.length} place${todos.length === 1 ? " is" : "s are"} left to connect on your system (the "TODO(system):" comments and the function module calls in the code):`;
   const line = room.addLine("notice", text);
   if (todos.length > 0) {
     const list = document.createElement("ul");

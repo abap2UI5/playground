@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Version } from "@abaplint/core";
-import { DEFAULT_TARGET, TARGETS, TODO_MARK, systemTodos, targetLabel, targetRules } from "../../src/shell/target-system.mjs";
+import { DEFAULT_TARGET, TARGETS, TODO_MARK, functionCalls, systemTodos, targetLabel, targetRules, uncheckedCallsText } from "../../src/shell/target-system.mjs";
 
 test("every target is a release abaplint knows, and the default is one of them", () => {
   const known = Object.values(Version);
@@ -50,4 +50,30 @@ test("the TODO(system) lines are listed per file and line, whatever their case a
   ]);
   assert.deepEqual(systemTodos([]), []);
   assert.deepEqual(systemTodos(undefined), []);
+});
+
+test("every CALL FUNCTION is found, marked or not, and only the unmarked ones are told to the model", () => {
+  const files = [{
+    name: "zcl_app.clas.abap",
+    source: [
+      `    " ${TODO_MARK} the real order list`,
+      "",
+      "    CALL FUNCTION 'BAPI_SALESORDER_GETLIST'",
+      "      EXPORTING customer_number = lv_kunnr.",
+      "    call function `Z_MY_MODULE`.",
+      "    CALL FUNCTION lv_dynamic.",
+      "* CALL FUNCTION 'IN_A_COMMENT_LINE'.",
+      `    lv_text = 'CALL FUNCTION in a literal'. " CALL FUNCTION 'AFTER_THE_QUOTE'`,
+    ].join("\n"),
+  }];
+  assert.deepEqual(functionCalls(files), [
+    { file: "zcl_app.clas.abap", line: 3, name: "BAPI_SALESORDER_GETLIST", marked: true },
+    { file: "zcl_app.clas.abap", line: 5, name: "Z_MY_MODULE", marked: false },
+    { file: "zcl_app.clas.abap", line: 6, name: "LV_DYNAMIC", marked: false },
+  ]);
+  const told = uncheckedCallsText(files);
+  assert.match(told, /^not checked here \(2\)/);
+  assert.match(told, /zcl_app\.clas\.abap:5 CALL FUNCTION Z_MY_MODULE/);
+  assert.doesNotMatch(told, /BAPI_SALESORDER_GETLIST/);
+  assert.equal(uncheckedCallsText([{ name: "zcl_clean.clas.abap", source: "CLASS zcl_clean DEFINITION. ENDCLASS." }]), "");
 });
