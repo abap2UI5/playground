@@ -294,14 +294,27 @@ const CONTEXT_FULL = "The conversation has filled the model's context - New chat
  *   fullText        when given, a full context window is said apart: every
  *                   call "not run" with this, rather than as a cut one
  *   askSmaller      when given, said after the first cut before asking again
+ *   maxRounds       when given, the rounds of tool calls one message may
+ *                   take before the turn ends and the reader is asked
+ *   afterTools()    when given, asked after every round: a sentence ends
+ *                   the turn and is said in the chat (a model going round
+ *                   in circles - ai-agent.mjs, stuckOn( ))
+ *
+ * A turn ended by either is ended the way Stop ends one between two rounds:
+ * the results are in the conversation, and the reader's next message goes on
+ * from there.
  */
-export async function runTurnLoop({ provider, messages, total, ui, speed, request, pendingText, halted, onStream, runTools, cutText, fullText, askSmaller }) {
+export async function runTurnLoop({ provider, messages, total, ui, speed, request, pendingText, halted, onStream, runTools, cutText, fullText, askSmaller, maxRounds, afterTools }) {
   let jsonRetries = 0;
   // Answers in a row cut off at max_tokens with a tool call in them. Each
   // one is a full, billed request, and thinking counts towards the limit:
   // a long think before a large write could be cut on every attempt, and
   // the loop asked again without end until Stop was pressed.
   let cuts = 0;
+  // Rounds of tool calls in this turn. Nothing else ends a turn whose model
+  // keeps calling tools - and every round is a billed request, the whole
+  // conversation read again.
+  let rounds = 0;
   while (!halted()) {
     ui.assistantStart();
     const settings = SPEEDS[speed()] ?? SPEEDS[DEFAULT_SPEED];
@@ -416,6 +429,17 @@ export async function runTurnLoop({ provider, messages, total, ui, speed, reques
     // All results in one message - split across several, the model learns
     // to stop making parallel calls.
     messages.push({ role: "user", content: await runTools(uses) });
+    rounds += 1;
+    if (halted()) return;
+    const why = afterTools?.();
+    if (why) {
+      ui.notice(why);
+      return;
+    }
+    if (maxRounds && rounds >= maxRounds) {
+      ui.notice(`Stopped after ${rounds} steps in one message - a turn that long is usually going round in circles. Say "go on" to continue, or what to do differently.`);
+      return;
+    }
   }
 }
 

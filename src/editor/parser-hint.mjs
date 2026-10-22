@@ -101,9 +101,57 @@ export function explainDiagnostic(diagnostic, lines) {
   const message = diagnostic.message.replace("ABAP version(or", "ABAP version (or");
   if (diagnostic.code !== PARSER_ERROR || !NOT_A_STATEMENT.test(diagnostic.message)) return { message };
   const at = missingFullStop(lines, diagnostic.range.start.line);
-  if (at === undefined) return { message };
+  if (at === undefined) {
+    const hint = borrowedSyntax(statementAt(lines, diagnostic.range.start.line));
+    return { message: hint ? `${message} - ${hint}` : message };
+  }
   return {
     message: `${message} - is the full stop missing at the end of line ${at + 1}?`,
     start: { line: at, character: codeOf(lines[at]).length },
   };
+}
+
+// The statement that starts at `start`, as one line of code: comments out,
+// literals and templates emptied (so a pattern below never matches text
+// inside them), up to its full stop - at most forty lines.
+/**
+ * @param {string[]} lines
+ * @param {number} start
+ */
+export function statementAt(lines, start) {
+  const parts = [];
+  for (let i = start; i < Math.min(lines.length, start + 40); i++) {
+    const code = codeOf(lines[i] ?? "").replace(/'(?:[^']|'')*'|`(?:[^`]|``)*`|\|(?:[^|\\]|\\.)*\|/g, "''");
+    parts.push(code.trim());
+    if (code.endsWith(".")) break;
+  }
+  return parts.join(" ");
+}
+
+// What another language spells differently - the commonest reason after the
+// missing full stop, and the one a language model makes most: it writes
+// what CDS, SQL or JavaScript would accept, and abaplint can only say that
+// the statement does not exist, naming a word of it ("char", "SELECT"). The
+// benchmarks of AI-written ABAP found models stuck on exactly that message
+// for every round of feedback. Asked only of a statement abaplint already
+// refused, like the full stop: a wrong guess costs a hint, never an error.
+const BORROWED = [
+  {
+    test: /\babap\.(?:char|numc|int[1248]|dec|string|dats|tims|datn|timn|curr|quan|fltp|boolean|raw|sstring|clnt|lang|unit|cuky)\b/i,
+    hint: "abap.char( 20 ) and its kin are CDS notation; in ABAP write TYPE c LENGTH 20 (abap.numc: n, abap.int4: i, abap.dec: p LENGTH .. DECIMALS .., abap.dats: d, abap.tims: t, abap.string: string)",
+  },
+  { test: /\bSELECT\b.*\bTOP\s+\d+/i, hint: "ABAP SQL has no TOP n - write UP TO n ROWS" },
+  { test: /\bSELECT\b.*\bLIMIT\s+\d+/i, hint: "ABAP SQL has no LIMIT n - write UP TO n ROWS" },
+  { test: /!=/, hint: "ABAP compares with <> (or NE), not !=" },
+  { test: /\w(?:\+\+|--)(?=\s|\.|$)/, hint: "ABAP has no ++ or -- - write lv_i = lv_i + 1 (or lv_i += 1 from 7.54 on)" },
+  { test: /^ELSE\s+IF\b/i, hint: "ABAP writes ELSEIF as one word" },
+];
+
+/**
+ * The hint for a statement abaplint refused, when it reads like another
+ * language's - or undefined.
+ * @param {string} statement
+ */
+export function borrowedSyntax(statement) {
+  return BORROWED.find((b) => b.test.test(statement))?.hint;
 }

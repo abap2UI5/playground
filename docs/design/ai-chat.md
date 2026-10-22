@@ -192,6 +192,77 @@ talks to a model or needs a key.
   being checked in and rode silently on the NEXT message. `chat-ui.mjs` sets
   up the attaching for both rooms; listening for a drop on the page stays
   with each room (`listenForFileDrops( )`).
+- **The reader's system, and what the app still needs from it**
+  (`src/shell/target-system.mjs`). The model wrote 7.50 syntax whatever the
+  reader's system was, and abaplint checked it at `v750`: a reader on 7.02
+  downloaded a class that ran here and failed to activate at home. The
+  header's **target system** (`#chat-target`: 7.02-7.31, 7.40, 7.50+ /
+  S/4HANA, ABAP Cloud) IS abaplint's `version` - `setAbapRelease( )` on the
+  studio's host (`agent-hooks.mjs`) applies it the way the Config tab's Apply
+  does (the corpus parsed again, kept by `keepAbaplintSettings( )`, the
+  problems counted afresh), and `playgroundRules( )` is told the release on
+  every request (`host.abapRelease( )`), with what it rules out - 7.02 gets
+  no inline declarations or constructor expressions and is told the guide's
+  7.50 examples are to be translated, Cloud gets released APIs only. A
+  release the Config tab set that the list does not carry is shown and told
+  as abaplint names it, and the header follows a release applied there
+  (`onAbaplintSettings( )` in `registry.mjs`, `host.onAbapRelease( )`). abaplint at `Cloud` checks the language version, not
+  whether an SAP object is released; the rules say that part is the model's.
+  What this page cannot check at all - a SELECT from the reader's tables, a
+  BAPI, class or CDS view the model assumed - the model marks with a
+  `" TODO(system): …` line above it, and the download lists those lines
+  under the zip (`placeholderNotice( )` in `chat.mjs`, `systemTodos( )`) with
+  the release the code was checked against, so "it ran here" is not read as
+  "it runs on my system". `tests/ai.spec.js` holds the header (the check
+  stops a DATA( ) at v702, the rules in the request, kept over a reload) and
+  the download's list; `tests/node/target-system.test.mjs` the releases and
+  the matching.
+- **A turn that is not getting anywhere ends, and the reader is asked.**
+  Nothing ended a turn whose model kept calling tools, and every round is a
+  billed request with the whole conversation read again. Two limits, both
+  ended the way Stop ends a turn between rounds (the results are in the
+  conversation, the next message goes on from there): `MAX_ROUNDS` (30)
+  rounds of tool calls per message (`maxRounds` of `runTurnLoop( )`), and
+  `STUCK_RUNS` (3) runs in a row whose problems are the same
+  (`problemKey` of `describeRun( )` - file, checker, rule and message,
+  without the position, since an edit above a problem moves its line;
+  `afterTools: stuckOn` in `createAgent( )`). The benchmarks say compiler
+  feedback that did not help twice rarely helps the third time; the
+  reader, who sees the Problems, decides. The Pilot passes neither: working
+  through a list row by row is a long turn on purpose.
+- **A CALL FUNCTION is listed whether the model marked it or not**
+  (`functionCalls( )` in `target-system.mjs`). It is the one reference to
+  the reader's system that nothing here reports: SAP's tables and types are
+  abaplint errors (`errorNamespace` is `.`), but abaplint has no function
+  modules to look in, and the transpiled call fails only when it runs - on
+  a button the model may never press. So after every run the model is told
+  the calls without a `TODO(system)` line above them (`withUnchecked( )`,
+  `uncheckedCallsText( )`), and the download lists them beside the TODOs.
+  `tests/ai.spec.js` holds both, and the parser hint for `abap.char(20)`
+  (checkers.md) reaching the report.
+- **No key, no answer - so the welcome offers a local model.** While no key
+  is held, the welcome carries "Use a model on your own machine": the key
+  form turned to an OpenAI-compatible server at Ollama's address (unless a
+  base URL is already set), the model's name to type. A local server takes
+  no key and costs nothing; it needs a model that calls tools.
+- **How well it builds is measured, not assumed** (`tests/ai-eval.spec.js`).
+  The specs above answer the API themselves, so they hold the mechanics and
+  say nothing about whether a model, with these rules and the guide, ends on
+  an app that runs. `AI_EVAL_KEY=sk-ant-… npm test -- ai-eval` sends each
+  task of `tests/fixtures/ai-eval-tasks.json` (a message, optionally a target
+  system, texts the app must show) through the real page to the real API and
+  appends a JSON line per task to `AI_EVAL_OUT` (default
+  `test-results/ai-eval.jsonl`): clean or not (the last run started with no
+  error or warning), the turns, the tool calls, the runs that stopped or had
+  problems, the `TODO(system)` lines, the tokens and the seconds.
+  `AI_EVAL_SPEED` picks the header's speed, `AI_EVAL_ONLY` a few tasks.
+  `.github/workflows/ai-eval.yml` runs it weekly and after every merge that
+  moves the pins (the guide in the prompt moves with them) or the studio's
+  rules, with the repository secret `ANTHROPIC_API_KEY`, and writes the
+  table into the job summary (`tools/ai-eval-summary.mjs`).
+  Without a key the file holds no tests, so `npm test` and CI never reach a
+  model. A change to the rules is judged over several runs of the set -
+  one answer varies too much to compare two numbers.
 - **Which API answers** (`src/shell/llm-provider.mjs`, both chats). The
   conversation is the Messages API's shape whatever answers it; a provider
   turns one request of it into a call and the answer back. `anthropic` is the

@@ -771,6 +771,11 @@
           <option value="balanced" selected>Balanced · Opus 5.5</option>
           <option value="thorough">Thorough · Opus 5.5</option>
         </select>
+        <!-- The reader's SAP system: the ABAP release abaplint checks the code
+             against, told to the model (src/shell/target-system.mjs). Its
+             options are written by chat.mjs. -->
+        <select id="chat-target" class="chat-speed chat-target" aria-label="Your SAP system - the ABAP release the code is checked against"
+                title="The ABAP release of the system the app is for: the syntax check holds the code to it, and Claude is told."></select>
         <button type="button" id="chat-download" title="The files in the editor as an abapGit repository">Download for abapGit</button>
         <button type="button" id="chat-export" class="ghost" title="The conversation as a markdown file">Export</button>
         <button type="button" id="chat-new" class="ghost" title="Start a new conversation - the files stay in the editor">New chat</button>

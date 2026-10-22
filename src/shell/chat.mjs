@@ -33,6 +33,7 @@ import { frameApi as apiOf } from "./frame-link.mjs";
 import { frame } from "./page.mjs";
 import { readStored, removeStored, writeStored } from "./storage.mjs";
 import { setStatus } from "./ui.mjs";
+import { DEFAULT_TARGET, TARGETS, functionCalls, systemTodos, targetLabel } from "./target-system.mjs";
 
 const KEY_STORAGE = "abap2ui5-playground:anthropic-key";
 // The stage the studio last showed - kept, the way a split is.
@@ -94,6 +95,7 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
     export: document.getElementById("chat-export"),
     reset: document.getElementById("chat-new"),
     speed: document.getElementById("chat-speed"),
+    target: document.getElementById("chat-target"),
     bar: document.getElementById("studio-bar"),
     stages: [...document.querySelectorAll(".studio-stage")],
     fullscreen: document.getElementById("studio-fullscreen"),
@@ -140,6 +142,8 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
     onStartOver: () => {
       transcript = [];
       lastUser = undefined;
+      // A key is held now: the welcome's way in without one is done.
+      if (room?.hasKey()) el.log.querySelector(".chat-local")?.remove();
     },
     showWelcome,
     rules: () => import("./ai-agent.mjs"),
@@ -213,6 +217,7 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
       const zip = abapGitZip(host.files());
       download(zip.name, zip.bytes);
       setStatus(`${zip.name} is on its way`);
+      placeholderNotice();
     } catch (e) {
       setStatus("the zip could not be written", true);
       room.addLine("notice", String(e?.message ?? e));
@@ -237,9 +242,110 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
   // (tests/bfcache.spec.js). The files are kept (the studio's draft,
   // remember( ) in main.mjs) and the conversation can be exported; that is the net.
 
+  setUpTarget();
   showWelcome();
   if (el.toggle) el.toggle.disabled = false;
   if (startOpen) setOpen(true);
+}
+
+// The reader's SAP system in the header: the release the syntax check holds
+// the code to (abaplint's version, host.setAbapRelease( ) in
+// agent-hooks.mjs), which the model is told before every request. A release
+// set in the Config tab that the list does not carry is shown as abaplint
+// names it, so the select never claims a check that is not running.
+function setUpTarget() {
+  if (!el.target) return;
+  const now = host.abapRelease?.();
+  if (!now || !host.setAbapRelease) {
+    el.target.hidden = true;
+    return;
+  }
+  for (const target of TARGETS) {
+    const option = new Option(target.label, target.version);
+    option.title = target.title;
+    el.target.append(option);
+  }
+  const show = (version) => {
+    if (![...el.target.options].some((o) => o.value === version)) el.target.append(new Option(targetLabel(version), version));
+    el.target.value = version;
+  };
+  show(now);
+  // The Config tab sets the same release: the header follows it, so it
+  // never names a check that is not the one running.
+  host.onAbapRelease?.(show);
+  el.target.addEventListener("change", async () => {
+    const version = el.target.value;
+    const label = targetLabel(version);
+    // The corpus is parsed again under the new release - seconds, during
+    // which a second change would race the first.
+    el.target.disabled = true;
+    setStatus(`checking the code against ${label}…`);
+    try {
+      await host.setAbapRelease(version, (done, total) => {
+        setStatus(`checking the code against ${label}… ${Math.round((done / total) * 100)}%`);
+      });
+      setStatus(`the code is checked against ${label} now`);
+      room.addLine("notice", `Your system: ${label}. The syntax check holds the code to it, and Claude is told from the next message on.`);
+    } catch (e) {
+      el.target.value = host.abapRelease();
+      setStatus("the release could not be changed", true);
+      room.addLine("notice is-error", String(e?.message ?? e));
+    } finally {
+      el.target.disabled = false;
+    }
+  });
+}
+
+// Said under the download: which release the code was checked against, and
+// the TODO(system) lines the model left above what stands in for the
+// reader's system (target-system.mjs) - the part "it ran here" says nothing
+// about.
+function placeholderNotice() {
+  const label = targetLabel(host.abapRelease?.() ?? DEFAULT_TARGET);
+  // The TODO(system) lines, and the CALL FUNCTIONs nobody marked as one.
+  const files = host.files();
+  const order = (name) => files.findIndex((f) => f.name === name);
+  const todos = [
+    ...systemTodos(files),
+    ...functionCalls(files).filter((c) => !c.marked)
+      .map((c) => ({ file: c.file, line: c.line, text: `CALL FUNCTION ${c.name} - not checked here, it may not exist on your system` })),
+  ].sort((x, y) => order(x.file) - order(y.file) || x.line - y.line);
+  const text = todos.length === 0
+    ? `Checked against ${label}. Nothing in the code is marked as left to connect on your system - what stands in for SAP data or objects would carry a "TODO(system):" comment.`
+    : `Checked against ${label}. ${todos.length} place${todos.length === 1 ? " is" : "s are"} left to connect on your system (the "TODO(system):" comments and the function module calls in the code):`;
+  const line = room.addLine("notice", text);
+  if (todos.length > 0) {
+    const list = document.createElement("ul");
+    for (const todo of todos) {
+      const item = document.createElement("li");
+      item.textContent = `${todo.file}:${todo.line} - ${todo.text || "(no note)"}`;
+      list.append(item);
+    }
+    line.append(list);
+    room.scrollDown();
+  }
+  transcript.push({
+    role: "note",
+    text: [text, ...todos.map((t) => `- ${t.file}:${t.line} - ${t.text || "(no note)"}`)].join("\n"),
+  });
+}
+
+// No key? A model on the reader's own machine needs none: the key form,
+// turned to an OpenAI-compatible server at Ollama's address unless a base
+// URL is already set. The model's name is the reader's to type - nothing
+// here knows what they pulled.
+function offerLocalModel() {
+  room.showKeyForm(true);
+  const provider = document.getElementById("chat-provider");
+  const baseUrl = document.getElementById("chat-base-url");
+  const model = document.getElementById("chat-model");
+  provider.value = "openai";
+  provider.dispatchEvent(new Event("change"));
+  if (baseUrl.value.trim() === "" || baseUrl.value.trim() === "https://api.openai.com/v1") {
+    baseUrl.value = "http://localhost:11434/v1";
+    baseUrl.dispatchEvent(new Event("input"));
+  }
+  model.focus();
 }
 
 export const chatOpen = () => open;
@@ -435,6 +541,19 @@ function showWelcome() {
     list.append(b);
   }
   intro.append(title, lead, list);
+  // Without a key nothing here answers; a local model is the way in that
+  // costs nothing. Offered while no key is held.
+  if (!room.hasKey()) {
+    const local = document.createElement("p");
+    local.className = "chat-local";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ghost chat-local-open";
+    button.textContent = "Use a model on your own machine";
+    button.addEventListener("click", offerLocalModel);
+    local.append("No API key? ", button, " - Ollama or LM Studio, no key and no cost; it needs a model that can call tools.");
+    intro.append(local);
+  }
   // The last build this browser kept (main.mjs stores the studio's files
   // under a key of its own): offered back, not opened by itself - the
   // studio starts on the minimal class every time, and the model is told

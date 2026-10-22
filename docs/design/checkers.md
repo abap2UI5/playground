@@ -80,6 +80,21 @@ only about a statement abaplint already refused, so a wrong guess costs a
 question mark, never a false error. It also mends abaplint's
 `version(or` into `version (or`. `tests/node/parser-hint.test.mjs` holds it.
 
+### Another language's spelling
+
+The second commonest reason, and the one a language model makes most, is
+ABAP written the way CDS, SQL or JavaScript would accept it: `TYPE
+abap.char(20)`, `SELECT … TOP 10` or `LIMIT 5`, `!=`, `lv_i++`, `ELSE IF`.
+abaplint can only name a word of the statement ("char", "SELECT"), and the
+published benchmarks of AI-written ABAP found models stuck on exactly that
+message through every round of feedback. Where the full stop is not the
+answer, `borrowedSyntax( )` reads the refused statement to its full stop
+(`statementAt( )`: comments out, literals and templates emptied) and adds
+the ABAP spelling to the message - in the Problems list, and so in the run
+report the AI Studio's model reads. The same rule as above: asked only of a
+statement abaplint refused. Each hint is there because abaplint refuses the
+shape; one it accepts (`strlen(x)` without blanks) was taken out again.
+
 ## What is kept between visits: the draft and the file on screen
 
 
