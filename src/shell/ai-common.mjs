@@ -13,15 +13,10 @@ import { createProvider, explainOpenAIError, LLMAbortError, OpenAIError } from "
 // runs itself on every delta while an `inputJson` listener is registered.
 import { partialParse } from "@anthropic-ai/sdk/_vendor/partial-json-parser/parser.mjs";
 
-// How much the reader trades speed for care - the chat header's select. The
-// model is the reader's choice, not this page's: Balanced is the default and
-// stays on Opus 5.5 at the effort that model defaults to; Thorough lets it
-// think longer; Fast is Sonnet 5.5, which answers sooner.
-export const SPEEDS = {
-  thorough: { model: "claude-opus-5-5", effort: "high", label: "Thorough · Opus 5.5" },
-  balanced: { model: "claude-opus-5-5", effort: "medium", label: "Balanced · Opus 5.5" },
-  fast: { model: "claude-sonnet-5-5", effort: "medium", label: "Fast · Sonnet 5.5" },
-};
+// The speeds are src/shell/ai-speeds.mjs (the shell writes the header's
+// options from it); re-exported here for the agents and the chats.
+export { SPEEDS, DEFAULT_SPEED } from "./ai-speeds.mjs";
+import { SPEEDS, DEFAULT_SPEED } from "./ai-speeds.mjs";
 
 // What a token costs, in dollars per million, from Anthropic's price list
 // as of October 2026 - an estimate for the header, not a bill: a plan's
@@ -32,7 +27,6 @@ export const PRICES = {
   "claude-opus-5-5": { input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2 },
   "claude-sonnet-5-5": { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2 },
 };
-export const DEFAULT_SPEED = "balanced";
 
 /*
  * Old tool results are cleared by the API once a conversation is long - a

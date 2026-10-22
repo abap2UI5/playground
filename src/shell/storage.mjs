@@ -71,3 +71,37 @@ export function writeStoredJson(key, value) {
     return false;
   }
 }
+
+// sessionStorage, the same way: what one tab keeps for as long as it is open
+// - the AI Studio's conversation over a reload (chat.mjs). It throws in the
+// same situations localStorage does, and the answer is the same: no value.
+export function readSessionJson(key) {
+  try {
+    const raw = globalThis.sessionStorage?.getItem(key) ?? null;
+    return raw === null ? undefined : JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+}
+
+/** False when it could not be kept - a quota (a conversation with images in
+ *  it), a storage that is refused - and then nothing older is kept either:
+ *  a stale conversation restored over a newer one is worse than none. */
+export function writeSessionJson(key, value) {
+  try {
+    globalThis.sessionStorage?.setItem(key, JSON.stringify(value));
+    return true;
+  } catch {
+    removeSession(key);
+    return false;
+  }
+}
+
+export function removeSession(key) {
+  try {
+    globalThis.sessionStorage?.removeItem(key);
+    return true;
+  } catch {
+    return false;
+  }
+}

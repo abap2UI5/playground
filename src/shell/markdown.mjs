@@ -149,15 +149,21 @@ function element(tag, children) {
   return el;
 }
 
+// `code`, **bold**, *italic* or _italic_ (the underscores only between
+// non-word characters: zcl_app_main is a name, not an emphasis), and https
+// links. Bold may hold an asterisk (**a*b**): the shortest closing wins.
+const INLINE = /(`[^`]+`|\*\*.+?\*\*|\*[^*\s][^*]*\*|(?<![\w])_[^_\s][^_]*_(?![\w])|\[[^\]]+\]\(https:\/\/[^\s)]+\))/;
 function inline(text) {
   const nodes = [];
-  for (const part of text.split(/(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\(https:\/\/[^\s)]+\))/)) {
+  for (const part of text.split(INLINE)) {
     if (part === "") continue;
     const link = /^\[([^\]]+)\]\((https:\/\/[^\s)]+)\)$/.exec(part);
     if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
       nodes.push(element("code", [part.slice(1, -1)]));
     } else if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
       nodes.push(element("strong", [part.slice(2, -2)]));
+    } else if (((part.startsWith("*") && part.endsWith("*")) || (part.startsWith("_") && part.endsWith("_"))) && part.length > 2) {
+      nodes.push(element("em", [part.slice(1, -1)]));
     } else if (link) {
       // Only https, opened beside, and never a handle on this page: the
       // address is text the model wrote.

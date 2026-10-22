@@ -16,6 +16,7 @@
 import { listSentFiles, setUpAttaching } from "./attach-ui.mjs";
 import { keyTarget, setUpProviderForm } from "./llm-form.mjs";
 import { readProviderSettings } from "./llm-provider.mjs";
+import { DEFAULT_SPEED, SPEEDS } from "./ai-speeds.mjs";
 import { streamMarkdown } from "./markdown.mjs";
 import { readStored, removeStored, writeStored } from "./storage.mjs";
 import { setStatus } from "./ui.mjs";
@@ -24,10 +25,9 @@ import { setStatus } from "./ui.mjs";
 // API refuses such a key without the anthropic-workspace-id header. Empty
 // for the ordinary key, which belongs to a workspace already.
 export const WORKSPACE_STORAGE = "abap2ui5-playground:anthropic-workspace";
-// Thorough, Balanced or Fast (SPEEDS in ai-common.mjs). Kept only while it
+// Thorough, Balanced or Fast (SPEEDS in ai-speeds.mjs). Kept only while it
 // differs from Balanced, the rule the page's other preferences follow.
 const SPEED_STORAGE = "abap2ui5-playground:ai-speed";
-const DEFAULT_SPEED = "balanced";
 // The one width the stylesheet and layout.mjs share for "a phone".
 export const narrow = () => window.matchMedia("(max-width: 820px)").matches;
 
@@ -39,6 +39,7 @@ export const narrow = () => window.matchMedia("(max-width: 820px)").matches;
  *
  *   onBusy(busy)                the room's own mark of a turn under way
  *   onStartOver()               what else goes when the conversation does
+ *   onBusy(busy)                a turn under way, or over
  *   showWelcome()               the empty log, after New chat
  *   rules()                     the agent chunk, for the files' kinds and limit
  *
@@ -51,7 +52,10 @@ export const narrow = () => window.matchMedia("(max-width: 820px)").matches;
  *   working, done               the status line while and after
  *   ui                          the room's half of the agent's ui calls:
  *                               text(raw, line), tool(info), notice(text), acting(text)
- *   answered(context)           a turn that ended without an error
+ *   answered(context)           a turn that ended, whatever way - the files
+ *                               may have changed before it failed
+ *   failed({ stopped })         a turn that ended in an error: the message is
+ *                               no longer in the conversation unless `stopped`
  *   settled()                   a turn that ended, whatever way
  */
 export function createChatRoom({ prefix, el, onBusy, onStartOver, showWelcome, rules, turn: room }) {
@@ -189,6 +193,11 @@ export function createChatRoom({ prefix, el, onBusy, onStartOver, showWelcome, r
       el.keyInput.focus();
       return;
     }
+    // Whether anything the conversation's client was made of changes: the
+    // key, the server it goes to, the model named for it, the workspace.
+    // Save pressed on a form left as it was used to start the conversation
+    // over all the same - opened to look, closed with Save, chat gone.
+    const was = { key: sessionKey, target: keyFor, workspace: readStored(WORKSPACE_STORAGE) ?? "", settings: JSON.stringify(readProviderSettings()) };
     if (key !== "" || keyFor !== target) {
       sessionKey = key;
       keyFor = target;
@@ -196,11 +205,13 @@ export function createChatRoom({ prefix, el, onBusy, onStartOver, showWelcome, r
     const workspace = el.workspaceInput.value.trim();
     if (workspace === "") removeStored(WORKSPACE_STORAGE);
     else writeStored(WORKSPACE_STORAGE, workspace);
-    reflectProvider(providerForm.save());
+    const settings = providerForm.save();
+    reflectProvider(settings);
     el.keyInput.value = "";
+    const changed = sessionKey !== was.key || keyFor !== was.target || workspace !== was.workspace || JSON.stringify(settings) !== was.settings;
     // A new key is a new client; the conversation so far went with the old one,
     // and so does a turn still running on the old key.
-    startOver();
+    if (changed) startOver();
     showKeyForm(false);
     el.input.focus();
   });
@@ -250,7 +261,9 @@ export function createChatRoom({ prefix, el, onBusy, onStartOver, showWelcome, r
     showWelcome();
   });
 
-  // Asked before every request, so a change applies from the next turn on.
+  // The speeds, from the one list (ai-speeds.mjs); asked before every
+  // request, so a change applies from the next turn on.
+  for (const [value, { label }] of Object.entries(SPEEDS)) el.speed.append(new Option(label, value, value === DEFAULT_SPEED, value === DEFAULT_SPEED));
   const stored = readStored(SPEED_STORAGE);
   if (stored && [...el.speed.options].some((o) => o.value === stored)) el.speed.value = stored;
   el.speed.addEventListener("change", () => {
@@ -390,12 +403,12 @@ export function createChatRoom({ prefix, el, onBusy, onStartOver, showWelcome, r
       if (!live()) return;
       if (stopped) addLine("notice", "Stopped.");
       setStatus(stopped ? "stopped" : room.done);
-      room.answered?.(context);
     } catch (e) {
       if (!live()) return;
       const said = mod ? mod.explainError(e) : { text: `The AI part of the page could not be loaded: ${String(e?.message ?? e)}` };
       addLine(said.stopped ? "notice" : "notice is-error", said.text);
       setStatus(said.stopped ? "stopped" : "the AI request failed", !said.stopped);
+      room.failed?.({ stopped: Boolean(said.stopped) });
       if (said.key) {
         // The message never reached a model, and a new key is a new
         // conversation: what was typed and attached is put back to send again.
@@ -413,6 +426,10 @@ export function createChatRoom({ prefix, el, onBusy, onStartOver, showWelcome, r
       if (live()) {
         finishRows();
         setBusy(false);
+        // Whatever way the turn ended: a turn whose tools changed three
+        // files and whose next request the API refused still changed them,
+        // and offered nothing to put them back.
+        room.answered?.(context);
         room.settled?.();
       }
     }

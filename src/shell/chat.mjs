@@ -30,8 +30,10 @@ import { createChatRoom, narrow } from "./chat-ui.mjs";
 import { abapGitZip, download } from "./export.mjs";
 import { createDriver } from "./frame-drive.mjs";
 import { frameApi as apiOf } from "./frame-link.mjs";
+import { readProviderSettings } from "./llm-provider.mjs";
+import { renderMarkdown } from "./markdown.mjs";
 import { frame } from "./page.mjs";
-import { readStored, removeStored, writeStored } from "./storage.mjs";
+import { readSessionJson, readStored, removeSession, removeStored, writeSessionJson, writeStored } from "./storage.mjs";
 import { setStatus } from "./ui.mjs";
 import { DEFAULT_TARGET, TARGETS, functionCalls, systemTodos, targetLabel } from "./target-system.mjs";
 
@@ -39,6 +41,11 @@ const KEY_STORAGE = "abap2ui5-playground:anthropic-key";
 // The stage the studio last showed - kept, the way a split is.
 const STAGE_STORAGE = "abap2ui5-playground:ai-stage";
 const STAGES = ["chat", "preview", "code", "split"];
+// The conversation, kept for this tab over a reload (sessionStorage: the
+// tab's own, gone with it, and nothing a page must answer `unload` for - the
+// back/forward cache rule, tests/bfcache.spec.js). The files are kept apart,
+// under AI_STORAGE_KEY in localStorage (main.mjs); the key is never kept.
+const CONVERSATION_STORAGE = "abap2ui5-playground:ai-conversation";
 
 const SUGGESTIONS = [
   "A table of flights with a search field that filters by carrier",
@@ -63,9 +70,22 @@ let open = false;
 let el;
 // The conversation as text, for the export: { role, text } per line.
 let transcript = [];
-// The reader's latest message, which can be edited and sent again once the
-// turn is over (rewind( ) in ai-agent.mjs takes the exchange out).
-let lastUser;
+// The reader's messages that are in the conversation, latest last: the
+// latest can be edited and sent again once the turn is over (rewind( ) in
+// ai-agent.mjs takes the exchange out), and then the one before it.
+let userLines = [];
+// A conversation from before a reload, handed to the agent when it is made
+// (createAgent in ai-agent.mjs takes it as `resume`), and whether an agent
+// has been made in this page at all.
+let resume;
+let agentMade = false;
+// The files as they were when the last "App updated" card was put in the
+// log - a run that changed nothing (run_app for a second look) is no update.
+let cardFiles;
+
+// Who the chat says is at work: Claude for the Anthropic models, and for an
+// OpenAI-compatible server whatever model was named there.
+const who = () => (readProviderSettings().provider === "anthropic" ? "Claude" : "the model");
 
 /**
  * `chatHost` is the page (setUpStudio( ) in agent-hooks.mjs): files(), setFiles(files), run(),
@@ -138,20 +158,38 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
     prefix: "chat",
     el,
     // A turn that keeps running while the studio is closed is still working.
-    onBusy: (busy) => document.body.classList.toggle("is-ai-working", busy && open),
+    // The download waits for it: half the files written is no app to take home.
+    onBusy: (busy) => {
+      document.body.classList.toggle("is-ai-working", busy && open);
+      el.download.disabled = busy;
+    },
     onStartOver: () => {
-      transcript = [];
-      lastUser = undefined;
       // A key is held now: the welcome's way in without one is done.
       if (room?.hasKey()) el.log.querySelector(".chat-local")?.remove();
+      // The key typed for a conversation taken up after a reload starts
+      // nothing over: there is no agent yet, and the conversation is what
+      // the key is for.
+      if (resume && !agentMade) return;
+      transcript = [];
+      userLines = [];
+      resume = undefined;
+      agentMade = false;
+      forgetConversation();
     },
-    showWelcome,
+    showWelcome: () => {
+      // New chat: a conversation waiting to be taken up goes too.
+      resume = undefined;
+      transcript = [];
+      userLines = [];
+      forgetConversation();
+      showWelcome();
+    },
     rules: () => import("./ai-agent.mjs"),
     turn: {
       load: () => import("./ai-agent.mjs"),
       sent({ line, typed, files }) {
-        lastUser?.div.querySelector(".chat-edit")?.remove();
-        lastUser = { div: line, text: typed, files };
+        userLines.at(-1)?.div.querySelector(".chat-edit")?.remove();
+        userLines.push({ div: line, text: typed, files });
         transcript.push({ role: "user", text: `${typed}${files.length ? `\n\n${files.map((f) => `📎 ${f.name}`).join("\n")}` : ""}` });
         // The files as they are now - offered back under the answer when the
         // step changed them.
@@ -162,8 +200,12 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
           mirror = mod.createMirror();
           driver.observe((body, response) => mirror.observe(body, response));
         }
+        const taken = resume;
+        resume = undefined;
+        agentMade = true;
         return mod.createAgent({
           ...conversation,
+          resume: taken,
           host: {
             ...host,
             // The running app, for look and act: its frame as the transport,
@@ -206,13 +248,32 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
       answered(before) {
         if (JSON.stringify(host.files()) !== JSON.stringify(before)) addCheckpoint(before);
       },
-      settled: () => offerEdit(),
+      // A message no answer came to - the first request of its turn failed -
+      // is out of the conversation again (send( ) in ai-agent.mjs): ✎ on it
+      // would take the exchange BEFORE it out instead, and the log and the
+      // history would part ways. A stopped one stays, and keeps its ✎.
+      failed({ stopped }) {
+        if (stopped) return;
+        userLines.pop();
+        const at = transcript.findLastIndex((t) => t.role === "user");
+        if (at !== -1) transcript.splice(at, 1);
+      },
+      settled() {
+        offerEdit();
+        keepConversation();
+      },
     },
   });
   // A drop anywhere on the studio's own page.
   if (startOpen) listenForFileDrops({ highlight: el.chat, onFiles: (files) => chatDropped(files) });
 
   el.download.addEventListener("click", () => {
+    // The starting class as it was handed out is nothing to take home.
+    if (host.files().every(isUntouchedStarter)) {
+      setStatus("nothing to download yet - describe the app first");
+      room.addLine("notice", "There is nothing to download yet: the editor holds only the starting class. Describe the app you want first.");
+      return;
+    }
     try {
       const zip = abapGitZip(host.files());
       download(zip.name, zip.bytes);
@@ -232,18 +293,21 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
       setStatus("nothing to export yet");
       return;
     }
-    const name = `abap2ui5-ai-studio-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-")}.md`;
+    // Local time, as the heading inside says it.
+    const now = new Date();
+    const two = (n) => String(n).padStart(2, "0");
+    const name = `abap2ui5-ai-studio-${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}-${two(now.getHours())}-${two(now.getMinutes())}-${two(now.getSeconds())}.md`;
     download(name, new TextEncoder().encode(transcriptMarkdown()), "text/markdown");
     setStatus(`${name} is on its way`);
   });
 
-  // No beforeunload here, though a reload takes the conversation with it:
-  // nothing on this site may keep a page out of the back/forward cache
-  // (tests/bfcache.spec.js). The files are kept (the studio's draft,
-  // remember( ) in main.mjs) and the conversation can be exported; that is the net.
+  // No beforeunload here: nothing on this site may keep a page out of the
+  // back/forward cache (tests/bfcache.spec.js). The conversation is kept for
+  // the tab after every turn instead (keepConversation( )), the files are
+  // kept by remember( ) in main.mjs, and both are offered back here.
 
   setUpTarget();
-  showWelcome();
+  if (!restoreConversation()) showWelcome();
   if (el.toggle) el.toggle.disabled = false;
   if (startOpen) setOpen(true);
 }
@@ -285,7 +349,7 @@ function setUpTarget() {
         setStatus(`checking the code against ${label}… ${Math.round((done / total) * 100)}%`);
       });
       setStatus(`the code is checked against ${label} now`);
-      room.addLine("notice", `Your system: ${label}. The syntax check holds the code to it, and Claude is told from the next message on.`);
+      room.addLine("notice", `Your system: ${label}. The syntax check holds the code to it, and ${who()} is told from the next message on.`);
     } catch (e) {
       el.target.value = host.abapRelease();
       setStatus("the release could not be changed", true);
@@ -328,6 +392,7 @@ function placeholderNotice() {
     role: "note",
     text: [text, ...todos.map((t) => `- ${t.file}:${t.line} - ${t.text || "(no note)"}`)].join("\n"),
   });
+  keepConversation();
 }
 
 // No key? A model on the reader's own machine needs none: the key form,
@@ -372,9 +437,10 @@ export function chatDropped(files) {
 
 function transcriptMarkdown() {
   const lines = [`# abap2UI5 AI Studio - ${new Date().toLocaleString()}`, ""];
+  const them = who() === "Claude" ? "Claude" : "The model";
   for (const { role, text } of transcript) {
     if (role === "user") lines.push(`## You`, "", text, "");
-    else if (role === "assistant") lines.push(`## Claude`, "", text, "");
+    else if (role === "assistant") lines.push(`## ${them}`, "", text, "");
     else lines.push(`> ${role}: ${text.replace(/\n/g, "\n> ")}`, "");
   }
   lines.push("---", "", `Files in the editor: ${host.files().map((f) => f.name).join(", ")}`, "");
@@ -403,6 +469,7 @@ function addCheckpoint(before) {
     showAppName();
     room.addLine("notice", "The files are back as they were before that step - the model is told with your next message.");
     transcript.push({ role: "note", text: "the files were put back as before the last step" });
+    keepConversation();
     host.run().catch(() => {});
   });
   line.append(button);
@@ -411,10 +478,13 @@ function addCheckpoint(before) {
 }
 
 // "Edit" on the reader's latest message: the exchange is taken out of the
-// conversation and the text put back to send again, changed.
+// conversation and the text put back to send again, changed. And then the
+// message before it is the latest, and gets its ✎ - the exchanges go one at
+// a time, from the end.
 function offerEdit() {
-  if (!lastUser || !room.agent) return;
-  const { div, text, files } = lastUser;
+  const last = userLines.at(-1);
+  if (!last || (!room.agent && !resume)) return;
+  const { div, text, files } = last;
   if (div.querySelector(".chat-edit")) return;
   const edit = document.createElement("button");
   edit.type = "button";
@@ -423,7 +493,7 @@ function offerEdit() {
   edit.setAttribute("aria-label", "Edit this message and send it again");
   edit.textContent = "✎";
   edit.addEventListener("click", () => {
-    if (room.busy || !room.agent?.rewind()) return;
+    if (room.busy || !rewind()) return;
     for (let node = div.nextSibling; node; ) {
       const next = node.nextSibling;
       node.remove();
@@ -433,13 +503,95 @@ function offerEdit() {
     room.rows.clear();
     const at = transcript.findLastIndex((t) => t.role === "user");
     if (at !== -1) transcript.length = at;
-    lastUser = undefined;
-    el.input.value = text;
+    userLines.pop();
+    // Whatever is typed already stays, after the message put back.
+    const typed = el.input.value.trim();
+    el.input.value = typed && typed !== text ? `${text}\n${el.input.value}` : text;
     if (files.length > 0) room.attaching.add(files);
     el.input.focus();
     setStatus("edit the message and send it again");
+    offerEdit();
+    keepConversation();
   });
   div.append(edit);
+}
+
+// The last exchange out of the history - the agent's, or, before an agent
+// is made for a conversation taken up after a reload, the kept one's.
+function rewind() {
+  if (room.agent) return room.agent.rewind();
+  const turn = resume?.turns?.pop();
+  if (!turn) return false;
+  resume.messages.length = turn.at;
+  resume.seen = turn.seen;
+  resume.seenFiles = turn.seenFiles;
+  return true;
+}
+
+// ------------------------------------------------- the conversation, kept
+//
+// After every turn, and after everything that changes the history by hand
+// (✎, a checkpoint, the download's notice): what the agent is made of and
+// what the log shows, for the tab. Never the key, never the files - the key
+// is typed again, the files are the welcome's "open the last build again".
+
+function keepConversation() {
+  const state = room.agent?.state ?? resume;
+  if (!state || state.messages.length === 0) {
+    forgetConversation();
+    return;
+  }
+  writeSessionJson(CONVERSATION_STORAGE, {
+    state,
+    transcript: transcript.map(({ role, text }) => ({ role, text })),
+  });
+}
+
+function forgetConversation() {
+  removeSession(CONVERSATION_STORAGE);
+}
+
+// The log drawn again from what was kept, the history handed to the agent
+// once it is made. Answers whether there was a conversation to take up.
+function restoreConversation() {
+  const kept = readSessionJson(CONVERSATION_STORAGE);
+  const state = kept?.state;
+  if (!Array.isArray(state?.messages) || state.messages.length === 0 || !Array.isArray(state.turns) || !Array.isArray(kept.transcript)) {
+    forgetConversation();
+    return false;
+  }
+  resume = state;
+  el.log.replaceChildren();
+  transcript = [];
+  userLines = [];
+  for (const entry of kept.transcript) {
+    if (typeof entry?.text !== "string") continue;
+    const { role, text } = entry;
+    if (role === "user") {
+      const line = room.addLine("user", text);
+      userLines.push({ div: line, text, files: [] });
+      transcript.push({ role, text });
+    } else if (role === "assistant") {
+      const line = room.addLine("assistant", "");
+      renderMarkdown(line, text);
+      transcript.push({ role, text, el: line });
+    } else if (role === "did" || role === "failed") {
+      room.addLine(role === "failed" ? "tool is-error" : "tool", text);
+      transcript.push({ role, text });
+    } else if (role === "note") {
+      room.addLine("notice", text);
+      transcript.push({ role, text });
+    }
+  }
+  // Only the messages the history holds can be taken out of it: a line of
+  // the reader's whose turn failed is in the transcript, not in the turns.
+  userLines = userLines.slice(-state.turns.length);
+  room.addLine("notice", "Your conversation is back from before the reload. The app is not running yet - it starts again with the next change, or run it from the Code stage.");
+  const offer = resumeOffer();
+  if (offer) el.log.append(offer);
+  room.scrollDown(true);
+  offerEdit();
+  return true;
 }
 
 function setOpen(value) {
@@ -499,6 +651,11 @@ function showAppName() {
 // flashes so the eye finds it.
 function appUpdated() {
   showAppName();
+  // A run that changed no file is a second look at the same app, not an
+  // update - run_app put a card in the log every time.
+  const now = JSON.stringify(host.files());
+  if (now === cardFiles) return;
+  cardFiles = now;
   const card = document.createElement("button");
   card.type = "button";
   card.className = "chat-card";
@@ -523,10 +680,11 @@ function showWelcome() {
   const title = document.createElement("h2");
   title.textContent = "What do you want to build?";
   const lead = document.createElement("p");
+  const them = who();
   lead.textContent =
-    "Describe the app you want. Claude writes it as an abap2UI5 class into the editor, runs it here and fixes " +
+    `Describe the app you want. ${them === "Claude" ? "Claude" : "The model"} writes it as an abap2UI5 class into the editor, runs it here and fixes ` +
     "what the checks find - the app appears on the right. Ask for changes until it fits, then download it for abapGit. " +
-    "Add a specification, a screenshot or an Excel sheet with data with 📎 and Claude builds from it.";
+    `Add a specification, a screenshot or an Excel sheet with data with 📎 and ${them} builds from it.`;
   const list = document.createElement("div");
   list.className = "chat-suggestions";
   for (const text of SUGGESTIONS) {
@@ -554,14 +712,21 @@ function showWelcome() {
     local.append("No API key? ", button, " - Ollama or LM Studio, no key and no cost; it needs a model that can call tools.");
     intro.append(local);
   }
-  // The last build this browser kept (main.mjs stores the studio's files
-  // under a key of its own): offered back, not opened by itself - the
-  // studio starts on the minimal class every time, and the model is told
-  // what the editor holds with the first message (<editor_files>).
+  const offer = resumeOffer();
+  if (offer) intro.append(offer);
+  el.log.append(intro);
+}
+
+// The last build this browser kept (main.mjs stores the studio's files
+// under a key of its own): offered back, not opened by itself - the
+// studio starts on the minimal class every time, and the model is told
+// what the editor holds with the first message (<editor_files>). On the
+// welcome, and under a conversation taken up after a reload.
+function resumeOffer() {
   const last = host.lastBuild?.();
   if (last && host.files().every(isUntouchedStarter)) {
-    const resume = document.createElement("div");
-    resume.className = "chat-resume";
+    const block = document.createElement("div");
+    block.className = "chat-resume";
     const open = document.createElement("button");
     open.type = "button";
     open.className = "chat-suggestion chat-resume-open";
@@ -573,7 +738,7 @@ function showWelcome() {
         room.addLine("notice is-error", `The last build could not be opened: ${String(e?.message ?? e)}`);
         return;
       }
-      resume.remove();
+      block.remove();
       showAppName();
       room.addLine("notice", "The last build is back in the editor - ask for a change, or describe something new.");
       // Run, so the stage shows it; the report goes nowhere.
@@ -585,10 +750,10 @@ function showWelcome() {
     forget.textContent = "forget it";
     forget.addEventListener("click", () => {
       host.forgetLastBuild?.();
-      resume.remove();
+      block.remove();
     });
-    resume.append(open, forget);
-    intro.append(resume);
+    block.append(open, forget);
+    return block;
   }
-  el.log.append(intro);
+  return null;
 }

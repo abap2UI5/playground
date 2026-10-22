@@ -2334,10 +2334,14 @@ body.is-studio[data-stage="chat"] .chat { grid-column: 1 / -1; }
 @media (max-width: 820px) {
   .studio-bar { flex-wrap: wrap; gap: 8px; padding: 8px 2px; }
   .studio-brand { margin-right: auto; }
-  .studio-brand-name,
-  .studio-status { display: none; }
+  .studio-brand-name { display: none; }
   .studio-stages { order: 3; flex: 1 1 100%; margin-left: 0; }
   button.studio-stage { flex: 1; }
+  /* The status on a row of its own, while it says something: hidden
+     outright, "edit the message and send it again", the release check's
+     progress and "the zip could not be written" were never seen on a phone. */
+  .studio-status { order: 4; flex: 1 1 100%; text-align: left; font-size: 11px; }
+  .studio-status:empty { display: none; }
 }
 
 /* The bar. */

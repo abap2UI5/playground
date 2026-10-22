@@ -87,7 +87,8 @@ read them before touching `tools/` or `src/runtime/`.
 | `frame-drive.mjs` | One app frame as the AI's transport |
 | `chat-ui.mjs` | What both chats share on screen (`createChatRoom()`: log, key form, Send/Stop, speed, files, one submit) |
 | `markdown.mjs` | `renderMarkdown()`, `streamMarkdown()` (incremental) |
-| `ai-common.mjs` | Speeds, prices, errors, `runTurnLoop()`, `followStream()`, `str/clip/echo/count`, `rankEntries()` |
+| `ai-speeds.mjs` | `SPEEDS` and `DEFAULT_SPEED` - the one list both headers' selects are written from |
+| `ai-common.mjs` | Prices, errors, `runTurnLoop()`, `followStream()`, `str/clip/echo/count`, `rankEntries()` |
 | `llm-provider.mjs` | Anthropic SDK or an OpenAI-compatible server; `httpUrl()`, `keyHost()` |
 | `llm-form.mjs` | The provider half of both key forms; `keyTarget()` |
 | `attach-ui.mjs` | Files for a message on screen (paperclip, chips, paste, drop) |
@@ -251,7 +252,7 @@ Each bullet names the design doc that explains it. Keep them true.
 - The service worker caches a core asset only if it hashes to the build, and a cached hit is verified before it is served (`verifiedHit()`) - under `app/` against `dist/app-hashes.json`, which the worker knows by its hash; the documents and catalogue files are network-first; a new document must be added to `DOCUMENTS` in `sw.js` and to `writeServiceWorker()`.
 - A chunk never imports a shell module (`editor.mjs`, `insight.mjs`, `file-sets.mjs`, `deep-link.mjs`, …) — what it needs is handed to its setup function, or esbuild splits the shell.
 - The size budget sums `assets/*.mjs`; the shell entry and its static imports stay free of Monaco and `shell.css` free of Monaco's CSS; the corpus must parse in 256 KB of stack.
-- Never `window.prompt()`/`alert()` (dead in a cross-origin frame); never treat `blur` as cancel in a shell input (the app frame steals focus); every `localStorage` access through `storage.mjs` (bar `theme-boot.mjs`).
+- Never `window.prompt()`/`alert()` (dead in a cross-origin frame); never treat `blur` as cancel in a shell input (the app frame steals focus); every `localStorage` and `sessionStorage` access through `storage.mjs` (bar `theme-boot.mjs`).
 - Nothing may keep a page out of the back/forward cache: no `unload`, no `beforeunload`, no `no-store` (`tests/bfcache.spec.js`).
 
 **Editor and checkers** ([checkers.md](docs/design/checkers.md), [format.md](docs/design/format.md), [panel.md](docs/design/panel.md))
@@ -266,6 +267,7 @@ Each bullet names the design doc that explains it. Keep them true.
 **AI** ([ai-chat.md](docs/design/ai-chat.md), [ai-pilot.md](docs/design/ai-pilot.md))
 - A key or token is held in memory for the visit and never stored; a key goes only to the server it was typed for. The Pilot opens a link's code only after asking (the app steers the model); the Gist section asks once a link's code has run (the playground's frame is same-origin).
 - The model's tools go through the same paths as the reader's (`replaceWith()`, `run()`); the conversation is append-only (bar `rewind()` of the last exchange); agent chunks stay out of the precache.
+- The studio's conversation is kept for the tab in sessionStorage (`keepConversation()` in `chat.mjs`), never the key; the files under `AI_STORAGE_KEY` in localStorage. Nothing of it asks for `beforeunload`.
 - The studio's target system is abaplint's `version`, nothing of its own: the header sets it the way the Config tab does, and the model is told the release the check runs at, never another.
 - `src/vendor/agent/` is never edited here — change upstream and re-vendor.
 

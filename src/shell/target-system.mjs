@@ -80,10 +80,19 @@ export function targetRules(version) {
 export const targetLabel = (version) => targetOf(version)?.label ?? `ABAP ${version}`;
 
 // The marker the model writes above whatever stands in for the reader's
-// system. One spelling, matched case-insensitively and after the comment's
-// quote, so `"TODO(system):` and `" todo(system):` both count.
+// system. One spelling, matched case-insensitively in the line's comment -
+// the part after the `"` that is not inside a literal - so `"TODO(system):`
+// and `" todo(system):` both count, and `'" TODO(system): …'` in a string
+// does not.
 export const TODO_MARK = 'TODO(system):';
-const TODO_LINE = /"\s*todo\(system\):\s*(.*)$/i;
+const TODO_TEXT = /^\s*todo\(system\):\s*(.*)$/i;
+const todoOf = (line) => {
+  const { comment } = codeOf(line);
+  return comment === undefined ? null : TODO_TEXT.exec(comment);
+};
+// A line that is nothing but a comment: `*` in the first column, or a `"`
+// after nothing but blanks.
+const commentOnly = (line) => line.startsWith("*") || /^\s*"/.test(line);
 
 /**
  * Every `" TODO(system): ...` line in the files, in file and line order:
@@ -96,7 +105,7 @@ export function systemTodos(files) {
   for (const file of files ?? []) {
     const lines = String(file.source ?? "").split(/\r?\n/);
     lines.forEach((text, i) => {
-      const m = TODO_LINE.exec(text);
+      const m = todoOf(text);
       if (m) todos.push({ file: file.name, line: i + 1, text: m[1].trim() });
     });
   }
@@ -119,7 +128,10 @@ const CALL_FUNCTION = /\bCALL\s+FUNCTION\s+(?:'§(\d+)'|([\w/~-]+))/i;
 /**
  * Every CALL FUNCTION in the files: { file, line (1-based), name, marked }.
  * `name` is the module in its quotes, or the variable of a dynamic call.
- * A line that is a comment, or a call after a `"`, does not count.
+ * A line that is a comment, or a call after a `"`, does not count. `marked`
+ * is a TODO(system) line above the call with nothing but blank lines and
+ * other comments between - a model that writes its note and then a second
+ * comment line is not unmarked for it.
  */
 export function functionCalls(files) {
   const calls = [];
@@ -130,13 +142,18 @@ export function functionCalls(files) {
       const { code, literals } = codeOf(text);
       const m = CALL_FUNCTION.exec(code);
       if (!m) return;
-      let above = i - 1;
-      while (above >= 0 && lines[above].trim() === "") above -= 1;
+      let marked = false;
+      for (let above = i - 1; above >= 0 && (lines[above].trim() === "" || commentOnly(lines[above])); above -= 1) {
+        if (todoOf(lines[above])) {
+          marked = true;
+          break;
+        }
+      }
       calls.push({
         file: file.name,
         line: i + 1,
         name: (m[1] !== undefined ? literals[Number(m[1])] : m[2]).toUpperCase(),
-        marked: above >= 0 && TODO_LINE.test(lines[above]),
+        marked,
       });
     });
   }
@@ -144,15 +161,22 @@ export function functionCalls(files) {
 }
 
 // The line up to its `"` comment, each '...' or `...` literal replaced by
-// '§n' and kept in `literals` - a `"` inside one is text.
+// '§n' and kept in `literals` - a `"` inside one is text, and a doubled
+// quote inside one ('it''s') is one quote of the text. `comment` is what
+// follows the `"`, or undefined when the line has none.
 function codeOf(line) {
   const literals = [];
   let code = "";
   let quote;
   let text = "";
-  for (const c of line) {
+  let comment;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
     if (quote) {
-      if (c === quote) {
+      if (c === quote && line[i + 1] === quote) {
+        text += c;
+        i += 1;
+      } else if (c === quote) {
         code += `'§${literals.push(text) - 1}'`;
         quote = undefined;
       } else {
@@ -162,12 +186,13 @@ function codeOf(line) {
       quote = c;
       text = "";
     } else if (c === '"') {
+      comment = line.slice(i + 1);
       break;
     } else {
       code += c;
     }
   }
-  return { code, literals };
+  return { code, literals, comment };
 }
 
 /** What the model is told after a run about the calls it did not mark -
