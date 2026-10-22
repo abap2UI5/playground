@@ -192,6 +192,49 @@ talks to a model or needs a key.
   being checked in and rode silently on the NEXT message. `chat-ui.mjs` sets
   up the attaching for both rooms; listening for a drop on the page stays
   with each room (`listenForFileDrops( )`).
+- **The reader's system, and what the app still needs from it**
+  (`src/shell/target-system.mjs`). The model wrote 7.50 syntax whatever the
+  reader's system was, and abaplint checked it at `v750`: a reader on 7.02
+  downloaded a class that ran here and failed to activate at home. The
+  header's **target system** (`#chat-target`: 7.02-7.31, 7.40, 7.50+ /
+  S/4HANA, ABAP Cloud) IS abaplint's `version` - `setAbapRelease( )` on the
+  studio's host (`agent-hooks.mjs`) applies it the way the Config tab's Apply
+  does (the corpus parsed again, kept by `keepAbaplintSettings( )`, the
+  problems counted afresh), and `playgroundRules( )` is told the release on
+  every request (`host.abapRelease( )`), with what it rules out - 7.02 gets
+  no inline declarations or constructor expressions and is told the guide's
+  7.50 examples are to be translated, Cloud gets released APIs only. A
+  release the Config tab set that the list does not carry is shown and told
+  as abaplint names it. abaplint at `Cloud` checks the language version, not
+  whether an SAP object is released; the rules say that part is the model's.
+  What this page cannot check at all - a SELECT from the reader's tables, a
+  BAPI, class or CDS view the model assumed - the model marks with a
+  `" TODO(system): …` line above it, and the download lists those lines
+  under the zip (`placeholderNotice( )` in `chat.mjs`, `systemTodos( )`) with
+  the release the code was checked against, so "it ran here" is not read as
+  "it runs on my system". `tests/ai.spec.js` holds the header (the check
+  stops a DATA( ) at v702, the rules in the request, kept over a reload) and
+  the download's list; `tests/node/target-system.test.mjs` the releases and
+  the matching.
+- **No key, no answer - so the welcome offers a local model.** While no key
+  is held, the welcome carries "Use a model on your own machine": the key
+  form turned to an OpenAI-compatible server at Ollama's address (unless a
+  base URL is already set), the model's name to type. A local server takes
+  no key and costs nothing; it needs a model that calls tools.
+- **How well it builds is measured, not assumed** (`tests/ai-eval.spec.js`).
+  The specs above answer the API themselves, so they hold the mechanics and
+  say nothing about whether a model, with these rules and the guide, ends on
+  an app that runs. `AI_EVAL_KEY=sk-ant-… npm test -- ai-eval` sends each
+  task of `tests/fixtures/ai-eval-tasks.json` (a message, optionally a target
+  system, texts the app must show) through the real page to the real API and
+  appends a JSON line per task to `AI_EVAL_OUT` (default
+  `test-results/ai-eval.jsonl`): clean or not (the last run started with no
+  error or warning), the turns, the tool calls, the runs that stopped or had
+  problems, the `TODO(system)` lines, the tokens and the seconds.
+  `AI_EVAL_SPEED` picks the header's speed, `AI_EVAL_ONLY` a few tasks.
+  Without a key the file holds no tests, so `npm test` and CI never reach a
+  model. A change to the rules is judged over several runs of the set -
+  one answer varies too much to compare two numbers.
 - **Which API answers** (`src/shell/llm-provider.mjs`, both chats). The
   conversation is the Messages API's shape whatever answers it; a provider
   turns one request of it into a call and the answer back. `anthropic` is the

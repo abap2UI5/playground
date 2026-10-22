@@ -310,6 +310,90 @@ test("Fast in the header sends the next message to Sonnet 5.5, and is remembered
   await expect(page.locator("#chat-speed")).toHaveValue("fast");
 });
 
+test("the target system in the header moves the syntax check, is told to the model and is remembered", async ({ page }) => {
+  const requests = [];
+  await page.route("https://api.anthropic.com/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    requests.push(request.postDataJSON());
+    const answer = requests.length === 1
+      ? sse({ tools: [{ name: "write_file", input: { name: APP_FILE, source: APP, as_app: true } }] })
+      : sse({ text: "Done." });
+    await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: answer });
+  });
+
+  await openStudio(page);
+  await saveKey(page);
+  // The default is the release the editor checks against out of the box.
+  await expect(page.locator("#chat-target")).toHaveValue("v750");
+  await page.locator("#chat-target").selectOption("v702");
+  await expect(page.locator("#status")).toHaveText("the code is checked against ABAP 7.02 - 7.31 now", { timeout: 120000 });
+  await expect(page.locator(".chat-notice").last()).toContainText("Your system: ABAP 7.02 - 7.31");
+
+  await page.locator("#chat-input").fill("A page");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toHaveText("Done.", { timeout: 90000 });
+
+  // The model was told the release, and what it rules out.
+  const system = requests[0].system.map((b) => b.text).join("");
+  expect(system).toContain("SAP NetWeaver 7.02 to 7.31");
+  expect(system).toContain("no inline declarations");
+  expect(system).toContain("TODO(system):");
+  // The app's DATA( ) is 7.40 syntax: at v702 the check stops the run.
+  const report = requests[1].messages.at(-1).content[0].content;
+  expect(report).toContain("(the app did not start)");
+  expect(report).toMatch(/\[abaplint error/);
+
+  // Kept like a setting typed into the Config tab.
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText("ready - describe the app you want", { timeout: 120000 });
+  await expect(page.locator("#chat-target")).toHaveValue("v702");
+});
+
+test("the download says what the model left to connect on the reader's system", async ({ page }) => {
+  const todo = "SELECT the carriers from SCARR";
+  const app = APP.replace("    IF client->check_on_init( ).", `    " TODO(system): ${todo}\n    IF client->check_on_init( ).`);
+  const line = app.split("\n").findIndex((l) => l.includes("TODO(system)")) + 1;
+  let calls = 0;
+  await page.route("https://api.anthropic.com/**", async (route) => {
+    if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    calls += 1;
+    const answer = calls === 1
+      ? sse({ tools: [{ name: "write_file", input: { name: APP_FILE, source: app, as_app: true } }] })
+      : sse({ text: "Done." });
+    await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: answer });
+  });
+
+  await openStudio(page);
+  await saveKey(page);
+  await page.locator("#chat-input").fill("A page of carriers");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toHaveText("Done.", { timeout: 90000 });
+
+  const downloaded = page.waitForEvent("download");
+  await page.locator("#chat-download").click();
+  expect((await downloaded).suggestedFilename()).toMatch(/\.zip$/);
+  const notice = page.locator(".chat-notice").last();
+  await expect(notice).toContainText("Checked against ABAP 7.50+ / S/4HANA. 1 place is left to connect on your system");
+  await expect(notice.locator("li")).toHaveText(`${APP_FILE}:${line} - ${todo}`);
+});
+
+test("without a key the welcome offers a model on the reader's own machine", async ({ page }) => {
+  await openStudio(page);
+  await page.locator(".chat-local-open").click();
+  await expect(page.locator("#chat-key")).toBeVisible();
+  await expect(page.locator("#chat-provider")).toHaveValue("openai");
+  await expect(page.locator("#chat-base-url")).toHaveValue("http://localhost:11434/v1");
+  await expect(page.locator("#chat-model")).toBeFocused();
+  // A local server needs no key: the form says where requests go.
+  await expect(page.locator("#chat-key-target")).toContainText("localhost");
+  // Saved, the offer is done.
+  await page.locator("#chat-model").fill("qwen3-coder");
+  await page.locator("#chat-key button[type=submit]").click();
+  await expect(page.locator("#chat-key")).toBeHidden();
+  await expect(page.locator(".chat-local")).toHaveCount(0);
+});
+
 test("a key an earlier version stored is removed by the playground itself, not only by the studio", async ({ page }) => {
   // Stored once, before the first load - the page's own removal is what is
   // being watched, not this script putting it back on the reload.

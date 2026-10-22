@@ -80,6 +80,7 @@ read them before touching `tools/` or `src/runtime/`.
 | `chat.mjs` | AI Studio on screen (chunk, its page only) |
 | `ai-agent.mjs` | AI Studio's conversation and tools (`runTools()`), chunk on use |
 | `ai-starter.mjs` | The class the studio starts on |
+| `target-system.mjs` | The studio's target system: `TARGETS` (abaplint releases the header offers, the rules the model is told), `systemTodos()` (the `" TODO(system):` lines the download lists) |
 | `pilot.mjs` | AI Pilot on screen and the bridge's half (chunk) |
 | `pilot-agent.mjs` | AI Pilot's conversation, mirror and tools (chunk) |
 | `ai-operator.mjs` | The mirror and operator both rooms use on a frame |
@@ -183,6 +184,10 @@ npm run test:unit  # node:test over tests/node/*.test.mjs - no build, no browser
 - `RUNNABLE_JSON=/tmp/runnable.json npm test -- docs-examples` runs the
   documentation's runnable examples here — a measurement, not part of `npm test`
   ([public-surfaces.md](docs/design/public-surfaces.md)).
+- `AI_EVAL_KEY=sk-ant-… npm test -- ai-eval` has a real model build the apps of
+  `tests/fixtures/ai-eval-tasks.json` in the AI Studio and writes a line per task
+  to `test-results/ai-eval.jsonl` — a measurement billed to the key, not part of
+  `npm test` ([ai-chat.md](docs/design/ai-chat.md)).
 - The full suite is 422+ tests, about 25 minutes on 4 cores in one run. Every
   test boots its own playground on purpose ([testing.md](docs/design/testing.md)).
 
@@ -259,6 +264,7 @@ Each bullet names the design doc that explains it. Keep them true.
 **AI** ([ai-chat.md](docs/design/ai-chat.md), [ai-pilot.md](docs/design/ai-pilot.md))
 - A key or token is held in memory for the visit and never stored; a key goes only to the server it was typed for. The Pilot opens a link's code only after asking (the app steers the model); the Gist section asks once a link's code has run (the playground's frame is same-origin).
 - The model's tools go through the same paths as the reader's (`replaceWith()`, `run()`); the conversation is append-only (bar `rewind()` of the last exchange); agent chunks stay out of the precache.
+- The studio's target system is abaplint's `version`, nothing of its own: the header sets it the way the Config tab does, and the model is told the release the check runs at, never another.
 - `src/vendor/agent/` is never edited here — change upstream and re-vendor.
 
 **Public surfaces and the site** ([public-surfaces.md](docs/design/public-surfaces.md), [sample-catalogue.md](docs/design/sample-catalogue.md), [one-site.md](docs/design/one-site.md))

@@ -2176,6 +2176,10 @@ button.chat-suggestion {
 }
 .chat-tool.is-error,
 .chat-notice.is-error { color: var(--danger); border-left-color: var(--danger); }
+/* What the download leaves to connect on the reader's system - the
+   TODO(system) lines, one per row (chat.mjs, placeholderNotice). */
+.chat-notice ul { margin: .25rem 0 0; padding-left: 1.1rem; }
+.chat-notice li { white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* While a reply is under way, the last line says so. */
 .chat.is-busy .chat-log::after {
@@ -2604,6 +2608,9 @@ body.is-studio .chat-welcome h2 {
 }
 body.is-studio .chat-suggestions { align-items: stretch; gap: .55rem; }
 .chat-resume { display: flex; align-items: center; gap: .6rem; margin-top: .9rem; }
+/* The welcome's way in without a key (chat.mjs, offerLocalModel). */
+.chat-local { margin: .9rem 0 0; font-size: 13px; }
+.chat-local-open { font-size: inherit; }
 .chat-checkpoint { align-self: flex-start; margin-left: 2.1rem; }
 .chat-checkpoint-restore { font-size: 12px; color: var(--fg-dim); }
 .chat-user { position: relative; }

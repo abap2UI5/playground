@@ -4,8 +4,10 @@
 // frame's side), and the AI rooms -
 // the AI Studio (chat.mjs) and the AI Pilot (pilot.mjs) - which work on the
 // same editor and press the same Run through the hooks set up here.
-import { getFiles, openFile, refreshNow } from "../editor/editor.mjs";
-import { entryClass } from "../editor/registry.mjs";
+import { getFiles, invalidateAnalysis, openFile, refreshNow } from "../editor/editor.mjs";
+import { abaplintSettings, applyAbaplintSettings, entryClass } from "../editor/registry.mjs";
+import { keepAbaplintSettings } from "./checker-settings.mjs";
+import { problemsChanged } from "./insight-common.mjs";
 import { compile } from "../editor/transpile.mjs";
 import { checkFileSet } from "../editor/files.mjs";
 import { carriedSampleFiles } from "../editor/samples.mjs";
@@ -265,6 +267,20 @@ export function setUpStudio(chat) {
         }
       },
       forgetLastBuild: () => removeStored(AI_STORAGE_KEY),
+      // The release the syntax check holds the code to - abaplint's
+      // `version`, the Config tab's setting - which the chat header offers
+      // as the reader's target system (target-system.mjs) and the model is
+      // told before every request. Set the way the Config tab's Apply sets
+      // it: the corpus parsed again, kept for the next visit, the problems
+      // counted afresh.
+      abapRelease: () => abaplintSettings().version,
+      setAbapRelease: async (version, progress) => {
+        const next = { ...abaplintSettings(), version };
+        await applyAbaplintSettings(next, progress);
+        keepAbaplintSettings(next);
+        invalidateAnalysis();
+        problemsChanged(await refreshNow());
+      },
     },
     // The studio is the page: it opens at once, and there is no playground
     // under it to leave to.

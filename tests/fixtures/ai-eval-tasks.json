@@ -1,0 +1,44 @@
+[
+  {
+    "id": "flights-filter",
+    "prompt": "A table of flights with a search field that filters by carrier",
+    "expect": ["Carrier"]
+  },
+  {
+    "id": "travel-form",
+    "prompt": "A form to enter a travel request - name, destination, dates - with validation and a confirmation popup",
+    "expect": ["Destination"]
+  },
+  {
+    "id": "todo-list",
+    "prompt": "A to-do list where I can add, tick off and delete entries",
+    "expect": []
+  },
+  {
+    "id": "master-detail",
+    "prompt": "A list of customers; clicking one opens a second page with its orders and a back button",
+    "expect": []
+  },
+  {
+    "id": "message-box",
+    "prompt": "An input for a number and a button that shows in a message box whether it is a prime number",
+    "expect": []
+  },
+  {
+    "id": "editable-table",
+    "prompt": "An editable table of products (name, price, stock) with buttons to add and delete rows and a total of the stock below it",
+    "expect": ["Price"]
+  },
+  {
+    "id": "sales-orders-702",
+    "prompt": "A table of open sales orders with their customer and net value, sorted by value, and a button that refreshes it",
+    "target": "v702",
+    "expect": []
+  },
+  {
+    "id": "products-cloud",
+    "prompt": "A product list with a search field over the product description - for our S/4HANA Cloud system",
+    "target": "Cloud",
+    "expect": []
+  }
+]
