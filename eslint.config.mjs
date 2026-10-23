@@ -130,9 +130,10 @@ export default [
     rules: { "no-implicit-globals": "off" },
   },
 
-  // Node: the build, the dev server, the configs.
+  // Node: the build, the dev server, the configs - and the Evaluate page's
+  // Astro project, whose modules run only at build time, in Node.
   {
-    files: ["tools/**/*.mjs", "playwright.config.js", "eslint.config.mjs"],
+    files: ["tools/**/*.mjs", "playwright.config.js", "eslint.config.mjs", "src/evaluate/**/*.mjs"],
     languageOptions: { globals: { ...globals.node } },
   },
 

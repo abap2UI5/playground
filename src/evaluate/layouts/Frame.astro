@@ -1,0 +1,60 @@
+---
+/* The frame every page of this deployment outside the workbench wears - the
+ * catalogue's stylesheet, the theme before the first paint, the bar with its
+ * marks and menu, the footer - taken from tools/sample-frame.mjs as the very
+ * strings the sample pages and the 404 are written with, so there is one copy
+ * of the bar here and not a second one in Astro. `set:html` puts them in as
+ * they are: Astro neither hoists nor bundles a script it did not parse, which
+ * is what keeps the two inline scripts byte for byte the text their hashes in
+ * the policy are taken from. */
+import { BASE, MENU_SCRIPT, PAGE_SCRIPT, SITE, THEME_SCRIPT, bar } from "../../../tools/sample-frame.mjs";
+import "../styles/evaluate.css";
+
+interface Props { title: string; description: string; image: string }
+const { title, description, image } = Astro.props;
+const canonical = `${SITE}evaluate/`;
+---
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<meta name="description" content={description}>
+<link rel="canonical" href={canonical}>
+<meta property="og:title" content="Evaluate abap2UI5">
+<meta property="og:description" content={description}>
+<meta property="og:url" content={canonical}>
+<meta property="og:image" content={new URL(image, canonical).href}>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f5f7">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1e2024">
+<link rel="icon" href={`${BASE}favicon.png`}>
+<link rel="apple-touch-icon" href={`${BASE}apple-touch-icon.png`}>
+<link rel="preload" href={`${BASE}fonts/inter-roman-latin.woff2`} as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href={`${BASE}samples/catalogue.css`}>
+<Fragment set:html={THEME_SCRIPT} />
+</head>
+<body data-evaluate>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<Fragment set:html={bar(BASE, "none")} />
+
+<main id="main" tabindex="-1" class="evaluate">
+  <slot />
+</main>
+
+<footer class="foot">
+  <p>
+    Written for the people who approve abap2UI5 and published beside the
+    <a href={`${BASE}samples/`}>sample catalog</a> and the
+    <a href={BASE}>playground</a>; the detail behind every section is in the
+    <a href="https://abap2ui5.github.io/docs/get_started/about">documentation</a>.
+    <a href="https://github.com/abap2UI5/playground/tree/main/src/evaluate">Edit this page on GitHub</a>.
+  </p>
+</footer>
+
+<Fragment set:html={PAGE_SCRIPT(BASE)} />
+<Fragment set:html={MENU_SCRIPT} />
+</body>
+</html>

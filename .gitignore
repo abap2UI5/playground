@@ -7,3 +7,5 @@
 /test-results/
 /playwright-report/
 *.log
+# what Astro writes beside the Evaluate page's sources (tools/evaluate-page.mjs)
+/src/evaluate/.astro/

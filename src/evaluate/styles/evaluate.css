@@ -1,12 +1,12 @@
-/* The Evaluate page (tools/evaluate-page.mjs), over the catalogue's stylesheet
- * - the bar, the palette, the type, `main`, the footer and the skip link are
- * catalogue.css's; this is only what the page has that no other page here
- * has: a hero with a screenshot, a line of counted figures, sections drawn as
- * bands, real tables, and four tiles at the end.
+/* The Evaluate page's own layer over the catalogue's stylesheet - the bar, the
+ * palette, the type, `main`, the footer and the skip link are catalogue.css's,
+ * linked from layouts/Frame.astro; Astro bundles this file into the page's one
+ * stylesheet under assets/. What is here is only what the page has that no
+ * other page of this deployment has: a hero with a screenshot, a line of
+ * counted figures, sections drawn as bands, real tables, and four tiles.
  *
- * Ported from the manual's landing layout (abap2UI5/docs,
- * scripts/site-css/docs.css), where the page lived until it moved here, and
- * kept to the same measures so a reader who knew it there finds it unchanged. */
+ * Ported from the manual's landing layout (abap2UI5/docs), where the page lived
+ * until it moved here, and kept to the same measures. */
 
 .evaluate { padding-top: 40px; overflow-wrap: break-word; }
 

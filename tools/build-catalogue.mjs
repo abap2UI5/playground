@@ -36,7 +36,7 @@ import { UI5_LIBRARIES, UI5_VERSION } from "../src/shell/ui5-libraries.mjs";
 import { cmpVersion, isCarried, isSapui5Only, libraryOf } from "../src/shell/ui5-libs.mjs";
 import { isBranch, isSampleFile } from "../src/shell/catalogue-urls.mjs";
 import { SITE, prepareSamplePages, writeSamplePages } from "./sample-pages.mjs";
-import { EVALUATE_SOURCES } from "./evaluate-page.mjs";
+import { evaluateSources, writeEvaluatePage } from "./evaluate-page.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = path.join(ROOT, "dist");
@@ -422,10 +422,11 @@ for (const tool of ["build-catalogue.mjs", "sample-pages.mjs", "sample-frame.mjs
 for (const shared of ["shell/ui5-libs.mjs", "shell/ui5-libraries.mjs", "shell/theme-boot.mjs", "catalogue/sample.css"]) {
   stamp.update(fs.readFileSync(path.join(ROOT, "src", shared)));
 }
-// the Evaluate page's prose, stylesheet and screenshot, and the framework
-// README its counted figures come from
-for (const file of [...EVALUATE_SOURCES, path.join(ROOT, "deps", "abap2ui5", "README.md")]) {
-  if (fs.existsSync(file)) stamp.update(fs.readFileSync(file));
+// the Evaluate page - every file of its Astro project, the Astro that builds
+// it, and the framework README its counted figures come from
+for (const file of [...evaluateSources(), path.join(ROOT, "node_modules", "astro", "package.json"),
+                    path.join(ROOT, "deps", "abap2ui5", "README.md")]) {
+  if (fs.existsSync(file)) stamp.update(`${path.relative(ROOT, file)}\0`).update(fs.readFileSync(file));
 }
 const hash = stamp.digest("hex");
 const written = ["samples/apps.json", "samples/all/index.html", "samples/sample.css", "samples/llms.txt", "sitemap.xml", "404.html",
@@ -443,6 +444,10 @@ if (current) {
   // left the old stamp beside half the pages, and the next build believed it.
   fs.rmSync(STAMP, { force: true });
   writeSamplePages(index, DIST, pages);
+  /* The page for the person who approves abap2UI5 (tools/evaluate-page.mjs):
+   * not a sample page, but in their frame and written at the same moment, so
+   * it is a page of this set like the 404. */
+  await writeEvaluatePage(DIST);
 
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
   /* Undefined values drop out of JSON.stringify on their own, which is what the

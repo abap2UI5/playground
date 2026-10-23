@@ -1,0 +1,72 @@
+---
+/* Evaluate abap2UI5 - the page for the person who approves it: IT
+ * management, architecture boards, product owners, SAP Basis, internal audit.
+ * The questions a review asks, in the order it asks them.
+ *
+ * The prose is sections/*.md, one file per section in reading order (the
+ * number in the name is the order). Each opens with its H2, and Astro gives
+ * the H2 the id its words make - the ids the page had in the manual, which the
+ * redirect at /docs/evaluate and the framework's README link to, so a
+ * reworded heading is a changed address (tests/evaluate.spec.js names them).
+ * Every link into the manual is absolute: it is another deployment on this
+ * origin. */
+import Frame from "../layouts/Frame.astro";
+import Hero from "../components/Hero.astro";
+import Facts from "../components/Facts.astro";
+import Tiles from "../components/Tiles.astro";
+import { BASE } from "../../../tools/sample-frame.mjs";
+
+const DOCS = "https://abap2ui5.github.io/docs/";
+const IMAGE = `${import.meta.env.BASE_URL}walkthrough-preview.webp`;
+const DESCRIPTION = "abap2UI5 for the people who approve a tool rather than build with it - what problem it answers, when it is the right choice and when RAP is, what your organization keeps, where it runs, what it costs, the objections a review board raises, and how to test it on one real screen in a week.";
+
+const sections = Object.entries(import.meta.glob("../sections/*.md", { eager: true }))
+  .sort(([a], [b]) => a.localeCompare(b, "en", { numeric: true }))
+  .map(([file, mod]) => ({ file, Content: mod.Content }));
+
+const tiles = [
+  {
+    title: "Ten minutes, nothing installed",
+    details: "Open the playground and change a running app, or browse the sample catalog for the screen closest to yours.",
+    href: `${BASE}samples/`,
+    icon: `<circle cx="12" cy="12" r="8.6" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M10.2 8.4v7.2a.5.5 0 0 0 .76.43l5.8-3.6a.5.5 0 0 0 0-.86l-5.8-3.6a.5.5 0 0 0-.76.43z" fill="currentColor"/>`,
+  },
+  {
+    title: "One afternoon, one developer",
+    details: "Send them the Quickstart — abapGit pull, ICF node, first app. The tutorial takes the same app to transport and unit tests.",
+    href: `${DOCS}get_started/quickstart`,
+    icon: `<path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" d="M8 7.5 3.5 12 8 16.5M16 7.5l4.5 4.5-4.5 4.5M13.6 4.8 10.4 19.2"/>`,
+  },
+  {
+    title: "One question",
+    details: "Ask it in the Slack channel or as a GitHub issue, where the people who run it in production answer.",
+    href: "https://abapgit.slack.com/join/shared_invite/zt-46tqufaht-QlrxTzlDqlx85CWbeUnOqg#/shared-invite/email",
+    icon: `<path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" d="M4 5.5h16v10H9l-4.5 3.5z"/>`,
+  },
+  {
+    title: "A partner",
+    details: "The companies on Who Uses abap2UI5? offer implementation, workshops and support agreements.",
+    href: `${DOCS}resources/who_uses`,
+    icon: `<path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" d="M3.5 19.5V9l5.5 3.5V9l5.5 3.5V9l6 3.5v7zM3.5 19.5h17M6 4.5h3v7.5"/>`,
+  },
+];
+---
+<Frame title="Evaluate abap2UI5 · for the people who approve it" description={DESCRIPTION} image={IMAGE}>
+  <Hero
+    name="For the people who approve it"
+    title="Evaluate abap2UI5"
+    note="Nothing to install, no trial license, no sales call — the playground runs in your browser."
+    actions={[
+      { text: "Try it in the playground", href: BASE, primary: true },
+      { text: "Read the technical picture", href: `${DOCS}get_started/about` },
+    ]}
+    image={{ src: IMAGE, alt: "An abap2UI5 app: a selection form above a table of invoices, with a dialog editing one row", width: 1000, height: 598 }}
+  >
+    For IT management, architecture boards, product owners, SAP Basis and internal audit: the questions a review asks, in the order it asks them, each with the page that carries the detail. A developer who wants to see it run is better served by the <a href={`${DOCS}get_started/quickstart`}>Quickstart</a>; send them there and read on.
+  </Hero>
+  <Facts />
+  <div class="bands">
+    {sections.map(({ Content }) => <section class="band"><Content /></section>)}
+    <Tiles tiles={tiles} />
+  </div>
+</Frame>

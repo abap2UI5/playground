@@ -1,0 +1,16 @@
+---
+/* The four ways to start, in order of effort, after the last section - so
+ * the last section does not list them a second time. */
+interface Tile { title: string; details: string; href: string; icon: string }
+interface Props { tiles: Tile[] }
+const { tiles } = Astro.props;
+---
+<section class="tiles" aria-label="Where to start">
+  {tiles.map((t) => (
+    <a class="tile" href={t.href}>
+      <span class="tile-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" set:html={t.icon} /></span>
+      <span class="tile-title">{t.title}</span>
+      <span class="tile-details">{t.details}</span>
+    </a>
+  ))}
+</section>
