@@ -2014,6 +2014,17 @@ button.insight-row {
     color: inherit;
   }
 }
+/* FIVE MARKS AT 320. With the AI Studio the row is five 40px items, and
+   brand, row, search and the menu came to 355px of a 320px screen: the whole
+   page moved sideways by 35. Under 380 the items keep the 34px a thumb is
+   given (the coarse-pointer rule below) and lose the rest of their padding,
+   and the bar's gaps close by 2: 42px back, which is the 35 and some air. */
+@media (max-width: 380px) {
+  .bar { gap: 8px; }
+  .bar-nav { gap: 2px; }
+  .bar-nav a,
+  .bar-nav .here { padding: 3px 3px; min-width: 34px; }
+}
 /* UNDER A THUMB A MARK IS A TARGET, and these were drawn for a pointer: 30px
    of box for the marks at either end, 25px of pill for a section once its
    word is clipped away, on a screen where 44 is what a finger is asked to be
