@@ -202,9 +202,9 @@ it back to the curated list of the day.
 
 ## Build an app by describing it
 
-**Still being built, and not linked from the playground:** the **AI Studio**
-has a page of its own, [`/playground/ai/`](https://abap2ui5.github.io/playground/ai/),
-reached by its address and kept out of search engines. It starts on a minimal
+The **AI Studio** has a page of its own, [`/playground/ai/`](https://abap2ui5.github.io/playground/ai/)
+- the **AI Studio** button beside Samples, and the menu's Tools section on
+every page of this site. It starts on a minimal
 class: `z2ui5_if_app` implemented, `main` still empty. The chat runs down the left, and the stage beside it shows the running
 app in a window of its own, the code, or both side by side (**Preview**,
 **Code**, **Split** in the studio's bar; a phone takes them in turns, the chat

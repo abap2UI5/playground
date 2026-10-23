@@ -36,11 +36,18 @@ import { createDriver } from "./frame-drive.mjs";
 import { frameApi as apiOf, isolate, linkOf, navigate, unlink } from "./frame-link.mjs";
 import { frameIsolated } from "./page.mjs";
 import { highlightJson } from "./highlight.mjs";
-import { readStored, removeStored, writeStored } from "./storage.mjs";
+import { readProviderSettings } from "./llm-provider.mjs";
+import { renderMarkdown } from "./markdown.mjs";
+import { readSessionJson, readStored, removeSession, removeStored, writeSessionJson, writeStored } from "./storage.mjs";
 import { setStatus } from "./ui.mjs";
 
 // Whether "What Claude sees" was left open - a preference like a split.
 const SEES_STORAGE = "abap2ui5-playground:pilot-sees";
+// The conversation, kept for this tab over a reload (sessionStorage, as the
+// studio keeps its own - chat.mjs): the history and the usage, and the log
+// as text; never the key. The apps start again on a fresh database, and the
+// next message tells the model so with their screens.
+const CONVERSATION_STORAGE = "abap2ui5-playground:pilot-conversation";
 
 const SUGGESTIONS = [
   "What can I do in this app?",
@@ -74,6 +81,17 @@ let nextTab = 2;
 // tab strip's +) or in place of the app on screen (Change app).
 let pickBeside = false;
 let hudTimer;
+// The conversation as text, for keeping it: { role, text } per line.
+let transcript = [];
+// A conversation from before a reload, handed to the agent when it is made
+// (createPilot in pilot-agent.mjs takes it as `resume`), and whether an
+// agent has been made in this page at all.
+let resume;
+let agentMade = false;
+
+// Who the chat says is flying: Claude for the Anthropic models, and for an
+// OpenAI-compatible server whatever model was named there.
+const who = () => (readProviderSettings().provider === "anthropic" ? "Claude" : "the model");
 
 const tabById = (id) => tabs.find((t) => t.id === id);
 const visibleTab = () => tabById(visible) ?? tabs[0];
@@ -387,13 +405,40 @@ export function setUpPilot(pilotHost) {
     prefix: "pilot",
     el,
     onBusy: (busy) => document.body.classList.toggle("is-pilot-flying", busy),
-    showWelcome,
+    onStartOver: () => {
+      // A key is held now: the welcome's way in without one is done.
+      if (room?.hasKey()) el.log.querySelector(".pilot-local")?.remove();
+      // Another provider may be another name on the button.
+      sayWho();
+      // The key typed for a conversation taken up after a reload starts
+      // nothing over: there is no agent yet, and the conversation is what
+      // the key is for.
+      if (resume && !agentMade) return;
+      transcript = [];
+      resume = undefined;
+      agentMade = false;
+      forgetConversation();
+    },
+    showWelcome: () => {
+      // New chat: a conversation waiting to be taken up goes too.
+      resume = undefined;
+      transcript = [];
+      forgetConversation();
+      showWelcome();
+    },
     rules: () => chunk,
     turn: {
       load: () => chunk,
-      createAgent: ({ mod: loaded, ...conversation }) =>
-        loaded.createPilot({
+      sent({ typed, files }) {
+        transcript.push({ role: "user", text: `${typed}${files.length ? `\n\n${files.map((f) => `📎 ${f.name}`).join("\n")}` : ""}` });
+      },
+      createAgent: ({ mod: loaded, ...conversation }) => {
+        const taken = resume;
+        resume = undefined;
+        agentMade = true;
+        return loaded.createPilot({
           ...conversation,
+          resume: taken,
           host: {
             files: host.files,
             // Run, and then every other tab started again on the new Run as
@@ -426,10 +471,23 @@ export function setUpPilot(pilotHost) {
             closeApp: (id) => closeTab(id),
           },
           speed: () => el.speed.value,
-        }),
+        });
+      },
       working: "the Pilot is flying…",
       done: "the Pilot is done",
       ui: {
+        // The answer so far, in the transcript - replaced on every delta.
+        text(raw, line) {
+          const last = transcript[transcript.length - 1];
+          if (last?.role === "assistant" && last.el === line) last.text = raw;
+          else transcript.push({ role: "assistant", text: raw, el: line });
+        },
+        tool({ summary, error }) {
+          transcript.push({ role: error ? "failed" : "did", text: summary });
+        },
+        notice(t) {
+          transcript.push({ role: "note", text: t });
+        },
         // The model is about to do something to the app: said over it, and
         // on a phone the app comes forward so the reader sees it happen.
         acting(t) {
@@ -441,6 +499,7 @@ export function setUpPilot(pilotHost) {
       // at the end - an answer, a question, the key form - is in the chat.
       settled() {
         if (narrow()) setView("chat");
+        keepConversation();
       },
     },
   });
@@ -449,8 +508,73 @@ export function setUpPilot(pilotHost) {
 
   window.matchMedia("(max-width: 820px)").addEventListener("change", () => setView(document.body.dataset.view));
   setSees(readStored(SEES_STORAGE) === "open" && !narrow());
-  showWelcome();
+  sayWho();
+  if (!restoreConversation()) showWelcome();
   room.showKeyForm(true);
+}
+
+// "What Claude sees" - or what the model sees, when it is not Claude.
+function sayWho() {
+  const them = who();
+  el.sees.textContent = `What ${them} sees`;
+  el.sees.title = `The screen as ${them} reads it - the agent snapshot of the app`;
+}
+
+// ------------------------------------------------- the conversation, kept
+//
+// After every turn: what the agent is made of and what the log shows, for
+// the tab. Never the key - it is typed again - and no screens: the apps
+// start again with the page, and the next message carries them.
+
+function keepConversation() {
+  const state = room.agent?.state ?? resume;
+  if (!state || state.messages.length === 0) {
+    forgetConversation();
+    return;
+  }
+  writeSessionJson(CONVERSATION_STORAGE, {
+    state,
+    transcript: transcript.map(({ role, text }) => ({ role, text })),
+  });
+}
+
+function forgetConversation() {
+  removeSession(CONVERSATION_STORAGE);
+}
+
+// The log drawn again from what was kept, the history handed to the agent
+// once it is made. Answers whether there was a conversation to take up.
+function restoreConversation() {
+  const kept = readSessionJson(CONVERSATION_STORAGE);
+  const state = kept?.state;
+  if (!Array.isArray(state?.messages) || state.messages.length === 0 || !Array.isArray(kept.transcript)) {
+    forgetConversation();
+    return false;
+  }
+  resume = state;
+  el.log.replaceChildren();
+  transcript = [];
+  for (const entry of kept.transcript) {
+    if (typeof entry?.text !== "string") continue;
+    const { role, text } = entry;
+    if (role === "user") {
+      room.addLine("user", text);
+      transcript.push({ role, text });
+    } else if (role === "assistant") {
+      const line = room.addLine("assistant", "");
+      renderMarkdown(line, text);
+      transcript.push({ role, text, el: line });
+    } else if (role === "did" || role === "failed") {
+      room.addLine(role === "failed" ? "tool is-error" : "tool", text);
+      transcript.push({ role, text });
+    } else if (role === "note") {
+      room.addLine("notice", text);
+      transcript.push({ role, text });
+    }
+  }
+  room.addLine("notice", `Your conversation is back from before the reload. The app started again on a fresh database - ${who()} is told with your next message.`);
+  room.scrollDown(true);
+  return true;
 }
 
 // On a phone the app and the chat take turns; at desk width both are on
@@ -534,12 +658,14 @@ function showWelcome() {
   const intro = document.createElement("div");
   intro.className = "pilot-welcome";
   const title = document.createElement("h2");
-  title.textContent = "You steer, Claude flies the app.";
+  const them = who();
+  const Them = them === "Claude" ? "Claude" : "The model";
+  title.textContent = `You steer, ${them} flies the app.`;
   const lead = document.createElement("p");
   lead.textContent =
-    "Say what you want done in the app on screen. Claude reads the screen, fills the fields and presses the " +
-    "buttons - in this app, in your browser, while you watch. Take the controls yourself any time; Claude " +
-    "carries on from wherever you left it. Add a PDF, an Excel sheet or a Word file with 📎 and Claude " +
+    `Say what you want done in the app on screen. ${Them} reads the screen, fills the fields and presses the ` +
+    `buttons - in this app, in your browser, while you watch. Take the controls yourself any time; ${them} ` +
+    `carries on from wherever you left it. Add a PDF, an Excel sheet or a Word file with 📎 and ${them} ` +
     "works from it - the orders to enter, the values to check.";
   const list = document.createElement("div");
   list.className = "pilot-suggestions";
@@ -555,6 +681,10 @@ function showWelcome() {
     list.append(b);
   }
   intro.append(title, lead, list);
+  // Without a key nothing here answers; a local model is the way in that
+  // costs nothing (chat-ui.mjs). Offered while no key is held.
+  const local = room.localModelOffer();
+  if (local) intro.append(local);
   el.log.append(intro);
 }
 

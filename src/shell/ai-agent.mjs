@@ -349,19 +349,21 @@ export function filesAsText(files, { all = files } = {}) {
  * change in the header applies from the next turn on (the Anthropic
  * provider's models; an OpenAI-compatible server answers with the one model
  * the key form named). `provider` is what the key form saved - see
- * llm-provider.mjs - and defaults to Anthropic.
+ * llm-provider.mjs - and defaults to Anthropic. `resume` is a conversation's
+ * `state` from before a reload (chat.mjs keeps it for the tab), taken up
+ * where it was.
  */
-export function createAgent({ apiKey, workspace, provider: settings, host, ui, speed = () => DEFAULT_SPEED }) {
+export function createAgent({ apiKey, workspace, provider: settings, host, ui, speed = () => DEFAULT_SPEED, resume }) {
   const provider = providerFor({ ...settings, apiKey, workspace });
   // The conversation exactly as it was sent and answered - only ever
   // appended to: the model's thinking blocks are bound to the history they
   // were written in, and an edited history invalidates them.
-  const messages = [];
+  const messages = Array.isArray(resume?.messages) ? resume.messages : [];
   // What the model last saw of the editor, so a hand edit between two
   // messages is told to it rather than discovered by a failed edit_file -
   // as a snapshot to compare, and as the files, so only what changed goes.
-  let seen;
-  let seenFiles = [];
+  let seen = typeof resume?.seen === "string" ? resume.seen : undefined;
+  let seenFiles = Array.isArray(resume?.seenFiles) ? resume.seenFiles : [];
   let stream;
   let stopped = false;
   // Resolved by stop( ): a tool still running (a run waiting on its app, a
@@ -372,11 +374,22 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
   const untilStopped = (work, what) =>
     Promise.race([work, stopping.then(() => ({ error: `Stopped by the person while ${what}.` }))]);
   // No dollars for a model this page has no price list for (a local one costs nothing).
-  const total = { input: 0, output: 0, cached: 0, written: 0, dollars: provider.priced ? 0 : undefined };
+  const total = {
+    input: resume?.total?.input ?? 0,
+    output: resume?.total?.output ?? 0,
+    cached: resume?.total?.cached ?? 0,
+    written: resume?.total?.written ?? 0,
+    dollars: provider.priced ? resume?.total?.dollars ?? 0 : undefined,
+  };
   // Where each message of the reader's began in the history, and what the
   // model had seen of the editor before it - so rewind( ) can take the last
   // exchange out whole for a message edited and sent again.
-  const turns = [];
+  const turns = Array.isArray(resume?.turns) ? resume.turns : [];
+  // A conversation taken up again shows what it has cost so far.
+  if (resume) ui.usage({ ...total });
+  // Who the chat says is at work: the Anthropic models are Claude; whatever
+  // answers at an OpenAI-compatible server is "the model".
+  const who = provider.kind === "anthropic" ? "Claude" : "the model";
 
   const snapshot = () => JSON.stringify(host.files());
 
@@ -483,11 +496,27 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
     const unchecked = uncheckedCallsText(host.files());
     return unchecked ? { ...report, text: `${report.text}\n${unchecked}` } : report;
   }
+  // One run as the model reads it, within MAX_TOOL_TEXT: the report, then
+  // the screen. Cut as one text, the screen - last, and JSON fitted whole
+  // by fitSnapshot( ) on purpose - was what went when several views, the
+  // log and sixty problems came first; the report is cut to what the
+  // screen leaves instead. `wait` wraps the screen's read (untilStopped).
+  async function runReport(ran, wait = (p) => p) {
+    const report = withUnchecked(describeRun(ran));
+    noteRun(report);
+    let screen = "";
+    if (report.started && !report.failed) {
+      const read = await wait(screenAfterRun());
+      screen = typeof read === "string" ? read : "";
+    }
+    report.text = clip(report.text, MAX_TOOL_TEXT - screen.length) + screen;
+    return report;
+  }
 
   function stuckOn() {
     if (sameRuns < STUCK_RUNS) return undefined;
     const n = lastProblems.split("\n").length;
-    return `The same ${n === 1 ? "problem" : `${n} problems`} came back ${sameRuns} runs in a row, so Claude stopped here rather than try again - ` +
+    return `The same ${n === 1 ? "problem" : `${n} problems`} came back ${sameRuns} runs in a row, so ${who} stopped here rather than try again - ` +
       "look at the Problems in the code, then say what to try, or fix it by hand and send again.";
   }
 
@@ -519,13 +548,20 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
   // One answer's tool calls, run in order - and the app run after them when
   // they changed a file.
   async function runTools(uses) {
-    // Whether the reader changed the editor by hand while the model was
-    // thinking - something the model has not been told yet, and must still
-    // be told on the next message rather than absorbed into what its own
-    // tools did.
-    // Checked before every tool as well, not just once here: a change by
-    // hand between two tools is as untold as one made before them.
-    let untold = snapshot() !== seen;
+    // The files the reader changed by hand while the model was thinking, or
+    // between two of its tools - something the model has not been told yet,
+    // and must still be told on the next message rather than absorbed into
+    // what its own tools did. Only those files: told as "everything changed"
+    // before, every file went again, the model's own writes among them, as
+    // the person's hand edits.
+    const handEdited = new Set();
+    // The files the model's own tools changed this round - it knows them.
+    const written = new Set();
+    const differing = (before, now) => {
+      const was = new Map(JSON.parse(before).map((f) => [f.name, f.source]));
+      for (const f of JSON.parse(now)) if (was.get(f.name) !== f.source) handEdited.add(f.name);
+    };
+    if (seen !== undefined && snapshot() !== seen) differing(seen, snapshot());
     let expected = snapshot();
     const results = [];
     // The last successful change, and whether a run_app came after it.
@@ -537,7 +573,7 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
         results.push({ type: "tool_result", tool_use_id: use.id, is_error: true, content: "Stopped by the user." });
         continue;
       }
-      if (snapshot() !== expected) untold = true;
+      if (snapshot() !== expected) differing(expected, snapshot());
       if (use.name === "run_app") ui.toolPending({ id: use.id, text: pendingText("run_app", {}) });
       let result;
       try {
@@ -550,13 +586,15 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
         type: "tool_result",
         tool_use_id: use.id,
         ...(result.error ? { is_error: true } : {}),
-        // A read is cut per file by filesAsText( ); everything else here.
-        content: use.name === "read_files" && !result.error ? result.text : clip(result.error ?? result.text),
+        // A read is cut per file by filesAsText( ), a run by runReport( );
+        // everything else here.
+        content: (use.name === "read_files" || use.name === "run_app") && !result.error ? result.text : clip(result.error ?? result.text),
       };
       results.push(entry);
       if (FILE_TOOLS.has(use.name) && !result.error) {
         lastChange = entry;
         ranSince = false;
+        for (const name of result.changed ?? []) written.add(name);
       } else if (use.name === "run_app") {
         ranSince = true;
       }
@@ -579,21 +617,25 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
       let report;
       try {
         const ran = await untilStopped(host.run(), "the app was running");
-        report = ran.error ? { text: ran.error, summary: "run stopped" } : withUnchecked(describeRun(ran));
-        noteRun(report);
-        if (report.started && !report.failed) report.text += await untilStopped(screenAfterRun(), "the screen was read").then((t) => (typeof t === "string" ? t : ""));
+        report = ran.error ? { text: ran.error, summary: "run stopped" } : await runReport(ran, (p) => untilStopped(p, "the screen was read"));
       } catch (e) {
         report = { text: `The automatic run failed: ${String(e?.message ?? e)}`, summary: "run failed" };
       }
       ui.tool({ id, summary: report.summary, error: Boolean(report.failed), started: Boolean(report.started) && !report.failed });
-      lastChange.content = clip(`${lastChange.content}\n\nThe page ran the app after these changes:\n${report.text}`);
+      // Not cut again: the change's own text is a line, the report is
+      // within its budget already.
+      lastChange.content = `${lastChange.content}\n\nThe page ran the app after these changes:\n${report.text}`;
     }
-    // Whatever the tools changed, the model has just been told - unless a
-    // hand edit came in first, which the next user message has to carry.
-    if (!untold) {
-      seen = afterTools;
-      seenFiles = JSON.parse(afterTools);
-    }
+    // What the model knows of the editor now: a file its tools wrote as it
+    // is; a file nobody touched as it last saw it; a file the reader edited
+    // by hand - or added - left out, so the next message tells it that one
+    // and nothing else (editorChanged( )). Built in the editor's order, so
+    // that with nothing by hand it IS the snapshot and nothing is sent.
+    const before = new Map(seenFiles.map((f) => [f.name, f.source]));
+    seenFiles = JSON.parse(afterTools)
+      .filter((f) => !handEdited.has(f.name) && (written.has(f.name) || before.has(f.name)))
+      .map((f) => (written.has(f.name) ? f : { name: f.name, source: before.get(f.name) }));
+    seen = JSON.stringify(seenFiles);
     return results;
   }
 
@@ -610,12 +652,7 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
         const files = names.length ? all.filter((f) => names.includes(f.name)) : all;
         return { text: filesAsText(files, { all }), summary: `read ${names.length ? files.map((f) => f.name).join(", ") : `${files.length} file${files.length === 1 ? "" : "s"}`}` };
       }
-      case "run_app": {
-        const report = withUnchecked(describeRun(await host.run()));
-        noteRun(report);
-        if (report.started && !report.failed) report.text += await screenAfterRun();
-        return report;
-      }
+      case "run_app": return runReport(await host.run());
       case "look": {
         const snap = await operatorOf().look(count(input.max_rows, "max_rows"));
         return { text: screenText(snap), summary: `looked at ${snap.title || snap.app || "the app"}` };
@@ -636,7 +673,13 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
     try {
       const row = count(input.row, "row");
       const maxRows = count(input.max_rows, "max_rows");
-      if (event && told !== -1 && m.version !== told) {
+      // The rules say never on a screen the model has not seen; told
+      // nothing yet (an app whose first screen arrived after the report),
+      // the first act went out blind all the same.
+      if (event && told === -1) {
+        throw new AgentError("you have not seen this screen yet - nothing was typed or pressed; act on the screen below");
+      }
+      if (event && m.version !== told) {
         throw new AgentError("the screen changed since you saw it (a run, or the person used the app) - nothing was typed or pressed; act on the screen below");
       }
       const snap = await operatorOf().act({ values, event, row, args: Array.isArray(input.args) ? input.args : undefined, maxRows });
@@ -694,6 +737,7 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
     return {
       text: `${at === -1 ? "Created" : "Replaced"} ${name} (${lines} lines)${next[0].name === name ? ", it is the app" : ""}.`,
       summary: `${at === -1 ? "created" : "rewrote"} ${name}`,
+      changed: [name],
     };
   }
 
@@ -711,8 +755,11 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
     // A file that came in with CRLF (a gist, a stored draft) keeps it in its
     // model, and the model writes \n: matched as typed, every edit of more
     // than one line was "does not occur". The texts take the file's ending.
+    // And the other way round: CRLF typed for an LF file matched loosely
+    // (trim( ) forgives the \r) and the new text kept its \r\n - a file
+    // with both endings, which Format and the diff both choke on.
     const crlf = file.source.includes("\r\n");
-    const eol = (t) => (crlf ? t.replace(/\r?\n/g, "\r\n") : t);
+    const eol = (t) => (crlf ? t.replace(/\r?\n/g, "\r\n") : t.replace(/\r\n/g, "\n"));
     const oldText = eol(rawOld);
     const newText = eol(rawNew);
     const found = locate(file.source, oldText, newText);
@@ -721,7 +768,7 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
     host.setFiles(files.map((f) => (f.name === name ? { name, source } : f)));
     host.show?.(name);
     const how = found.loose ? " (indentation and trailing spaces matched loosely; the file's own indentation is kept)" : "";
-    return { text: `Edited ${name}${how}.`, summary: `edited ${name}` };
+    return { text: `Edited ${name}${how}.`, summary: `edited ${name}`, changed: [name] };
   }
 
   function deleteFile(input) {
@@ -733,7 +780,7 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
     // class that is not there.
     const tests = name.replace(/\.clas\.abap$/, ".clas.testclasses.abap");
     host.setFiles(files.filter((f) => f.name !== name && f.name !== tests));
-    return { text: `Deleted ${name}.`, summary: `deleted ${name}` };
+    return { text: `Deleted ${name}.`, summary: `deleted ${name}`, changed: [name, tests] };
   }
 
   return {
@@ -761,6 +808,12 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
     },
     get usage() {
       return { ...total };
+    },
+    /** What a conversation is made of, for keeping it over a reload
+     *  (chat.mjs): the history, the turns, what the model has seen of the
+     *  editor, the usage. The key never - it is not in here. */
+    get state() {
+      return { messages, turns, seen, seenFiles, total: { ...total } };
     },
   };
 }
@@ -915,7 +968,13 @@ export function describeRun(report) {
   // The problems without their positions - an edit above them moves the
   // lines, not the problem - for telling a run that fixed nothing
   // (stuckOn( ) in createAgent).
-  const problemKey = problems.map((p) => `${p.file} ${p.source} ${p.rule ?? ""} ${p.message}`).sort().join("\n");
+  // A first roundtrip that failed counts as a problem too - its first line
+  // with the numbers taken out (a line number moves with an edit above it):
+  // an app that dumped the same way three runs running was never "stuck".
+  const dumped = first && first.status >= 400
+    ? [`dump ${String(first.response ?? "").split("\n")[0].replace(/\d+/g, "#").slice(0, 200)}`]
+    : [];
+  const problemKey = [...problems.map((p) => `${p.file} ${p.source} ${p.rule ?? ""} ${p.message}`), ...dumped].sort().join("\n");
   return { text: lines.join("\n"), summary, failed: !report.started || (first?.status ?? 0) >= 400, started: Boolean(report.started), problemKey, problemCount: problems.length };
 }
 

@@ -242,7 +242,8 @@ export const carriedFiles = (url) => carriedSampleFiles(String(url).split("/").p
 
 // The AI chat (src/shell/chat.mjs, src/shell/ai-agent.mjs): the model works
 // on the same editor and presses the same Run, through these. Only on the
-// studio's own page - the playground carries no way into it.
+// studio's own page - the playground links to it and never opens it over
+// its own work.
 export function setUpStudio(chat) {
   chat.setUpChat(
     {

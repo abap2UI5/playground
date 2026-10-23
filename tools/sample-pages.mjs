@@ -870,7 +870,7 @@ export function writeSamplePages(index, distDir, { rows, skipped }) {
    * which is where GitHub Pages looks for it. */
   fs.writeFileSync(path.join(distDir, "404.html"), withPolicy(stripHtmlComments(notFoundPage(rows))));
 
-  /* The sitemap: the two pages that are always here, the full list, and one
+  /* The sitemap: the three pages that are always here, the full list, and one
    * line per sample. Absolute URLs, because that is what a sitemap is.
    *
    * AND NO `lastmod`, which this used to stamp with the day of the build on
@@ -890,6 +890,7 @@ export function writeSamplePages(index, distDir, { rows, skipped }) {
    * case. */
   const urls = [
     SITE,
+    `${SITE}ai/`,
     `${SITE}samples/`,
     `${SITE}samples/all/`,
     ...rows.map((row) => `${SITE}samples/${row.dir}/`),

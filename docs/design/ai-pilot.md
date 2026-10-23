@@ -111,7 +111,11 @@ Details that are easy to undo:
   earlier act of the same answer, a click of the reader's while the model
   thought, or one during the pause between typing and pressing - is
   refused with the screen as it is now, nothing typed or pressed. Two
-  `act a1` in one answer pressed NEXT and then the next screen's a1.
+  `act a1` in one answer pressed NEXT and then the next screen's a1. And an
+  app the answer was not written for at all - opened by `open_app` in the
+  same answer, or by the reader's + App while the model thought - is a
+  screen the model has not seen (`shownAt` has no entry): the act was
+  written blind, and is refused the same way.
 - **A screen is fitted, never cut mid-JSON** (`fitSnapshot( )`, as
   mcp-server's): long values cut to 2,000 characters and read-only, then
   rows from the end of the largest table, the JSON whole and `cut` saying
@@ -119,6 +123,11 @@ Details that are easy to undo:
   character `clip( )`. The `<screen>` of one message holds 60,000 for all
   apps together; a dump (`lastAnswer`) is 2,000 at most and comes after the
   screen.
+- **`read_source` cuts each class on its own** (`MAX_FILE_TEXT`,
+  `MAX_FILES_TEXT`) rather than all of them as one text at 30,000: with two
+  apps open the second one's class was never seen. A run or an open that
+  did not start says the first abaplint errors with their lines
+  (`notStarted( )`), not only "1 error in the ABAP".
 - **A tool argument the tool does not take is refused** (`execute( )`
   against the tool's `input_schema`), `row`/`max_rows` are whole numbers
   (a string of digits too), `beside` a boolean - dropped without a word,
@@ -195,6 +204,21 @@ hands a drop to the page (a `drop` message, only where the page's
 `settings` said it takes files; `pilotDropped( )`)
 unless one of the app's own controls took it first (`defaultPrevented` - an
 upload control).
+
+**The conversation is kept for the tab** (`CONVERSATION_STORAGE`,
+`keepConversation( )` in `pilot.mjs`, as the studio's - [ai-chat.md](ai-chat.md)):
+after every turn the agent's `state` (the history and the usage, never the
+key) and the log as text go to sessionStorage, and the next load of the
+same tab draws the log again (`restoreConversation( )`) and hands the
+state to the agent as `resume` when it is made. No screens are kept: the
+apps start again with the page, `told` starts empty, and the next message
+carries every screen as "changed" - a conversation taken up is never the
+"first" one (`send( )`). New chat forgets it; a key typed for a
+conversation waiting to be taken up does not start it over. The welcome
+offers a model on the reader's own machine while no key is held
+(`localModelOffer( )` in `chat-ui.mjs`, both rooms), and the room says
+"Claude" only for the Anthropic provider (`who( )`; "What Claude sees"
+follows it).
 
 The tools are `look`, `act`, `restart_app`, `find_apps`, `open_app` (with
 `beside`), `show_app`, `close_app` and `read_source` - the apps, Run and the

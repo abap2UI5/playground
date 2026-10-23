@@ -77,3 +77,25 @@ test("every CALL FUNCTION is found, marked or not, and only the unmarked ones ar
   assert.doesNotMatch(told, /BAPI_SALESORDER_GETLIST/);
   assert.equal(uncheckedCallsText([{ name: "zcl_clean.clas.abap", source: "CLASS zcl_clean DEFINITION. ENDCLASS." }]), "");
 });
+
+test("a TODO(system) in a string literal is text, and a comment line between the mark and the call still marks it", () => {
+  const files = [{
+    name: "zcl_app.clas.abap",
+    source: [
+      `    lv_text = '" ${TODO_MARK} not a mark'.`,
+      "    CALL FUNCTION 'IT''S_A_MODULE'.",
+      `    " ${TODO_MARK} check the BAPI`,
+      "    \" the parameters are the customer's",
+      "",
+      "    CALL FUNCTION 'BAPI_CUSTOMER_GETDETAIL2'.",
+      "    lv_x = 1.",
+      "    CALL FUNCTION 'Z_AFTER_CODE'.",
+    ].join("\n"),
+  }];
+  assert.deepEqual(systemTodos(files), [{ file: "zcl_app.clas.abap", line: 3, text: "check the BAPI" }]);
+  assert.deepEqual(functionCalls(files), [
+    { file: "zcl_app.clas.abap", line: 2, name: "IT'S_A_MODULE", marked: false },
+    { file: "zcl_app.clas.abap", line: 6, name: "BAPI_CUSTOMER_GETDETAIL2", marked: true },
+    { file: "zcl_app.clas.abap", line: 8, name: "Z_AFTER_CODE", marked: false },
+  ]);
+});

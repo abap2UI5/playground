@@ -603,14 +603,24 @@ test("on a wide screen the studio opens on Split: chat, code and app side by sid
   expect(app.height).toBeGreaterThan(500);
 });
 
-test("the playground carries no way into the studio, embedded or not", async ({ page }) => {
-  for (const url of ["/", "/?embed=1"]) {
-    await page.goto(url);
-    await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
-    await expect(page.locator("#ai")).toHaveCount(0);
-    await expect(page.locator("#studio-bar")).toBeHidden();
-    await expect(page.locator("#chat")).toBeHidden();
-  }
+test("the playground links to the studio's page and never opens it over its own work; an embed links nowhere", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await expect(page.locator("#studio-bar")).toBeHidden();
+  await expect(page.locator("#chat")).toBeHidden();
+  // The toolbar's link and the menu's, both to the page.
+  await expect(page.locator("#ai-studio")).toBeVisible();
+  await expect(page.locator("#ai-studio")).toHaveAttribute("href", "ai/");
+  await expect(page.locator('#extra .menu a[data-site="ai"]')).toHaveAttribute("href", "ai/");
+  await page.locator("#ai-studio").click();
+  await expect(page).toHaveURL(/\/ai\/$/);
+  await expect(page.locator("body")).toHaveClass(/is-studio/, { timeout: 120000 });
+
+  await page.goto("/?embed=1");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await expect(page.locator("#ai-studio")).toBeHidden();
+  await expect(page.locator("#studio-bar")).toBeHidden();
+  await expect(page.locator("#chat")).toBeHidden();
 });
 
 test("the studio's page starts on a minimal class: no run, no sample, and no way out to a playground under it", async ({ page }) => {
@@ -626,8 +636,9 @@ test("the studio's page starts on a minimal class: no run, no sample, and no way
   await expect(page.locator("#studio-url")).toHaveText("your app");
   await expect(page.locator("#studio-exit")).toBeHidden();
   await expect(page).toHaveTitle("AI Studio · abap2UI5");
-  // Kept out of search engines while it is being built.
-  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex");
+  // Published: indexed, with a canonical of its own.
+  await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://abap2ui5.github.io/playground/ai/");
 });
 
 function cors() {
@@ -708,10 +719,15 @@ test("a built app comes back after a reload from the welcome", async ({ page }) 
   await expect(page.locator(".chat-assistant").last()).toHaveText("Done.", { timeout: 90000 });
   await expect(page.frameLocator("#app").getByText(MARK)).toBeVisible();
 
-  // Gone with the reload (no beforeunload - the back/forward cache rule,
-  // tests/bfcache.spec.js), and back from the welcome.
+  // The reload takes the key and the running app (no beforeunload - the
+  // back/forward cache rule, tests/bfcache.spec.js); the conversation is
+  // kept for the tab, the files are back from the welcome's offer.
   await page.reload();
   await expect(page.locator("#status")).toHaveText("ready - describe the app you want", { timeout: 120000 });
+  await expect(page.locator(".chat-user")).toContainText("A page");
+  await expect(page.locator(".chat-assistant")).toHaveText("Done.");
+  await expect(page.locator(".chat-notice").last()).toContainText("back from before the reload");
+  await expect(page.locator("#chat-key")).toBeVisible();
 
   // Back on the minimal class, the last build one click away.
   await expect(page.locator("#studio-url")).toHaveText("your app");
@@ -722,6 +738,134 @@ test("a built app comes back after a reload from the welcome", async ({ page }) 
   await expect(page.locator("#studio-url")).toContainText("ZCL_AI_APP");
   expect(await page.evaluate(() => localStorage.getItem("abap2ui5-playground:files"))).toBeNull();
   expect(await page.evaluate(() => localStorage.getItem("abap2ui5-playground:ai-files"))).toContain(APP_FILE);
+
+  // The key typed again does not start the conversation over: the next
+  // message goes out with the history from before the reload, and the
+  // usage so far is back in the header.
+  const sent = [];
+  await page.route("https://api.anthropic.com/**", async (route) => {
+    if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    sent.push(route.request().postDataJSON());
+    await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: sse({ text: "Still here." }) });
+  });
+  await saveKey(page);
+  await expect(page.locator(".chat-assistant")).toHaveCount(1);
+  await page.locator("#chat-input").fill("and now?");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toHaveText("Still here.", { timeout: 90000 });
+  await expect(page.locator("#chat-usage")).toContainText("in");
+  expect(sent[0].messages.map((m) => m.role)).toEqual(["user", "assistant", "user", "assistant", "user"]);
+  expect(sent[0].messages.at(-1).content.at(-1).text).toBe("and now?");
+
+  // New chat forgets it: a reload comes back to the welcome.
+  await page.locator("#chat-new").click();
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText("ready - describe the app you want", { timeout: 120000 });
+  await expect(page.locator(".chat-welcome")).toBeVisible();
+  await expect(page.locator(".chat-user")).toHaveCount(0);
+});
+
+test("a message whose first request failed is out of the conversation, and its ✎ with it", async ({ page }) => {
+  let calls = 0;
+  await page.route("https://api.anthropic.com/**", async (route) => {
+    if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    calls += 1;
+    // The second message is refused (every time: the SDK retries an
+    // overload twice); everything else answers.
+    if (route.request().postDataJSON().messages.at(-1).content.at(-1).text === "second") {
+      return route.fulfill({ status: 529, headers: { ...cors(), "content-type": "application/json" }, body: JSON.stringify({ type: "error", error: { type: "overloaded_error", message: "Overloaded" } }) });
+    }
+    await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: sse({ text: calls === 1 ? "One." : "Two." }) });
+  });
+  await openStudio(page);
+  await saveKey(page);
+  await page.locator("#chat-input").fill("first");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toHaveText("One.", { timeout: 90000 });
+  await page.locator("#chat-input").fill("second");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-notice.is-error")).toContainText("overloaded", { timeout: 90000 });
+  await expect(page.locator("#chat-send")).toHaveText("Send");
+
+  // ✎ is on the first message - the one still in the history - not on the
+  // refused one; it used to be on the refused one and took the FIRST
+  // exchange out of the history while the log kept showing it.
+  await expect(page.locator(".chat-user")).toHaveCount(2);
+  await expect(page.locator(".chat-edit")).toHaveCount(1);
+  await expect(page.locator(".chat-user").first().locator(".chat-edit")).toHaveCount(1);
+  await page.locator(".chat-user").first().hover();
+  await page.locator(".chat-edit").click();
+  await expect(page.locator(".chat-user")).toHaveCount(0);
+  await expect(page.locator("#chat-input")).toHaveValue("first");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toHaveText("Two.", { timeout: 90000 });
+});
+
+test("Save on a key form left as it was keeps the conversation; a changed one starts over", async ({ page }) => {
+  const requests = await answerWith(page, [{ text: "One." }, { text: "Two." }, { text: "Three." }]);
+  await openStudio(page);
+  await saveKey(page);
+  await page.locator("#chat-input").fill("first");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toHaveText("One.", { timeout: 90000 });
+
+  // Opened to look, closed with Save: nothing changed, the chat stays.
+  await page.locator("#chat-key-button").click();
+  await expect(page.locator("#chat-key")).toBeVisible();
+  await page.locator("#chat-key button[type=submit]").click();
+  await expect(page.locator("#chat-key")).toBeHidden();
+  await expect(page.locator(".chat-assistant")).toHaveCount(1);
+  await page.locator("#chat-input").fill("second");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toHaveText("Two.", { timeout: 90000 });
+  expect(requests[1].messages).toHaveLength(3);
+
+  // Another key is another client: the conversation starts over.
+  await page.locator("#chat-key-button").click();
+  await page.locator("#chat-key-input").fill("sk-ant-another");
+  await page.locator("#chat-key button[type=submit]").click();
+  await page.locator("#chat-input").fill("third");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toHaveText("Three.", { timeout: 90000 });
+  expect(requests[2].messages).toHaveLength(1);
+});
+
+test("a turn that changed the files and then failed still offers them back", async ({ page }) => {
+  let calls = 0;
+  await page.route("https://api.anthropic.com/**", async (route) => {
+    if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    calls += 1;
+    if (calls === 1) {
+      return route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: sse({ tools: [{ name: "write_file", input: { name: APP_FILE, source: APP, as_app: true } }] }) });
+    }
+    await route.fulfill({ status: 500, headers: { ...cors(), "content-type": "application/json" }, body: JSON.stringify({ type: "error", error: { type: "api_error", message: "Internal server error" } }) });
+  });
+  await openStudio(page);
+  await saveKey(page);
+  await page.locator("#chat-input").fill("A page");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-notice.is-error")).toContainText("had an error", { timeout: 90000 });
+  await expect(page.locator("#chat-send")).toHaveText("Send");
+  await expect(page.locator(".chat-checkpoint-restore")).toHaveCount(1);
+  await page.locator(".chat-checkpoint-restore").click();
+  await expect(page.locator("#studio-url")).toHaveText("your app");
+});
+
+test("an edit typed with CRLF lands in an LF file with LF", async ({ page }) => {
+  const requests = await answerWith(page, [
+    { tools: [{ name: "write_file", input: { name: APP_FILE, source: APP, as_app: true } }] },
+    { tools: [{ name: "edit_file", input: { name: APP_FILE, old_text: "    IF client->check_on_init( ).\r\n      DATA(view)", new_text: "    IF client->check_on_init( ).\r\n      \" edited\r\n      DATA(view)" } }] },
+    { text: "Done." },
+  ]);
+  await openStudio(page);
+  await saveKey(page);
+  await page.locator("#chat-input").fill("A page");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toHaveText("Done.", { timeout: 90000 });
+  expect(resultsOf(requests[2])[0].is_error).toBeUndefined();
+  const source = await page.evaluate(() => window.monaco.editor.getModels().find((m) => m.uri.path.endsWith("zcl_ai_app.clas.abap")).getValue());
+  expect(source).toContain('\n      " edited\n');
+  expect(source).not.toContain("\r");
 });
 
 // A mocked API that answers each request from `answers` in turn (the last one
@@ -979,7 +1123,7 @@ test("after a clean run the model tries the app: the screen rides on the report,
 test("a step's files can be put back, and the last message edited and sent again", async ({ page }) => {
   const requests = await answerWith(page, [
     { tools: [{ name: "write_file", input: { name: APP_FILE, source: APP, as_app: true } }] },
-    { text: "| Field | Type |\n| --- | --- |\n| NAME | string |\n\nSee [the docs](https://abap2ui5.github.io/docs/) and [no](http://x.y/)." },
+    { text: "| Field | Type |\n| --- | --- |\n| NAME | string |\n\nSee [the docs](https://abap2ui5.github.io/docs/) and [no](http://x.y/) - *really*, zcl_app_main is a name." },
     { text: "Again, differently." },
   ]);
   await openStudio(page);
@@ -992,6 +1136,9 @@ test("a step's files can be put back, and the last message edited and sent again
   await expect(link).toHaveCount(1);
   await expect(link).toHaveAttribute("href", "https://abap2ui5.github.io/docs/");
   await expect(link).toHaveAttribute("target", "_blank");
+  // *italic*, and an underscore in a name is not one.
+  await expect(page.locator(".chat-assistant").last().locator("em")).toHaveText("really");
+  await expect(page.locator(".chat-assistant").last()).toContainText("zcl_app_main is a name");
   await expect(page.frameLocator("#app").getByText(MARK)).toBeVisible();
 
   // The files changed in this step: offered back.

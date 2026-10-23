@@ -5,13 +5,20 @@
 
 ## The AI chat — `src/shell/chat.mjs`, `src/shell/ai-agent.mjs`
 
-**The studio has a page of its own and no door from the playground** while it
-is being built: `ai/index.html`, written by `writeAiPage( )` in
+**The studio has a page of its own**, linked from the playground and never
+opened over it: `ai/index.html`, written by `writeAiPage( )` in
 `tools/site-documents.mjs` from the playground's finished `index.html` - the same
 document one directory down, with `<base href="../">` (so the bundle, the
 workers the inline script starts, the app frame and the service worker's scope
 all resolve where the playground's do: one build, two doors), `data-page="ai"`
-on `<html>`, its own title, no canonical link and `noindex`. `page.mjs` reads
+on `<html>`, its own title and canonical (`…/playground/ai/`), in the sitemap.
+The way in is the **AI Studio** link beside Samples in the toolbar
+(`#ai-studio`, an `<a>` dressed as the invite button - a switch that turned
+the page into the studio over the reader's own draft was tried and refused)
+and the Tools section of the menu, on all three copies of the bar
+(`index.html`, `src/catalogue/index.html`, `tools/sample-frame.mjs`; the
+documentation's copy lives in abap2UI5/docs). An embedded playground shows
+neither. The Pilot's page is still unlinked and `noindex`. `page.mjs` reads
 `data-page` (`aiPage`) and `main.mjs` acts on it: only there is `setUpChat( )` called (with `startOpen`), the editor
 starts on one minimal class (`AI_STARTER` in `ai-starter.mjs`: `z2ui5_if_app`
 implemented, `main( )` empty) without a run - the placeholder says
@@ -38,7 +45,11 @@ and Monaco's `automaticLayout` takes the size it is given. Two traps, both
 held by `tests/ai.spec.js` on a phone: the page's visually hidden `<h1>` is a
 box and took a grid cell until it was taken out of the flow, and the phone
 layout's `inset` on `.pane` (room for the tabs) pushed the stage down and off
-the screen until the studio took it back. The studio has its own palette in
+the screen until the studio took it back. On a phone the bar's status line
+is a row of its own while it says something (`.studio-status:empty` takes
+no room): hidden outright, "edit the message and send it again", the
+release check's progress and "the zip could not be written" were never seen
+there. The studio has its own palette in
 both themes on purpose - it is the one room of the site that is not the
 documentation - and answers `prefers-reduced-motion` for its own animations
 (the stage's edge glow while the model works, the shimmer of a pending tool
@@ -83,8 +94,14 @@ talks to a model or needs a key.
   agent's chunk and hands the agent `host.app`; a run that started ends its
   report on the screen as the agent snapshot (`screenAfterRun( )`), and an
   act with an event on a screen older than the one last told (`told`) is
-  refused. The rules ask for the main path ONCE after a clean run, never
-  before one. `tests/ai.spec.js` holds the act in the real app.
+  refused - and so is an act with an event on a screen the model has not
+  been shown at all (`told === -1`: the rules said never, the code let the
+  first one through blind). The rules ask for the main path ONCE after a
+  clean run, never before one. `tests/ai.spec.js` holds the act in the real
+  app. The run's report and the screen share one budget (`runReport( )`,
+  `MAX_TOOL_TEXT`): cut as one text, the screen - last, and its JSON fitted
+  whole by `fitSnapshot( )` on purpose - was what went when several views,
+  the log and sixty problems came first.
 - **The key is the reader's, the request is the browser's.** Held in the
   page's memory for the visit and **never stored**: the playground runs ABAP
   from any link in this same origin, and on the playground a view's
@@ -131,16 +148,29 @@ talks to a model or needs a key.
   wall: code in the Pilot's app frame finds an opaque origin, no parent
   document, location or global, a storage of its own and no `caches`; the
   studio's frame carries the same sandbox.
-- **The studio keeps its build, not its chat.** `AI_STORAGE_KEY`
+- **The studio keeps its build, and its chat for the tab.** `AI_STORAGE_KEY`
   (`abap2ui5-playground:ai-files`, `agent-hooks.mjs`; written by
   `remember( )` in `main.mjs`) holds the files whenever they
   are not the untouched starter - a key of its own, so the playground's draft
   is never written over - and the welcome offers them back
   (`host.lastBuild( )`, `.chat-resume` in `chat.mjs`); the studio still
-  starts on the minimal class every time. The conversation is not kept, and
-  no `beforeunload` asks before the page goes: nothing on this site may keep
-  a page out of the back/forward cache (`tests/bfcache.spec.js`); Export is
-  the way to keep a conversation.
+  starts on the minimal class every time. The conversation is kept in
+  **sessionStorage** (`CONVERSATION_STORAGE`, `keepConversation( )` in
+  `chat.mjs`: the agent's `state` - the history, the turns, what the model
+  has seen of the editor, the usage - and the transcript; never the key)
+  after every turn and after ✎, a checkpoint and the download's notice, and
+  taken up on the next load of the same tab (`restoreConversation( )`: the
+  log drawn again, the state handed to the agent as `resume` when it is
+  made, the key typed again, the files from the welcome's offer). A reload
+  used to be the total loss of a half hour's work; Export is no net for
+  that. sessionStorage because it is the tab's own, gone with it, and asks
+  for no `beforeunload`: nothing on this site may keep a page out of the
+  back/forward cache (`tests/bfcache.spec.js`). A conversation that will not
+  fit (images in it, a quota) is not kept, and nothing older is left behind
+  to be restored over it (`writeSessionJson( )` in `storage.mjs`). New chat
+  forgets it; a key typed for a conversation waiting to be taken up does
+  not start it over (`onStartOver` in `chat.mjs` leaves `resume` alone
+  while no agent has been made). `tests/ai.spec.js` holds the reload.
 - **Its instructions come from the pin.** `ai-agent.mjs` imports
   `deps/abap2ui5/docs/agents/building-apps.md` as text (the `.md` loader in
   `build-site.mjs`) under `PLAYGROUND_RULES`, which says what is different
@@ -169,11 +199,23 @@ talks to a model or needs a key.
   since it last saw them (`editorChanged( )`, against `seenFiles`), each cut
   on its own. `rewind( )` takes the LAST exchange out whole (the reader's
   message and what answered it, `turns`) for a message edited and sent again
-  (✎ on the latest message, `offerEdit( )` in `chat.mjs`): nothing before it
+  (✎ on the latest message, `offerEdit( )` in `chat.mjs`; then the one
+  before it is the latest and gets its ✎, `userLines`): nothing before it
   is touched, so what is left is still what the thinking blocks were written
-  against. The files are not put back by it; a step that changed them offers
-  them back under its answer (`addCheckpoint( )`), since Ctrl+Z is per file
-  and knows no turn. Export writes the conversation as markdown
+  against. A message whose first request failed (an overload, a rate limit)
+  is taken out of the history by `send( )` and out of `userLines` by the
+  room's `failed` hook - with a ✎ on it, `rewind( )` took the exchange
+  BEFORE it out while the log went on showing it. A stopped message stays,
+  and keeps its ✎. The files are not put back by it; a step that changed
+  them offers them back under its answer (`addCheckpoint( )`, called
+  whatever way the turn ended - a turn whose next request the API refused
+  still changed them), since Ctrl+Z is per file and knows no turn. What the
+  model has seen of the editor after a round of tools is put together per
+  file (`runTools( )`): a file its tools wrote as it is, a file nobody
+  touched as it last saw it, a file the reader edited by hand meanwhile -
+  or added - left out, so the next message carries that one and nothing
+  else. Told "everything changed" before, every file went again, the
+  model's own writes among them, as the person's hand edits. Export writes the conversation as markdown
   (`transcript`, never the key). Tool inputs stream (`eager_input_streaming`), so each is
   validated before it touches the editor, a turn cut off at `max_tokens` never
   runs its tools, and all results of a turn go back in one message.
@@ -213,7 +255,12 @@ talks to a model or needs a key.
   `" TODO(system): …` line above it, and the download lists those lines
   under the zip (`placeholderNotice( )` in `chat.mjs`, `systemTodos( )`) with
   the release the code was checked against, so "it ran here" is not read as
-  "it runs on my system". `tests/ai.spec.js` holds the header (the check
+  "it runs on my system". The mark counts in a line's comment only - after
+  the `"` that is not inside a literal (`codeOf( )`), so a string that
+  quotes one is text - and a call is marked with blank lines and other
+  comment lines between it and the mark (`functionCalls( )`). The download
+  is disabled while a turn runs (half the files written is no app to take
+  home) and says so on the untouched starter. `tests/ai.spec.js` holds the header (the check
   stops a DATA( ) at v702, the rules in the request, kept over a reload) and
   the download's list; `tests/node/target-system.test.mjs` the releases and
   the matching.
@@ -225,8 +272,10 @@ talks to a model or needs a key.
   rounds of tool calls per message (`maxRounds` of `runTurnLoop( )`), and
   `STUCK_RUNS` (3) runs in a row whose problems are the same
   (`problemKey` of `describeRun( )` - file, checker, rule and message,
-  without the position, since an edit above a problem moves its line;
-  `afterTools: stuckOn` in `createAgent( )`). The benchmarks say compiler
+  without the position, since an edit above a problem moves its line, and
+  a first roundtrip that failed by its first line with the numbers taken
+  out: an app that dumped the same way three runs running was never
+  "stuck"; `afterTools: stuckOn` in `createAgent( )`). The benchmarks say compiler
   feedback that did not help twice rarely helps the third time; the
   reader, who sees the Problems, decides. The Pilot passes neither: working
   through a list row by row is a long turn on purpose.
@@ -295,7 +344,10 @@ talks to a model or needs a key.
   only with `OLLAMA_ORIGINS` set to this site, LM Studio with CORS on in its
   server settings. `tests/ai.spec.js` holds a studio turn against a local
   server answered by the test.
-- **Model and request shape.** `SPEEDS` in `ai-agent.mjs`, picked in the chat
+- **Model and request shape.** `SPEEDS` in `src/shell/ai-speeds.mjs` (no
+  SDK in it, so `chat-ui.mjs` writes both headers' options from it - the
+  labels stood in `index.html` twice and in the code once, and a model bump
+  had to be remembered in three places), picked in the chat
   header and asked before every request (`abap2ui5-playground:ai-speed`, kept
   only while it is not the default): Balanced is `claude-opus-5-5` at effort
   `medium` (that model's own default), Thorough the same at `high`, Fast

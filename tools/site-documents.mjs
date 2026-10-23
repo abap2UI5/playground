@@ -85,9 +85,9 @@ export function writeIndex({ metafile, monacoCss }) {
 }
 
 // The AI Studio's page, ai/index.html: the playground's own document, one
-// directory down, marked as the studio. Not linked from anywhere - the
-// studio is still being built, so it is reached by its address alone and
-// kept out of search engines. `<base href="../">` makes every relative URL
+// directory down, marked as the studio - linked from the toolbar and the
+// menu, in the sitemap, with a canonical of its own (it is published; the
+// Pilot below is not yet). `<base href="../">` makes every relative URL
 // in it - the bundle, the workers the inline script starts, the app frame,
 // the service worker's scope - resolve where the playground's own do, so
 // there is one build of everything and two doors into it. main.mjs reads
@@ -95,10 +95,10 @@ export function writeIndex({ metafile, monacoCss }) {
 function writeAiPage(html, metafile) {
   const page = html
     .replace(/<html([^>]*)>/, '<html$1 data-page="ai">')
-    .replace("<head>", `<head>\n<base href="../">\n<meta name="robots" content="noindex">${preloadsFor(metafile, "src/shell/chat.mjs")}`)
+    .replace("<head>", `<head>\n<base href="../">${preloadsFor(metafile, "src/shell/chat.mjs")}`)
     .replace(/<title>[^<]*<\/title>/, "<title>AI Studio · abap2UI5</title>")
-    .replace(/<link rel="canonical"[^>]*>\n?/, "");
-  for (const mark of ['data-page="ai"', '<base href="../">', "<title>AI Studio"]) {
+    .replace(/<link rel="canonical"[^>]*>/, '<link rel="canonical" href="https://abap2ui5.github.io/playground/ai/">');
+  for (const mark of ['data-page="ai"', '<base href="../">', "<title>AI Studio", 'canonical" href="https://abap2ui5.github.io/playground/ai/"']) {
     if (!page.includes(mark)) {
       console.error(`build-site: ERROR the AI page could not be written - ${mark} did not land in src/shell/index.html's copy`);
       process.exit(1);
