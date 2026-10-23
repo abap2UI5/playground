@@ -58,17 +58,20 @@ same relative `../fonts/…`, because both sit exactly one directory down. The
 shell's bundle marks `*.woff2` external for that reason — bundled, esbuild
 would copy the files a second time under hashed names beside `assets/`.
 
-**What the bar carries, left to right.** The mark and the name, then the four
+**What the bar carries, left to right.** The mark and the name, then the five
 sections of the project — **Home**, **Documentation**, **Samples**,
-**Playground** — then the search box, then the two marks and the menu behind
-the last button. Home and Documentation are two pages of the documentation's
-deployment; Samples and Playground are here.
+**Playground**, **AI Studio** — then the search box, then the two marks and
+the menu behind the last button. Home and Documentation are two pages of the
+documentation's deployment; Samples, Playground and the AI Studio are here.
+The studio was in the menu only until 2026-10-23, which made it the one door
+of the project a reader had to know about to find: the README and the
+documentation name four ways in, and the bar named three of them.
 
 Each section carries its **mark** in front of its name — a house, a book, a
-window, a play button, the four the documentation's home page draws on its own
-cards — in the link's own colour, so the section you are on is marked twice.
+window, a play button, a sparkle — in the link's own colour, so the section
+you are on is marked twice.
 Below 620px the names are clipped away and each mark carries its **short
-name** under it instead — Home, Docs, Samples, Play, from `data-short` on the
+name** under it instead — Home, Docs, Samples, Play, AI, from `data-short` on the
 same span the full word is on: four full names and their marks are 499px of a
 390px screen, and the row ran off the end of it, but four marks with no word
 were four guesses for a reader who arrived from a link, and a tooltip does not
@@ -76,7 +79,9 @@ exist under a thumb. The full name stays clipped rather than `display: none`,
 so a screen reader still reads it, and the short one is drawn with an empty
 alt (`content: attr(data-short) / ""`) so it is not read twice. The three
 copies of the bar say it, and the manual borrows one of them;
-`tests/catalogue.spec.js` holds the phone.
+`tests/catalogue.spec.js` holds the phone. On the studio's own page
+(`ai/index.html`, written from the shell's document by `site-documents.mjs`)
+the studio's item is the bold one and Playground is a link again.
 
 **The playground's bar used to be the exception, and is not any more.** It was
 one row carrying both the project's bar and this page's workbench — undo,

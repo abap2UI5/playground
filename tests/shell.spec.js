@@ -446,10 +446,11 @@ test("the bar begins and ends as the sample catalogue's bar does", async ({ page
   await expect(page.locator(".brand")).toHaveText("abap2UI5");
   await expect(page.locator(".brand img")).toBeVisible();
 
-  // And the same far end: the four sections - Home, Documentation, Samples and
-  // where you are - then LinkedIn and GitHub, then the button that opens the
-  // rest.
-  await expect(page.locator(".bar-nav > *")).toHaveText(["Home", "Documentation", "Samples", "Playground"]);
+  // And the same far end: the five sections - Home, Documentation, Samples,
+  // where you are, and the AI Studio - then LinkedIn and GitHub, then the
+  // button that opens the rest.
+  await expect(page.locator(".bar-nav > *")).toHaveText(["Home", "Documentation", "Samples", "Playground", "AI Studio"]);
+  await expect(page.locator('.bar-nav a[data-site="ai"]')).toHaveAttribute("href", "ai/");
   // The same box the other three bars carry, in the same place: the middle of
   // the row. It used to sit at the right-hand end here, because the workbench
   // owned the middle - the workbench has a row of its own now.

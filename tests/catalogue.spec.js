@@ -322,9 +322,10 @@ test("the bar ends where the playground's own bar ends", async ({ page }) => {
   // so the brand does not say it again.
   await expect(page.locator(".brand")).toHaveText("abap2UI5");
   await expect(page.locator(".brand img")).toBeVisible();
-  // Next to it, in this order: the four sections of the project, then the
+  // Next to it, in this order: the five sections of the project, then the
   // search box, then the two marks, then the button that opens the rest.
-  await expect(page.locator(".bar-nav > *")).toHaveText(["Home", "Documentation", "Samples", "Playground"]);
+  await expect(page.locator(".bar-nav > *")).toHaveText(["Home", "Documentation", "Samples", "Playground", "AI Studio"]);
+  await expect(page.locator('.bar-nav a[data-site="ai"]')).toHaveAttribute("href", "../ai/");
   await expect(page.locator(".bar .search-button")).toBeVisible();
   await expect(page.locator('.bar-nav [aria-current="page"]')).toHaveText("Samples");
   await expect(page.locator('.bar-nav a[data-site="docs"]')).toHaveText("Documentation");
@@ -396,7 +397,7 @@ test.describe("on a phone", () => {
   });
 });
 
-test("on a phone the four sections keep a name under their marks", async ({ browser }) => {
+test("on a phone the five sections keep a name under their marks", async ({ browser }) => {
   // Four marks with no word under them were four guesses for a reader who
   // arrived on a phone: a house, a book, a window and a play button. The
   // short name is drawn from `data-short` and the full one is kept for the
@@ -406,7 +407,7 @@ test("on a phone the four sections keep a name under their marks", async ({ brow
   await page.route("**/samples/apps.json", (route) => route.fulfill(json(INDEX)));
   await page.goto("/samples/");
   const items = page.locator(".bar-nav > *");
-  await expect(items).toHaveCount(4);
+  await expect(items).toHaveCount(5);
   const shorts = await items.evaluateAll((els) => els.map((el) => {
     const span = el.querySelector("span[data-short]");
     return {
@@ -416,12 +417,12 @@ test("on a phone the four sections keep a name under their marks", async ({ brow
       width: el.getBoundingClientRect().width,
     };
   }));
-  expect(shorts.map((s) => s.short)).toEqual(["Home", "Docs", "Samples", "Play"]);
+  expect(shorts.map((s) => s.short)).toEqual(["Home", "Docs", "Samples", "Play", "AI"]);
   for (const s of shorts) {
     expect(s.drawn).toContain(`"${s.short}"`);
     expect(s.width).toBeGreaterThanOrEqual(34);
   }
-  expect(shorts.map((s) => s.name)).toEqual(["Home", "Documentation", "Samples", "Playground"]);
+  expect(shorts.map((s) => s.name)).toEqual(["Home", "Documentation", "Samples", "Playground", "AI Studio"]);
   // And the row still fits the screen.
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBe(0);
