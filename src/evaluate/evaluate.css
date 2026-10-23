@@ -1,0 +1,120 @@
+/* The Evaluate page (tools/evaluate-page.mjs), over the catalogue's stylesheet
+ * - the bar, the palette, the type, `main`, the footer and the skip link are
+ * catalogue.css's; this is only what the page has that no other page here
+ * has: a hero with a screenshot, a line of counted figures, sections drawn as
+ * bands, real tables, and four tiles at the end.
+ *
+ * Ported from the manual's landing layout (abap2UI5/docs,
+ * scripts/site-css/docs.css), where the page lived until it moved here, and
+ * kept to the same measures so a reader who knew it there finds it unchanged. */
+
+.evaluate { padding-top: 40px; overflow-wrap: break-word; }
+
+/* ---- the hero ---------------------------------------------------------- */
+.hero { display: flex; align-items: center; gap: 32px; }
+.hero-main { flex: 0 1 592px; min-width: 0; }
+.hero-name, .hero-text, .hero-tagline { max-width: 576px; }
+.hero-name { margin: 0; font-size: 20px; line-height: 28px; font-weight: 600; color: var(--accent); }
+/* The headline is the only thing on the page set past twice the reader's own
+   size, and the tracking rather than the weight holds the line together. */
+.hero-text { margin: 0; font-size: 38px; line-height: 46px; font-weight: 600; letter-spacing: -.02em; }
+.hero-tagline { margin: 0; padding-top: 12px; font-size: 17px; line-height: 26px; font-weight: 500; color: var(--fg-dim); }
+/* Two buttons, one size: equal tracks, the row no wider than two of the
+   widest label. On a phone they stack. */
+.hero-actions {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  width: max-content; gap: 12px; padding-top: 29px;
+}
+.hero-action {
+  padding: 0 14px; border: 1px solid transparent; border-radius: 6px;
+  font-size: 13px; line-height: 34px; font-weight: 600;
+  text-align: center; text-decoration: none; white-space: nowrap;
+}
+.hero-action.primary { background: var(--accent); color: var(--accent-fg); }
+.hero-action.plain { border-color: var(--line); color: var(--fg); }
+.hero-action.plain:hover { border-color: var(--accent); color: var(--accent); }
+/* What the primary button costs, which is nothing - the one claim on the
+   page a vendor cannot make, where the eye is after reading the buttons. */
+.hero-note { margin: 0; padding-top: 14px; font-size: 13px; line-height: 20px; color: var(--fg-dim); }
+/* The reader of this page will not open the playground to see an app, so a
+   screenshot stands where the front door has its mark. */
+/* align-items, or the flex row stretches the image to the height its
+   attributes give it before the width scales it down - on a phone that was
+   150px of empty box above the screenshot. */
+.hero-shot { flex: 1 1 auto; min-width: 0; display: flex; justify-content: flex-end; align-items: flex-start; }
+.hero-shot img {
+  display: block; width: 100%; max-width: 520px; height: auto;
+  border: 1px solid var(--line); border-radius: 6px;
+}
+/* The counted figures: one quiet line, a fact sheet's footer rather than a
+   second tagline (tools/evaluate-page.mjs reads them). */
+.facts-line { margin: 0; padding: 20px 0 0; font-size: 13px; line-height: 20px; color: var(--fg-dim); }
+
+@media (max-width: 900px) {
+  .hero { flex-direction: column; align-items: stretch; }
+  /* In a column the 592px basis of the headline's half is a HEIGHT - 120px of
+     nothing under the note - so both halves are only as tall as they are. */
+  .hero-main, .hero-shot { flex: none; }
+  .hero-shot { justify-content: flex-start; }
+}
+@media (max-width: 620px) {
+  .evaluate { padding-top: 24px; }
+  .hero-text { font-size: 30px; line-height: 38px; }
+  .hero-actions { grid-auto-flow: row; width: auto; }
+}
+
+/* ---- the sections ------------------------------------------------------ */
+/* Each section is a band of one argument: it opens on the hairline the H2
+   carries, and prose keeps the 74ch measure; the tables take the width. */
+.bands { margin-top: 32px; }
+.band > h2 {
+  margin: 32px 0 16px; padding-top: 24px; border-top: 1px solid var(--line);
+  font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -.01em;
+}
+.band > p, .band > ul, .band > ol { max-width: 74ch; line-height: 1.65; }
+.band li + li { margin-top: 6px; }
+.band pre {
+  margin: 16px 0; padding: 16px 18px; overflow-x: auto;
+  border-radius: 6px; background: var(--bg-sunken);
+  font-family: var(--font-mono); font-size: 12.5px; line-height: 1.55;
+}
+.band code { font-family: var(--font-mono); font-size: .92em; }
+/* The tables take the band's width, all of them alike; one that does not fit
+   scrolls in its own box rather than pushing the page sideways on a phone. */
+.table-wrap { margin: 16px 0; overflow-x: auto; }
+.band table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.5; }
+.band th, .band td { padding: 8px 14px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+.band th { background: var(--bg-sunken); font-weight: 600; }
+.band tr:nth-child(2n) td { background: var(--bg-sunken); }
+
+/* ---- the four tiles ---------------------------------------------------- */
+/* The four ways to start, in order of effort; two by two under 1100px, one
+   column on a phone. */
+.tiles {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px;
+  margin-top: 40px;
+}
+@media (max-width: 1100px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 620px) { .tiles { grid-template-columns: minmax(0, 1fr); } }
+.tile {
+  display: block; padding: 22px;
+  border: 1px solid var(--line); border-radius: 6px;
+  color: var(--fg); text-decoration: none;
+}
+.tile:hover { border-color: var(--accent); }
+.tile-icon { display: block; margin-bottom: 12px; color: var(--accent); }
+.tile-icon svg { display: block; width: 21px; height: 21px; }
+.tile-title { display: block; font-size: 15px; line-height: 22px; font-weight: 600; }
+/* Cards that are links and look like panels are doors with no handle. */
+.tile-title::after {
+  content: "↗"; display: inline-block; margin-left: 6px;
+  color: var(--accent); font-size: 14px; font-weight: 400;
+  transition: transform .25s;
+}
+.tile:hover .tile-title::after { transform: translate(2px, -2px); }
+.tile-details { display: block; padding-top: 3px; font-size: 13px; line-height: 22px; font-weight: 500; color: var(--fg-dim); }
+
+@media (prefers-reduced-motion: reduce) { .tile-title::after { transition: none; } }
+@media print {
+  .hero-actions, .tiles { display: none; }
+}

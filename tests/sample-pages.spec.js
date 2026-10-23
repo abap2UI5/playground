@@ -491,8 +491,9 @@ test("every sample has a page, and every page is in the sitemap", async () => {
 
   const sitemap = fs.readFileSync(path.join(DIST, "sitemap.xml"), "utf8");
   const locs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
-  expect(locs.length).toBe(paged.length + 4);
+  expect(locs.length).toBe(paged.length + 5);
   expect(locs).toContain("https://abap2ui5.github.io/playground/ai/");
+  expect(locs).toContain("https://abap2ui5.github.io/playground/evaluate/");
   expect(locs).toContain("https://abap2ui5.github.io/playground/");
   expect(locs).toContain("https://abap2ui5.github.io/playground/samples/");
   expect(locs).toContain("https://abap2ui5.github.io/playground/samples/all/");

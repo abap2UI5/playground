@@ -148,6 +148,7 @@ read them before touching `tools/` or `src/runtime/`.
 | `tools/sample-pages.mjs` | One page per sample, `samples/all/`, sitemap, `llms.txt` |
 | `tools/sample-frame.mjs` | The frame those pages share (bar, footer, `THEME_SCRIPT`, `MENU_SCRIPT`) |
 | `tools/not-found-page.mjs` | `dist/404.html`, which guesses |
+| `tools/evaluate-page.mjs` | `dist/evaluate/`, the page for the person who approves abap2UI5 (prose in `src/evaluate/`; it moved here from the manual) |
 | `tools/sample-sources.mjs` | The printed ABAP, one tarball per ref |
 | `tools/abap-highlight.mjs` | Build-time ABAP colouring (published: the docs import it) |
 | `tools/html.mjs` | Comment stripping and `withPolicy()` (CSP) for every written document |
@@ -349,6 +350,6 @@ sample pages' per-line markup and the 220 MB site budget
 | The AI Studio, providers, keys, attachments, `agent-hooks.mjs`, `linked-code.mjs` | [ai-chat.md](docs/design/ai-chat.md) |
 | The AI Pilot, `frame-drive.mjs`, the vendored agent client | [ai-pilot.md](docs/design/ai-pilot.md) |
 | Share, `?src=`, `?gist=`, `?embed=`/`?view=`/`?readonly=`/`?lines=`, the samples dialog, `original.mjs`, `layout-editor.mjs`, `src/embed/` | [public-surfaces.md](docs/design/public-surfaces.md) |
-| `src/catalogue/`, `build-catalogue.mjs`, sample pages, the 404 | [sample-catalogue.md](docs/design/sample-catalogue.md) |
+| `src/catalogue/`, `build-catalogue.mjs`, sample pages, the 404, the Evaluate page | [sample-catalogue.md](docs/design/sample-catalogue.md) |
 | The bar, palette, font, search box, site memory, anything shared with abap2UI5/docs | [one-site.md](docs/design/one-site.md) |
 | `tests/`, `playwright.config.js`, CI workflows | [testing.md](docs/design/testing.md) |
