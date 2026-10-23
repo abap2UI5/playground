@@ -528,7 +528,7 @@ test("the header keeps to a few rows on a phone", async ({ page }) => {
   }
   await page.locator("#toolbar-more").click();
   await expect(page.locator("#toolbar-more")).toHaveAttribute("aria-expanded", "true");
-  for (const id of ["#format", "#autorun", "#share", "#source-link", "#fullscreen", "#about"]) {
+  for (const id of ["#format", "#ai-studio", "#autorun", "#share", "#source-link", "#fullscreen", "#about"]) {
     await expect(page.locator(`#toolbar-menu ${id}`)).toBeVisible();
   }
   // Each says what it is in words there - the About button is not a stray "i".
@@ -547,7 +547,7 @@ test("the header keeps to a few rows on a phone", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(page.locator("#toolbar-more")).toBeHidden();
   const order = await page.locator(".toolbar > [id]").evaluateAll((all) => all.map((c) => c.id));
-  expect(order.slice(0, 7)).toEqual(["undo", "redo", "format", "examples", "run", "autorun", "status"]);
+  expect(order.slice(0, 8)).toEqual(["undo", "redo", "format", "examples", "ai-studio", "run", "autorun", "status"]);
   await expect(page.locator("#about")).toBeVisible();
   await page.setViewportSize({ width: 390, height: 760 });
   // The theme switch is one press further, in the menu - reachable, not gone.
