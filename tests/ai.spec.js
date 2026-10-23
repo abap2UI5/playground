@@ -603,14 +603,24 @@ test("on a wide screen the studio opens on Split: chat, code and app side by sid
   expect(app.height).toBeGreaterThan(500);
 });
 
-test("the playground carries no way into the studio, embedded or not", async ({ page }) => {
-  for (const url of ["/", "/?embed=1"]) {
-    await page.goto(url);
-    await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
-    await expect(page.locator("#ai")).toHaveCount(0);
-    await expect(page.locator("#studio-bar")).toBeHidden();
-    await expect(page.locator("#chat")).toBeHidden();
-  }
+test("the playground links to the studio's page and never opens it over its own work; an embed links nowhere", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await expect(page.locator("#studio-bar")).toBeHidden();
+  await expect(page.locator("#chat")).toBeHidden();
+  // The toolbar's link and the menu's, both to the page.
+  await expect(page.locator("#ai-studio")).toBeVisible();
+  await expect(page.locator("#ai-studio")).toHaveAttribute("href", "ai/");
+  await expect(page.locator('#extra .menu a[data-site="ai"]')).toHaveAttribute("href", "ai/");
+  await page.locator("#ai-studio").click();
+  await expect(page).toHaveURL(/\/ai\/$/);
+  await expect(page.locator("body")).toHaveClass(/is-studio/, { timeout: 120000 });
+
+  await page.goto("/?embed=1");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await expect(page.locator("#ai-studio")).toBeHidden();
+  await expect(page.locator("#studio-bar")).toBeHidden();
+  await expect(page.locator("#chat")).toBeHidden();
 });
 
 test("the studio's page starts on a minimal class: no run, no sample, and no way out to a playground under it", async ({ page }) => {
@@ -626,8 +636,9 @@ test("the studio's page starts on a minimal class: no run, no sample, and no way
   await expect(page.locator("#studio-url")).toHaveText("your app");
   await expect(page.locator("#studio-exit")).toBeHidden();
   await expect(page).toHaveTitle("AI Studio · abap2UI5");
-  // Kept out of search engines while it is being built.
-  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex");
+  // Published: indexed, with a canonical of its own.
+  await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://abap2ui5.github.io/playground/ai/");
 });
 
 function cors() {

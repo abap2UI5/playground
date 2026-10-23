@@ -5,13 +5,20 @@
 
 ## The AI chat — `src/shell/chat.mjs`, `src/shell/ai-agent.mjs`
 
-**The studio has a page of its own and no door from the playground** while it
-is being built: `ai/index.html`, written by `writeAiPage( )` in
+**The studio has a page of its own**, linked from the playground and never
+opened over it: `ai/index.html`, written by `writeAiPage( )` in
 `tools/site-documents.mjs` from the playground's finished `index.html` - the same
 document one directory down, with `<base href="../">` (so the bundle, the
 workers the inline script starts, the app frame and the service worker's scope
 all resolve where the playground's do: one build, two doors), `data-page="ai"`
-on `<html>`, its own title, no canonical link and `noindex`. `page.mjs` reads
+on `<html>`, its own title and canonical (`…/playground/ai/`), in the sitemap.
+The way in is the **AI Studio** link beside Samples in the toolbar
+(`#ai-studio`, an `<a>` dressed as the invite button - a switch that turned
+the page into the studio over the reader's own draft was tried and refused)
+and the Tools section of the menu, on all three copies of the bar
+(`index.html`, `src/catalogue/index.html`, `tools/sample-frame.mjs`; the
+documentation's copy lives in abap2UI5/docs). An embedded playground shows
+neither. The Pilot's page is still unlinked and `noindex`. `page.mjs` reads
 `data-page` (`aiPage`) and `main.mjs` acts on it: only there is `setUpChat( )` called (with `startOpen`), the editor
 starts on one minimal class (`AI_STARTER` in `ai-starter.mjs`: `z2ui5_if_app`
 implemented, `main( )` empty) without a run - the placeholder says

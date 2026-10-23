@@ -341,6 +341,21 @@ button.invite {
    shows the plain label, which is fine. */
 button.invite::before { content: "✦ " / ""; }
 button.invite:hover:not(:disabled) { background: var(--accent); color: var(--accent-fg); }
+/* The AI Studio is a link to its own page, dressed as the second invite. */
+a.invite {
+  display: inline-block;
+  font: inherit;
+  font-weight: 600;
+  padding: .3rem .8rem;
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+a.invite::before { content: "✦ " / ""; }
+a.invite:hover { background: var(--accent); color: var(--accent-fg); }
+.is-embedded #ai-studio { display: none; }
 
 select {
   font: inherit;
@@ -1502,7 +1517,7 @@ button.insight-row {
      so the row now keeps what makes something run and hands the rest to a
      menu (below); tests/shell.spec.js holds the height. */
   .toolbar { gap: .3rem; padding: .3rem .4rem; }
-  .toolbar button, .toolbar .source-link { padding: .3rem .5rem; }
+  .toolbar button, .toolbar .source-link, .toolbar a.invite { padding: .3rem .5rem; }
   .toolbar button.icon { padding: .2rem .45rem; }
   .versions,
   .spacer { display: none; }

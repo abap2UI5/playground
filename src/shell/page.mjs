@@ -15,8 +15,8 @@ export const embedded = params.get("embed") === "1";
 // The AI Studio's page (ai/index.html, written by tools/build-site.mjs from
 // this document): the studio opens on its own, on the minimal class of
 // ai-starter.mjs, and what is built there is neither restored from nor stored
-// over the playground's own draft. The playground itself has no way into the studio while it is being
-// built - its address is the door.
+// over the playground's own draft. The playground links to it (the toolbar,
+// the menu) rather than opening it over its own work - its address is the door.
 export const aiPage = document.documentElement.dataset.page === "ai";
 
 // The AI Pilot's page (pilot/index.html, written the same way): a chat in
