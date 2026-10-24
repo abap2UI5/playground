@@ -99,13 +99,11 @@ of each line. Each step is still its own script and still runnable by name
    degrades and why the index is built rather than fetched by the page.
    It keeps a stamp of its own (`catalogue.stamp`, like `app.stamp`): over
    the index as it will be written (`built` left out), the ABAP the pages
-   print, `SITE`, and the bytes of the eight tools (`build-catalogue`,
-   `sample-pages`, `sample-frame`, `not-found-page`, `evaluate-page`,
-   `sample-sources`, `abap-highlight`, `html`), four shared files
-   (`ui5-libs.mjs`, `ui5-libraries.mjs`, `theme-boot.mjs`,
-   `src/catalogue/sample.css`) that lay the pages out, and the Evaluate
-   page's three files under `src/evaluate/` with the framework README its
-   figures are read from - and when none of it moved the 804 pages and
+   print, `SITE`, and the bytes of the seven tools (`build-catalogue`,
+   `sample-pages`, `sample-frame`, `not-found-page`, `sample-sources`,
+   `abap-highlight`, `html`) and four shared files (`ui5-libs.mjs`,
+   `ui5-libraries.mjs`, `theme-boot.mjs`, `src/catalogue/sample.css`)
+   that lay the pages out - and when none of it moved the 804 pages and
    `apps.json` are left in place (2.2 s → 0.4 s; `--force` writes anyway).
    The index is still built on every run, because it is what the stamp is
    over; `apps.json` keeps the `built` of the build that last changed it.

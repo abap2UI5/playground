@@ -377,21 +377,6 @@ leaves no word behind, by how near the NAME is (`.../z2ui5_cl_smp_app_49/`
 finds the classes one character away). Nothing is fetched to answer, and
 nothing is shown when nothing is close.
 
-**And the page for the person who approves abap2UI5.** `dist/evaluate/`
-(`tools/evaluate-page.mjs`, the prose in `src/evaluate/evaluate.html`) is not a
-sample page, but it is drawn in their frame - the bar with no section marked,
-`catalogue.css` and a stylesheet of its own - and written at the same moment,
-like the 404. It lived in the manual at `/docs/evaluate`, drawn like the front
-door; a developer sends this link to the person who decides, and an address
-under `/docs/` said "manual" before they had read a word, so it moved here and
-the manual keeps a redirect that carries the `#fragment`. Its eight section ids
-are the ones it had there, which the redirect and the framework's README link
-to. The counted figures under the hero are read from the pinned framework's
-README (`facts:start` … `facts:end`), never typed, and a README without the
-block costs the line, never the build. Every link into the manual is absolute;
-`tests/evaluate.spec.js` holds the ids, the figures, the links and the 320px
-width.
-
 `SITE` (overridable with `PG_SITE_URL`) is the one absolute URL on this site,
 and only these pages need it — a canonical link and a sitemap are absolute by
 definition, everything else stays relative so the site still works under any

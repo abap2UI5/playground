@@ -84,7 +84,6 @@ import { highlightAbapLines } from "./abap-highlight.mjs";
 import { fetchSampleSources } from "./sample-sources.mjs";
 import { MENU_SCRIPT, PAGE_SCRIPT, SEARCH_SCRIPT, SITE, THEME_SCRIPT, bar, foot } from "./sample-frame.mjs";
 import { notFoundPage } from "./not-found-page.mjs";
-import { writeEvaluatePage } from "./evaluate-page.mjs";
 
 /* Where the site is published - tools/sample-frame.mjs decides it, beside the
  * bar every page here carries; it is re-exported because this is where the
@@ -871,12 +870,6 @@ export function writeSamplePages(index, distDir, { rows, skipped }) {
    * which is where GitHub Pages looks for it. */
   fs.writeFileSync(path.join(distDir, "404.html"), withPolicy(stripHtmlComments(notFoundPage(rows))));
 
-  /* The page for the person who approves abap2UI5 (tools/evaluate-page.mjs):
-   * not a sample page, but drawn in the same frame and written at the same
-   * moment, so it is a page of this set like the 404. */
-  const evaluate = writeEvaluatePage(distDir);
-  fs.writeFileSync(path.join(evaluate.dir, "index.html"), withPolicy(stripHtmlComments(evaluate.html)));
-
   /* The sitemap: the three pages that are always here, the full list, and one
    * line per sample. Absolute URLs, because that is what a sitemap is.
    *
@@ -898,7 +891,6 @@ export function writeSamplePages(index, distDir, { rows, skipped }) {
   const urls = [
     SITE,
     `${SITE}ai/`,
-    `${SITE}evaluate/`,
     `${SITE}samples/`,
     `${SITE}samples/all/`,
     ...rows.map((row) => `${SITE}samples/${row.dir}/`),
