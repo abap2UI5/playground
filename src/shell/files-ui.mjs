@@ -5,7 +5,7 @@
 // the markup only so nothing flashes before boot puts real tabs into it.
 import { addFile, closeFile, currentFile, getFiles, onFileShown, openFile } from "../editor/editor.mjs";
 import { nameProblem, skeletonFor } from "../editor/files.mjs";
-import { STARTER_TABLE, starterTable } from "../editor/tables.mjs";
+import { STARTER_TABLE, isSeedFile, isTableFile, starterTable, tableFileOf } from "../editor/tables.mjs";
 import { setStatus } from "./ui.mjs";
 
 let strip;
@@ -13,6 +13,9 @@ let strip;
 // change - but it does change what several things on the page are about: the
 // outline below the editor, and the link to where this file came from.
 let onOpened;
+// What "→ App" asks for: the page writes the app and runs it (loadAppFromTable( )
+// in file-sets.mjs, which this module cannot import - that one imports this).
+let onAppFromTable;
 
 // Whether the strip is currently asking for a name, so a render provoked by
 // something else does not throw the half-typed one away.
@@ -21,6 +24,7 @@ let naming = false;
 export function setUpFiles(options = {}) {
   strip = document.getElementById("files");
   onOpened = options.onOpened;
+  onAppFromTable = options.onAppFromTable;
 
   strip.addEventListener("click", (e) => {
     const close = e.target.closest("[data-close]");
@@ -39,6 +43,11 @@ export function setUpFiles(options = {}) {
     }
     if (e.target.closest("[data-add-table]")) {
       addStarterTable();
+      return;
+    }
+    const app = e.target.closest("[data-app-from]");
+    if (app) {
+      onAppFromTable?.(app.dataset.appFrom);
       return;
     }
     const tab = e.target.closest("[data-file]");
@@ -81,7 +90,7 @@ export function render() {
      beside the file names, and a tablist may hold nothing but tabs - a screen
      reader made no sense of it. The file that is open says so itself. */
   strip.setAttribute("role", "group");
-  strip.replaceChildren(...files.map((file, index) => fileTab(file, index, open)), addButton(), addTableButton());
+  strip.replaceChildren(...files.map((file, index) => fileTab(file, index, open)), addButton(), addTableButton(), ...appButton(open, files));
 }
 
 // One tab: the name, and for every file but the first a control to remove it.
@@ -144,6 +153,23 @@ function addTableButton() {
   add.setAttribute("aria-label", "Add a database table");
   add.append("+ table");
   return add;
+}
+
+// "→ App": shown while a table (or its rows) is the file on screen, and only
+// then - it is a question about THAT table, and a button that is always there
+// would have to guess which one. It writes an app for it: a list of the rows
+// and a dialog to add, change and delete one (src/editor/app-from-table.mjs).
+function appButton(open, files) {
+  const table = isTableFile(open) ? open : isSeedFile(open) ? tableFileOf(open) : undefined;
+  if (!onAppFromTable || !table || !files.some((f) => f.name === table)) return [];
+  const add = document.createElement("button");
+  add.className = "file-app-from";
+  add.dataset.appFrom = table;
+  add.type = "button";
+  add.title = "Write an app for this table: a list of its rows, and a dialog to add, change and delete one";
+  add.setAttribute("aria-label", `Write an app for ${table}`);
+  add.append("→ App");
+  return [add];
 }
 
 function addStarterTable() {

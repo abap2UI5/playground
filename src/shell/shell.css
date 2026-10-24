@@ -490,7 +490,8 @@ select:disabled { opacity: .5; }
 }
 
 .file-add,
-.file-add-table {
+.file-add-table,
+.file-app-from {
   border: none;
   border-radius: 0;
   background: none;
@@ -501,6 +502,9 @@ select:disabled { opacity: .5; }
 }
 /* "+ table" beside the bare "+": a word, so a size that reads as one. */
 .file-add-table { font-size: 12px; white-space: nowrap; }
+/* "→ App", while a table is on screen: the one of the three that DOES
+   something to the file set, so it carries the accent rather than the dim. */
+.file-app-from { font-size: 12px; white-space: nowrap; color: var(--accent); font-weight: 600; }
 
 .editor { flex: 1; min-height: 0; }
 /* On a phone every line of a class is wider than the editor, so Monaco's
@@ -2331,7 +2335,8 @@ body.is-studio .pane-right { grid-column: 2; grid-row: 2 / -1; display: flex; bo
 body.is-studio .pane-left > .files { grid-column: 2; grid-row: 2; }
 /* No "+ table" in the studio: the model writes classes only, and a table
    is the playground's tool for somebody writing ABAP by hand. */
-body.is-studio .file-add-table { display: none; }
+body.is-studio .file-add-table,
+body.is-studio .file-app-from { display: none; }
 body.is-studio .pane-left > .editor { grid-column: 2; grid-row: 3; min-height: 0; }
 body.is-studio .pane-left > .insight { grid-column: 2; grid-row: 4; }
 

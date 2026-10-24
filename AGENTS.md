@@ -106,6 +106,7 @@ read them before touching `tools/` or `src/runtime/`.
 | `analysis.mjs` | One analysis, three readers; applies `parser-hint.mjs` |
 | `parser-hint.mjs` | The missing-full-stop question on abaplint's `parser_error`, and `borrowedSyntax()`: the ABAP spelling of CDS/SQL/JavaScript shapes it refuses |
 | `tables.mjs` | Tables of your own: rows parser, table check, starter `zproducts`, abapGit data config |
+| `app-from-table.mjs` | **→ App**: the class for a table - a list of its rows, a dialog to add, change, delete |
 | `registry.mjs` | The page's client of the registry worker |
 | `registry-worker.mjs` | The worker's entry: abaplint, the corpus, the transpiler |
 | `registry-core.mjs` | abaplint as it runs there; `formatFiles()`, `FORMAT_RULES`, clock-yielded parse |
