@@ -103,9 +103,9 @@ of each line. Each step is still its own script and still runnable by name
    `sample-pages`, `sample-frame`, `not-found-page`, `evaluate-page`,
    `sample-sources`, `abap-highlight`, `html`), four shared files
    (`ui5-libs.mjs`, `ui5-libraries.mjs`, `theme-boot.mjs`,
-   `src/catalogue/sample.css`) that lay the pages out, and every file of the
-   Evaluate page's Astro project under `src/evaluate/`, Astro's own version
-   and the framework README its figures are read from - and when none of it moved the 804 pages and
+   `src/catalogue/sample.css`) that lay the pages out, and the Evaluate
+   page's three files under `src/evaluate/` with the framework README its
+   figures are read from - and when none of it moved the 804 pages and
    `apps.json` are left in place (2.2 s → 0.4 s; `--force` writes anyway).
    The index is still built on every run, because it is what the stamp is
    over; `apps.json` keeps the `built` of the build that last changed it.

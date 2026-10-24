@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 import { SITE } from "../tools/sample-pages.mjs";
-import { factsIn } from "../src/evaluate/lib/facts.mjs";
+import { factsIn } from "../tools/evaluate-page.mjs";
 
 // dist/evaluate/ - the page for the person who approves abap2UI5
 // (tools/evaluate-page.mjs). It lived in the manual at /docs/evaluate; it is a

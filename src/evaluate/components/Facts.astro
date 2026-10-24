@@ -1,7 +1,0 @@
----
-/* The counted figures, one quiet line under the hero - read at build time
- * (lib/facts.mjs), never typed. No figures, no line. */
-import { readFacts } from "../lib/facts.mjs";
-const facts = readFacts();
----
-{facts.length > 0 && <p class="facts-line">{facts.join(" · ")}</p>}

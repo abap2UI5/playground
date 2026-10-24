@@ -148,7 +148,7 @@ read them before touching `tools/` or `src/runtime/`.
 | `tools/sample-pages.mjs` | One page per sample, `samples/all/`, sitemap, `llms.txt` |
 | `tools/sample-frame.mjs` | The frame those pages share (bar, footer, `THEME_SCRIPT`, `MENU_SCRIPT`) |
 | `tools/not-found-page.mjs` | `dist/404.html`, which guesses |
-| `tools/evaluate-page.mjs` | `dist/evaluate/`, the page for the person who approves abap2UI5: builds the Astro project `src/evaluate/` (layout, components, one markdown file per section) and sends it out through `withPolicy()` |
+| `tools/evaluate-page.mjs` | `dist/evaluate/`, the page for the person who approves abap2UI5 (prose in `src/evaluate/`; it moved here from the manual) |
 | `tools/sample-sources.mjs` | The printed ABAP, one tarball per ref |
 | `tools/abap-highlight.mjs` | Build-time ABAP colouring (published: the docs import it) |
 | `tools/html.mjs` | Comment stripping and `withPolicy()` (CSP) for every written document |
@@ -217,8 +217,7 @@ section 4). Every npm dependency is pinned **exactly**: the transpiler,
 abaplint and the linter end up inside the bundle a visitor downloads, so
 "whatever resolves today" would change the site under its own tests. The dev
 tooling is pinned the same way (eslint 10.12.0, @eslint/js 10.0.1, globals
-17.12.0, typescript 6.0.3, @xmldom/xmldom 0.9.12, astro 7.3.8 - the Evaluate
-page's static build, nothing of it reaches a visitor but HTML and CSS). Actions are pinned to
+17.12.0, typescript 6.0.3, @xmldom/xmldom 0.9.12). Actions are pinned to
 commits. Type checking is opt-in per file (`// @ts-check`); a module joins by
 adding the comment and passing.
 

@@ -37,7 +37,6 @@
     "@playwright/test": "1.64.0",
     "@ui5/cli": "4.0.71",
     "@xmldom/xmldom": "0.9.12",
-    "astro": "7.3.8",
     "buffer": "6.0.3",
     "esbuild": "0.28.2",
     "eslint": "10.12.0",

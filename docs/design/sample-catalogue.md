@@ -377,24 +377,11 @@ leaves no word behind, by how near the NAME is (`.../z2ui5_cl_smp_app_49/`
 finds the classes one character away). Nothing is fetched to answer, and
 nothing is shown when nothing is close.
 
-**And the page for the person who approves abap2UI5.** `dist/evaluate/` is not
-a sample page, but it is drawn in their frame - the bar with no section
-marked, `catalogue.css` and a stylesheet of its own - and written at the same
-moment, like the 404. It is the one page here built with a site generator:
-`src/evaluate/` is an Astro project (a layout that takes the bar, the two
-inline scripts and `page.mjs` from `tools/sample-frame.mjs` as the strings the
-sample pages use, three components - the hero, the figures, the tiles - and
-one markdown file per section, numbered in reading order), and
-`tools/evaluate-page.mjs` builds it into `build/evaluate/`, copies it over and
-sends it out through `withPolicy()`. Astro because the page is a landing page,
-which is the shape its components and its markdown are made for, while what it
-emits is static HTML and one stylesheet - no client component, no script of
-its own, and the writer refuses a build that grew one. Telemetry is off for the
-build. Two things Astro 7 needed: its prerender bundle resolves a bare import
-from this repository's `node_modules`, where `cookie` is express's 0.7, so
-Astro's own 2.x is bundled in (`vite.resolve.noExternal`); and the tables are
-wrapped for a phone on the written HTML rather than by a rehype plugin, which
-would need the unified processor as a second dependency. It lived in the manual at `/docs/evaluate`, drawn like the front
+**And the page for the person who approves abap2UI5.** `dist/evaluate/`
+(`tools/evaluate-page.mjs`, the prose in `src/evaluate/evaluate.html`) is not a
+sample page, but it is drawn in their frame - the bar with no section marked,
+`catalogue.css` and a stylesheet of its own - and written at the same moment,
+like the 404. It lived in the manual at `/docs/evaluate`, drawn like the front
 door; a developer sends this link to the person who decides, and an address
 under `/docs/` said "manual" before they had read a word, so it moved here and
 the manual keeps a redirect that carries the `#fragment`. Its eight section ids
