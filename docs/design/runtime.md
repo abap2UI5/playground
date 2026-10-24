@@ -160,6 +160,18 @@ files; the abapGit zip puts the TABL in `src/` (with its BOM) and the rows in
 closes its rows file, and the editor shows the two in Monaco's XML and JSON
 languages.
 
+**An app from a table.** While a table or its rows is the file on screen, the
+file strip offers **→ App** (`src/editor/app-from-table.mjs`,
+`tests/app-from-table.spec.js`, `tests/node/app-from-table.test.mjs`): it
+writes `zcl_<table>_app` - a list of the rows and a dialog to add, change and
+delete one, the view in the house layout - puts it first beside the table, so
+Run starts it, and runs it. The set it replaces is kept as a draft, the way a
+sample picked over it is. The class is ordinary abap2UI5 the reader goes on
+editing; it deletes by a `WHERE` on the key, never `FROM` a work area (see
+[build-traps.md](build-traps.md)), and commits each change itself - abap2UI5
+rolls back what a roundtrip leaves uncommitted, here as on a system. Hidden in
+the studio, like **+ table**.
+
 ## WRITE and the app's state
 
 Two things travel back beside each roundtrip's answer, both read in the

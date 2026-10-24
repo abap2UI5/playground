@@ -61,7 +61,7 @@ import { FROM_LAST_SESSION, startingFiles } from "./starting-files.mjs";
 import { autorunAfterChange, markBooted, setUpAutorun } from "./autorun.mjs";
 import { applyFrameTheme, isRunning, isRunWaiting, lastRun, run, setRunContext, uiTheme } from "./run.mjs";
 import { reflectCodeErrors, sayBriefly } from "./run-status.mjs";
-import { keepDraft, loadDraft, loadLinked, loadSample, linkedFiles, markOpened } from "./file-sets.mjs";
+import { keepDraft, loadAppFromTable, loadDraft, loadLinked, loadSample, linkedFiles, markOpened } from "./file-sets.mjs";
 import { AI_STORAGE_KEY, carriedFiles, offerFrameBridge, setUpPilotHooks, setUpStudio } from "./agent-hooks.mjs";
 import { discardCachedSite, keepAssetsForNextTime, servedFromCache } from "./site-cache.mjs";
 import { lessonChanged, startGuides } from "./guides.mjs";
@@ -309,7 +309,7 @@ async function boot() {
     setEditorTheme(isDark());
     applyFrameTheme();
   });
-  setUpFiles({ onOpened: fileOpened });
+  setUpFiles({ onOpened: fileOpened, onAppFromTable: (name) => loadAppFromTable(name, tabs) });
   setUpInsight();
   // The registry answers from a worker, so what remember( ) and fileOpened( )
   // show is what was last known; this is how the fresh answer reaches the

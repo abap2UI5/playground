@@ -6,6 +6,8 @@
 // run that every pick starts.
 import { getFiles, setFiles } from "../editor/editor.mjs";
 import { checkFileSet } from "../editor/files.mjs";
+import { appFromTable } from "../editor/app-from-table.mjs";
+import { seedFileOf } from "../editor/tables.mjs";
 import { isSample, loadSampleFiles, sampleById } from "../editor/samples.mjs";
 import { fetchLinkedFiles, followNavigation, forgetOrigins } from "./deep-link.mjs";
 import { render as renderFiles } from "./files-ui.mjs";
@@ -178,6 +180,32 @@ export async function loadDraft(files, tabs) {
   forgetOrigins();
   const kept = replaceWith(checked);
   await runPicked(kept, tabs);
+}
+
+// An app written from a table of the reader's own (src/editor/app-from-table.mjs),
+// asked for with "→ App" in the file strip: the class, the table and its rows
+// as the new set - the class first, because the first file is what Run starts
+// - and the same move as a sample from there, with the same word about what
+// was there before. Not "as opened": it is new work, so it is kept as the
+// draft from the first moment, and a reload brings it back.
+export async function loadAppFromTable(tableName, tabs) {
+  const files = getFiles();
+  const table = files.find((f) => f.name === tableName);
+  if (!table) return;
+  const { file, problem } = appFromTable(table.source, files.map((f) => f.name));
+  if (!file) {
+    setStatus(problem ?? "no app could be written for this table", true);
+    return;
+  }
+  const seed = files.find((f) => f.name === seedFileOf(tableName));
+  latestPick++;
+  forgetOrigins();
+  const kept = replaceWith(checkFileSet([file, table, ...(seed ? [seed] : [])]), { asOpened: false });
+  const started = await runWhenFree();
+  if (!started) return;
+  tabs.show("right");
+  if (kept) sayDraftIsKept(kept);
+  else setStatus(`running ${file.name}, written for ${tableName.replace(/\.tabl\.xml$/, "").toUpperCase()} - change it like any class`);
 }
 
 // A catalogued example, chosen in the examples browser. The URL goes down the

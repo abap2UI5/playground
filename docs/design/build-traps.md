@@ -770,7 +770,7 @@ then presses Run to watch the bar go.
 
 ### Findings from tables of your own and the State tab
 
-Four things nothing documents, each found the hard way (`src/editor/tables.mjs`,
+Five things nothing documents, each found the hard way (`src/editor/tables.mjs`,
 `src/editor/transpile-core.mjs`, `src/runtime/index.mjs`,
 `src/runtime/app-state.mjs`):
 
@@ -794,6 +794,13 @@ Four things nothing documents, each found the hard way (`src/editor/tables.mjs`,
    class map (`defineClasses( )` in `src/runtime/index.mjs` keeps the two
    put-back maps side by side). A table name may not reuse a framework or
    open-abap DDIC name at all.
+
+5. **`DELETE dbtab FROM wa` deletes every row.** @abaplint/transpiler 2.14.3
+   passes the runtime the table and a `WHERE`, never the work area, so the
+   statement reaches SQLite as a bare `DELETE FROM dbtab` - `sy-subrc = 0`,
+   `sy-dbcnt` the size of the table. `DELETE FROM dbtab WHERE key = ...`
+   deletes the one row; `UPDATE dbtab FROM wa` is not affected. So **→ App**
+   writes the WHERE form (`app-from-table.mjs`).
 
 A data element (`ROLLNAME`) a field names must exist in the corpus, or the
 transpiler types the field as `VoidType` and the table cannot be created.
