@@ -532,7 +532,7 @@ test("a page renders as the catalogue's own, and its links work", async ({ page 
   // reader is already in - which is what the Samples item is for, and where a
   // reader in the samples usually already was.
   await expect(page.locator(".brand")).toHaveAttribute("href", "https://abap2ui5.github.io/docs/");
-  await expect(page.locator(".bar-nav > *")).toHaveText(["Home", "Documentation", "Samples", "Playground", "AI Studio"]);
+  await expect(page.locator(".bar-nav > *")).toHaveText(["Home", "Documentation", "Samples", "Playground"]);
   await expect(page.locator(".bar .search-button")).toBeVisible();
   const here = page.locator(".bar-nav a", { hasText: "Samples" });
   await expect(here).toBeVisible();

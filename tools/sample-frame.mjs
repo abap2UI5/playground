@@ -72,8 +72,11 @@ export const SOCIALS = `<div class="socials">
         <a href="https://abap2ui5.github.io/docs/resources/support">Support</a>
         <a href="https://abap2ui5.github.io/docs/resources/contribution">Contribute</a>
         <a href="https://abap2ui5.github.io/docs/resources/sponsor">Sponsor</a>
+        <a href="https://abap2ui5.github.io/test-docs/">For decision makers</a>
         <span class="menu-head">Tools</span>
         <a href="https://abap2ui5.github.io/playground/ai/" data-site="ai">AI Studio</a>
+        <a href="https://abap2ui5.github.io/layout-editor/">Layout Editor</a>
+        <a href="https://abap2ui5-addons.github.io/abap-cloud-gui/">Report converter</a>
         <a href="https://github.com/abap2UI5/linter" target="_blank" rel="noopener">Linter</a>
         <a href="https://abap2ui5.github.io/linter/">Linter rules</a>
         <a href="https://github.com/abap2UI5/vscode-extension" target="_blank" rel="noopener">VS Code extension</a>
@@ -144,7 +147,7 @@ export const SOCIALS = `<div class="socials">
  * door of the project, and pressing it in the samples put them on the front of
  * the samples, which is where the Samples item goes and where most of them
  * already were. Reported from the published site. The row reads: the mark, a
- * hairline, the five sections - Home, Documentation, Samples, Playground, AI Studio -,
+ * hairline, the four sections - Home, Documentation, Samples, Playground -,
  * the search box in the middle, then a hairline, LinkedIn, GitHub and the
  * button that opens the menu (SOCIALS above, wired by MENU_SCRIPT). The box
  * itself is `search.mjs` beside these pages, one module for all 772 of them
@@ -156,7 +159,7 @@ export const SOCIALS = `<div class="socials">
  * loads the same file - so a reader who arrives from there has it already. */
 export const SEARCH_SCRIPT = (up) => `<script type="module" src="${up}samples/search.mjs"></script>`;
 
-/* `current` is which of the five the page IS: the catalogue and the sample
+/* `current` is which of the four the page IS: the catalogue and the sample
  * pages are Samples, and the 404 (not-found-page.mjs) is none of them - a
  * page that is not there must not tell a screen reader it is the samples
  * page. */
@@ -170,7 +173,6 @@ export const bar = (up, current = "samples") => `<header class="bar">
     <a href="https://abap2ui5.github.io/docs/get_started/about" data-site="docs" data-scope="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 7.2C10.5 5.9 8.5 5.2 6 5.2H3.3v11.9H6c2.5 0 4.5.7 6 1.9 1.5-1.2 3.5-1.9 6-1.9h2.7V5.2H18c-2.5 0-4.5.7-6 1.9z"/><path d="M12 7.2v11.8"/></svg><span data-text="Documentation" data-short="Docs">Documentation</span></a>
     <a href="${up}samples/"${current === "samples" ? ` aria-current="page"` : ""} data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.2" y="4.8" width="17.6" height="14.4" rx="2"/><path d="M3.2 9.4h17.6M8.5 9.4v9.8"/></svg><span data-text="Samples" data-short="Samples">Samples</span></a>
     <a href="${up}" data-site="playground" title="Write ABAP and run it in the browser"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M10.2 8.4v7.2a.5.5 0 0 0 .76.43l5.8-3.6a.5.5 0 0 0 0-.86l-5.8-3.6a.5.5 0 0 0-.76.43z" fill="currentColor" stroke="none"/></svg><span data-text="Playground" data-short="Play">Playground</span></a>
-    <a href="${up}ai/" data-site="ai" title="Build an app from a description, in the browser"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"><path d="m12 4 1.9 5.1L19 11l-5.1 1.9L12 18l-1.9-5.1L5 11l5.1-1.9z"/><path d="M5 3.5v3M3.5 5h3M19 16.5v3M17.5 18h3"/></svg><span data-text="AI Studio" data-short="AI">AI Studio</span></a>
   </nav>
   <span class="search-slot" data-search></span>
   ${SOCIALS}

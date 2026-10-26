@@ -58,20 +58,30 @@ same relative `../fonts/…`, because both sit exactly one directory down. The
 shell's bundle marks `*.woff2` external for that reason — bundled, esbuild
 would copy the files a second time under hashed names beside `assets/`.
 
-**What the bar carries, left to right.** The mark and the name, then the five
+**What the bar carries, left to right.** The mark and the name, then the four
 sections of the project — **Home**, **Documentation**, **Samples**,
-**Playground**, **AI Studio** — then the search box, then the two marks and
-the menu behind the last button. Home and Documentation are two pages of the
-documentation's deployment; Samples, Playground and the AI Studio are here.
-The studio was in the menu only until 2026-10-23, which made it the one door
-of the project a reader had to know about to find: the README and the
-documentation name four ways in, and the bar named three of them.
+**Playground** — then the search box, then the two marks and the menu behind
+the last button. Home and Documentation are two pages of the documentation's
+deployment; Samples and Playground are here.
+
+**The bar names places; tools are in the menu.** The four sections are the
+one site a developer moves around in — read, find a sample, try it. Everything
+else is a tool or a page for another reader, stands on its own, and is
+reached from the menu's **Tools** list: the **AI Studio** (`/ai/`, here),
+the **Layout Editor** (abap2UI5/layout-editor) and the **Report converter**
+(abap2UI5-addons/abap-cloud-gui), and, among the practical links,
+**For decision makers** (abap2UI5/test-docs). The studio was a fifth section
+from 2026-10-23 to 2026-10-26, so that it would not be the one door a reader
+had to know about; it went back to the menu when the line between the site
+and its tools was drawn, and the playground's toolbar still carries a link to
+it beside Samples. The standalone tools keep their own bars and link back to
+the documentation from their brand or nav; they do not carry this bar.
 
 Each section carries its **mark** in front of its name — a house, a book, a
-window, a play button, a sparkle — in the link's own colour, so the section
-you are on is marked twice.
+window, a play button — in the link's own colour, so the section you are on
+is marked twice.
 Below 620px the names are clipped away and each mark carries its **short
-name** under it instead — Home, Docs, Samples, Play, AI, from `data-short` on the
+name** under it instead — Home, Docs, Samples, Play, from `data-short` on the
 same span the full word is on: four full names and their marks are 499px of a
 390px screen, and the row ran off the end of it, but four marks with no word
 were four guesses for a reader who arrived from a link, and a tooltip does not
@@ -81,7 +91,7 @@ alt (`content: attr(data-short) / ""`) so it is not read twice. The three
 copies of the bar say it, and the manual borrows one of them;
 `tests/catalogue.spec.js` holds the phone. On the studio's own page
 (`ai/index.html`, written from the shell's document by `site-documents.mjs`)
-the studio's item is the bold one and Playground is a link again.
+no section is the bold one and Playground is a link again.
 
 **The playground's bar used to be the exception, and is not any more.** It was
 one row carrying both the project's bar and this page's workbench — undo,

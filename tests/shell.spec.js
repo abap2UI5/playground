@@ -446,11 +446,11 @@ test("the bar begins and ends as the sample catalogue's bar does", async ({ page
   await expect(page.locator(".brand")).toHaveText("abap2UI5");
   await expect(page.locator(".brand img")).toBeVisible();
 
-  // And the same far end: the five sections - Home, Documentation, Samples,
-  // where you are, and the AI Studio - then LinkedIn and GitHub, then the
-  // button that opens the rest.
-  await expect(page.locator(".bar-nav > *")).toHaveText(["Home", "Documentation", "Samples", "Playground", "AI Studio"]);
-  await expect(page.locator('.bar-nav a[data-site="ai"]')).toHaveAttribute("href", "ai/");
+  // And the same far end: the four sections - Home, Documentation, Samples
+  // and where you are - then LinkedIn and GitHub, then the button that opens
+  // the rest. The AI Studio is a tool, in that menu and in the toolbar.
+  await expect(page.locator(".bar-nav > *")).toHaveText(["Home", "Documentation", "Samples", "Playground"]);
+  await expect(page.locator('.bar-nav a[data-site="ai"]')).toHaveCount(0);
   // The same box the other three bars carry, in the same place: the middle of
   // the row. It used to sit at the right-hand end here, because the workbench
   // owned the middle - the workbench has a row of its own now.
@@ -470,7 +470,8 @@ test("the bar begins and ends as the sample catalogue's bar does", async ({ page
   await extra.locator("summary").click();
   await expect(theme).toBeVisible();
   expect(await extra.locator(".menu a").count()).toBeGreaterThanOrEqual(10);
-  for (const part of ["github.com/abap2UI5/linter", "github.com/abap2UI5/vscode-extension", "github.com/abap2UI5-addons"]) {
+  for (const part of ["github.com/abap2UI5/linter", "github.com/abap2UI5/vscode-extension", "github.com/abap2UI5-addons",
+    "abap2ui5.github.io/layout-editor/", "abap2ui5-addons.github.io/abap-cloud-gui/", "abap2ui5.github.io/test-docs/"]) {
     await expect(extra.locator(`.menu a[href*="${part}"]`).first()).toBeVisible();
   }
   await page.keyboard.press("Escape");
