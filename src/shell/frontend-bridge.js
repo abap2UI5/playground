@@ -352,8 +352,17 @@
       var view = f && f.ViewSlots.getView(f.ctx, slot);
       var model = view && (f.ViewSlots.trackedModel(view) || view.getModel());
       if (!model || typeof model.setProperty !== "function") return false;
+      // Marked in the set the frontend's change tracking keeps on the model
+      // (actions/Slots trackChanges) - the one pending( ) reads, and the one
+      // the next event's delta is built from. Not through a frontend helper:
+      // ViewSlots.markChanged, which did exactly this, went with
+      // cc/Scrolling (abap2UI5#2935), and the call threw after the value was
+      // in the field - the reader saw it, and their click never sent it.
+      // A model without the set is not one an event ships a delta of.
+      var changed = model._z2ui5ChangedPaths;
+      if (!changed || typeof changed.add !== "function") return false;
       model.setProperty(path, value);
-      f.ViewSlots.markChanged(view, path);
+      changed.add(path);
       carry(model, path);
       return true;
     },
