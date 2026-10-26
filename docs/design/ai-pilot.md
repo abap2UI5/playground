@@ -88,7 +88,11 @@ Details that are easy to undo:
   two client acts, values first: they are pending in the session and are
   written into the frame's model and marked changed (`fill( )`, the way
   typing marks them), so the reader sees them arrive, and a click of the
-  reader's own would carry them on. The request that goes out is the one a
+  reader's own would carry them on. Marked by adding the path to the model's
+  `_z2ui5ChangedPaths` itself, the set `pending( )` reads: the frontend's
+  `ViewSlots.markChanged` did that until abap2UI5#2935 removed it with
+  `cc/Scrolling`, and the bridge calling it threw after the value was in the
+  field - shown, never sent. The request that goes out is the one a
   single act would send. An act whose event is not there to press (unknown,
   disabled) is refused as ONE act, before anything is typed.
 - **What the Pilot's request carried is cleared in the frame.** Its

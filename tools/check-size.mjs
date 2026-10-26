@@ -72,7 +72,11 @@ const TRANSFERRED = [
    * worker's. */
   { file: "editor/*.mjs", limit: 0.85 * MB, note: "abaplint, the transpiler and the abap2UI5 linter, in the registry worker" },
   { file: "runtime/framework.mjs", limit: 0.8 * MB, note: "abap2UI5 and open-abap, transpiled" },
-  { file: "editor/corpus.json", limit: 0.6 * MB, note: "the ABAP sources the editor checks against" },
+  /* 0.60 until the pin bump to abap2UI5@4e0f3a01: the framework grew by
+   * z2ui5_cl_ui5_llm_guide (a thousand lines) and the corpus to 0.61 MB.
+   * The corpus ships whole on purpose (AGENTS.md, "Deliberate limits"), so
+   * the budget moved rather than the class. */
+  { file: "editor/corpus.json", limit: 0.65 * MB, note: "the ABAP sources the editor checks against" },
   { file: "runtime/sql-wasm.wasm", limit: 0.4 * MB, note: "SQLite" },
   /* The sample catalogue at /samples/ is its own document and its own wait:
    * nobody downloads it to write ABAP, and nobody downloads the playground to
