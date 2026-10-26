@@ -98,17 +98,16 @@ function writeAiPage(html, metafile) {
     .replace("<head>", `<head>\n<base href="../">${preloadsFor(metafile, "src/shell/chat.mjs")}`)
     .replace(/<title>[^<]*<\/title>/, "<title>AI Studio · abap2UI5</title>")
     .replace(/<link rel="canonical"[^>]*>/, '<link rel="canonical" href="https://abap2ui5.github.io/playground/ai/">')
-    // The bar: on this document the studio is where the reader IS, so its
-    // item is the bold one and Playground is a link again - to the
-    // workbench's front, which `<base href="../">` resolves "./" to. The
-    // Playground link carries `data-site` so site-memory lifts it to where
-    // the reader left the workbench, the way every other bar's does.
+    // The bar: the studio is a tool, not one of the bar's sections (it is in
+    // the menu and the toolbar), so on this document no section is the bold
+    // one and Playground is a link again - to the workbench's front, which
+    // `<base href="../">` resolves "./" to. The Playground link carries
+    // `data-site` so site-memory lifts it to where the reader left the
+    // workbench, the way every other bar's does.
     .replace(/<span class="here" aria-current="page">([\s\S]*?data-text="Playground"[\s\S]*?<\/span>)<\/span>/,
-      '<a href="./" data-site="playground" title="Write ABAP and run it in the browser">$1</a>')
-    .replace(/<a href="ai\/" data-site="ai"[^>]*>([\s\S]*?data-text="AI Studio"[\s\S]*?<\/span>)<\/a>/,
-      '<span class="here" aria-current="page">$1</span>');
+      '<a href="./" data-site="playground" title="Write ABAP and run it in the browser">$1</a>');
   for (const mark of ['data-page="ai"', '<base href="../">', "<title>AI Studio", 'canonical" href="https://abap2ui5.github.io/playground/ai/"',
-    '<a href="./" data-site="playground"', '<span class="here" aria-current="page"><svg']) {
+    '<a href="./" data-site="playground"']) {
     if (!page.includes(mark)) {
       console.error(`build-site: ERROR the AI page could not be written - ${mark} did not land in src/shell/index.html's copy`);
       process.exit(1);

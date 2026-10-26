@@ -42,8 +42,8 @@ test("an address that is not a page answers 404 with this site's own page", asyn
   expect(html).toContain('<meta name="robots" content="noindex">');
 
   await expect(page.locator("h1")).toHaveText("This page is not here");
-  // The frame: the five sections and the box, the same bar as every other page.
-  await expect(page.locator(".bar-nav a")).toHaveCount(5);
+  // The frame: the four sections and the box, the same bar as every other page.
+  await expect(page.locator(".bar-nav a")).toHaveCount(4);
   await expect(page.locator(".search-slot")).toBeVisible();
   // ...and the bar does not claim this is the samples page.
   await expect(page.locator('.bar-nav a[aria-current="page"]')).toHaveCount(0);

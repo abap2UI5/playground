@@ -2018,9 +2018,10 @@ button.insight-row {
     color: inherit;
   }
 }
-/* FIVE MARKS AT 320. With the AI Studio the row is five 40px items, and
+/* MARKS AT 320. With the AI Studio the row was five 40px items, and
    brand, row, search and the menu came to 355px of a 320px screen: the whole
-   page moved sideways by 35. Under 380 the items keep the 34px a thumb is
+   page moved sideways by 35. The studio has moved to the menu since and four
+   items fit, but the rule stays: it is what keeps a fifth from doing that again. Under 380 the items keep the 34px a thumb is
    given (the coarse-pointer rule below) and lose the rest of their padding,
    and the bar's gaps close by 2: 42px back, which is the 35 and some air. */
 @media (max-width: 380px) {
