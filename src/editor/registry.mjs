@@ -277,10 +277,6 @@ export const languageServer = (method, params, files) => call("ls", method, para
 // carries `problems` when the transpiler refused something at a line.
 export const compile = (files) => call("compile", files);
 
-// A classic report to a class of abap-cloud-gui's report runtime, in the
-// worker (registry-worker.mjs, convertReport) - see src/shell/report2cloud.mjs.
-export const convertReport = (report) => call("convertReport", report);
-
 // Every class and interface completion can offer: the corpus's, told once,
 // with the user's own merged in - read off the file names, which is where
 // the object type lives for a file the editor holds.

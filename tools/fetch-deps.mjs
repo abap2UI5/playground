@@ -66,18 +66,6 @@ export const PINS = [
     note: "the samples the page opens on and lists as built in",
   },
   {
-    /* report2cloud and the runtime it converts into: a classic report
-     * (.prog.abap) in the editor is converted in the browser into a class
-     * of abap-cloud-gui's report runtime, and runs (tools/build-report2cloud.mjs).
-     * The converter and the runtime classes come out of the same commit, so
-     * a converted class always meets the runtime it was converted for. Its
-     * abap2UI5 release is the framework pin's (abaplint.jsonc there names it). */
-    name: "abap-cloud-gui",
-    url: "https://github.com/abap2UI5-addons/abap-cloud-gui",
-    sha: "348528653b14afdece528cfba85916c94a0f90a3",
-    note: "report2cloud and the report runtime - the converter bundled, src/01 transpiled for the runtime",
-  },
-  {
     name: "open-abap-core",
     url: "https://github.com/open-abap/open-abap-core",
     // The commit abap2UI5 itself pins, so the playground transpiles the

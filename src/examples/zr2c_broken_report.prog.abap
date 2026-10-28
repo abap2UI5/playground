@@ -1,4 +1,0 @@
-REPORT zr2c_broken_report.
-
-START-OF-SELECTION.
-  CALL TRANSACTION 'SE38'.

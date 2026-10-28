@@ -1,10 +1,8 @@
 #!/usr/bin/env node
 // The build, arranged the way the steps actually depend on one another.
 //
-// There are six: fetch the pinned sources, build the framework, build the UI5
-// frontend, build the sample catalogue, assemble the site, and build
-// report2cloud (the converter and the report runtime of abap-cloud-gui, which
-// transpiles against the site's corpus). The second and third
+// There are five: fetch the pinned sources, build the framework, build the UI5
+// frontend, build the sample catalogue, assemble the site. The second and third
 // are the slow ones - a downport of
 // nine hundred ABAP files that takes about three minutes, and a UI5 build that
 // takes about two - and they have nothing whatever to do with each other. They
@@ -36,7 +34,6 @@ const STEPS = {
   ui5: "tools/build-ui5.mjs",
   site: "tools/build-site.mjs",
   catalogue: "tools/build-catalogue.mjs",
-  report2cloud: "tools/build-report2cloud.mjs",
 };
 
 // `label` is what turns a step's output into something readable next to another
@@ -94,8 +91,6 @@ try {
   // so, not a broken build (tools/build-catalogue.mjs says why at length).
   await run("catalogue");
   await run("site");
-  // after the site: it transpiles against the corpus the site step wrote
-  await run("report2cloud");
 } catch (e) {
   console.error(`build: ${e.message}`);
   process.exit(1);
