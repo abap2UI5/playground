@@ -52,7 +52,60 @@ const filesReady = new Promise((resolve) => {
 
 const progress = (done, total) => post({ type: "progress", done, total });
 
+// report2cloud: the converter and the report runtime's ABAP, fetched on the
+// first report converted (tools/build-report2cloud.mjs writes both). The
+// converter's bundle carries no abaplint of its own - it reads this one's
+// off globalThis, set before it is imported.
+let converter;
+function loadConverter() {
+  if (!converter) {
+    globalThis.__pgAbaplint = core.lentAbaplint();
+    converter = import(/* @vite-ignore */ new URL("../report2cloud/convert.mjs", self.location.href).href);
+    converter.catch(() => {
+      converter = undefined;
+    });
+  }
+  return converter;
+}
+let library;
+function loadLibrary() {
+  if (!library) {
+    library = fetch(new URL("../report2cloud/library.json", self.location.href)).then((response) => {
+      if (!response.ok) throw new Error(`report2cloud/library.json: ${response.status}`);
+      return response.json();
+    });
+    library.catch(() => {
+      library = undefined;
+    });
+  }
+  return library;
+}
+
 const OPS = {
+  // A classic report to a class of the report runtime: its files, what was
+  // refused at which line, the TODOs, the migration report - and the report
+  // runtime added to the registry, so the class checks. The text pool is
+  // the report's .prog.xml when the set has one.
+  async convertReport({ name, source, textpool }) {
+    const [lib, { convert, defaultClassName, migrationReport, parseTextpool }] = await Promise.all([loadLibrary(), loadConverter()]);
+    core.addLibrary(lib.files);
+    const program = name.replace(/\.prog\.abap$/, "");
+    const result = convert(source, {
+      file: name,
+      className: defaultClassName(program),
+      programName: program,
+      textpool: textpool === undefined ? undefined : parseTextpool(textpool),
+    });
+    return {
+      ok: result.ok,
+      className: result.className,
+      files: result.ok ? result.files : {},
+      refusals: result.refusals.map((r) => ({ line: r.row, column: r.col, message: r.message })),
+      todos: result.todos.map((t) => ({ line: t.row, column: t.col, message: t.message })),
+      report: migrationReport(result, { source: name, texts: textpool === undefined ? undefined : name.replace(/\.abap$/, ".xml") }),
+      commit: lib.commit,
+    };
+  },
   async build({ settings }) {
     if (settings) core.useAbaplintSettings(settings);
     const corpus = await corpusReady;

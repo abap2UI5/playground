@@ -27,16 +27,16 @@ to it and `tests/pilot.spec.js` runs that check.
 
 ## The build pipeline
 
-`npm run build` is `tools/build.mjs`, which runs five steps, each cached by a
+`npm run build` is `tools/build.mjs`, which runs six steps, each cached by a
 hash of its inputs, so only the first build costs minutes. Steps 2 and 3 run
 **together** — they read different sources and write to different places, and
-only steps 4 and 5 read what either produced — so a cold build costs the longer of
+only steps 4 to 6 read what either produced — so a cold build costs the longer of
 them rather than both. Their output is streamed with the step's name in front
 of each line. Each step is still its own script and still runnable by name
 (`npm run build:framework`):
 
 1. **`tools/fetch-deps.mjs`** pins `abap2UI5/abap2UI5`, its published
-   frontend, `open-abap-core` and `abap2UI5/samples` by commit SHA under
+   frontend, `abap2UI5-addons/abap-cloud-gui`, `open-abap-core` and `abap2UI5/samples` by commit SHA under
    `deps/`. Bumping a pin is editing the sha there — nothing else fetches
    source. The samples pin is the one that decides which code the page opens
    on, so a bump of it is a change to the site, not only to the toolchain.
@@ -168,6 +168,15 @@ of each line. Each step is still its own script and still runnable by name
    browser can link a row to the ABAP, and `src/editor/samples.mjs` is their
    only importer; `src/editor/sample-list.mjs` is the half of the catalogue
    Node can read, which is what the tests import.
+6. **`tools/build-report2cloud.mjs`** writes `dist/report2cloud/`: the
+   report2cloud converter of the abap-cloud-gui pin, bundled on the registry
+   worker's abaplint (`convert.mjs`); the addon's report runtime as source for
+   the corpus (`library.json`); and that runtime transpiled with
+   `transpileObjects()` against `corpus.json`, which is why it runs after the
+   site step (`runtime.json`). None of it is fetched before the first classic
+   report ([report2cloud.md](report2cloud.md)). Its stamp is
+   `report2cloud.stamp`, over the pin, this tool, the transpile module and
+   the lockfile.
 
 ## Debug builds
 

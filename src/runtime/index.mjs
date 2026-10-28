@@ -274,9 +274,8 @@ export async function defineClasses(chunks) {
   }
   shadowedDdic.clear();
   const ddicBefore = { ...ddic };
-  // The set's CREATE TABLEs, which its last chunk puts here (schemaChunk( )
-  // in src/editor/transpile-core.mjs); a set from before that chunk existed
-  // brings none.
+  // The set's CREATE TABLEs, which the chunks add here (schemaChunk( ) in
+  // src/editor/transpile-core.mjs) - the user's, and a library's before them.
   globalThis.abap.playgroundSchema = [];
   const before = { ...classes };
   // Only the chunks of THIS set keep a line table: every class name ever

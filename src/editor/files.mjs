@@ -28,6 +28,11 @@ const TEST_PATTERN = /^([a-z][a-z0-9_]*)\.clas\.testclasses\.abap$/;
 // of the table the way a test include is a second file of its class.
 const TABLE_PATTERN = /^([a-z][a-z0-9_]*)\.tabl\.xml$/;
 const SEED_PATTERN = /^([a-z][a-z0-9_]*)\.tabu\.json$/;
+// A classic report and its text pool (selection texts, text symbols, the
+// screens): converted on Run into a class of abap-cloud-gui's report runtime
+// (src/shell/report2cloud.mjs), which then runs like any other class.
+const PROG_PATTERN = /^([a-z][a-z0-9_]*)\.prog\.abap$/;
+const TEXTPOOL_PATTERN = /^([a-z][a-z0-9_]*)\.prog\.xml$/;
 
 export function parseName(fileName) {
   const test = TEST_PATTERN.exec(fileName);
@@ -36,6 +41,10 @@ export function parseName(fileName) {
   if (table) return { object: table[1].toUpperCase(), kind: "tabl" };
   const seed = SEED_PATTERN.exec(fileName);
   if (seed) return { object: seed[1].toUpperCase(), kind: "tabl", include: "tabu" };
+  const prog = PROG_PATTERN.exec(fileName);
+  if (prog) return { object: prog[1].toUpperCase(), kind: "prog" };
+  const textpool = TEXTPOOL_PATTERN.exec(fileName);
+  if (textpool) return { object: textpool[1].toUpperCase(), kind: "prog", include: "textpool" };
   const match = NAME_PATTERN.exec(fileName);
   if (!match) return undefined;
   return { object: match[1].toUpperCase(), kind: match[2] };
@@ -53,8 +62,12 @@ export const classFileOf = (fileName) => fileName.replace(/\.clas\.testclasses\.
 export function ownerFileOf(fileName) {
   if (TEST_PATTERN.test(fileName)) return classFileOf(fileName);
   if (SEED_PATTERN.test(fileName)) return fileName.replace(/\.tabu\.json$/, ".tabl.xml");
+  if (TEXTPOOL_PATTERN.test(fileName)) return fileName.replace(/\.prog\.xml$/, ".prog.abap");
   return undefined;
 }
+
+// Whether a file is a classic report - the report itself, not its text pool.
+export const isReportFile = (fileName) => PROG_PATTERN.test(String(fileName));
 
 // The files that go when this one is closed: the second files that belong to it.
 export function dependentsOf(fileName) {
@@ -62,6 +75,7 @@ export function dependentsOf(fileName) {
     return [fileName.replace(/\.clas\.abap$/, ".clas.testclasses.abap")];
   }
   if (TABLE_PATTERN.test(fileName)) return [fileName.replace(/\.tabl\.xml$/, ".tabu.json")];
+  if (PROG_PATTERN.test(fileName)) return [fileName.replace(/\.prog\.abap$/, ".prog.xml")];
   return [];
 }
 
@@ -76,7 +90,8 @@ export function nameProblem(fileName, existing = [], all = existing) {
       `A file is named like it is in abapGit: a lower-case object name, then ` +
       `.clas.abap for a class or .intf.abap for an interface - or ` +
       `.clas.testclasses.abap for a class's unit tests, .tabl.xml for a ` +
-      `database table and .tabu.json for its rows. For example ` +
+      `database table and .tabu.json for its rows, .prog.abap for a classic ` +
+      `report and .prog.xml for its text pool. For example ` +
       `zcl_detail.clas.abap.`
     );
   }
@@ -85,7 +100,9 @@ export function nameProblem(fileName, existing = [], all = existing) {
   if (owner && !all.includes(owner)) {
     return parsed.include === "tabu"
       ? `${fileName} holds the rows of ${owner}, which is not open - add the table first.`
-      : `${fileName} holds the tests of ${owner}, which is not open - add the class first.`;
+      : parsed.include === "textpool"
+        ? `${fileName} holds the text pool of ${owner}, which is not open - add the report first.`
+        : `${fileName} holds the tests of ${owner}, which is not open - add the class first.`;
   }
   return undefined;
 }
@@ -96,8 +113,9 @@ export function nameProblem(fileName, existing = [], all = existing) {
 export function sidecarFor(fileName) {
   const parsed = parseName(fileName);
   // A test include is a second file of its class, which has the sidecar; a
-  // table's definition IS its XML, and its rows are no object of their own.
-  if (!parsed || parsed.include || parsed.kind === "tabl") return undefined;
+  // table's definition IS its XML, and its rows are no object of their own;
+  // a report's XML is its text pool, the reader's own.
+  if (!parsed || parsed.include || parsed.kind === "tabl" || parsed.kind === "prog") return undefined;
   const xmlName = fileName.replace(/\.abap$/, ".xml");
   // Named after the object: one constant description on every sidecar failed
   // abaplint's identical_descriptions (on in app-template's config) as soon
@@ -207,9 +225,11 @@ export function checkFileSet(files) {
     if (problem) throw new Error(problem);
     seen.add(file.name);
   }
+  // A class, or a classic report the Run converts into one (its text pool is
+  // the report's include, never the app on its own).
   const first = parseName(files[0].name);
-  if (first?.kind !== "clas" || first.include) {
-    throw new Error(`The first file is the app, so it has to be a class - ${files[0].name} is not.`);
+  if ((first?.kind !== "clas" && first?.kind !== "prog") || first.include) {
+    throw new Error(`The first file is the app, so it has to be a class or a report - ${files[0].name} is not.`);
   }
   return files.map(({ name, source }) => ({ name, source }));
 }
