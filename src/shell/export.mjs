@@ -113,13 +113,9 @@ function readme(files, url) {
       lines.push(`- \`data/${file.name}\` - the rows of ${parsed.object}, as abapGit keeps table contents`);
       continue;
     }
-    const what = parsed.include === "textpool"
-      ? "the text pool of the report"
-      : parsed.include
+    const what = parsed.include
       ? "unit tests"
-      : parsed.kind === "prog"
-        ? "a classic report, converted by report2cloud of abap-cloud-gui"
-        : parsed.kind === "tabl"
+      : parsed.kind === "tabl"
         ? "database table"
         : parsed.kind === "intf"
           ? "interface"

@@ -55,13 +55,12 @@ function nameFrom(url) {
   const last = url.pathname.split("/").pop() ?? "";
   // A class, an interface, or a class's test include - the third is the file
   // src/editor/files.mjs is written to take beside its class, and a link that
-  // names both is a link to an app with its tests. And a classic report, with
-  // its text pool beside it - the Run converts it (src/shell/report2cloud.mjs).
+  // names both is a link to an app with its tests.
   // Case-insensitive like the name it returns: Z2UI5_X.CLAS.ABAP is the same
   // object as z2ui5_x.clas.abap.
-  if (!/\.(clas|intf|prog)\.abap$|\.clas\.testclasses\.abap$|\.prog\.xml$/i.test(last)) {
+  if (!/\.(clas|intf)\.abap$|\.clas\.testclasses\.abap$/i.test(last)) {
     throw new Error(
-      `${last || url.href} is not an ABAP object file. A link points at a .clas.abap, a .intf.abap, a .clas.testclasses.abap, or a report's .prog.abap and .prog.xml.`,
+      `${last || url.href} is not an ABAP object file. A link points at a .clas.abap, a .intf.abap or a .clas.testclasses.abap.`,
     );
   }
   return last.toLowerCase();

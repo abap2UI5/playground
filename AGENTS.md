@@ -56,7 +56,6 @@ read them before touching `tools/` or `src/runtime/`.
 | `share-dialog.mjs`, `export.mjs`, `zip.mjs` | The Share dialog (link, embed block, markdown fence, Gist), the abapGit package layout (tables in `src/`, rows in `data/`), a stored zip written by hand |
 | `gist.mjs` | `?gist=<id>` read, a gist written |
 | `deep-link.mjs` | `?src=`: the host allow list, `rawFor()`, siblings |
-| `report2cloud.mjs` | A classic report on Run: `convertedSet()` through the worker, the report runtime's chunks (`dist/report2cloud/runtime.json`) |
 | `linked-code.mjs` | What is asked because a link's code runs here (`markLinkedCodeRan()`, the Pilot's `#linked-dialog`) |
 | `embed.mjs` | Messages to an embedding page (`ready`, `status`, `height`, `edited`; `reset` in); `?readonly=`, `?lines=` |
 | `examples.mjs` | The samples dialog over `samples/apps.json` |
@@ -111,8 +110,7 @@ read them before touching `tools/` or `src/runtime/`.
 | `registry.mjs` | The page's client of the registry worker |
 | `registry-worker.mjs` | The worker's entry: abaplint, the corpus, the transpiler |
 | `registry-core.mjs` | abaplint as it runs there; `formatFiles()`, `FORMAT_RULES`, clock-yielded parse |
-| `transpile-core.mjs` | Single-object transpile in the worker; source maps for dumps; `transpileObjects()` (also at build time) |
-| `report2cloud-entry.mjs` | The converter's bundle (`dist/report2cloud/convert.mjs`), on the worker's abaplint |
+| `transpile-core.mjs` | Single-object transpile in the worker; source maps for dumps |
 | `transpile.mjs` | The page's side of the compile |
 | `providers.mjs` | Monaco's language providers over the worker |
 | `lint-core.mjs` | The abap2UI5 linter in the worker |
@@ -140,11 +138,11 @@ read them before touching `tools/` or `src/runtime/`.
 | `src/catalogue/` | `/samples/`: `index.html`, `catalogue.css`, `catalogue.mjs` (the page), `search-entry.mjs` (→ `samples/search.mjs`), `page-entry.mjs` (→ `samples/page.mjs`: site memory, `outline.mjs`, `lines.mjs`, `run-jump.mjs`), `sample.css` (sample pages) |
 | `src/vendor/agent/` | abap2UI5/mcp-server's agent client, copied **unchanged** by `tools/vendor-agent.mjs` (`source.json`; `--check`). Never edited here |
 | `src/abap/` | `zcl_pg_bridge`, the playground's only ABAP |
-| `src/examples/` | ABAP served statically so `?src=` tests have same-origin targets (two classic reports among them) |
+| `src/examples/` | ABAP served statically so `?src=` tests have same-origin targets |
 | `src/embed/` | `abap2ui5-embed.js` (the loader), `index.html` ("Eight shapes"), `host.html` (smallest embedding) |
 | `src/fonts/` | Inter, self-hosted (`NOTICE.md`) |
-| `tools/build.mjs` | `npm run build`: the six steps, 2 and 3 together |
-| `tools/fetch-deps.mjs` | The pins (framework, frontend, abap-cloud-gui, open-abap-core, samples); `--update-pins`, `--print-latest` |
+| `tools/build.mjs` | `npm run build`: the five steps, 2 and 3 together |
+| `tools/fetch-deps.mjs` | The pins (framework, frontend, open-abap-core, samples); `--update-pins`, `--print-latest` |
 | `tools/build-framework.mjs` | Downport, transpile, bundle → `dist/runtime/framework.mjs` |
 | `tools/build-ui5.mjs` | The UI5 frontend → `dist/app/`; `frameOptions` and `checkLocal` patches |
 | `tools/build-catalogue.mjs` | `dist/samples/apps.json`, and the sample pages through `sample-pages.mjs` |
@@ -155,7 +153,6 @@ read them before touching `tools/` or `src/runtime/`.
 | `tools/abap-highlight.mjs` | Build-time ABAP colouring (published: the docs import it) |
 | `tools/html.mjs` | Comment stripping and `withPolicy()` (CSP) for every written document |
 | `tools/build-site.mjs` | The page, worker, linter and catalogue bundles; corpus; samples (`lessons.json`); examples; embed |
-| `tools/build-report2cloud.mjs` | report2cloud: `dist/report2cloud/` (converter, report runtime source and chunks) |
 | `tools/site-documents.mjs` | `writeIndex()`, the AI and Pilot pages, `preloadsFor()`, `writeCatalogueDocument()` |
 | `tools/service-worker.mjs` | `writeServiceWorker()`: build id, hashes, precached chunks |
 | `tools/esbuild-plugins.mjs` | The load-bearing esbuild plugins (shims, stubs, Monaco CSS) |
@@ -243,7 +240,6 @@ Each bullet names the design doc that explains it. Keep them true.
 - Every build step is cached by a stamp over its inputs AND checks its outputs exist. Run abaplint and the transpiler from `node_modules/.bin` by path, never `npx`.
 - The transpiler's `addCommonJS` and the esbuild flags (`keepNames`, injected `Buffer`, console/crypto shims) are load-bearing; the generated frontend (`z2ui5_cl_ui5f_*`) is a stub in the bundle.
 - `build-ui5.mjs` must fail loudly if `frameOptions="trusted"` or the ComponentSupport `data-settings` it patches are no longer there.
-- abap-cloud-gui is never in a default bundle: its converter, source and chunks are fetched on the first report (`dist/report2cloud/`, [report2cloud.md](docs/design/report2cloud.md)), and the converter uses the worker's abaplint, never a copy of its own.
 - Generated markers (`modulepreload`, `__EDITOR_PRELOADS__`, `__EDITOR_CSS__`, `__THEME_BOOT__`, `__THEME_MENU__`, the precache list) are written by the build, never by hand.
 
 **Runtime** ([runtime.md](docs/design/runtime.md))
@@ -291,9 +287,7 @@ Each bullet names the design doc that explains it. Keep them true.
 
 - **The first file is the app.** Positional on purpose; a required class name
   would force every deep link to rename what it points at. A test include
-  cannot be first for the same reason: it declares no app. A classic report
-  can be first - the Run converts it into the app
-  ([report2cloud.md](docs/design/report2cloud.md)) - and only first.
+  cannot be first for the same reason: it declares no app.
 - **Only what the transpiler implements.** Anything it cannot compile is
   reported in the panel; there is no fallback and none is wanted.
 - **Only the UI5 libraries in `UI5_LIBRARIES`** (`src/shell/ui5-libraries.mjs`,
@@ -359,4 +353,3 @@ sample pages' per-line markup and the 220 MB site budget
 | `src/catalogue/`, `build-catalogue.mjs`, sample pages, the 404 | [sample-catalogue.md](docs/design/sample-catalogue.md) |
 | The bar, palette, font, search box, site memory, anything shared with abap2UI5/docs | [one-site.md](docs/design/one-site.md) |
 | `tests/`, `playwright.config.js`, CI workflows | [testing.md](docs/design/testing.md) |
-| Classic reports, `report2cloud.mjs`, `build-report2cloud.mjs`, the abap-cloud-gui pin | [report2cloud.md](docs/design/report2cloud.md) |
