@@ -783,7 +783,10 @@ Five things nothing documents, each found the hard way (`src/editor/tables.mjs`,
 2. **`Transpiler.run` over the filtered view of the user's objects returns
    `databaseSetup.schemas.sqlite` holding exactly the user's `CREATE TABLE`s**
    - nothing of the framework's - which is what `compile()` hands the runtime
-   to create (`createStatements( )` in `transpile-core.mjs`).
+   to create, as one list (`schemaChunk( )` in `transpile-core.mjs`). Which
+   statement belongs to which table the result does not say, and the runtime
+   does not ask: the names, for the drop and the rows, come from the TABL
+   objects themselves.
 3. **Private attributes are JavaScript `#private` fields** in the transpiled
    class, invisible to any reflection from outside. The one way in is
    `FRIENDS_ACCESS_INSTANCE`, which the transpiler emits for `FRIENDS`; the
