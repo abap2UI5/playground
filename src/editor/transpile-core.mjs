@@ -25,8 +25,7 @@ import { isSeedFile, isTableFile, parseSeed, readTable } from "./tables.mjs";
 // transpiler is bundled statically here: it is off the page's thread now,
 // and the worker's bundle downloads beside the page's rather than after it.
 
-function onlyTheUsersObjects(reg) {
-  const objects = userObjects();
+function onlyThese(reg, objects) {
   return new Proxy(reg, {
     get(target, prop, receiver) {
       if (prop === "getObjects") return () => objects;
@@ -64,7 +63,20 @@ export async function compile(files) {
   // SELECT from a table nobody created.
   const seeds = tableSeeds(files);
 
-  const view = onlyTheUsersObjects(reg);
+  const chunks = await transpileObjects(reg, userObjects(), seeds);
+  if (!chunks.some((c) => c.object === entry)) {
+    throw new Error(`The transpiler produced no JavaScript for ${entry}.`);
+  }
+  return { chunks, tests: listTests() };
+}
+
+// The objects to JavaScript, as chunks in the order the runtime defines them
+// in - the user's files on every Run (compile above), and at build time a
+// library the page hands to the runtime before them: the classes of the
+// report runtime a converted report inherits from (tools/build-report2cloud.mjs).
+// seeds: the rows of the tables among the objects, by table name.
+export async function transpileObjects(reg, objects, seeds = new Map()) {
+  const view = onlyThese(reg, objects);
   const editorConfig = reg.getConfig();
 
   let output;
@@ -98,7 +110,7 @@ export async function compile(files) {
   }
 
   const creates = createStatements(output.databaseSetup?.schemas?.sqlite ?? []);
-  const chunks = ordered(output.objects.filter((o) => o.chunk)).map((o) => {
+  return ordered(output.objects.filter((o) => o.chunk)).map((o) => {
     const before = prologue(o);
     return {
       object: o.object.name,
@@ -111,11 +123,6 @@ export async function compile(files) {
       lines: lineTable(o.chunk, before),
     };
   });
-
-  if (!chunks.some((c) => c.object === entry)) {
-    throw new Error(`The transpiler produced no JavaScript for ${entry}.`);
-  }
-  return { chunks, tests: listTests() };
 }
 
 // The unit tests among the user's files: every local class FOR TESTING in a
@@ -240,7 +247,7 @@ function tableSeeds(files) {
 
 // The transpiler's CREATE TABLE for SQLite, by table name: it writes one per
 // transparent table of the objects it was handed, which is the user's tables
-// and nothing else (onlyTheUsersObjects).
+// and nothing else (onlyThese).
 function createStatements(statements) {
   const out = new Map();
   for (const sql of statements) {

@@ -19,6 +19,7 @@
     "test": "playwright test",
     "serve": "node tools/serve.mjs",
     "build:catalogue": "node tools/build-catalogue.mjs",
+    "build:report2cloud": "node tools/build-report2cloud.mjs",
     "lint": "eslint .",
     "typecheck": "tsc -p jsconfig.json --noEmit",
     "test:unit": "node --test \"tests/node/*.test.mjs\""

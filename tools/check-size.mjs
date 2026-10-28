@@ -78,6 +78,12 @@ const TRANSFERRED = [
    * the budget moved rather than the class. */
   { file: "editor/corpus.json", limit: 0.65 * MB, note: "the ABAP sources the editor checks against" },
   { file: "runtime/sql-wasm.wasm", limit: 0.4 * MB, note: "SQLite" },
+  /* report2cloud - only for a page that converts a report, fetched on the
+   * first conversion (tools/build-report2cloud.mjs): the converter, and the
+   * report runtime as source for the checks and as chunks for the runtime. */
+  { file: "report2cloud/convert.mjs", limit: 0.1 * MB, note: "the converter, abaplint borrowed from the registry worker" },
+  { file: "report2cloud/library.json", limit: 0.2 * MB, note: "the report runtime's ABAP, for the checks" },
+  { file: "report2cloud/runtime.json", limit: 0.3 * MB, note: "the report runtime, transpiled" },
   /* The sample catalogue at /samples/ is its own document and its own wait:
    * nobody downloads it to write ABAP, and nobody downloads the playground to
    * read it. Budgeted because it is the one file here that grows with the
@@ -109,7 +115,12 @@ const TRANSFERRED = [
 // deliberately, in the commit that spends it - and what is left above it is
 // room for the sample corpus to keep growing, not for the next feature to
 // land unmeasured.
-const TOTAL_LIMIT = 220 * MB;
+//
+// It moved from 220 MB with report2cloud: dist/report2cloud/ is 4.5 MB (the
+// report runtime of abap-cloud-gui transpiled, 3.4 MB of it), fetched only by
+// a page that converts a classic report (docs/design/report2cloud.md). The
+// headroom above it is the one the samples had before.
+const TOTAL_LIMIT = 225 * MB;
 
 // How much JavaScript stack the boot parse is allowed to want. Measured: the
 // shipped corpus needs a little over 130 KB, and needed more than 610 KB while

@@ -95,6 +95,11 @@ How the playground works, and what that means for you:
   case in the file name, start with z or y, at most 30 characters.
 - The FIRST file is the app: Run starts the class it declares. Use
   write_file with as_app: true for the app class.
+- A classic report (<name>.prog.abap, its text pool in <name>.prog.xml) can
+  be the app as well: Run converts it into a class of abap-cloud-gui and
+  starts that. What the converter refuses comes back as problems with
+  "report2cloud:" in front, at the line of the report - change the report
+  until there are none, never write the converted class yourself.
 - Use the tools to change the editor. Never paste code into the chat
   instead - the person sees the editor and the running app, and the files
   are what they take home. Write a new app as one complete write_file;
@@ -707,11 +712,11 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
     const source = str(input.source);
     if (!name || source === undefined) return { error: "write_file needs a name and a source (both strings)." };
     if (!parseName(name)) {
-      return { error: `${name} is not a file name the playground takes: <name>.clas.abap, <name>.intf.abap or <class>.clas.testclasses.abap, lower case.` };
+      return { error: `${name} is not a file name the playground takes: <name>.clas.abap, <name>.intf.abap, <class>.clas.testclasses.abap, or <name>.prog.abap for a classic report (converted on Run) with <name>.prog.xml for its text pool, lower case.` };
     }
     const parsed = parseName(name);
-    if (input.as_app === true && (parsed.kind !== "clas" || parsed.include)) {
-      return { error: `${name} cannot be the app - the app is a class (<name>.clas.abap) implementing z2ui5_if_app.` };
+    if (input.as_app === true && ((parsed.kind !== "clas" && parsed.kind !== "prog") || parsed.include)) {
+      return { error: `${name} cannot be the app - the app is a class (<name>.clas.abap) implementing z2ui5_if_app, or a classic report (<name>.prog.abap) the Run converts into one.` };
     }
     const files = host.files();
     const at = files.findIndex((f) => f.name === name);
