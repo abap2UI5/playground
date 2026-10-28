@@ -97,7 +97,7 @@ export async function compile(files) {
     reg.parse();
   }
 
-  const creates = createStatements(output.databaseSetup?.schemas?.sqlite ?? []);
+  /** @type {{ object: string | undefined, name: string | undefined, js: string, lines: any[][] }[]} */
   const chunks = ordered(output.objects.filter((o) => o.chunk)).map((o) => {
     const before = prologue(o);
     return {
@@ -107,7 +107,7 @@ export async function compile(files) {
       // says zcl_x.clas.mjs:LINE rather than <anonymous>:LINE, and LINE can
       // be looked up in `lines` - see locate( ) in src/runtime/index.mjs.
       name: baseName(o.filename),
-      js: before + o.chunk.getCode() + tableSetup(o, creates, seeds),
+      js: before + o.chunk.getCode() + tableSetup(o, reg, seeds),
       lines: lineTable(o.chunk, before),
     };
   });
@@ -115,6 +115,7 @@ export async function compile(files) {
   if (!chunks.some((c) => c.object === entry)) {
     throw new Error(`The transpiler produced no JavaScript for ${entry}.`);
   }
+  chunks.push(schemaChunk(output.databaseSetup?.schemas?.sqlite ?? []));
   return { chunks, tests: listTests() };
 }
 
@@ -238,29 +239,28 @@ function tableSeeds(files) {
   return rows;
 }
 
-// The transpiler's CREATE TABLE for SQLite, by table name: it writes one per
-// transparent table of the objects it was handed, which is the user's tables
-// and nothing else (onlyTheUsersObjects).
-function createStatements(statements) {
-  const out = new Map();
-  for (const sql of statements) {
-    const name = /^CREATE TABLE '([^']+)'/.exec(sql)?.[1];
-    if (name) out.set(name.toUpperCase(), sql);
-  }
-  return out;
+// The transpiler's CREATE TABLEs for SQLite: one per transparent table of the
+// objects it was handed, which is the user's tables and nothing else
+// (onlyTheUsersObjects). They are handed on as one list, executed as a whole
+// at every reset (createUserTables( ) in src/runtime/index.mjs) - which
+// statement belongs to which table is nothing the runtime needs to know, and
+// nothing the transpiler's result says.
+function schemaChunk(statements) {
+  return { object: undefined, name: undefined, js: `abap.playgroundSchema.push(...${JSON.stringify(statements)});\n`, lines: [] };
 }
 
-// What a table's chunk carries beside its DDIC type: the CREATE TABLE and the
-// rows to insert, on the DDIC entry the chunk has just made - which is how
-// the runtime knows the table by name, and where src/runtime/index.mjs finds
-// both at every Run. JSON is JavaScript, so the rows are written as they are.
-// A table that is not transparent (a structure) has no CREATE and gets none.
-function tableSetup(o, creates, seeds) {
+// What a table's chunk carries beside its DDIC type: the rows to insert, on
+// the DDIC entry the chunk has just made - which is how the runtime knows the
+// table by name, and where src/runtime/index.mjs finds them at every Run.
+// JSON is JavaScript, so the rows are written as they are. Only a transparent
+// table is created in the database (as the transpiler decides it, by the
+// table category); a structure gets nothing.
+function tableSetup(o, reg, seeds) {
   if (o.object.type !== "TABL") return "";
   const name = o.object.name.toUpperCase();
-  const create = creates.get(name);
-  if (create === undefined) return "";
-  const setup = { create, rows: seeds.get(name) ?? [] };
+  const table = /** @type {any} */ (reg.getObject("TABL", name));
+  if (table?.getTableCategory?.() !== "TRANSP") return "";
+  const setup = { rows: seeds.get(name) ?? [] };
   return `\nabap.DDIC[${JSON.stringify(name)}].playground = ${JSON.stringify(setup)};\n`;
 }
 

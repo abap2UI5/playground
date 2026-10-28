@@ -274,6 +274,9 @@ export async function defineClasses(chunks) {
   }
   shadowedDdic.clear();
   const ddicBefore = { ...ddic };
+  // The set's CREATE TABLEs, which the chunks add here (schemaChunk( ) in
+  // src/editor/transpile-core.mjs) - the user's, and a library's before them.
+  globalThis.abap.playgroundSchema = [];
   const before = { ...classes };
   // Only the chunks of THIS set keep a line table: every class name ever
   // defined used to keep one for the session, and locate( ) builds its
@@ -306,6 +309,7 @@ export async function defineClasses(chunks) {
   userTables = [...shadowedDdic.keys()]
     .filter((name) => ddic[name]?.playground)
     .map((name) => ({ name, ...ddic[name].playground }));
+  userSchema = globalThis.abap.playgroundSchema ?? [];
   await createUserTables();
 }
 
@@ -315,10 +319,12 @@ export async function defineClasses(chunks) {
 // like `shadowed` above for abap.Classes.
 const shadowedDdic = new Map();
 
-// The tables of the user's own (src/editor/tables.mjs): name, CREATE TABLE,
-// the rows it starts with - from the DDIC entries the last set defined
-// (tableSetup( ) in src/editor/transpile-core.mjs puts them there).
+// The tables of the user's own (src/editor/tables.mjs): name and the rows it
+// starts with - from the DDIC entries the last set defined (tableSetup( ) in
+// src/editor/transpile-core.mjs puts them there) - and the CREATE TABLEs of
+// all of them, one list (schemaChunk( ) there).
 let userTables = [];
+let userSchema = [];
 
 // The ones created in the database that is open now, to drop before the
 // next set's are created - a set defined without a reset in between (a Run
@@ -346,8 +352,10 @@ async function createUserTables() {
     if (frameworkTables.has(table.name)) {
       throw new Error(`${table.name} is already a DDIC object of the framework or of open-abap - give your table a name of its own.`);
     }
-    await db.execute(table.create);
-    created.add(table.name);
+  }
+  for (const name of userTables.map((t) => t.name)) created.add(name);
+  for (const statement of userSchema) await db.execute(statement);
+  for (const table of userTables) {
     const type = abap.DDIC[table.name].type();
     const fields = type.get();
     const mandt = abap.builtin.sy.get().mandt.get();
