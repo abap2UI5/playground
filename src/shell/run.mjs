@@ -16,6 +16,7 @@ import {
 import { declaredObjectName, entryClass } from "../editor/registry.mjs";
 import { compile } from "../editor/transpile.mjs";
 import { parseName } from "../editor/files.mjs";
+import { convertedSet, isReportSet } from "./report2cloud.mjs";
 import { setTestResults, showInsight, updateInsight } from "./insight.mjs";
 import { announceAppHeight } from "./embed.mjs";
 import { clearRoundtrips, roundtripList } from "./roundtrips.mjs";
@@ -153,14 +154,20 @@ export function firstLine(body) {
 function structuralProblem(files) {
   if (files.length === 0) return "There is nothing to run.";
   const first = parseName(files[0].name);
-  if (first?.kind !== "clas" || first.include) {
+  // A classic report first is converted into the class that starts
+  // (report2cloud.mjs); anywhere else it would be nobody's.
+  if ((first?.kind !== "clas" && first?.kind !== "prog") || first.include) {
     return `The playground starts the class in the first file, and ${files[0].name} is not a class.`;
   }
   for (const file of files) {
     const parsed = parseName(file.name);
+    if (parsed?.kind === "prog" && file !== files[0] && !parsed.include) {
+      return `${file.name} is a report - the playground converts the report in the first file, and only that one.`;
+    }
     // A test include declares local test classes, not the object; abaplint
-    // checks what is in it. A table's two files are no ABAP at all.
-    if (parsed?.include || parsed?.kind === "tabl") continue;
+    // checks what is in it. A table's two files are no ABAP at all, a
+    // report's text pool neither, and a report declares no class.
+    if (parsed?.include || parsed?.kind === "tabl" || parsed?.kind === "prog") continue;
     const expected = parsed?.object;
     const declared = declaredObjectName(file.source);
     if (declared === undefined) {
@@ -323,8 +330,20 @@ export async function run({ quiet = false } = {}) {
       return;
     }
 
+    // A classic report: converted first, the class is what runs - with the
+    // report runtime's chunks defined before its own (report2cloud.mjs).
+    let runFiles = files;
+    let library = [];
+    if (isReportSet(files)) {
+      setStatus("converting the report…");
+      const converted = await convertedSet(files);
+      runFiles = converted.files;
+      library = converted.library;
+      showOutput("report2cloud", converted.report);
+    }
+
     setStatus("compiling…");
-    const { chunks, tests } = await compile(files);
+    const { chunks, tests } = await compile(runFiles);
     // Waited for: the worker evaluates each chunk with `new Function`, and a
     // chunk V8 refuses, or one that throws while defining itself, is the
     // error to show. Left unawaited it was an "Uncaught (in promise)" in the
@@ -344,7 +363,7 @@ export async function run({ quiet = false } = {}) {
     // (src/shell/linked-code.mjs). For the visit - a script it started
     // outlives the files being replaced.
     if (fromALink(context.startedFrom)) markLinkedCodeRan();
-    await state.runtime.defineClasses(chunks.map(({ name, js, lines }) => ({ name, js, lines })));
+    await state.runtime.defineClasses([...library, ...chunks.map(({ name, js, lines }) => ({ name, js, lines }))]);
 
     // The unit tests in the test includes, before the app: a run is compile,
     // test, start - the order a developer works in - and a failing test is
@@ -396,7 +415,7 @@ export async function run({ quiet = false } = {}) {
     clearRoundtrips();
 
     const src = new URL("app/index.html", document.baseURI);
-    src.searchParams.set("app_start", entryClass(files));
+    src.searchParams.set("app_start", entryClass(runFiles));
     src.searchParams.set("run", String(state.runCounter));
     // UI5 reads sap-ui-* from the query and it wins over the bootstrap tag, so
     // the app follows the same light or dark the rest of the page does. Both

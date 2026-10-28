@@ -20,6 +20,7 @@
 // parseAsync so the worker can report progress while it happens. Everything
 // after that is incremental: only the file that changed is dirty.
 import * as abaplint from "@abaplint/core";
+import { Indent } from "@abaplint/core/build/src/pretty_printer/indent.js";
 // The language server's own issue-to-diagnostic mapping, reached directly:
 // abaplint exports it only through LanguageServer.diagnostics( ), which runs
 // the rules for the one file it is asked about, and analyse( ) below runs them
@@ -290,6 +291,22 @@ async function parseWithYields(reg, onProgress) {
 
 export function getRegistry() {
   return registry;
+}
+
+// abaplint as the converter of report2cloud borrows it (registry-worker.mjs):
+// the module, and the pretty printer's Indent it reaches into.
+export const lentAbaplint = () => ({ ...abaplint, Indent });
+
+// The report runtime of abap-cloud-gui (dist/report2cloud/library.json), held
+// like the corpus - dependencies, which the rules skip and the user's
+// objects are not - so a converted class checks against the classes it
+// inherits from. Added once; the parse is incremental.
+let libraryAdded = false;
+export function addLibrary(files) {
+  if (libraryAdded) return;
+  libraryAdded = true;
+  registry.addDependencies(files.map((f) => new abaplint.MemoryFile(`/lib/${f.name}`, f.source)));
+  registry.parse();
 }
 
 // Brings the registry in line with the editor. Only what changed is touched, so
