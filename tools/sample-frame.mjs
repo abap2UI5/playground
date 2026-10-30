@@ -72,7 +72,7 @@ export const SOCIALS = `<div class="socials">
         <a href="https://abap2ui5.github.io/docs/resources/support">Support</a>
         <a href="https://abap2ui5.github.io/docs/resources/contribution">Contribute</a>
         <a href="https://abap2ui5.github.io/docs/resources/sponsor">Sponsor</a>
-        <a href="https://abap2ui5.github.io/test-docs/">For decision makers</a>
+        <a href="https://abap2ui5.github.io/why/">For managers</a>
         <span class="menu-head">Tools</span>
         <a href="https://abap2ui5.github.io/playground/ai/" data-site="ai">AI Studio</a>
         <a href="https://abap2ui5.github.io/layout-editor/">Layout Editor</a>

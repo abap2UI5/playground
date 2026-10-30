@@ -471,7 +471,7 @@ test("the bar begins and ends as the sample catalogue's bar does", async ({ page
   await expect(theme).toBeVisible();
   expect(await extra.locator(".menu a").count()).toBeGreaterThanOrEqual(10);
   for (const part of ["github.com/abap2UI5/linter", "github.com/abap2UI5/vscode-extension", "github.com/abap2UI5-addons",
-    "abap2ui5.github.io/layout-editor/", "abap2ui5-addons.github.io/abap-cloud-gui/", "abap2ui5.github.io/test-docs/"]) {
+    "abap2ui5.github.io/layout-editor/", "abap2ui5-addons.github.io/abap-cloud-gui/", "abap2ui5.github.io/why/"]) {
     await expect(extra.locator(`.menu a[href*="${part}"]`).first()).toBeVisible();
   }
   await page.keyboard.press("Escape");
