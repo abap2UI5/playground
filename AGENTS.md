@@ -199,7 +199,7 @@ npm run test:unit  # node:test over tests/node/*.test.mjs - no build, no browser
 | | |
 |---|---|
 | `check.yml` | Every non-main branch and PR: a `lint` job (lint, typecheck, test:unit) beside four test shards — Chromium `--shard=n/3` ×3 and WebKit on its own — each building with `.github/actions/build` (caches for `deps/`, `~/.ui5`, the downport) and checking the size budget. Two workers per runner, traces on retry, the service worker blocked except in `worker.spec.js` |
-| `pages.yml` | Pushes to `main` and **nightly**: the same lint job and four shards, a fifth runner building the artefact, deploy once all are green (`needs: [lint, test, build]`), then `notify-docs` dispatches `playground-published` to abap2UI5/docs (`DOCS_DISPATCH_TOKEN`) |
+| `pages.yml` | Pushes to `main` and **nightly**: the same lint job and four shards, a fifth runner building the artefact, deploy once all are green (`needs: [lint, test, build]`) |
 | `upstream.yml` | Weekly: build and test against upstream `HEAD` without moving pins; opens or extends an issue on failure |
 | `ai-eval.yml` | Weekly, after a merge that moves the pins or the studio's rules, and by hand: `tests/ai-eval.spec.js` against the real model with the `ANTHROPIC_API_KEY` secret, the table in the job summary (`tools/ai-eval-summary.mjs`), the lines as an artifact. A measurement, not a gate - red only when a task wrote no line; without the secret a green no-op |
 | `bump-linter.yaml` | Weekly: pins `@abap2ui5/linter` to its latest release behind the full gate |
@@ -277,7 +277,7 @@ Each bullet names the design doc that explains it. Keep them true.
 - An embedded playground never reads or writes the stored draft or settings. The first-steps strip never shows on an embed, an app-only page, the AI pages or anything a link opened.
 - `#playground=` (the share fragment) is read by abap2UI5/layout-editor too.
 - The catalogue build degrades per repository and never fails the build; everything on sample pages is escaped, links are `https` only, documents go out through `withPolicy()`.
-- The bar, the menu, the palette and the font exist in several copies across two repositories — change them together, playground first. `search-engine.mjs` is a copy of the docs repo's; a change to matching starts there.
+- The bar, the menu, the palette and the font exist in several copies here — change them together. Across the abap2UI5 sites only the family convention binds (CONVENTION.md in abap2UI5/abap2UI5.github.io: the brand goes home to https://abap2ui5.github.io/, one red accent); the documentation is a site of its own and borrows nothing from this one. `search-engine.mjs` is a copy of the docs repo's; a change to matching starts there.
 
 **Tests** ([testing.md](docs/design/testing.md))
 - Anything user-visible is tested through a real browser against the built `dist/`; pure modules may add `node:test` tests in `tests/node/`.

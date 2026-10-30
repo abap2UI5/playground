@@ -11,9 +11,8 @@
  * who has, so the switch wins in both directions. */
 /* ---- the type, one face for every reader --------------------------------
  *
- * Inter, self-hosted, Latin only. Four deployments share this stack (the
- * documentation calls it `--vp-font-family-base`; check:design holds the two
- * equal), and it used to lead with `system-ui` - each reader's own face. That
+ * Inter, self-hosted, Latin only. Every abap2UI5 site uses this face (the family
+ * convention, CONVENTION.md in abap2UI5/abap2UI5.github.io), and it used to lead with `system-ui` - each reader's own face. That
  * meant the same page was a different page on every desk: a headline that sits
  * on one line for the author wraps for half the readers, and nothing about the
  * design could be relied on further than the machine it was drawn on.
@@ -57,7 +56,7 @@
   --fg: #1c1d21;
   --fg-dim: #6a6d76;
   --line: #d9dbe0;
-  --accent: #0a6ed1;
+  --accent: #d03c4a;
   --accent-fg: #ffffff;
   --warn: #8a5a00;
   --warn-bg: #fdf3e0;
@@ -65,15 +64,14 @@
      (--vp-font-family-base / -mono in theme/style.css over there), character
      for character. They led with different families - `system-ui` here,
      `-apple-system` there - which is the same face on macOS and Windows and
-     two different ones on Linux: one bar in two typefaces. check:design holds
-     the two files to the same string. */
+     two different ones on Linux: one bar in two typefaces. The documentation
+     is a site of its own now; the stacks are kept equal by hand. */
   /* Two radii, named, and the same two in all four documents: `control` is
      what you click or type in (a pill, a button, an input, the search box),
      `surface` is what things sit on (a panel, a dialog). There was no scale on
      either side before - 5, 6, 8, 4, 10 and 999px were all in use, and the
      spread inside each stylesheet was as wide as the spread between them. Only
-     the SHARED parts are moved onto these; check:design holds the two files to
-     the same values. */
+     the SHARED parts are moved onto these; Kept equal by hand. */
   --radius-control: 5px;
   --radius-surface: 8px;
 
@@ -100,8 +98,8 @@
     --fg: #e6e7ea;
     --fg-dim: #9a9da6;
     --line: #303338;
-    --accent: #4aa3ff;
-    --accent-fg: #0b1620;
+    --accent: #f0606d;
+    --accent-fg: #16171a;
     --warn: #e8b45c;
     --warn-bg: #2a2317;
     --code-name: #ef9a95;
@@ -117,8 +115,8 @@
   --fg: #e6e7ea;
   --fg-dim: #9a9da6;
   --line: #303338;
-  --accent: #4aa3ff;
-  --accent-fg: #0b1620;
+  --accent: #f0606d;
+  --accent-fg: #16171a;
   --warn: #e8b45c;
   --warn-bg: #2a2317;
   --code-name: #ef9a95;

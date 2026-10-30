@@ -3,6 +3,24 @@
 > Design notes, moved out of `AGENTS.md`. Read this before touching the bar, the palette, the font, the search box, `site-memory.mjs` or anything shared with abap2UI5/docs.
 > The rules in short, and every other area, are in [AGENTS.md](../../AGENTS.md).
 
+## Now: sites of their own
+
+The playground, the documentation and the hub at https://abap2ui5.github.io/
+are separate sites now, joined by plain links and one family convention
+(CONVENTION.md in abap2UI5/abap2UI5.github.io): the brand top left goes home
+to the hub, the accent is the red of the logo (`#d03c4a`, `#f0606d` in dark),
+the type is Inter. The documentation no longer borrows the bar, its script or
+the stylesheets from this deployment, no longer reads the theme key or the
+site memory, and is no longer sent a dispatch after a deploy. What it still
+takes from here is a URL contract (the embed frame, `?src=`, share links) and
+published files (`apps.json`). The AI Studio wears the same palette through
+its `--st-*` tokens and the family's mark instead of a spark of its own.
+
+What follows is the history of the one-site design. The mechanisms inside
+this origin (the four bars here, the search box, the site memory between the
+playground and the catalogue) still work as described; the documentation's
+half of each is gone.
+
 ## One site in three places
 
 The playground, the sample catalogue at `/samples/` and the

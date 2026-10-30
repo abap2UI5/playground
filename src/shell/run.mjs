@@ -17,7 +17,7 @@ import { declaredObjectName, entryClass } from "../editor/registry.mjs";
 import { compile } from "../editor/transpile.mjs";
 import { parseName } from "../editor/files.mjs";
 import { setTestResults, showInsight, updateInsight } from "./insight.mjs";
-import { announceAppHeight } from "./embed.mjs";
+import { announceAppHeight, announceProblems } from "./embed.mjs";
 import { clearRoundtrips, roundtripList } from "./roundtrips.mjs";
 import { markLinkedCodeRan } from "./linked-code.mjs";
 import { state } from "./state.mjs";
@@ -312,6 +312,7 @@ export async function run({ quiet = false } = {}) {
     updateInsight(problems);
     const errors = problems.filter((i) => i.severity === 1 && i.source === "abaplint");
     if (errors.length > 0) {
+      announceProblems(errors);
       setStatus(`${errors.length} error${errors.length > 1 ? "s" : ""} in the ABAP - fix them and run again`, true);
       stopped("the code on screen has errors");
       // The errors are already in the panel, one clickable row each, saying

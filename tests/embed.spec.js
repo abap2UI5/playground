@@ -477,3 +477,29 @@ test("an edit is reported once, and data-reset puts the page's code back", async
   await frame.evaluate(() => window.monaco.editor.getEditors()[0].trigger("test", "undo", null));
   expect(await modelValue(frame, LINKED_FILE)).toContain("three");
 });
+
+test("an embedded playground names the errors that stop a Run - file, line, message", async ({ page }) => {
+  // Code that does not compile, handed over the way a share link carries it.
+  const { deflateRawSync } = await import("node:zlib");
+  const source = "CLASS zcl_broken DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    INTERFACES z2ui5_if_app.\nENDCLASS.\n\nCLASS zcl_broken IMPLEMENTATION.\n  METHOD z2ui5_if_app~main.\n    no_such_variable = 1.\n  ENDMETHOD.\nENDCLASS.\n";
+  const fragment = "2" + deflateRawSync(Buffer.from(JSON.stringify([{ name: "zcl_broken.clas.abap", source }]))).toString("base64url");
+  await collectMessages(page);
+  await page.goto("/embed/host.html");
+  await page.evaluate((src) => {
+    const frame = document.createElement("iframe");
+    frame.src = src;
+    document.body.replaceChildren(frame);
+  }, new URL(`/?embed=1&view=app#${fragment}`, page.url()).href);
+
+  await expect
+    .poll(() => page.evaluate(() => window.__messages.some((m) => m.type === "problems")), { timeout: 120000 })
+    .toBe(true);
+  const messages = await page.evaluate(() => window.__messages);
+  const { problems } = messages.find((m) => m.type === "problems");
+  expect(problems.length).toBeGreaterThan(0);
+  expect(problems[0]).toMatchObject({ file: "zcl_broken.clas.abap", line: 8 });
+  expect(problems[0].message).toMatch(/no_such_variable/i);
+  // ...and the status that follows it says the Run stopped.
+  const after = messages.slice(messages.findIndex((m) => m.type === "problems"));
+  expect(after.some((m) => m.type === "status" && m.state === "error")).toBe(true);
+});
