@@ -1,8 +1,7 @@
 /* ---- the type, one face for every reader --------------------------------
  *
- * Inter, self-hosted, Latin only. Four deployments share this stack (the
- * documentation calls it `--vp-font-family-base`; check:design holds the two
- * equal), and it used to lead with `system-ui` - each reader's own face. That
+ * Inter, self-hosted, Latin only. Every abap2UI5 site uses this face (the family
+ * convention, CONVENTION.md in abap2UI5/abap2UI5.github.io), and it used to lead with `system-ui` - each reader's own face. That
  * meant the same page was a different page on every desk: a headline that sits
  * on one line for the author wraps for half the readers, and nothing about the
  * design could be relied on further than the machine it was drawn on.
@@ -46,7 +45,7 @@
   --fg: #1c1d21;
   --fg-dim: #6a6d76;
   --line: #d9dbe0;
-  --accent: #0a6ed1;
+  --accent: #d03c4a;
   --accent-fg: #ffffff;
   --danger: #b5253a;
   --ok: #237a35;
@@ -54,15 +53,14 @@
      (--vp-font-family-base / -mono in theme/style.css over there), character
      for character. They led with different families - `system-ui` here,
      `-apple-system` there - which is the same face on macOS and Windows and
-     two different ones on Linux: one bar in two typefaces. check:design holds
-     the two files to the same string. */
+     two different ones on Linux: one bar in two typefaces. The documentation
+     is a site of its own now; the stacks are kept equal by hand. */
   /* Two radii, named, and the same two in all four documents: `control` is
      what you click or type in (a pill, a button, an input, the search box),
      `surface` is what things sit on (a panel, a dialog). There was no scale on
      either side before - 5, 6, 8, 4, 10 and 999px were all in use, and the
      spread inside each stylesheet was as wide as the spread between them. Only
-     the SHARED parts are moved onto these; check:design holds the two files to
-     the same values. */
+     the SHARED parts are moved onto these; Kept equal by hand. */
   --radius-control: 5px;
   --radius-surface: 8px;
 
@@ -85,8 +83,8 @@
     --fg: #e6e7ea;
     --fg-dim: #9a9da6;
     --line: #303338;
-    --accent: #4aa3ff;
-    --accent-fg: #0b1620;
+    --accent: #f0606d;
+    --accent-fg: #16171a;
     --danger: #ff8092;
     --ok: #5cc472;
     --code-name: #ef9a95;
@@ -102,8 +100,8 @@
   --fg: #e6e7ea;
   --fg-dim: #9a9da6;
   --line: #303338;
-  --accent: #4aa3ff;
-  --accent-fg: #0b1620;
+  --accent: #f0606d;
+  --accent-fg: #16171a;
   --danger: #ff8092;
   --ok: #5cc472;
   --code-name: #ef9a95;
@@ -249,8 +247,11 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  color: inherit;
+  text-decoration: none;
   font-size: 14px;
   white-space: nowrap;
+  padding: 2px 0;
 }
 .brand::after {
   content: ""; width: 1px; height: 22px; margin-left: 8px;
@@ -2255,56 +2256,26 @@ button.chat-suggestion {
 
 /* Pressing AI turns the page into the AI Studio (src/shell/chat.mjs): the
    site's bar and the workbench toolbar step aside, and the page is a chat
-   beside a stage that shows the app, the code, or both. It is deliberately
-   not the documentation's sober palette - a room of its own, with its own
-   tokens in both themes - but it is built from the SAME elements: nothing is
+   beside a stage that shows the app, the code, or both. It wears the
+   family's palette (CONVENTION.md in abap2UI5/abap2UI5.github.io) through
+   its own --st-* tokens, and it is built from the SAME elements: nothing is
    moved in the DOM. The app frame in particular must stay where it is, since
    an iframe that is moved reloads; the studio is a grid laid over the
    existing panes (`.pane-left` dissolves into it with display: contents) and
    body[data-stage] says which of them the stage shows. */
 body.is-studio {
-  --st-fg: #1b1a2e;
-  --st-dim: #6b6a85;
-  --st-surface: rgba(255, 255, 255, .72);
-  --st-surface-strong: #ffffff;
-  --st-border: rgba(91, 76, 196, .16);
-  --st-glow: rgba(124, 92, 255, .28);
-  --st-grad: linear-gradient(135deg, #7c5cff 0%, #3b82f6 55%, #06b6d4 100%);
-  --st-bg:
-    radial-gradient(1100px 620px at -10% -20%, rgba(124, 92, 255, .20), transparent 60%),
-    radial-gradient(900px 560px at 115% 0%, rgba(6, 182, 212, .16), transparent 60%),
-    radial-gradient(800px 500px at 50% 120%, rgba(59, 130, 246, .12), transparent 60%),
-    #f6f5ff;
+  --st-fg: var(--fg);
+  --st-dim: var(--fg-dim);
+  --st-surface: var(--bg);
+  --st-surface-strong: var(--bg);
+  --st-border: var(--line);
+  --st-glow: color-mix(in srgb, var(--accent) 22%, transparent);
+  /* A plain fill written as a gradient, so every `background: var(--st-grad)`
+     and the text clip on the name keep working. */
+  --st-grad: linear-gradient(var(--accent), var(--accent));
+  --st-bg: var(--bg-sunken);
   background: var(--st-bg);
   color: var(--st-fg);
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) body.is-studio {
-    --st-fg: #ecebff;
-    --st-dim: #9d9bc0;
-    --st-surface: rgba(22, 22, 40, .66);
-    --st-surface-strong: #15152a;
-    --st-border: rgba(160, 150, 255, .14);
-    --st-glow: rgba(124, 92, 255, .42);
-    --st-bg:
-      radial-gradient(1100px 620px at -10% -20%, rgba(124, 92, 255, .32), transparent 60%),
-      radial-gradient(900px 560px at 115% 0%, rgba(6, 182, 212, .20), transparent 60%),
-      radial-gradient(800px 500px at 50% 120%, rgba(59, 130, 246, .16), transparent 60%),
-      #090a16;
-  }
-}
-:root[data-theme="dark"] body.is-studio {
-  --st-fg: #ecebff;
-  --st-dim: #9d9bc0;
-  --st-surface: rgba(22, 22, 40, .66);
-  --st-surface-strong: #15152a;
-  --st-border: rgba(160, 150, 255, .14);
-  --st-glow: rgba(124, 92, 255, .42);
-  --st-bg:
-    radial-gradient(1100px 620px at -10% -20%, rgba(124, 92, 255, .32), transparent 60%),
-    radial-gradient(900px 560px at 115% 0%, rgba(6, 182, 212, .20), transparent 60%),
-    radial-gradient(800px 500px at 50% 120%, rgba(59, 130, 246, .16), transparent 60%),
-    #090a16;
 }
 
 /* What steps aside. */
@@ -2399,17 +2370,8 @@ body.is-studio[data-stage="chat"] .chat { grid-column: 1 / -1; }
   background-clip: text;
   color: transparent;
 }
-.studio-spark {
-  display: inline-grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  background: var(--st-grad);
-  color: #fff;
-  font-size: 14px;
-  box-shadow: 0 4px 18px var(--st-glow);
-}
+.studio-brand img { display: block; }
+.studio-brand a { display: inline-flex; align-items: center; gap: .45rem; color: inherit; text-decoration: none; font-weight: 600; }
 .studio-stages {
   display: inline-flex;
   gap: 2px;
@@ -2518,7 +2480,7 @@ body.is-studio.is-ai-working .pane-right::after {
   inset: 0;
   border-radius: inherit;
   padding: 2px;
-  background: conic-gradient(from var(--studio-angle), #7c5cff, #3b82f6, #06b6d4, #7c5cff);
+  background: conic-gradient(from var(--studio-angle), var(--accent), transparent 40%, var(--accent));
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
@@ -2595,11 +2557,11 @@ body.is-studio .chat-tool.is-pending {
   color: var(--st-fg);
   border-color: transparent;
   background:
-    linear-gradient(90deg, rgba(124, 92, 255, .10), rgba(6, 182, 212, .22), rgba(124, 92, 255, .10)) 0 0 / 200% 100%,
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 8%, transparent), color-mix(in srgb, var(--accent) 20%, transparent), color-mix(in srgb, var(--accent) 8%, transparent)) 0 0 / 200% 100%,
     var(--st-surface-strong);
   animation: studio-shimmer 1.4s linear infinite;
 }
-body.is-studio .chat-tool.is-pending::before { content: "◌ "; color: #7c5cff; }
+body.is-studio .chat-tool.is-pending::before { content: "◌ "; color: var(--accent); }
 body.is-studio .chat-progress { margin-left: 2.1rem; color: var(--st-dim); }
 body.is-studio .chat-progress::before { content: "✧ "; font-style: normal; }
 body.is-studio.is-ai-working .chat-log::after {
@@ -2608,7 +2570,7 @@ body.is-studio.is-ai-working .chat-log::after {
   height: .5rem;
   margin-left: 2.1rem;
   border-radius: 999px;
-  background: radial-gradient(circle, #7c5cff 40%, transparent 42%) 0 50% / 33.3% 100% repeat-x;
+  background: radial-gradient(circle, var(--accent) 40%, transparent 42%) 0 50% / 33.3% 100% repeat-x;
   animation: studio-dots 1s steps(3) infinite;
 }
 
@@ -2691,7 +2653,7 @@ body.is-studio .chat-compose textarea {
   min-height: 3.4rem;
   box-shadow: 0 6px 24px rgba(20, 10, 60, .08);
 }
-body.is-studio .chat-compose textarea:focus { outline: 2px solid #7c5cff; outline-offset: 0; }
+body.is-studio .chat-compose textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; }
 body.is-studio #chat-send {
   border: 0;
   border-radius: 14px;
@@ -2731,8 +2693,8 @@ button.chat-attach {
   padding: 0 .65rem;
   font-size: 16px;
 }
-body.is-studio button.chat-attach:hover { border-color: #7c5cff; }
-body.is-studio .chat.is-dropping { outline: 2px dashed #7c5cff; outline-offset: -6px; }
+body.is-studio button.chat-attach:hover { border-color: var(--accent); }
+body.is-studio .chat.is-dropping { outline: 2px dashed var(--accent); outline-offset: -6px; }
 .chat-user-files { display: block; margin-top: .3rem; font: 11.5px var(--font-mono); opacity: .85; }
 
 @keyframes studio-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }

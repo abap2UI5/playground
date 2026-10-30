@@ -75,15 +75,10 @@ the honest thing for it to say, and nothing else on this site depends on it.
 site would not otherwise need: the six files change when a sample is merged in
 another repository, and that is no reason for anything to be pushed here.
 
-**And it tells the documentation.** `scripts/build-site.mjs` over in
-abap2UI5/docs borrows the bar, the bar's script and two stylesheets from this
-deployment at build time, so a bar change here reached the manual only with
-the manual's next push. The `notify-docs` job at the end of `pages.yml` sends
-abap2UI5/docs a `repository_dispatch` (`playground-published`) after a
-successful deploy; it needs a fine-grained token in this repository's secrets
-as `DOCS_DISPATCH_TOKEN` (contents: write on abap2UI5/docs), and without one
-it says so and does nothing — the manual's own nightly deploy, an hour after
-this one, is the net under it.
+**It tells nobody.** The documentation used to borrow the bar and two
+stylesheets from this deployment and was sent a `repository_dispatch` after
+each deploy. It is a site of its own now and borrows nothing, so the job is
+gone.
 
 **Capability markers.** abap2UI5/samples lets an author end a class's title
 in `(A)`, `(C)` or `(A,C)` - a frontend action, an abap2UI5 custom control, or

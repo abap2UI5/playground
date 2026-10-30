@@ -164,7 +164,7 @@ export const SEARCH_SCRIPT = (up) => `<script type="module" src="${up}samples/se
  * page that is not there must not tell a screen reader it is the samples
  * page. */
 export const bar = (up, current = "samples") => `<header class="bar">
-  <a class="brand" href="https://abap2ui5.github.io/docs/" data-back>
+  <a class="brand" href="https://abap2ui5.github.io/" target="_self">
     <img src="${up}favicon.png" alt="" width="20" height="20">
     <span>abap2UI5</span>
   </a>

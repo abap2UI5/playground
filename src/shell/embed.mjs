@@ -14,6 +14,13 @@
 //   { source: "abap2ui5-playground", type: "status", state: "running" | "error",
 //     message: <the line the status bar shows> }
 //   { source: "abap2ui5-playground", type: "edited", edited: true | false }
+//   { source: "abap2ui5-playground", type: "problems",
+//     problems: [{ file, line, column, message }] }
+//
+// "problems" is sent when abaplint errors stop a Run, just before the status
+// says so: the first twenty, lines and columns counting from 1. A page that
+// hands the playground generated code (abap-cloud-gui's report converter) needs
+// to know WHICH lines, and a frame of another origin cannot be read.
 //
 // "edited" is sent when the reader's code stops being the code the page
 // embedded, and again (edited: false) when it is that code once more - undone
@@ -57,6 +64,18 @@ function send(message) {
 
 export function announceReady() {
   send({ type: "ready" });
+}
+
+export function announceProblems(errors) {
+  send({
+    type: "problems",
+    problems: errors.slice(0, 20).map((p) => ({
+      file: p.file,
+      line: (p.range?.start?.line ?? 0) + 1,
+      column: (p.range?.start?.character ?? 0) + 1,
+      message: String(p.message ?? ""),
+    })),
+  });
 }
 
 export function announceStatus(message, isError) {
