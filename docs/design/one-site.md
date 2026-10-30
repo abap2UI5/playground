@@ -88,7 +88,7 @@ else is a tool or a page for another reader, stands on its own, and is
 reached from the menu's **Tools** list: the **AI Studio** (`/ai/`, here),
 the **Layout Editor** (abap2UI5/layout-editor) and the **Report converter**
 (abap2UI5-addons/abap-cloud-gui), and, among the practical links,
-**For decision makers** (abap2UI5/test-docs). The studio was a fifth section
+**For managers** (abap2UI5/why). The studio was a fifth section
 from 2026-10-23 to 2026-10-26, so that it would not be the one door a reader
 had to know about; it went back to the menu when the line between the site
 and its tools was drawn, and the playground's toolbar still carries a link to

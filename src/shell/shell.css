@@ -2722,71 +2722,33 @@ body.is-studio .chat-key button.primary { border: 0; background: var(--st-grad);
 /* -------------------------------------------------------------- AI Pilot */
 
 /* The AI Pilot's page (src/shell/pilot.mjs): Claude operates the app, the
-   reader steers from the chat. A room of its own again, and deliberately not
-   the studio's: the studio is a workshop where something is being MADE, so
-   it glows; the Pilot is an instrument panel where something is being
-   FLOWN - a warm, quiet console with one signal colour (amber: the Pilot is
-   acting) and one status colour (green: the app is live). The app has the
+   reader steers from the chat. It wears the family's
+   palette like the studio (CONVENTION.md in abap2UI5/abap2UI5.github.io):
+   one signal colour, the accent (the Pilot is acting), and one status
+   colour, green (the app is live). The app has the
    stage, the co-pilot's chat stands to its right, and "What Claude sees"
    opens between the two. Built, like the studio, from the same elements:
    the app frame is never moved (a moved iframe reloads), the editor is
    hidden rather than removed, and body[data-view] decides on a phone which
    of app and chat is on screen. */
 body.is-pilot {
-  --pl-ink: #17202e;
-  --pl-dim: #5d6677;
-  --pl-bg: #f3efe6;
-  --pl-panel: #fffdf8;
-  --pl-panel-2: #f8f4ea;
-  --pl-line: rgba(23, 32, 46, .12);
-  --pl-signal: #f59e0b;
-  --pl-signal-2: #ea580c;
-  --pl-signal-ink: #1c1206;
-  --pl-signal-soft: rgba(245, 158, 11, .16);
-  --pl-live: #10b981;
+  --pl-ink: var(--fg);
+  --pl-dim: var(--fg-dim);
+  --pl-bg: var(--bg-sunken);
+  --pl-panel: var(--bg);
+  --pl-panel-2: var(--bg-sunken);
+  --pl-line: var(--line);
+  --pl-signal: var(--accent);
+  --pl-signal-2: var(--accent);
+  --pl-signal-ink: var(--accent-fg);
+  --pl-signal-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --pl-live: var(--ok);
   --pl-sees-bg: #121823;
   --pl-sees-ink: #d9e1ee;
-  --pl-grad: linear-gradient(120deg, #f59e0b 0%, #ea580c 100%);
-  --pl-shadow: 0 1px 0 rgba(255, 255, 255, .7) inset, 0 8px 30px rgba(40, 28, 8, .08);
-  background:
-    linear-gradient(rgba(23, 32, 46, .035) 1px, transparent 1px) 0 0 / 28px 28px,
-    linear-gradient(90deg, rgba(23, 32, 46, .035) 1px, transparent 1px) 0 0 / 28px 28px,
-    var(--pl-bg);
+  --pl-grad: linear-gradient(var(--accent), var(--accent));
+  --pl-shadow: none;
+  background: var(--pl-bg);
   color: var(--pl-ink);
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) body.is-pilot {
-    --pl-ink: #e8edf5;
-    --pl-dim: #8b96a8;
-    --pl-bg: #0c1016;
-    --pl-panel: #141a23;
-    --pl-panel-2: #10151d;
-    --pl-line: rgba(255, 255, 255, .09);
-    --pl-signal-soft: rgba(245, 158, 11, .14);
-    --pl-sees-bg: #0a0e14;
-    --pl-shadow: 0 1px 0 rgba(255, 255, 255, .04) inset, 0 10px 34px rgba(0, 0, 0, .35);
-    background:
-      radial-gradient(900px 500px at 100% 0%, rgba(245, 158, 11, .08), transparent 60%),
-      linear-gradient(rgba(255, 255, 255, .025) 1px, transparent 1px) 0 0 / 28px 28px,
-      linear-gradient(90deg, rgba(255, 255, 255, .025) 1px, transparent 1px) 0 0 / 28px 28px,
-      var(--pl-bg);
-  }
-}
-:root[data-theme="dark"] body.is-pilot {
-  --pl-ink: #e8edf5;
-  --pl-dim: #8b96a8;
-  --pl-bg: #0c1016;
-  --pl-panel: #141a23;
-  --pl-panel-2: #10151d;
-  --pl-line: rgba(255, 255, 255, .09);
-  --pl-signal-soft: rgba(245, 158, 11, .14);
-  --pl-sees-bg: #0a0e14;
-  --pl-shadow: 0 1px 0 rgba(255, 255, 255, .04) inset, 0 10px 34px rgba(0, 0, 0, .35);
-  background:
-    radial-gradient(900px 500px at 100% 0%, rgba(245, 158, 11, .08), transparent 60%),
-    linear-gradient(rgba(255, 255, 255, .025) 1px, transparent 1px) 0 0 / 28px 28px,
-    linear-gradient(90deg, rgba(255, 255, 255, .025) 1px, transparent 1px) 0 0 / 28px 28px,
-    var(--pl-bg);
 }
 
 /* What steps aside: the site's bar, the workbench, the editor and its panel. */
@@ -2849,17 +2811,8 @@ body.is-pilot .pilot { grid-column: -2; grid-row: 2; }
   letter-spacing: -.01em;
 }
 .pilot-brand b { font-weight: 750; }
-.pilot-mark {
-  display: inline-grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--pl-grad);
-  color: var(--pl-signal-ink);
-  font-size: 14px;
-  transform: rotate(-12deg);
-}
+.pilot-brand img { display: block; }
+.pilot-brand a { display: inline-flex; align-items: center; gap: .45rem; color: inherit; text-decoration: none; font-weight: 600; }
 .pilot-app {
   display: inline-flex;
   align-items: center;
@@ -2958,7 +2911,7 @@ body.is-pilot.is-pilot-flying .pane-right::after {
   inset: 0;
   border-radius: inherit;
   padding: 2px;
-  background: conic-gradient(from var(--pilot-angle), transparent 0 55%, #f59e0b 75%, #ea580c 90%, transparent 100%);
+  background: conic-gradient(from var(--pilot-angle), transparent 0 55%, var(--accent) 80%, transparent 100%);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
@@ -3110,7 +3063,7 @@ body.is-pilot .pilot-head button,
   gap: .4rem;
   padding: .75rem;
   border-bottom: 1px solid var(--pl-line);
-  background: var(--pl-signal-soft);
+  background: var(--pl-panel-2);
   font-size: 13px;
 }
 .pilot-key label { font-weight: 650; }
@@ -3302,8 +3255,8 @@ body.is-pilot button.pilot-attach:hover { border-color: var(--pl-signal); }
 @keyframes pilot-pulse { 50% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); } }
 @keyframes pilot-sweep { to { --pilot-angle: 360deg; } }
 @keyframes pilot-flash {
-  0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, .5); }
-  40% { box-shadow: 0 0 0 6px rgba(245, 158, 11, .35); }
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 50%, transparent); }
+  40% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 35%, transparent); }
   100% { box-shadow: var(--pl-shadow); }
 }
 /* The Pilot's animations are its own, so it answers for them: less motion
