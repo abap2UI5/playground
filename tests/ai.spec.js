@@ -635,7 +635,7 @@ test("the studio's page starts on a minimal class: no run, no sample, and no way
   await expect(page.locator(".app-placeholder-what")).toHaveText("Your app appears here as soon as Claude has built it.");
   await expect(page.locator("#studio-url")).toHaveText("your app");
   await expect(page.locator("#studio-exit")).toBeHidden();
-  await expect(page).toHaveTitle("AI Studio · abap2UI5");
+  await expect(page).toHaveTitle("AI App Builder · abap2UI5");
   // Published: indexed, with a canonical of its own.
   await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://abap2ui5.github.io/playground/ai/");

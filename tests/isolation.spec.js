@@ -3,7 +3,7 @@ import { MAIN_CLASS, open, setSource } from "./helpers.mjs";
 
 // The app frame and the page around it speak only in messages
 // (src/shell/frame-link.mjs, src/shell/frontend-bridge.js), and on the AI
-// Studio's and the AI Pilot's pages the frame is on an opaque origin: an
+// Studio's and the AI Agent's pages the frame is on an opaque origin: an
 // app's own script - a view's core:HTML, anything the app loads - cannot
 // reach the page that holds the reader's API key. What such a script can do
 // is what code evaluated in the frame can do, so that is what these do.
@@ -31,7 +31,7 @@ const reachOut = () => {
   };
 };
 
-test("on the AI Pilot's page the app frame is on an opaque origin and cannot reach the page", async ({ page }) => {
+test("on the AI Agent's page the app frame is on an opaque origin and cannot reach the page", async ({ page }) => {
   await page.goto("/pilot/");
   // Something of the page's own in its storage, that a script in the frame
   // must not be able to read.
@@ -67,7 +67,7 @@ test("on the AI Pilot's page the app frame is on an opaque origin and cannot rea
 
 // The studio's frame is set up by the same switch (page.mjs) and holds no app
 // until the model builds one - tests/ai.spec.js runs those in it.
-test("on the AI Studio's page the app frame is sandboxed without allow-same-origin", async ({ page }) => {
+test("on the AI App Builder's page the app frame is sandboxed without allow-same-origin", async ({ page }) => {
   await page.goto("/ai/");
   await expect(page.locator("#status")).toHaveText("ready - describe the app you want", { timeout: 120000 });
   const sandbox = await page.locator("#app").getAttribute("sandbox");

@@ -7,7 +7,7 @@ actual framework — transpiled at build time from a pinned commit — with noth
 behind it: no server, no SAP system, no backend of any kind. Beside it, on the
 same origin: the sample index at `samples/apps.json` (which the samples site,
 abap2UI5/samples-site, builds from) with a forward for every address the
-catalogue used to have here, the AI Studio (`/ai/`), the AI Pilot
+catalogue used to have here, the AI App Builder (`/ai/`), the AI Agent
 (`/pilot/`), and the embed kit that documentation pages use.
 
 **This file is the short version.** The reasoning behind every rule — the
@@ -33,7 +33,7 @@ read them before touching `tools/` or `src/runtime/`.
 | `run-status.mjs` | The status line between runs ("running - the code on screen has N errors"), transient words, the stale-frame mark |
 | `autorun.mjs` | Auto (debounce, stored setting) and Run's three reasons to be inactive |
 | `file-sets.mjs` | `replaceWith()`, `keepDraft()`, opening a sample/draft/linked class, the kept-draft sentence; `openedFiles()`, `isAsOpened()`, `onOpenedChange()` |
-| `agent-hooks.mjs` | `offerFrameBridge()` (the frames' roundtrips), the AI Studio's and Pilot's hosts, `runForAgent()`, `addAppFiles()` |
+| `agent-hooks.mjs` | `offerFrameBridge()` (the frames' roundtrips), the AI App Builder's and Pilot's hosts, `runForAgent()`, `addAppFiles()` |
 | `site-cache.mjs` | `keepAssetsForNextTime()` (registers `sw.js`), `discardCachedSite()` |
 | `frame-link.mjs` | The page's half of the frame line, messages only: `isolate()`, `navigate()`, `serveFrames()`, `tellFrames()`, `frameApi()`, `linkOf()`, `onFrameMessage()` |
 | `guides.mjs`, `first-steps.mjs`, `learn-path.mjs` | The first-visit hint strip and "Lesson n of m" (chunks after the first run), and the module that decides on them |
@@ -77,12 +77,12 @@ read them before touching `tools/` or `src/runtime/`.
 | `insight-<tab>.mjs` | One module per tab: `problems` (+ Fix them bar, `fixableSaid()`), `outline`, `view` (`viewTab()`), `tests` (`testsTab()`), `roundtrips` (`roundtripsTab()`), `state` (app attributes per roundtrip), `console` (WRITE output, `#console-count`), `log`, `config` (the two checkers' tabs) |
 | `highlight.mjs`, `xml-pretty.mjs` | Colour for the panel's XML/JSON; XML one element per line |
 | `chain-read.mjs`, `view-edit.mjs`, `chain-patch.mjs`, `chain-write.mjs` | View edit: chain read back by executing it; edited view matched to the shown one; change patched into the ABAP that is there; fallback rewrite in the house layout |
-| `chat.mjs` | AI Studio on screen (chunk, its page only) |
-| `ai-agent.mjs` | AI Studio's conversation and tools (`runTools()`), chunk on use |
+| `chat.mjs` | AI App Builder on screen (chunk, its page only) |
+| `ai-agent.mjs` | AI App Builder's conversation and tools (`runTools()`), chunk on use |
 | `ai-starter.mjs` | The class the studio starts on |
 | `target-system.mjs` | The studio's target system: `TARGETS` (abaplint releases the header offers, the rules the model is told), `systemTodos()` (the `" TODO(system):` lines the download lists), `functionCalls()`/`uncheckedCallsText()` (every CALL FUNCTION - nothing else here reports one) |
-| `pilot.mjs` | AI Pilot on screen and the bridge's half (chunk) |
-| `pilot-agent.mjs` | AI Pilot's conversation, mirror and tools (chunk) |
+| `pilot.mjs` | AI Agent on screen and the bridge's half (chunk) |
+| `pilot-agent.mjs` | AI Agent's conversation, mirror and tools (chunk) |
 | `ai-operator.mjs` | The mirror and operator both rooms use on a frame |
 | `frame-drive.mjs` | One app frame as the AI's transport |
 | `chat-ui.mjs` | What both chats share on screen (`createChatRoom()`: log, key form, Send/Stop, speed, files, one submit) |
@@ -159,7 +159,7 @@ read them before touching `tools/` or `src/runtime/`.
 | `tools/check-size.mjs` | The size budget and the stack budget |
 | `tools/serve.mjs` | Dev/test server; mounts `dist/` three ways, answers misses with `404.html` |
 | `tools/vendor-agent.mjs` | Vendors and checks `src/vendor/agent/` |
-| `tools/ai-eval-summary.mjs` | The AI Studio's measurement (`ai-eval.jsonl`) as the job summary's table; fails on a task without a line |
+| `tools/ai-eval-summary.mjs` | The AI App Builder's measurement (`ai-eval.jsonl`) as the job summary's table; fails on a task without a line |
 | `tests/*.spec.js` | Playwright against the built `dist/` (`bfcache.spec.js` reads rather than runs) |
 | `tests/node/*.test.mjs` | `node:test` over the pure modules; `dom.mjs` over `@xmldom/xmldom`; fixture from abap2UI5/samples `z2ui5_cl_smp_app_494` |
 | `tests/fixtures/` | Office/PDF files for the chats, unit-test ABAP |
@@ -188,7 +188,7 @@ npm run test:unit  # node:test over tests/node/*.test.mjs - no build, no browser
   documentation's runnable examples here — a measurement, not part of `npm test`
   ([public-surfaces.md](docs/design/public-surfaces.md)).
 - `AI_EVAL_KEY=sk-ant-… npm test -- ai-eval` has a real model build the apps of
-  `tests/fixtures/ai-eval-tasks.json` in the AI Studio and writes a line per task
+  `tests/fixtures/ai-eval-tasks.json` in the AI App Builder and writes a line per task
   to `test-results/ai-eval.jsonl` — a measurement billed to the key, not part of
   `npm test` ([ai-chat.md](docs/design/ai-chat.md)).
 - The full suite is 422+ tests, about 25 minutes on 4 cores in one run. Every
@@ -347,8 +347,8 @@ sample pages' per-line markup and the 220 MB site budget
 | Format, `FORMAT_RULES`, the formatting provider | [format.md](docs/design/format.md) |
 | abaplint, the linter, Config tabs, `ui5-floor.mjs`, stored settings, the draft (`file-sets.mjs`), Fix them, Reset, the parser hint | [checkers.md](docs/design/checkers.md) |
 | The bottom panel's tabs, View edit (`chain-*.mjs`, `view-edit.mjs`), unit tests, dumps, `guides.mjs`/`first-steps.mjs`/`learn-path.mjs` | [panel.md](docs/design/panel.md) |
-| The AI Studio, providers, keys, attachments, `agent-hooks.mjs`, `linked-code.mjs` | [ai-chat.md](docs/design/ai-chat.md) |
-| The AI Pilot, `frame-drive.mjs`, the vendored agent client | [ai-pilot.md](docs/design/ai-pilot.md) |
+| The AI App Builder, providers, keys, attachments, `agent-hooks.mjs`, `linked-code.mjs` | [ai-chat.md](docs/design/ai-chat.md) |
+| The AI Agent, `frame-drive.mjs`, the vendored agent client | [ai-pilot.md](docs/design/ai-pilot.md) |
 | Share, `?src=`, `?gist=`, `?embed=`/`?view=`/`?readonly=`/`?lines=`, the samples dialog, `original.mjs`, `layout-editor.mjs`, `src/embed/` | [public-surfaces.md](docs/design/public-surfaces.md) |
 | `src/catalogue/`, `build-catalogue.mjs`, the redirects, the 404 | [sample-catalogue.md](docs/design/sample-catalogue.md) |
 | The bar, palette, font, search box, site memory, anything shared with abap2UI5/docs | [one-site.md](docs/design/one-site.md) |

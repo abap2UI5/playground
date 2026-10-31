@@ -418,7 +418,7 @@ export function chatDropped(files) {
 }
 
 function transcriptMarkdown() {
-  const lines = [`# abap2UI5 AI Studio - ${new Date().toLocaleString()}`, ""];
+  const lines = [`# abap2UI5 AI App Builder - ${new Date().toLocaleString()}`, ""];
   const them = who() === "Claude" ? "Claude" : "The model";
   for (const { role, text } of transcript) {
     if (role === "user") lines.push(`## You`, "", text, "");
