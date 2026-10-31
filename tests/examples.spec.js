@@ -722,7 +722,7 @@ test("the dialog links to the catalogue page, where a search has an address", as
   await serveCatalogues(page);
   await open(page);
   await openBrowser(page);
-  await expect(page.locator(".examples-all")).toHaveAttribute("href", "samples/");
+  await expect(page.locator(".examples-all")).toHaveAttribute("href", "https://abap2ui5.github.io/samples-site/");
 });
 
 test("a sample the page carries and the index lists is one row, and the count is of samples", async ({ page }) => {

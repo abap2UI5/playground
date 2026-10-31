@@ -1,6 +1,6 @@
 // The one way a free-text search matches a row, for the two lists that offer
 // one: the samples browser on the playground (src/shell/examples.mjs) and the
-// sample catalogue page (src/catalogue/catalogue.mjs). Every word has to be
+// sample catalogue (abap2UI5/samples-site now). Every word has to be
 // somewhere in the row's haystack, in any order: "table select" finds the
 // selection-modes sample whichever way round it was typed, which one string
 // compared whole would not.

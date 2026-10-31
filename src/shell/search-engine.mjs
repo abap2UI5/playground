@@ -7,7 +7,7 @@
  * to be plain JavaScript with no imports. This file is that, and
  * `docs/.vitepress/theme/search-engine.js` in abap2UI5/docs is where it is
  * maintained — this is the copy, kept in step by hand, the same arrangement as
- * the palette and site-memory. Change one, change the other.
+ * the palette. Change one, change the other.
  *
  * What is NOT copied is the index it reads: that is one generated document at
  * /docs/search-index.json, built over there from the pages of the manual and
@@ -447,7 +447,7 @@ export function rememberQuery(query) {
   }
 }
 
-/** Forget it. A refresh starts the site over (site-memory.mjs), and a
+/** Forget it. A refresh starts the site over, and a
  *  prefilled field is a memory of the visit before it like any other; the box
  *  is what calls this, because the key is this file's (search-box.mjs). */
 export function forgetQuery() {

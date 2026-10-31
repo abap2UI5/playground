@@ -6,7 +6,7 @@
 // two hundred lines of inline script that have nothing to do with how a
 // sample page is laid out. The frame - bar, footer, theme and menu - is the
 // same as theirs, from tools/sample-frame.mjs.
-import { BASE, MENU_SCRIPT, PAGE_SCRIPT, SEARCH_SCRIPT, THEME_SCRIPT, bar, foot } from "./sample-frame.mjs";
+import { BASE, MENU_SCRIPT, SEARCH_SCRIPT, THEME_SCRIPT, bar, foot } from "./sample-frame.mjs";
 
 /* ---- THE PAGE FOR AN ADDRESS THAT IS NOT A PAGE ------------------------
  *
@@ -66,13 +66,13 @@ ${bar(BASE, "none")}
 
 <main id="main" tabindex="-1" class="sample">
   <div class="sample-body">
-  <nav class="crumbs" aria-label="Breadcrumb"><a href="${BASE}samples/">Sample catalog</a></nav>
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="https://abap2ui5.github.io/samples-site/">Sample catalog</a></nav>
   <h1>This page is not here</h1>
   <p class="lede">The address does not name a page of this deployment. A sample may have been
     renamed or dropped by the repository it comes from, or the link that brought you here may
     simply be old.</p>
-  <p>The <a href="${BASE}samples/">catalog</a> searches every sample by what it does, by the
-    control it builds and by the release your system runs; <a href="${BASE}samples/all/">the full
+  <p>The <a href="https://abap2ui5.github.io/samples-site/">catalog</a> searches every sample by what it does, by the
+    control it builds and by the release your system runs; <a href="https://abap2ui5.github.io/samples-site/">the full
     list</a> is all of them on one page; the <a href="${BASE}">playground</a> runs ABAP in this
     browser with no system behind it; and the
     <a href="https://abap2ui5.github.io/docs/get_started/about">documentation</a> is where the
@@ -235,7 +235,6 @@ ${foot(BASE)}
 </script>
 ${MENU_SCRIPT}
 ${SEARCH_SCRIPT(BASE)}
-${PAGE_SCRIPT(BASE)}
 </body>
 </html>
 `;

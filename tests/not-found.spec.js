@@ -42,8 +42,8 @@ test("an address that is not a page answers 404 with this site's own page", asyn
   expect(html).toContain('<meta name="robots" content="noindex">');
 
   await expect(page.locator("h1")).toHaveText("This page is not here");
-  // The frame: the four sections and the box, the same bar as every other page.
-  await expect(page.locator(".bar-nav a")).toHaveCount(4);
+  // The frame: the family's five sites and the box, the same bar as the playground.
+  await expect(page.locator(".bar-nav a")).toHaveCount(5);
   await expect(page.locator(".search-slot")).toBeVisible();
   // ...and the bar does not claim this is the samples page.
   await expect(page.locator('.bar-nav a[aria-current="page"]')).toHaveCount(0);
@@ -59,10 +59,8 @@ test("the way on is in the page, and every link on it works from any depth", asy
     if (/^https?:/.test(href)) continue;
     expect(href, "a link on the 404 is absolute, or it points at whatever missed").toMatch(/^\//);
   }
-  // The catalogue, followed rather than asserted: the point is that it lands.
-  await page.getByRole("link", { name: "catalog", exact: true }).click();
-  await expect(page).toHaveURL(`${BASE}samples/`);
-  await expect(page.locator("h1")).toBeVisible();
+  // The catalogue is a site of its own now; the link says so.
+  await expect(page.getByRole("link", { name: "catalog", exact: true })).toHaveAttribute("href", "https://abap2ui5.github.io/samples-site/");
 });
 
 test("a class name one character short suggests the classes it almost named", async ({ page }) => {

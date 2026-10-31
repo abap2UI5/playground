@@ -27,7 +27,6 @@
  * against.
  */
 import { search, grouped, highlight, loadIndex, rememberQuery, recallQuery, forgetQuery } from "./search-engine.mjs";
-import { arrivedBy } from "./site-memory.mjs";
 
 /* The index is published by the documentation, on the origin all four
  * documents share. Absolute, because these pages are served from three
@@ -439,9 +438,9 @@ export function mountSearch(host) {
  *  `data-search`, if the page has one. */
 export function setUpSearch(root = document) {
   /* A REFRESH STARTS THE SITE OVER, and the last thing you searched for is a
-   * memory of the visit before it like every other (site-memory.mjs, which
+   * memory of the visit before it like every other (the site memory, which
    * drops the rest of them). Here rather than there because the key is this
    * box's: the module that owns a memory is the one that forgets it. */
-  if (arrivedBy() === "reload") forgetQuery();
+  if (performance.getEntriesByType?.("navigation")?.[0]?.type === "reload") forgetQuery();
   mountSearch(root.querySelector("[data-search]"));
 }

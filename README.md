@@ -326,7 +326,7 @@ carries on from there.
 
 ## The sample catalogue
 
-**<https://abap2ui5.github.io/playground/samples/>** — every abap2UI5 sample in
+**<https://abap2ui5.github.io/samples-site/>** (abap2UI5/samples-site, built from this deployment's `samples/apps.json`) — every abap2UI5 sample in
 one searchable page: the learning path of
 [abap2UI5/samples](https://github.com/abap2UI5/samples), the UI5 demo kit ports
 of [abap2UI5/samples-controls](https://github.com/abap2UI5/samples-controls),

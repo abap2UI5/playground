@@ -17,7 +17,7 @@ import * as esbuild from "esbuild";
 import { MONACO_CSS, abap2ui5LinterPlugin, monacoCssPlugin, nodeStubPlugin } from "./esbuild-plugins.mjs";
 import { SAMPLE_LIST, SAMPLE_REPO } from "../src/editor/sample-list.mjs";
 import { rawUrlOf } from "../src/shell/catalogue-urls.mjs";
-import { writeCatalogueDocument, writeIndex } from "./site-documents.mjs";
+import { writeIndex } from "./site-documents.mjs";
 import { chunks, writeServiceWorker } from "./service-worker.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -423,15 +423,14 @@ async function buildPage() {
   });
 }
 
-// The sample catalogue page's bundles - see the catalogue section below for
-// what they are; this is only the esbuild call, so it can run beside the
-// other three.
+// The search box the 404 carries in its bar, as one small module of its own
+// - the only bundle under samples/ now that the catalogue is a site of its
+// own (tools/sample-pages.mjs). Only the esbuild call, so it can run beside
+// the other three.
 async function buildCatalogue() {
   await esbuild.build({
     entryPoints: [
-      { in: path.join(ROOT, "src", "catalogue", "catalogue.mjs"), out: "catalogue" },
       { in: path.join(ROOT, "src", "catalogue", "search-entry.mjs"), out: "search" },
-      { in: path.join(ROOT, "src", "catalogue", "page-entry.mjs"), out: "page" },
     ],
     outdir: path.join(DIST, "samples"),
     outExtension: { ".js": ".mjs" },
@@ -528,43 +527,16 @@ for (const name of ["favicon.png", "apple-touch-icon.png", "icon-192.png", "icon
   fs.copyFileSync(path.join(SHELL, name), path.join(DIST, name));
 }
 
-// The sample catalogue page: its own document at /samples/, its own small
-// bundle. Not part of the shell's entry - a reader who came to look something
-// up must not download Monaco and abaplint to do it, and a reader in the
-// editor must not carry a page they may never open. The two share
-// src/shell/ui5-libs.mjs (which library a control ships in) and the theme key,
-// and that sharing is why this is bundled at all rather than copied.
-//
-// dist/samples/apps.json is written by tools/build-catalogue.mjs, which runs
-// before this and owns that directory's data.
-//
-// The search box is the SECOND entry point here, and its own file on purpose:
-// the catalogue loads it and so does every one of the 772 per-sample pages,
-// which have no bundle of their own. One module beside them is fetched once
-// and cached for every page after it; inlined it would be written 773 times.
-// The bundles themselves came out of buildCatalogue( ) above, beside the
-// other three; what follows is the document and the stylesheet.
+// Under samples/: apps.json (tools/build-catalogue.mjs, which runs before
+// this and owns that directory), the redirects to the samples site, and the
+// 404's stylesheet - the palette's copy, which the 404 and sample.css build on.
 fs.copyFileSync(path.join(ROOT, "src", "catalogue", "catalogue.css"), path.join(DIST, "samples", "catalogue.css"));
-writeCatalogueDocument();
 
-/* THE HIGHLIGHTER, PUBLISHED - the file that decides which words in a class
- * are red and which are green, beside the pages it decides it for.
- *
- * It is a build-time module here: tools/sample-pages.mjs calls it and writes
- * the answer into all 772 pages, so nothing on the site loads it. What it is
- * published FOR is the documentation, which prints the same ABAP and now sets
- * it with this file rather than with a scheme of its own - the same borrow the
- * bar and search.mjs already are. Copied rather than bundled: it is one
- * function, it imports nothing, and what the manual should be reading is the
- * file itself. */
-fs.copyFileSync(path.join(ROOT, "tools", "abap-highlight.mjs"),
-  path.join(DIST, "samples", "abap-highlight.mjs"));
-log(`samples/abap-highlight.mjs (${kb(path.join(DIST, "samples", "abap-highlight.mjs"))})`);
 
 /* THE TYPE, ONE COPY FOR THE WHOLE SITE.
  *
  * `dist/fonts/`, because both stylesheets that name Inter sit exactly one
- * directory down - `assets/shell.css` and `samples/catalogue.css` - so the one
+ * directory down - `assets/shell.css` and `samples/catalogue.css` (the 404's) - so the one
  * relative url `../fonts/…` in each of them reaches the same two files. A url
  * in a stylesheet resolves against the STYLESHEET, not against the page, which
  * is why this also works from `/samples/<class>/`, three levels down, without
@@ -579,8 +551,6 @@ for (const name of fs.readdirSync(path.join(ROOT, "src", "fonts"))) {
   fs.copyFileSync(path.join(ROOT, "src", "fonts", name), path.join(DIST, "fonts", name));
   log(`fonts/${name} (${kb(path.join(DIST, "fonts", name))})`);
 }
-log(`samples/catalogue.mjs (${kb(path.join(DIST, "samples", "catalogue.mjs"))})`);
-log(`samples/page.mjs (${kb(path.join(DIST, "samples", "page.mjs"))}) - the sample pages' memory, outline and line numbers, one module for all of them`);
 log(`samples/search.mjs (${kb(path.join(DIST, "samples", "search.mjs"))})`);
 
 // A same-origin ABAP file, so ?src= can be exercised without depending on

@@ -229,11 +229,12 @@
   <!-- A landmark with no name is one of several called "navigation": this bar,
        the chapter menu on the manual, the trail above a title and the outline
        beside it. The other three say which they are; this one did not. -->
-  <nav class="bar-nav" aria-label="Main">
-    <a href="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3.6 10.9 12 4.2l8.4 6.7v8.3a1 1 0 0 1-1 1h-4.3v-6.1H8.9v6.1H4.6a1 1 0 0 1-1-1z"/></svg><span data-text="Home" data-short="Home">Home</span></a>
-    <a href="https://abap2ui5.github.io/docs/get_started/about" data-site="docs" data-scope="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 7.2C10.5 5.9 8.5 5.2 6 5.2H3.3v11.9H6c2.5 0 4.5.7 6 1.9 1.5-1.2 3.5-1.9 6-1.9h2.7V5.2H18c-2.5 0-4.5.7-6 1.9z"/><path d="M12 7.2v11.8"/></svg><span data-text="Documentation" data-short="Docs">Documentation</span></a>
-    <a href="samples/" data-site="samples" title="Every abap2UI5 sample, searchable" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.2" y="4.8" width="17.6" height="14.4" rx="2"/><path d="M3.2 9.4h17.6M8.5 9.4v9.8"/></svg><span data-text="Samples" data-short="Samples">Samples</span></a>
+  <nav class="bar-nav" aria-label="abap2UI5 sites">
+    <a href="https://abap2ui5.github.io/why/" title="abap2UI5 for the person who approves it"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.4" y="7.6" width="17.2" height="11.6" rx="1.8"/><path d="M9 7.6V6a1.4 1.4 0 0 1 1.4-1.4h3.2A1.4 1.4 0 0 1 15 6v1.6M3.4 12.4h17.2"/></svg><span data-text="For managers" data-short="Why">For managers</span></a>
+    <a href="https://abap2ui5.github.io/docs/" title="The manual"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 7.2C10.5 5.9 8.5 5.2 6 5.2H3.3v11.9H6c2.5 0 4.5.7 6 1.9 1.5-1.2 3.5-1.9 6-1.9h2.7V5.2H18c-2.5 0-4.5.7-6 1.9z"/><path d="M12 7.2v11.8"/></svg><span data-text="Docs" data-short="Docs">Docs</span></a>
+    <a href="https://abap2ui5.github.io/samples-site/" title="Every abap2UI5 sample, searchable"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.2" y="4.8" width="17.6" height="14.4" rx="2"/><path d="M3.2 9.4h17.6M8.5 9.4v9.8"/></svg><span data-text="Samples" data-short="Samples">Samples</span></a>
     <span class="here" aria-current="page"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M10.2 8.4v7.2a.5.5 0 0 0 .76.43l5.8-3.6a.5.5 0 0 0 0-.86l-5.8-3.6a.5.5 0 0 0-.76.43z" fill="currentColor" stroke="none"/></svg><span data-text="Playground" data-short="Play">Playground</span></span>
+    <a href="https://abap2ui5-addons.github.io/" title="Addons for your system, tools for your editor and pipeline"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.6" y="3.6" width="7" height="7" rx="1.3"/><rect x="13.4" y="3.6" width="7" height="7" rx="1.3"/><rect x="3.6" y="13.4" width="7" height="7" rx="1.3"/><rect x="13.4" y="13.4" width="7" height="7" rx="1.3"/></svg><span data-text="Addons &amp; Tools" data-short="Addons">Addons &amp; Tools</span></a>
   </nav>
   <!-- The box lands here, built by src/shell/search-box.mjs: written as an
        empty element rather than as markup, because the same box is on three
@@ -268,12 +269,11 @@
         <a href="ai/" data-site="ai">AI Studio</a>
         <a href="https://abap2ui5.github.io/layout-editor/">Layout Editor</a>
         <a href="https://abap2ui5-addons.github.io/abap-cloud-gui/">Report converter</a>
-        <a href="https://github.com/abap2UI5/linter" target="_blank" rel="noopener">Linter</a>
         <a href="https://abap2ui5.github.io/linter/">Linter rules</a>
-        <a href="https://github.com/abap2UI5/vscode-extension" target="_blank" rel="noopener">VS Code extension</a>
-        <a href="https://abap2ui5.github.io/docs/advanced/mcp_server">MCP server</a>
-        <a href="https://github.com/abap2UI5/app-template" target="_blank" rel="noopener">App template</a>
-        <a href="https://abap2ui5.github.io/docs/resources/addons">Add-ons</a>
+        <!-- Everything to install beside the framework, and the tools for
+             the editor, the pipeline and the agent, each with a page: a site
+             of its own. Not listed here a second time. -->
+        <a href="https://abap2ui5-addons.github.io/">Addons &amp; Tools</a>
         <span class="menu-head">Repositories</span>
         <div class="menu-repos">
           <div class="menu-group">
@@ -296,32 +296,7 @@
             <a href="https://github.com/abap2UI5/docs" target="_blank" rel="noopener">docs</a>
             <a href="https://github.com/abap2UI5/playground" target="_blank" rel="noopener">playground</a>
           </div>
-          <div class="menu-group">
-            <span class="menu-sub">Tools</span>
-            <a href="https://github.com/abap2UI5/linter" target="_blank" rel="noopener">linter</a>
-            <a href="https://github.com/abap2UI5/vscode-extension" target="_blank" rel="noopener">vscode-extension</a>
-            <a href="https://github.com/abap2UI5/mcp-server" target="_blank" rel="noopener">mcp-server</a>
-            <a href="https://github.com/abap2UI5/app-template" target="_blank" rel="noopener">app-template</a>
-          </div>
-          <div class="menu-group">
-            <span class="menu-sub">Add-ons</span>
-            <a href="https://github.com/abap2UI5-addons/popups" target="_blank" rel="noopener">popups</a>
-            <a href="https://github.com/abap2UI5-addons/http-connector" target="_blank" rel="noopener">http-connector</a>
-            <a href="https://github.com/abap2UI5-addons/rfc-connector" target="_blank" rel="noopener">rfc-connector</a>
-            <a href="https://github.com/abap2UI5-addons/lock-manager" target="_blank" rel="noopener">lock-manager</a>
-            <a href="https://github.com/abap2UI5-addons/launchpad-kpi" target="_blank" rel="noopener">launchpad-kpi</a>
-            <a href="https://github.com/abap2UI5-addons/table-maintenance" target="_blank" rel="noopener">table-maintenance</a>
-            <a href="https://github.com/abap2UI5-addons/se16n" target="_blank" rel="noopener">se16n</a>
-            <a href="https://github.com/abap2UI5-addons/custom-controls" target="_blank" rel="noopener">custom-controls</a>
-            <a href="https://github.com/abap2UI5-addons" target="_blank" rel="noopener">All add-ons</a>
-          </div>
-          <div class="menu-group">
-            <span class="menu-sub">Apps</span>
-            <a href="https://github.com/abap2UI5-apps/sql-console" target="_blank" rel="noopener">sql-console</a>
-            <a href="https://github.com/abap2UI5-apps/table-content-loader" target="_blank" rel="noopener">table-content-loader</a>
-            <a href="https://github.com/abap2UI5-apps" target="_blank" rel="noopener">All apps</a>
-          </div>
-        </div>
+</div>
       </div>
     </details>
   </div>
@@ -455,7 +430,7 @@
       <b>Samples</b> above carries a handful of built-in samples to start
       from and browses, without leaving this page, the samples of all three
       sibling repositories - the same list the
-      <a href="samples/">sample catalog</a> holds, which is where to go when
+      <a href="https://abap2ui5.github.io/samples-site/">sample catalog</a> holds, which is where to go when
       a search is worth linking to. What needs a real system is listed there
       too, and stays where the system is:
     </p>
@@ -658,7 +633,7 @@
       <!-- The same list with an address: filters in the URL, so a search can be
            linked or sent to somebody. This dialog is the quick way in; the page
            is the one to bookmark. -->
-      <a class="examples-all" href="samples/">Open the full catalog ↗</a>
+      <a class="examples-all" href="https://abap2ui5.github.io/samples-site/" target="_blank" rel="noopener">Open the full catalog ↗</a>
     </aside>
     <div class="about-body examples-body" id="examples-body"></div>
   </div>

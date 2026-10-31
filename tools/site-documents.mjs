@@ -11,9 +11,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { stripHtmlComments, withPolicy } from "./html.mjs";
-import { SITE } from "./sample-pages.mjs";
-import { THEME_BOOT, THEME_MENU, inlineScript } from "../src/shell/theme-boot.mjs";
+import { stripHtmlComments } from "./html.mjs";
+import { THEME_BOOT, inlineScript } from "../src/shell/theme-boot.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "src", "shell");
@@ -26,7 +25,6 @@ const log = (m) => console.log(`build-site: ${m}`);
  * as it is - never served, but read - is still a document, and replaced
  * before the comments are stripped. */
 const THEME_BOOT_MARKER = "<!-- __THEME_BOOT__ -->";
-const THEME_MENU_MARKER = "<!-- __THEME_MENU__ -->";
 
 // index.html, with a modulepreload for every chunk assets/shell.mjs imports
 // statically. Splitting the bundle put the code the entry shares with its
@@ -162,47 +160,3 @@ function preloadsFor(metafile, entryPoint) {
   return hrefs.map((href) => `\n<link rel="modulepreload" href="${href}">`).join("");
 }
 
-// The sample catalogue's document, dist/samples/index.html, out of
-// src/catalogue/index.html. Called after build-catalogue has written the index
-// it counts, and after the catalogue's bundles have landed beside it.
-export function writeCatalogueDocument() {
-  /* The catalogue's document, without the comments its source is written with -
-     four kilobytes of a twenty-kilobyte page - and with its policy in the head
-     (tools/html.mjs, both). */
-  /* The one figure the document carries as text - the count in the no-JS
-     fallback, the sentence a crawler and a reader without scripts get - is
-     written here from the index the catalogue step has just built, so it cannot
-     say "700-odd" while the index holds 772. A source with no marker, or an
-     index that is not there, fails the build rather than publishing a guess. */
-  const catalogueSource = fs.readFileSync(path.join(ROOT, "src", "catalogue", "index.html"), "utf8");
-  if (!catalogueSource.includes("__SAMPLE_COUNT__")) throw new Error("src/catalogue/index.html lost its __SAMPLE_COUNT__ marker");
-  /* The site's own address in the canonical, the og:url and the JSON-LD - the
-     same SITE every generated page writes, so a fork (PG_SITE_URL) does not
-     declare the upstream catalogue as the canonical copy of its own. */
-  if (!catalogueSource.includes("__SITE__")) throw new Error("src/catalogue/index.html lost its __SITE__ marker");
-  /* The two theme scripts, from src/shell/theme-boot.mjs - the text every sample
-     page carries too. */
-  for (const marker of [THEME_BOOT_MARKER, THEME_MENU_MARKER]) {
-    if (!catalogueSource.includes(marker)) throw new Error(`src/catalogue/index.html lost its ${marker} marker`);
-  }
-  const catalogueIndex = JSON.parse(fs.readFileSync(path.join(DIST, "samples", "apps.json"), "utf8"));
-  /* A missing index or one in a shape this does not know fails the build. An
-     EMPTY one does not: it is what build-catalogue writes, by design, when none
-     of the three catalogues arrived (raw.githubusercontent.com down during a
-     deploy), and that step's failure is the survivable one - the page then
-     says the catalogue could not be loaded. Throwing here made it fatal after
-     all. */
-  if (!Array.isArray(catalogueIndex.entries ?? catalogueIndex.samples) || !Array.isArray(catalogueIndex.sources)) {
-    throw new Error("dist/samples/apps.json is not an index - build-catalogue did not run, or its shape changed");
-  }
-  const sampleCount = (catalogueIndex.entries ?? catalogueIndex.samples).length;
-  if (!sampleCount) log("WARNING: the catalogue index is empty - the page will say it could not be loaded");
-  fs.writeFileSync(
-    path.join(DIST, "samples", "index.html"),
-    withPolicy(stripHtmlComments(catalogueSource
-      .replaceAll("__SITE__", SITE)
-      .replace("__SAMPLE_COUNT__", sampleCount ? String(sampleCount) : "no")
-      .replace(THEME_BOOT_MARKER, () => inlineScript(THEME_BOOT))
-      .replace(THEME_MENU_MARKER, () => inlineScript(THEME_MENU)))),
-  );
-}

@@ -44,7 +44,6 @@ import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
 import { setUpInsight, updateInsight } from "./insight.mjs";
 import { restoreCheckerSettings } from "./checker-settings.mjs";
 import { setUpSplitter, setUpTabs, setUpToolbarMenu } from "./layout.mjs";
-import { keepSiteLinksCurrent, rememberHere } from "./site-memory.mjs";
 import { setUpSearch } from "./search-box.mjs";
 import { announceEdited, announceReady, setUpEmbeddedEditor, startEmbedMessages } from "./embed.mjs";
 import { appUrl, copyToClipboard, shareUrl } from "./share.mjs";
@@ -208,13 +207,8 @@ async function boot() {
   setUpExtra();
   // The toolbar's own overflow menu, which only a phone shows (layout.mjs).
   setUpToolbarMenu();
-  // Samples and Documentation in the bar, pointed at the page each of those
-  // sites was last left on, and at how far down it the reader was
-  // (site-memory.mjs) - now, and again whenever that can have moved while this
-  // page stayed open. Skipped when embedded, where the bar is not on screen.
-  if (!embedded) keepSiteLinksCurrent();
-  // The other three bars step BACK to this page when it is still in the tab's
-  // history (site-memory.mjs), so that the browser can hand it back alive -
+  // Another site's bar may step BACK to this page when it is still in the
+  // tab's history, so that the browser can hand it back alive -
   // app, worker and all - instead of this boot running again. Whether it does
   // is the browser's call, and when it declined, the one place it says why is
   // notRestoredReasons on the arrival. The only console line in the shell:
@@ -235,14 +229,6 @@ async function boot() {
   //
   // Not when embedded (furniture in somebody else's page) and not in an
   // app-only view (a running app, not a place to come back to).
-  if (!embedded && !appOnly && !aiPage && !pilotPage) {
-    const writeHere = () => rememberHere("playground");
-    writeHere();
-    addEventListener("pagehide", writeHere);
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "hidden") writeHere();
-    });
-  }
   // The search box beside them: one box over the documentation and all ~770
   // samples, over the index the documentation publishes (search-box.mjs).
   // Not when embedded - an embedded playground is furniture in somebody
@@ -578,7 +564,7 @@ function reflectHistory() {
 // of 770 samples to run one of them is not done with the list - and `back`
 // carries the filters they had narrowed it to, so they land on their search
 // rather than at the top of it. The catalogue sets both parameters
-// (src/catalogue/catalogue.mjs).
+// (once the catalogue page's, now the samples site's).
 //
 // Live only for files that actually came from somewhere: over a draft, a
 // shared link or the AI's code there is no page with any relation to what is

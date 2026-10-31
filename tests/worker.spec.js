@@ -526,11 +526,12 @@ test("the catalogue's index is answered from the network first, and a cached cop
     );
   });
   const { served } = watch(page);
-  await page.goto("/samples/");
-  await expect(page.locator("#count")).toContainText("samples");
+  // The index, asked for by the page the worker controls - the samples
+  // dialog does the same.
+  await open(page);
+  const count = await page.evaluate(() => fetch("samples/apps.json").then((r) => r.json()).then((j) => (j.entries || j.samples || []).length));
   // A real number of samples, not the planted zero...
-  const count = await page.locator("#count").textContent();
-  expect(Number(count.match(/\d+/)[0])).toBeGreaterThan(100);
+  expect(count).toBeGreaterThan(100);
   // ...and the answer came through the worker, which is what makes the
   // fallback exist at all.
   expect([...served].some((p) => p.endsWith("/samples/apps.json"))).toBe(true);
@@ -538,8 +539,7 @@ test("the catalogue's index is answered from the network first, and a cached cop
   // response (waitUntil), so it is polled for rather than read once.
   await expect.poll(() => page.evaluate(async () => {
     const [name] = await caches.keys();
-    // Resolved from the catalogue's own page, one level down from the scope.
-    const hit = await (await caches.open(name)).match(new URL("../samples/apps.json", document.baseURI));
+    const hit = await (await caches.open(name)).match(new URL("samples/apps.json", document.baseURI));
     return hit ? (await hit.json()).stale === true : "missing";
   })).toBe(false);
 });
