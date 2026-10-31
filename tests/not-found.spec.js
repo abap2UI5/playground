@@ -42,11 +42,10 @@ test("an address that is not a page answers 404 with this site's own page", asyn
   expect(html).toContain('<meta name="robots" content="noindex">');
 
   await expect(page.locator("h1")).toHaveText("This page is not here");
-  // The frame: the family's five sites and the box, the same bar as the playground.
-  await expect(page.locator(".bar-nav a")).toHaveCount(5);
+  // The frame: the brand, the box and the menu, the same bar as the playground.
+  await expect(page.locator(".bar-nav")).toHaveCount(0);
+  await expect(page.locator(".brand")).toHaveAttribute("href", "https://abap2ui5.github.io/");
   await expect(page.locator(".search-slot")).toBeVisible();
-  // ...and the bar does not claim this is the samples page.
-  await expect(page.locator('.bar-nav a[aria-current="page"]')).toHaveCount(0);
 });
 
 test("the way on is in the page, and every link on it works from any depth", async ({ page }) => {

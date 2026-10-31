@@ -2718,6 +2718,59 @@ body.is-studio .chat.is-dropping { outline: 2px dashed var(--accent); outline-of
 .studio-status.error { color: var(--danger); }
 body.is-studio .chat-key button.primary { border: 0; background: var(--st-grad); color: #fff; border-radius: 999px; }
 
+/* THE STUDIO IN THE PLAYGROUND'S CLOTHES. The grid above stays - the chat
+   beside the stage, body[data-stage] - but nothing of it is a card any more:
+   the same white, the same hairlines, the same two radii as the workbench
+   (CONVENTION.md in abap2UI5/abap2UI5.github.io: one look). No shadow, no
+   glow, no blur, no pretend window chrome over the app, no slide-in. */
+body.is-studio {
+  --st-bg: var(--bg);
+  --st-surface: var(--bg);
+  --st-surface-strong: var(--bg);
+  --st-border: var(--line);
+  --st-glow: transparent;
+}
+body.is-studio .panes { animation: none; padding: 0; column-gap: 0; }
+body.is-studio .studio-bar { padding: 6px 10px; border-bottom: 1px solid var(--line); }
+body.is-studio .chat,
+body.is-studio .pane-right,
+body.is-studio .pane-left > :is(.files, .editor, .insight) {
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  border-color: var(--line);
+}
+body.is-studio .chat { border-right: 1px solid var(--line); border-top: 0; border-bottom: 0; border-left: 0; }
+body.is-studio .pane-right { border: 0; }
+body.is-studio[data-stage="split"] .pane-right { border-left: 1px solid var(--line); }
+body.is-studio .studio-window { display: none; }
+body.is-studio .studio-stages { border-radius: var(--radius-control); padding: 2px; backdrop-filter: none; }
+body.is-studio button.studio-stage { border-radius: var(--radius-control); }
+body.is-studio button.studio-stage[aria-selected="true"] { box-shadow: none; }
+body.is-studio button.studio-icon { border-radius: var(--radius-control); backdrop-filter: none; }
+body.is-studio .chat-user,
+body.is-studio .chat-assistant,
+body.is-studio .chat-tool,
+body.is-studio .chat-notice,
+body.is-studio .chat-card,
+body.is-studio button.chat-suggestion,
+body.is-studio .chat-compose textarea,
+body.is-studio .chat-key-row input,
+body.is-studio button.chat-attach,
+body.is-studio #chat-send,
+body.is-studio .chat-key button.primary,
+body.is-studio .chat-head button,
+body.is-studio .chat-speed {
+  border-radius: var(--radius-control);
+  box-shadow: none;
+}
+body.is-studio .chat-assistant::before { box-shadow: none; }
+body.is-studio .chat-welcome h2 { color: var(--fg); }
+body.is-studio .pane-right.is-flash { animation: none; }
+@media (prefers-reduced-motion: no-preference) {
+  body.is-studio.is-ai-working .pane-right::after { padding: 1px; }
+}
+
 
 /* -------------------------------------------------------------- AI Pilot */
 
