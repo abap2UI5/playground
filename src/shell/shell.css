@@ -2718,59 +2718,6 @@ body.is-studio .chat.is-dropping { outline: 2px dashed var(--accent); outline-of
 .studio-status.error { color: var(--danger); }
 body.is-studio .chat-key button.primary { border: 0; background: var(--st-grad); color: #fff; border-radius: 999px; }
 
-/* THE STUDIO IN THE PLAYGROUND'S CLOTHES. The grid above stays - the chat
-   beside the stage, body[data-stage] - but nothing of it is a card any more:
-   the same white, the same hairlines, the same two radii as the workbench
-   (CONVENTION.md in abap2UI5/abap2UI5.github.io: one look). No shadow, no
-   glow, no blur, no pretend window chrome over the app, no slide-in. */
-body.is-studio {
-  --st-bg: var(--bg);
-  --st-surface: var(--bg);
-  --st-surface-strong: var(--bg);
-  --st-border: var(--line);
-  --st-glow: transparent;
-}
-body.is-studio .panes { animation: none; padding: 0; column-gap: 0; }
-body.is-studio .studio-bar { padding: 6px 10px; border-bottom: 1px solid var(--line); }
-body.is-studio .chat,
-body.is-studio .pane-right,
-body.is-studio .pane-left > :is(.files, .editor, .insight) {
-  border-radius: 0;
-  box-shadow: none;
-  backdrop-filter: none;
-  border-color: var(--line);
-}
-body.is-studio .chat { border-right: 1px solid var(--line); border-top: 0; border-bottom: 0; border-left: 0; }
-body.is-studio .pane-right { border: 0; }
-body.is-studio[data-stage="split"] .pane-right { border-left: 1px solid var(--line); }
-body.is-studio .studio-window { display: none; }
-body.is-studio .studio-stages { border-radius: var(--radius-control); padding: 2px; backdrop-filter: none; }
-body.is-studio button.studio-stage { border-radius: var(--radius-control); }
-body.is-studio button.studio-stage[aria-selected="true"] { box-shadow: none; }
-body.is-studio button.studio-icon { border-radius: var(--radius-control); backdrop-filter: none; }
-body.is-studio .chat-user,
-body.is-studio .chat-assistant,
-body.is-studio .chat-tool,
-body.is-studio .chat-notice,
-body.is-studio .chat-card,
-body.is-studio button.chat-suggestion,
-body.is-studio .chat-compose textarea,
-body.is-studio .chat-key-row input,
-body.is-studio button.chat-attach,
-body.is-studio #chat-send,
-body.is-studio .chat-key button.primary,
-body.is-studio .chat-head button,
-body.is-studio .chat-speed {
-  border-radius: var(--radius-control);
-  box-shadow: none;
-}
-body.is-studio .chat-assistant::before { box-shadow: none; }
-body.is-studio .chat-welcome h2 { color: var(--fg); }
-body.is-studio .pane-right.is-flash { animation: none; }
-@media (prefers-reduced-motion: no-preference) {
-  body.is-studio.is-ai-working .pane-right::after { padding: 1px; }
-}
-
 
 /* -------------------------------------------------------------- AI Pilot */
 
@@ -2821,19 +2768,21 @@ body.is-pilot .studio-window { display: none; }
    and the chat beside each other below it. */
 body.is-pilot .panes {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(21rem, 27rem);
+  grid-template-columns: minmax(21rem, 27rem) minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
   padding: 0 14px 14px;
 }
 body.is-pilot.is-pilot-sees .panes {
-  grid-template-columns: minmax(0, 1fr) minmax(16rem, 24rem) minmax(21rem, 27rem);
+  grid-template-columns: minmax(21rem, 27rem) minmax(16rem, 24rem) minmax(0, 1fr);
 }
 body.is-pilot .panes > h1 { position: absolute; }
 body.is-pilot .pilot-bar { grid-column: 1 / -1; grid-row: 1; }
-body.is-pilot .pane-right { grid-column: 1; grid-row: 2; }
+/* The app on the right, as in the studio and the playground: the
+   conversation first, what Claude sees beside it, the app last. */
+body.is-pilot .pilot { grid-column: 1; grid-row: 2; }
 body.is-pilot .pilot-sees { grid-column: 2; grid-row: 2; }
-body.is-pilot .pilot { grid-column: -2; grid-row: 2; }
+body.is-pilot .pane-right { grid-column: -2; grid-row: 2; }
 
 @media (max-width: 820px) {
   body.is-pilot .panes,
@@ -3380,3 +3329,37 @@ body.is-pilot button.pilot-attach:hover { border-color: var(--pl-signal); }
 .compare-bar { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; padding: .5rem 1rem; border-bottom: 1px solid var(--line); }
 .compare-said { flex: 1; color: var(--fg-dim); font-size: 12px; }
 .compare-diff { flex: 1; min-height: 0; }
+
+/* ONE LOOK FOR THE THREE ROOMS: the playground and the AI Pilot wear the
+   AI Studio's - a sunken page, the work on white cards with an 18px radius,
+   a hairline and a soft shadow, 14px apart, and the app always the card on
+   the right, in its window. Wide screens only: below 820px the playground is
+   one pane at a time (phone.md) and keeps its tabs. */
+@media (min-width: 821px) {
+  body:not(.is-studio):not(.is-pilot):not(.is-embedded):not(.is-app-only) { background: var(--bg-sunken); }
+  body:not(.is-studio):not(.is-pilot):not(.is-embedded):not(.is-app-only) > .bar,
+  body:not(.is-studio):not(.is-pilot):not(.is-embedded):not(.is-app-only) > .toolbar { background: transparent; border-bottom: 0; }
+  body:not(.is-studio):not(.is-pilot):not(.is-embedded):not(.is-app-only) .panes { padding: 0 14px 14px; }
+  body:not(.is-studio):not(.is-pilot):not(.is-embedded):not(.is-app-only) .pane-left,
+  body:not(.is-studio):not(.is-pilot):not(.is-embedded):not(.is-app-only) .pane-right {
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    box-shadow: 0 10px 40px rgba(20, 10, 60, .10);
+    overflow: hidden;
+  }
+  /* the gap between the two cards is the handle */
+  body:not(.is-studio):not(.is-pilot):not(.is-embedded):not(.is-app-only) .splitter { flex-basis: 14px; }
+  body:not(.is-studio):not(.is-pilot):not(.is-embedded):not(.is-app-only) .splitter::after { inset: 30% 6px; border-radius: 2px; }
+  body:not(.is-studio):not(.is-pilot):not(.is-embedded):not(.is-app-only) .studio-window {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: none;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  body.is-pilot .pane-right,
+  body.is-pilot .pilot,
+  body.is-pilot .pilot-sees { border-radius: 18px; box-shadow: 0 10px 40px rgba(20, 10, 60, .10); }
+}
