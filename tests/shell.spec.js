@@ -437,7 +437,7 @@ test("on a phone Run brings the app forward - unless there is no app to bring", 
   await expect(page.locator(".insight-row.is-error").first()).toBeVisible();
 });
 
-test("the bar begins and ends as the sample catalogue's bar does", async ({ page }) => {
+test("the bar begins and ends as the family's top line does", async ({ page }) => {
   await open(page);
 
   // The same brand: the mark and the name, and nothing more - the nav says
@@ -446,18 +446,18 @@ test("the bar begins and ends as the sample catalogue's bar does", async ({ page
   await expect(page.locator(".brand")).toHaveText("abap2UI5");
   await expect(page.locator(".brand img")).toBeVisible();
 
-  // And the same far end: the four sections - Home, Documentation, Samples
-  // and where you are - then LinkedIn and GitHub, then the button that opens
-  // the rest. The AI Studio is a tool, in that menu and in the toolbar.
-  await expect(page.locator(".bar-nav > *")).toHaveText(["Home", "Documentation", "Samples", "Playground"]);
+  // And the same far end: the family's five sites - For managers, Docs,
+  // Samples, where you are, Addons & Tools - then LinkedIn and GitHub, then
+  // the button that opens the rest. The AI Studio is a tool, in that menu and in the toolbar.
+  await expect(page.locator(".bar-nav > *")).toHaveText(["For managers", "Docs", "Samples", "Playground", "Addons & Tools"]);
   await expect(page.locator('.bar-nav a[data-site="ai"]')).toHaveCount(0);
   // The same box the other three bars carry, in the same place: the middle of
   // the row. It used to sit at the right-hand end here, because the workbench
   // owned the middle - the workbench has a row of its own now.
   await expect(page.locator(".bar .search-button")).toBeVisible();
   await expect(page.locator('.bar-nav [aria-current="page"]')).toHaveText("Playground");
-  await expect(page.locator('.bar-nav a[href="samples/"]')).toBeVisible();
-  await expect(page.locator('.bar-nav a[data-site="docs"]')).toHaveText("Documentation");
+  await expect(page.locator('.bar-nav a[href="https://abap2ui5.github.io/samples-site/"]')).toBeVisible();
+  await expect(page.locator('.bar-nav a[href="https://abap2ui5.github.io/docs/"]')).toHaveText("Docs");
   await expect(page.locator(".bar .social")).toHaveCount(2);
   await expect(page.locator('.bar .social[href*="linkedin.com/company/abap2ui5"]')).toBeVisible();
   await expect(page.locator('.bar .social[href*="github.com/abap2UI5"]')).toBeVisible();
@@ -470,7 +470,7 @@ test("the bar begins and ends as the sample catalogue's bar does", async ({ page
   await extra.locator("summary").click();
   await expect(theme).toBeVisible();
   expect(await extra.locator(".menu a").count()).toBeGreaterThanOrEqual(10);
-  for (const part of ["github.com/abap2UI5/linter", "github.com/abap2UI5/vscode-extension", "github.com/abap2UI5-addons",
+  for (const part of ["abap2ui5.github.io/linter/", "abap2ui5-addons.github.io/",
     "abap2ui5.github.io/layout-editor/", "abap2ui5-addons.github.io/abap-cloud-gui/", "abap2ui5.github.io/why/"]) {
     await expect(extra.locator(`.menu a[href*="${part}"]`).first()).toBeVisible();
   }

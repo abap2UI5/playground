@@ -27,14 +27,6 @@ export const BASE = new URL(SITE).pathname;
 export const THEME_SCRIPT = inlineScript(THEME_BOOT);
 export const MENU_SCRIPT = inlineScript(THEME_MENU);
 
-/* Where the reader is and where the documentation was left, the outline and
- * the line numbers: the three scripts every one of these pages used to carry
- * INLINE - 15 kB a page, 772 pages, and a hand copy of src/shell/site-memory.mjs
- * to keep in step by hand - are one module now, samples/page.mjs, built from
- * src/catalogue/page-entry.mjs beside search.mjs and cached once for all of
- * them. What stays inline is what has to: the theme, before the first paint,
- * and the menu, which the documentation borrows from one of these pages. */
-export const PAGE_SCRIPT = (up) => `<script type="module" src="${up}samples/page.mjs"></script>`;
 
 /* The two marks the playground's own bar ends in (src/shell/index.html) and,
  * after them, the button and the menu the catalogue's bar ends in
@@ -77,12 +69,11 @@ export const SOCIALS = `<div class="socials">
         <a href="https://abap2ui5.github.io/playground/ai/" data-site="ai">AI Studio</a>
         <a href="https://abap2ui5.github.io/layout-editor/">Layout Editor</a>
         <a href="https://abap2ui5-addons.github.io/abap-cloud-gui/">Report converter</a>
-        <a href="https://github.com/abap2UI5/linter" target="_blank" rel="noopener">Linter</a>
         <a href="https://abap2ui5.github.io/linter/">Linter rules</a>
-        <a href="https://github.com/abap2UI5/vscode-extension" target="_blank" rel="noopener">VS Code extension</a>
-        <a href="https://abap2ui5.github.io/docs/advanced/mcp_server">MCP server</a>
-        <a href="https://github.com/abap2UI5/app-template" target="_blank" rel="noopener">App template</a>
-        <a href="https://abap2ui5.github.io/docs/resources/addons">Add-ons</a>
+        <!-- Everything to install beside the framework, and the tools for
+             the editor, the pipeline and the agent, each with a page: a site
+             of its own. Not listed here a second time. -->
+        <a href="https://abap2ui5-addons.github.io/">Addons &amp; Tools</a>
         <span class="menu-head">Repositories</span>
         <div class="menu-repos">
           <div class="menu-group">
@@ -105,32 +96,7 @@ export const SOCIALS = `<div class="socials">
             <a href="https://github.com/abap2UI5/docs" target="_blank" rel="noopener">docs</a>
             <a href="https://github.com/abap2UI5/playground" target="_blank" rel="noopener">playground</a>
           </div>
-          <div class="menu-group">
-            <span class="menu-sub">Tools</span>
-            <a href="https://github.com/abap2UI5/linter" target="_blank" rel="noopener">linter</a>
-            <a href="https://github.com/abap2UI5/vscode-extension" target="_blank" rel="noopener">vscode-extension</a>
-            <a href="https://github.com/abap2UI5/mcp-server" target="_blank" rel="noopener">mcp-server</a>
-            <a href="https://github.com/abap2UI5/app-template" target="_blank" rel="noopener">app-template</a>
-          </div>
-          <div class="menu-group">
-            <span class="menu-sub">Add-ons</span>
-            <a href="https://github.com/abap2UI5-addons/popups" target="_blank" rel="noopener">popups</a>
-            <a href="https://github.com/abap2UI5-addons/http-connector" target="_blank" rel="noopener">http-connector</a>
-            <a href="https://github.com/abap2UI5-addons/rfc-connector" target="_blank" rel="noopener">rfc-connector</a>
-            <a href="https://github.com/abap2UI5-addons/lock-manager" target="_blank" rel="noopener">lock-manager</a>
-            <a href="https://github.com/abap2UI5-addons/launchpad-kpi" target="_blank" rel="noopener">launchpad-kpi</a>
-            <a href="https://github.com/abap2UI5-addons/table-maintenance" target="_blank" rel="noopener">table-maintenance</a>
-            <a href="https://github.com/abap2UI5-addons/se16n" target="_blank" rel="noopener">se16n</a>
-            <a href="https://github.com/abap2UI5-addons/custom-controls" target="_blank" rel="noopener">custom-controls</a>
-            <a href="https://github.com/abap2UI5-addons" target="_blank" rel="noopener">All add-ons</a>
-          </div>
-          <div class="menu-group">
-            <span class="menu-sub">Apps</span>
-            <a href="https://github.com/abap2UI5-apps/sql-console" target="_blank" rel="noopener">sql-console</a>
-            <a href="https://github.com/abap2UI5-apps/table-content-loader" target="_blank" rel="noopener">table-content-loader</a>
-            <a href="https://github.com/abap2UI5-apps" target="_blank" rel="noopener">All apps</a>
-          </div>
-        </div>
+</div>
       </div>
     </details>
   </div>`;
@@ -163,16 +129,17 @@ export const SEARCH_SCRIPT = (up) => `<script type="module" src="${up}samples/se
  * pages are Samples, and the 404 (not-found-page.mjs) is none of them - a
  * page that is not there must not tell a screen reader it is the samples
  * page. */
-export const bar = (up, current = "samples") => `<header class="bar">
+export const bar = (up) => `<header class="bar">
   <a class="brand" href="https://abap2ui5.github.io/" target="_self">
     <img src="${up}favicon.png" alt="" width="20" height="20">
     <span>abap2UI5</span>
   </a>
-  <nav class="bar-nav" aria-label="Main">
-    <a href="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3.6 10.9 12 4.2l8.4 6.7v8.3a1 1 0 0 1-1 1h-4.3v-6.1H8.9v6.1H4.6a1 1 0 0 1-1-1z"/></svg><span data-text="Home" data-short="Home">Home</span></a>
-    <a href="https://abap2ui5.github.io/docs/get_started/about" data-site="docs" data-scope="https://abap2ui5.github.io/docs/" data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 7.2C10.5 5.9 8.5 5.2 6 5.2H3.3v11.9H6c2.5 0 4.5.7 6 1.9 1.5-1.2 3.5-1.9 6-1.9h2.7V5.2H18c-2.5 0-4.5.7-6 1.9z"/><path d="M12 7.2v11.8"/></svg><span data-text="Documentation" data-short="Docs">Documentation</span></a>
-    <a href="${up}samples/"${current === "samples" ? ` aria-current="page"` : ""} data-back><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.2" y="4.8" width="17.6" height="14.4" rx="2"/><path d="M3.2 9.4h17.6M8.5 9.4v9.8"/></svg><span data-text="Samples" data-short="Samples">Samples</span></a>
+  <nav class="bar-nav" aria-label="abap2UI5 sites">
+    <a href="https://abap2ui5.github.io/why/" title="abap2UI5 for the person who approves it"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.4" y="7.6" width="17.2" height="11.6" rx="1.8"/><path d="M9 7.6V6a1.4 1.4 0 0 1 1.4-1.4h3.2A1.4 1.4 0 0 1 15 6v1.6M3.4 12.4h17.2"/></svg><span data-text="For managers" data-short="Why">For managers</span></a>
+    <a href="https://abap2ui5.github.io/docs/" title="The manual"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 7.2C10.5 5.9 8.5 5.2 6 5.2H3.3v11.9H6c2.5 0 4.5.7 6 1.9 1.5-1.2 3.5-1.9 6-1.9h2.7V5.2H18c-2.5 0-4.5.7-6 1.9z"/><path d="M12 7.2v11.8"/></svg><span data-text="Docs" data-short="Docs">Docs</span></a>
+    <a href="https://abap2ui5.github.io/samples-site/" title="Every abap2UI5 sample, searchable"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.2" y="4.8" width="17.6" height="14.4" rx="2"/><path d="M3.2 9.4h17.6M8.5 9.4v9.8"/></svg><span data-text="Samples" data-short="Samples">Samples</span></a>
     <a href="${up}" data-site="playground" title="Write ABAP and run it in the browser"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M10.2 8.4v7.2a.5.5 0 0 0 .76.43l5.8-3.6a.5.5 0 0 0 0-.86l-5.8-3.6a.5.5 0 0 0-.76.43z" fill="currentColor" stroke="none"/></svg><span data-text="Playground" data-short="Play">Playground</span></a>
+    <a href="https://abap2ui5-addons.github.io/" title="Addons for your system, tools for your editor and pipeline"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.6" y="3.6" width="7" height="7" rx="1.3"/><rect x="13.4" y="3.6" width="7" height="7" rx="1.3"/><rect x="3.6" y="13.4" width="7" height="7" rx="1.3"/><rect x="13.4" y="13.4" width="7" height="7" rx="1.3"/></svg><span data-text="Addons &amp; Tools" data-short="Addons">Addons &amp; Tools</span></a>
   </nav>
   <span class="search-slot" data-search></span>
   ${SOCIALS}

@@ -422,7 +422,7 @@ for (const shared of ["shell/ui5-libs.mjs", "shell/ui5-libraries.mjs", "shell/th
   stamp.update(fs.readFileSync(path.join(ROOT, "src", shared)));
 }
 const hash = stamp.digest("hex");
-const written = ["samples/apps.json", "samples/all/index.html", "samples/sample.css", "samples/llms.txt", "sitemap.xml", "404.html", "llms.txt"];
+const written = ["samples/apps.json", "samples/index.html", "samples/all/index.html", "samples/sample.css", "sitemap.xml", "404.html", "llms.txt"];
 const current =
   !process.argv.includes("--force") &&
   fs.existsSync(STAMP) &&
@@ -430,7 +430,7 @@ const current =
   written.every((rel) => fs.existsSync(path.join(DIST, rel)));
 
 if (current) {
-  log(`dist/samples up to date (${pages.rows.length} pages, apps.json), leaving it in place`);
+  log(`dist/samples up to date (${pages.rows.length} redirects, apps.json), leaving it in place`);
 } else {
   // The stamp goes first, as in the other steps: a write interrupted half way
   // left the old stamp beside half the pages, and the next build believed it.

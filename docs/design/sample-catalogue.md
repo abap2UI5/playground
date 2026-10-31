@@ -3,6 +3,18 @@
 > Design notes, moved out of `AGENTS.md`. Read this before touching `src/catalogue/`, `tools/build-catalogue.mjs`, `tools/sample-*.mjs`, `tools/not-found-page.mjs` or `apps.json`.
 > The rules in short, and every other area, are in [AGENTS.md](../../AGENTS.md).
 
+## Now: the catalogue is a site of its own
+
+Since 2026-10-31 the catalogue - every sample, searchable, a page per sample -
+is **abap2UI5/samples-site** at https://abap2ui5.github.io/samples-site/. It
+builds from the one file this deployment still publishes, `samples/apps.json`
+(`tools/build-catalogue.mjs`), which is a contract: its fields are what that
+site reads. What `tools/sample-pages.mjs` writes under `dist/samples/` now is
+a forward for every address the pages used to have (`samples/<class>/`,
+`samples/`, `samples/all/`), the 404 beside them, the sitemap and `llms.txt`.
+The site memory between the catalogue and the playground went with the
+pages. Everything below is the history of the pages that were built here.
+
 ## The sample catalogue — `src/catalogue/`, at `/samples/`
 
 **<https://abap2ui5.github.io/playground/samples/>** — every sample of

@@ -360,34 +360,25 @@ function documentOf(url, request) {
   if (rel === "app/index.html") return new URL("app/index.html", BASE);
   if (rel === "ai/" || rel === "ai/index.html") return new URL("ai/index.html", BASE);
   if (rel === "pilot/" || rel === "pilot/index.html") return new URL("pilot/index.html", BASE);
-  // The catalogue, asked for as the directory or as the file. It registers no
-  // worker of its own - a reader who only wanted to look a sample up must not
-  // be handed the playground's three megabytes of precache - so this only ever
-  // runs for somebody the playground already installed for.
-  if (rel === "samples/" || rel === "samples/index.html") return new URL("samples/index.html", BASE);
   return undefined;
 }
 
-// The sample catalogue at samples/: its index, its bundle and its
-// stylesheet. Kept as they are used and deliberately NOT precached -
-// apps.json alone is most of a megabyte, and somebody who came to write ABAP
-// must not download a list of 770 samples to do it. One visit to the
-// catalogue is what puts it in the cache, and from then on an installed
-// playground opens it offline like everything else.
+// The sample index at samples/apps.json: the playground's own samples
+// dialog reads it, and so does the samples site's build. Kept as it is used
+// and deliberately NOT precached - it is most of a megabyte, and somebody who
+// came to write ABAP must not download a list of 770 samples to do it.
 //
-// NETWORK FIRST, like the documents, and unlike every other asset. The
-// catalogue is written by the deploy that wrote the bundle beside it, but
-// the deploy that changes it is usually not the deploy that changes the
-// bundle: the site is published every night so that a sample merged today
-// is listed tomorrow, and a night where only the catalogue moved produces a
-// worker identical to the one before it - same build id, same cache - so
-// no new worker installs and nothing ever evicts the copy. Served
-// cache-first, that copy was yesterday's catalogue for every visitor who
-// had ever opened the playground, which is exactly what caching the OLD
-// examples data got wrong. So these three ask the network and fall back to
-// the cache, and the cache is refreshed by every answer. The playground's
-// own samples dialog reads the same apps.json, so it stays current too.
-const LIVE = new Set(["samples/apps.json", "samples/catalogue.mjs", "samples/catalogue.css"]);
+// NETWORK FIRST, like the documents, and unlike every other asset. The index
+// is written by the deploy that wrote the bundle beside it, but the deploy
+// that changes it is usually not the deploy that changes the bundle: the site
+// is published every night so that a sample merged today is listed tomorrow,
+// and a night where only the index moved produces a worker identical to the
+// one before it - same build id, same cache - so no new worker installs and
+// nothing ever evicts the copy. Served cache-first, that copy was
+// yesterday's index for every visitor who had ever opened the playground. So
+// this asks the network and falls back to the cache, and the cache is
+// refreshed by every answer.
+const LIVE = new Set(["samples/apps.json"]);
 function isLive(url) {
   if (url.origin !== BASE.origin || url.search !== "") return false;
   if (!url.pathname.startsWith(BASE.pathname)) return false;

@@ -78,24 +78,15 @@ const TRANSFERRED = [
    * the budget moved rather than the class. */
   { file: "editor/corpus.json", limit: 0.65 * MB, note: "the ABAP sources the editor checks against" },
   { file: "runtime/sql-wasm.wasm", limit: 0.4 * MB, note: "SQLite" },
-  /* The sample catalogue at /samples/ is its own document and its own wait:
-   * nobody downloads it to write ABAP, and nobody downloads the playground to
-   * read it. Budgeted because it is the one file here that grows with the
-   * corpus - a sample added in any of the three repositories adds a row - and
+  /* The sample index is its own wait: nobody downloads it to write ABAP.
+   * Budgeted because it is the one file here that grows with the corpus - a sample added in any of the three repositories adds a row - and
    * it is what stands between opening the page and seeing a list. It
    * compresses hard: it is 800-odd near-identical objects. */
   { file: "samples/apps.json", limit: 0.15 * MB, note: `the sample catalogue's index, ${samplesIndexed()}` },
-  { file: "samples/catalogue.mjs", limit: 0.02 * MB, note: "the catalogue page itself" },
-  /* The bar's search box, loaded by the catalogue and by every per-sample
-   * page - so it is one file for 773 documents, and the budget is on the file
-   * rather than on the sum. What it searches is not in here: the index is
-   * fetched from the documentation's deployment, and only once somebody
-   * types. */
+  /* The bar's search box, as the 404 loads it. What it searches is not in
+   * here: the index is fetched from the documentation's deployment, and only
+   * once somebody types. */
   { file: "samples/search.mjs", limit: 0.012 * MB, note: "the search box in the bar" },
-  /* What the per-sample pages used to carry inline, 15 kB a page: the bar's
-   * memory, the outline walk and the line numbers, as one module for all 772
-   * of them - loaded by every one of them, so the budget is on the file. */
-  { file: "samples/page.mjs", limit: 0.012 * MB, note: "the sample pages' memory, outline and line numbers" },
 ];
 
 // The whole site. Most of it is UI5, which is fetched a bundle at a time and

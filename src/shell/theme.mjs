@@ -52,7 +52,7 @@ export function setUpTheme({ restore = true } = {}) {
   });
   // The switch is shared by every page on this origin, and two ways bring
   // this page back without reading it again: the back/forward cache (the bar
-  // hands the playground back alive on purpose - site-memory.mjs) and another
+  // hands the playground back alive on purpose) and another
   // tab flipping it. Either way the stored choice is read again, and the
   // editor and the app frame follow through the listeners.
   if (restore) {

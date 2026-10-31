@@ -6,7 +6,7 @@ import path from "node:path";
 //
 // The bar steps back to a page that is still behind the reader so that the
 // browser can hand it back alive - the playground with its running app, the
-// catalogue at the row the reader was on (site-memory.mjs, and the hand copy
+// catalogue at the row the reader was on (once site-memory.mjs, and the hand copy
 // on the sample pages). The browser declines the moment a page registers an
 // unload listener, and Firefox declines on beforeunload too; a Cache-Control
 // of no-store declines it everywhere. None of these has a use in this

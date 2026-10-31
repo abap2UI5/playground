@@ -5,9 +5,10 @@ Monaco and abaplint on the left and a real abap2UI5 app on the right. The ABAP
 in the editor is transpiled to JavaScript in the browser and run against the
 actual framework — transpiled at build time from a pinned commit — with nothing
 behind it: no server, no SAP system, no backend of any kind. Beside it, on the
-same origin: the sample catalogue at `/samples/` with a static page per
-sample, the AI Studio (`/ai/`), the AI Pilot (`/pilot/`), and the embed kit
-that documentation pages use.
+same origin: the sample index at `samples/apps.json` (which the samples site,
+abap2UI5/samples-site, builds from) with a forward for every address the
+catalogue used to have here, the AI Studio (`/ai/`), the AI Pilot
+(`/pilot/`), and the embed kit that documentation pages use.
 
 **This file is the short version.** The reasoning behind every rule — the
 measurements, what was tried and refused — is in `docs/design/<area>.md`;
@@ -66,7 +67,6 @@ read them before touching `tools/` or `src/runtime/`.
 | `search-box.mjs` | The bar's search box (all documents here) |
 | `search-engine.mjs` | Its matcher — a copy of abap2UI5/docs' `search-engine.js`, plus `normalise` |
 | `search-terms.mjs` | The dialog's and catalogue's free-text filter (`foldCase`, `queryTerms`) |
-| `site-memory.mjs` | Where the reader was on each neighbouring site; `returnTo()` |
 | `runtime-client.mjs` | The page's handle on the runtime worker (HEAD probe, STALLED) |
 | `warm-up.mjs` | The app frame's first load, fetched into the HTTP cache during the parse |
 | `frontend-bridge.js` | Injected into the app frame, talks to the page by `postMessage` only: the fetch interception, restart in place, the AI calls, storage shims for an opaque frame |
@@ -135,7 +135,7 @@ read them before touching `tools/` or `src/runtime/`.
 
 | Path | Purpose |
 | --- | --- |
-| `src/catalogue/` | `/samples/`: `index.html`, `catalogue.css`, `catalogue.mjs` (the page), `search-entry.mjs` (→ `samples/search.mjs`), `page-entry.mjs` (→ `samples/page.mjs`: site memory, `outline.mjs`, `lines.mjs`, `run-jump.mjs`), `sample.css` (sample pages) |
+| `src/catalogue/` | `catalogue.css` (the palette's copy) and `sample.css`, the 404's stylesheets; `search-entry.mjs` (→ `samples/search.mjs`, the 404's search box) |
 | `src/vendor/agent/` | abap2UI5/mcp-server's agent client, copied **unchanged** by `tools/vendor-agent.mjs` (`source.json`; `--check`). Never edited here |
 | `src/abap/` | `zcl_pg_bridge`, the playground's only ABAP |
 | `src/examples/` | ABAP served statically so `?src=` tests have same-origin targets |
@@ -145,8 +145,8 @@ read them before touching `tools/` or `src/runtime/`.
 | `tools/fetch-deps.mjs` | The pins (framework, frontend, open-abap-core, samples); `--update-pins`, `--print-latest` |
 | `tools/build-framework.mjs` | Downport, transpile, bundle → `dist/runtime/framework.mjs` |
 | `tools/build-ui5.mjs` | The UI5 frontend → `dist/app/`; `frameOptions` and `checkLocal` patches |
-| `tools/build-catalogue.mjs` | `dist/samples/apps.json`, and the sample pages through `sample-pages.mjs` |
-| `tools/sample-pages.mjs` | One page per sample, `samples/all/`, sitemap, `llms.txt` |
+| `tools/build-catalogue.mjs` | `dist/samples/apps.json`, and the redirects through `sample-pages.mjs` |
+| `tools/sample-pages.mjs` | A forward per sample to the samples site, `samples/`, `samples/all/`, the 404, sitemap, `llms.txt` |
 | `tools/sample-frame.mjs` | The frame those pages share (bar, footer, `THEME_SCRIPT`, `MENU_SCRIPT`) |
 | `tools/not-found-page.mjs` | `dist/404.html`, which guesses |
 | `tools/sample-sources.mjs` | The printed ABAP, one tarball per ref |
@@ -276,8 +276,8 @@ Each bullet names the design doc that explains it. Keep them true.
 - Share links, `?src=`, `?gist=`, `?embed=`, `?view=`, `?readonly=`, `?lines=`, the embed loader and its messages, `abap-highlight.mjs`'s export and `apps.json`'s fields are contracts with abap2UI5/docs; a docs change needing new behaviour ships after the playground deploy. External pages build URLs with `abap2ui5Embed.url()`.
 - An embedded playground never reads or writes the stored draft or settings. The first-steps strip never shows on an embed, an app-only page, the AI pages or anything a link opened.
 - `#playground=` (the share fragment) is read by abap2UI5/layout-editor too.
-- The catalogue build degrades per repository and never fails the build; everything on sample pages is escaped, links are `https` only, documents go out through `withPolicy()`.
-- The bar, the menu, the palette and the font exist in several copies here — change them together. Across the abap2UI5 sites only the family convention binds (CONVENTION.md in abap2UI5/abap2UI5.github.io: the brand goes home to https://abap2ui5.github.io/, one red accent); the documentation is a site of its own and borrows nothing from this one. `search-engine.mjs` is a copy of the docs repo's; a change to matching starts there.
+- The catalogue build degrades per repository and never fails the build; `samples/apps.json` is a contract with abap2UI5/samples-site, which builds from it; the redirects and the 404 go out through `withPolicy()`.
+- The bar and the menu exist twice here (`src/shell/index.html`, `tools/sample-frame.mjs` for the 404), the palette too (`shell.css`, `catalogue.css`) — change them together. The bar is the family's top line: For managers, Docs, Samples, Playground, Addons & Tools. Across the abap2UI5 sites only the family convention binds (CONVENTION.md in abap2UI5/abap2UI5.github.io: the brand goes home to https://abap2ui5.github.io/, one red accent); the documentation is a site of its own and borrows nothing from this one. `search-engine.mjs` is a copy of the docs repo's; a change to matching starts there.
 
 **Tests** ([testing.md](docs/design/testing.md))
 - Anything user-visible is tested through a real browser against the built `dist/`; pure modules may add `node:test` tests in `tests/node/`.
@@ -350,6 +350,6 @@ sample pages' per-line markup and the 220 MB site budget
 | The AI Studio, providers, keys, attachments, `agent-hooks.mjs`, `linked-code.mjs` | [ai-chat.md](docs/design/ai-chat.md) |
 | The AI Pilot, `frame-drive.mjs`, the vendored agent client | [ai-pilot.md](docs/design/ai-pilot.md) |
 | Share, `?src=`, `?gist=`, `?embed=`/`?view=`/`?readonly=`/`?lines=`, the samples dialog, `original.mjs`, `layout-editor.mjs`, `src/embed/` | [public-surfaces.md](docs/design/public-surfaces.md) |
-| `src/catalogue/`, `build-catalogue.mjs`, sample pages, the 404 | [sample-catalogue.md](docs/design/sample-catalogue.md) |
+| `src/catalogue/`, `build-catalogue.mjs`, the redirects, the 404 | [sample-catalogue.md](docs/design/sample-catalogue.md) |
 | The bar, palette, font, search box, site memory, anything shared with abap2UI5/docs | [one-site.md](docs/design/one-site.md) |
 | `tests/`, `playwright.config.js`, CI workflows | [testing.md](docs/design/testing.md) |
