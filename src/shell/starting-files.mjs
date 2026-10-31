@@ -100,7 +100,7 @@ export async function startingFiles() {
   if (params.has("gist") && linkedSources(params).length === 0) {
     const id = gistIdFrom(params.get("gist"));
     try {
-      if (pilotPage) throw new Error("The AI Pilot opens no gist - open it in the playground instead.");
+      if (pilotPage) throw new Error("The AI Agent opens no gist - open it in the playground instead.");
       if (!id) throw new Error(`${params.get("gist")} is not a gist id.`);
       const files = checkFileSet(await fetchGist(id));
       for (const f of files) setOrigin(f.name, `https://gist.github.com/${id}`);

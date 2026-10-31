@@ -94,9 +94,9 @@ function writeAiPage(html, metafile) {
   const page = html
     .replace(/<html([^>]*)>/, '<html$1 data-page="ai">')
     .replace("<head>", `<head>\n<base href="../">${preloadsFor(metafile, "src/shell/chat.mjs")}`)
-    .replace(/<title>[^<]*<\/title>/, "<title>AI Studio · abap2UI5</title>")
+    .replace(/<title>[^<]*<\/title>/, "<title>AI App Builder · abap2UI5</title>")
     .replace(/<link rel="canonical"[^>]*>/, '<link rel="canonical" href="https://abap2ui5.github.io/playground/ai/">')
-  for (const mark of ['data-page="ai"', '<base href="../">', "<title>AI Studio", 'canonical" href="https://abap2ui5.github.io/playground/ai/"']) {
+  for (const mark of ['data-page="ai"', '<base href="../">', "<title>AI App Builder", 'canonical" href="https://abap2ui5.github.io/playground/ai/"']) {
     if (!page.includes(mark)) {
       console.error(`build-site: ERROR the AI page could not be written - ${mark} did not land in src/shell/index.html's copy`);
       process.exit(1);
@@ -104,7 +104,7 @@ function writeAiPage(html, metafile) {
   }
   fs.mkdirSync(path.join(DIST, "ai"), { recursive: true });
   fs.writeFileSync(path.join(DIST, "ai", "index.html"), page);
-  log("ai/index.html (the AI Studio)");
+  log("ai/index.html (the AI App Builder)");
 }
 
 // The AI Pilot's page, pilot/index.html: the same document again, one
@@ -116,9 +116,9 @@ function writePilotPage(html, metafile) {
   const page = html
     .replace(/<html([^>]*)>/, '<html$1 data-page="pilot">')
     .replace("<head>", `<head>\n<base href="../">\n<meta name="robots" content="noindex">${preloadsFor(metafile, "src/shell/pilot.mjs")}`)
-    .replace(/<title>[^<]*<\/title>/, "<title>AI Pilot · abap2UI5</title>")
+    .replace(/<title>[^<]*<\/title>/, "<title>AI Agent · abap2UI5</title>")
     .replace(/<link rel="canonical"[^>]*>\n?/, "");
-  for (const mark of ['data-page="pilot"', '<base href="../">', "<title>AI Pilot"]) {
+  for (const mark of ['data-page="pilot"', '<base href="../">', "<title>AI Agent"]) {
     if (!page.includes(mark)) {
       console.error(`build-site: ERROR the Pilot page could not be written - ${mark} did not land in src/shell/index.html's copy`);
       process.exit(1);
@@ -126,7 +126,7 @@ function writePilotPage(html, metafile) {
   }
   fs.mkdirSync(path.join(DIST, "pilot"), { recursive: true });
   fs.writeFileSync(path.join(DIST, "pilot", "index.html"), page);
-  log("pilot/index.html (the AI Pilot)");
+  log("pilot/index.html (the AI Agent)");
 }
 
 // The room of an AI page - src/shell/chat.mjs for the studio, src/shell/pilot.mjs

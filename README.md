@@ -202,8 +202,8 @@ it back to the curated list of the day.
 
 ## Build an app by describing it
 
-The **AI Studio** has a page of its own, [`/playground/ai/`](https://abap2ui5.github.io/playground/ai/)
-- the **AI Studio** button beside Samples, and the menu's Tools section on
+The **AI App Builder** has a page of its own, [`/playground/ai/`](https://abap2ui5.github.io/playground/ai/)
+- the **AI App Builder** button beside Samples, and the menu's Tools section on
 every page of this site. It starts on a minimal
 class: `z2ui5_if_app` implemented, `main` still empty. The chat runs down the left, and the stage beside it shows the running
 app in a window of its own, the code, or both side by side (**Preview**,
@@ -249,9 +249,9 @@ with abapGit.
 - **Files in the chat.** 📎, a drop anywhere on the page or a paste adds a
   specification (PDF, Word), a screenshot or mockup of the screen you want, an
   Excel sheet whose rows become the app's data, or a text file — the same
-  formats and limits as in the AI Pilot below, read in your browser.
+  formats and limits as in the AI Agent below, read in your browser.
 - **It tries what it built.** Once a run is clean, the model can type into
-  the app's fields and press its buttons - the Pilot's eyes and hands, on
+  the app's fields and press its buttons - the Agent's eyes and hands, on
   the same frame - and read the toast or the message box the app answered
   with, so what it hands you is an app that worked once, not code that
   compiled.
@@ -278,8 +278,8 @@ somebody who sends a message.
 ## Let Claude operate an app
 
 **Still being built, and not linked from the playground either:** the **AI
-Pilot** has a page of its own, [`/playground/pilot/`](https://abap2ui5.github.io/playground/pilot/).
-Where the AI Studio builds an app, the Pilot *uses* one: the app runs on the
+Agent** has a page of its own, [`/playground/pilot/`](https://abap2ui5.github.io/playground/pilot/).
+Where the AI App Builder builds an app, the Agent *uses* one: the app runs on the
 stage, the chat stands beside it, and you say what you want done — *"greet
 Carol"*, *"open the value help sample and pick the third colour"*. Claude reads
 the screen, types into the fields and presses the buttons, **in the app on your
@@ -318,7 +318,7 @@ carries on from there.
   **PowerPoint** deck (`.pptx`) as its slides' text, and text files (CSV,
   JSON, XML, …) as text — *"enter every order in this sheet"*. The Office files are read in your browser; the
   old binary formats (`.xls`, `.doc`) are refused with what to save them as.
-- **Your own key, and no server** — exactly as in the AI Studio: held in
+- **Your own key, and no server** — exactly as in the AI App Builder: held in
   memory for the visit, sent to `api.anthropic.com` and nowhere else, and out
   of reach of the apps' code — every app frame on this page, each tab's
   included, is on an origin of its own and talks to the page by message

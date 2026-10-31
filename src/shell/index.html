@@ -264,7 +264,7 @@
         <a href="https://abap2ui5.github.io/samples-site/">Samples</a>
         <a href="https://abap2ui5-addons.github.io/">Addons &amp; Tools</a>
         <span class="menu-head">Tools</span>
-        <a href="ai/" data-site="ai">AI Studio</a>
+        <a href="ai/" data-site="ai">AI App Builder</a>
         <a href="https://abap2ui5.github.io/layout-editor/">Layout Editor</a>
         <a href="https://abap2ui5-addons.github.io/abap-cloud-gui/">Report converter</a>
         <a href="https://abap2ui5.github.io/linter/">Linter rules</a>
@@ -325,7 +325,7 @@
   <!-- The AI Studio, a page of its own (ai/, src/shell/chat.mjs): describe an
        app and watch it being built. A link, not a switch - the studio runs
        nothing of this page's and reloads nothing of it. -->
-  <a id="ai-studio" class="invite" href="ai/" data-overflow title="Describe an app and let the AI build it in the browser - the AI Studio">AI Studio</a>
+  <a id="ai-studio" class="invite" href="ai/" data-overflow title="Describe an app and let the AI build it in the browser - the AI App Builder">AI App Builder</a>
   <button id="run"class="primary" disabled title="Run (Ctrl+Enter)">Run</button>
 
   <!-- Run, pressed for you. A switch rather than a button, because it has a
@@ -643,7 +643,7 @@
        (the AI Studio button in the toolbar, the menu) rather than opening
        it over its own work. -->
   <header class="studio-bar" id="studio-bar" hidden>
-    <span class="studio-brand"><a href="https://abap2ui5.github.io/" target="_self"><img src="favicon.png" alt="" width="20" height="20"><span class="studio-brand-name">abap2UI5</span></a> <b>AI Studio</b></span>
+    <span class="studio-brand"><a href="https://abap2ui5.github.io/" target="_self"><img src="favicon.png" alt="" width="20" height="20"><span class="studio-brand-name">abap2UI5</span></a> <b>AI App Builder</b></span>
     <div class="studio-stages" role="tablist" aria-label="What the stage shows">
       <button type="button" role="tab" data-stage="chat" class="studio-stage only-narrow" aria-selected="false">Chat</button>
       <button type="button" role="tab" data-stage="preview" class="studio-stage" aria-selected="false">Preview</button>
@@ -652,15 +652,15 @@
     </div>
     <span class="studio-status" id="studio-status" role="status" aria-live="polite"></span>
     <button type="button" id="studio-fullscreen" class="studio-icon" title="Full screen" aria-label="Full screen">⛶</button>
-    <button type="button" id="studio-exit" class="studio-icon" title="Leave the AI Studio - back to the playground"
-            aria-label="Leave the AI Studio">✕</button>
+    <button type="button" id="studio-exit" class="studio-icon" title="Leave the AI App Builder - back to the playground"
+            aria-label="Leave the AI App Builder">✕</button>
   </header>
   <!-- The AI Pilot's own bar (src/shell/pilot.mjs, "AI Pilot" in shell.css):
        the page pilot/index.html, written by the build from this one, where
        Claude operates the running app and the reader steers in the chat.
        Hidden everywhere else. -->
   <header class="pilot-bar" id="pilot-bar" hidden>
-    <span class="pilot-brand"><a href="https://abap2ui5.github.io/" target="_self"><img src="favicon.png" alt="" width="20" height="20"><span class="pilot-brand-name">abap2UI5</span></a> <b>AI Pilot</b></span>
+    <span class="pilot-brand"><a href="https://abap2ui5.github.io/" target="_self"><img src="favicon.png" alt="" width="20" height="20"><span class="pilot-brand-name">abap2UI5</span></a> <b>AI Agent</b></span>
     <span class="pilot-app" title="The app on screen - Claude operates this one">
       <i class="pilot-live" aria-hidden="true"></i><span id="pilot-app-name">starting…</span>
     </span>
@@ -875,7 +875,7 @@
   </section>
 
   <!-- The AI Pilot's chat (src/shell/pilot.mjs). -->
-  <aside class="pilot" id="pilot" aria-label="AI Pilot chat" hidden>
+  <aside class="pilot" id="pilot" aria-label="AI Agent chat" hidden>
     <div class="pilot-head">
       <h2 class="pilot-title">Co-pilot</h2>
       <span class="pilot-usage" id="pilot-usage"></span>
