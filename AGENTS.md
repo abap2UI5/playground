@@ -51,7 +51,6 @@ read them before touching `tools/` or `src/runtime/`.
 | `checker-settings.mjs` | What the two Config tabs were last set to |
 | `theme.mjs` | The playground's light/dark switch, handed to editor and frame |
 | `theme-boot.mjs` | `THEME_BOOT`/`THEME_MENU`: the inline theme scripts every document carries (the one `localStorage` touch outside `storage.mjs`) |
-| `extra.mjs` | Closes the bar's menu on outside click and Escape |
 | `tool-switch.mjs` | `TOOLS`, the four abap2UI5 tools; the tool's name in every bar (playground, studio, Pilot) as the menu of all four. abap2UI5/layout-editor carries the same list - change both |
 | `files-ui.mjs` | The file strip: `+`, `+ table`, naming a file in place |
 | `share.mjs` | Share links: files in the fragment, deflate-raw + base64url |
@@ -65,7 +64,7 @@ read them before touching `tools/` or `src/runtime/`.
 | `catalogue-urls.mjs` | Raw and GitHub URLs of a catalogued sample from `file`/`branch` |
 | `ui5-libs.mjs` | Which UI5 library a control ships in; `cmpVersion` |
 | `ui5-libraries.mjs` | `UI5_VERSION`, and `UI5_LIBRARIES`, the closed set this site carries |
-| `search-box.mjs` | The bar's search box (all documents here) |
+| `search-box.mjs` | The 404's search box (through `src/catalogue/search-entry.mjs`); the playground's page has none |
 | `search-engine.mjs` | Its matcher — a copy of abap2UI5/docs' `search-engine.js`, plus `normalise` |
 | `search-terms.mjs` | The dialog's and catalogue's free-text filter (`foldCase`, `queryTerms`) |
 | `runtime-client.mjs` | The page's handle on the runtime worker (HEAD probe, STALLED) |
@@ -280,7 +279,7 @@ Each bullet names the design doc that explains it. Keep them true.
 - The catalogue build degrades per repository and never fails the build; `samples/apps.json` is a contract with abap2UI5/samples-site, which builds from it; the redirects and the 404 go out through `withPolicy()`.
 - The four tools - Playground, AI App Builder, AI Agent, and abap2UI5/layout-editor - wear one look, the studio's ([one-site.md](docs/design/one-site.md)): the tool's name in the accent beside "abap2UI5" is the menu of all four (`tool-switch.mjs`), the work sits on 18px cards on the sunken page, pressed things are pills. A change to that look goes to the layout editor's `styles.css` too.
 - The playground's page is one row (brand, tool's name, workbench): no project bar, no search box. The light/dark switch (`[data-theme-switch]`, `theme.mjs`) sits at the right of each of the three bars - workbench, studio, Pilot - as the layout editor carries its own. The 404 keeps its bar.
-- The bar and the menu exist twice here (`src/shell/index.html`, `tools/sample-frame.mjs` for the 404), the palette too (`shell.css`, `catalogue.css`) — change them together. The bar carries no row of the other sites: the brand leads home, the menu names them (CONVENTION.md in abap2UI5/abap2UI5.github.io). Across the abap2UI5 sites only the family convention binds (CONVENTION.md in abap2UI5/abap2UI5.github.io: the brand goes home to https://abap2ui5.github.io/, one red accent); the documentation is a site of its own and borrows nothing from this one. `search-engine.mjs` is a copy of the docs repo's; a change to matching starts there.
+- The bar and the menu exist once here, on the 404 (`tools/sample-frame.mjs`); the playground's page has the one row instead. The palette exists twice (`shell.css`, `catalogue.css`) — change them together. The bar carries no row of the other sites: the brand leads home, the menu names them (CONVENTION.md in abap2UI5/abap2UI5.github.io). Across the abap2UI5 sites only the family convention binds (CONVENTION.md in abap2UI5/abap2UI5.github.io: the brand goes home to https://abap2ui5.github.io/, one red accent); the documentation is a site of its own and borrows nothing from this one. `search-engine.mjs` is a copy of the docs repo's; a change to matching starts there.
 
 **Tests** ([testing.md](docs/design/testing.md))
 - Anything user-visible is tested through a real browser against the built `dist/`; pure modules may add `node:test` tests in `tests/node/`.

@@ -154,14 +154,12 @@ marker) and into every sample page as `MENU_SCRIPT` by
 `tools/sample-frame.mjs`, so the two kinds of page cannot come to behave
 differently. `catalogue.mjs` wires neither any more; nothing is kept in step
 by hand. The
-playground's own bar (`src/shell/index.html`, `src/shell/shell.css`) carries
-the same group on the row above its toolbar — *Playground* as the current item, a span
-rather than a link, because it is the page you are on and a stray click on it
-would throw away a page that costs seconds to load, and the brand a span for
-the same reason — with `extra.mjs` closing its menu; the documentation site's
-bar (`theme/TheBar.vue` over there) is the fourth copy. Three
-documents here carry the two marks and the menu by hand
-(`src/shell/index.html`, `src/catalogue/index.html`,
+playground's own page carried the same group on the row above its toolbar
+until the four tools were given one look; it is one row now - the brand, the
+tool's name and the workbench ([one-site.md](one-site.md)). The
+documentation site's bar (`theme/TheBar.vue` over there) was the fourth copy.
+The documents here that carry the two marks and the menu by hand
+(`src/catalogue/index.html`,
 `tools/sample-frame.mjs`, which every page `tools/sample-pages.mjs` writes shares): inline SVG, because a mark that is an empty square
 until a stylesheet arrives is worse than one that never needed it, and a
 shared partial would be a build step in front of a page whose whole point is

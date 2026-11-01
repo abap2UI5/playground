@@ -9,8 +9,9 @@
  * for every page the reader opens afterwards, is the same file the catalogue
  * itself loads.
  *
- * The playground does NOT load this: its bundle imports search-box.mjs
- * directly, because it has one.
+ * The playground has no search box any more (its page is one row, the
+ * brand, the tool's name and the workbench), so this is the module's only
+ * way onto a page.
  */
 import { setUpSearch } from "../shell/search-box.mjs";
 
