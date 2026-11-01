@@ -33,7 +33,9 @@ and the project's bar that stood above it - the search box, the two marks
 and the menu with the theme switch - is gone, and with it the toolbar's
 link to the AI App Builder, which the tool's name now leads to. What
 follows about the bar describes the 404's copy (`tools/sample-frame.mjs`)
-and the history.
+and the history. The light/dark switch came back as an icon at the right of the row,
+beside Full screen, and the studio's and the Pilot's bars carry the same
+one beside theirs (`[data-theme-switch]`, `theme.mjs` drives them all).
 
 What follows is the history of the one-site design. The mechanisms inside
 this origin (the four bars here, the search box, the site memory between the

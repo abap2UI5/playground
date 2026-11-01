@@ -524,7 +524,7 @@ test("the header keeps to a few rows on a phone", async ({ page }) => {
   }
   await page.locator("#toolbar-more").click();
   await expect(page.locator("#toolbar-more")).toHaveAttribute("aria-expanded", "true");
-  for (const id of ["#format", "#autorun", "#share", "#source-link", "#fullscreen", "#about"]) {
+  for (const id of ["#format", "#theme", "#autorun", "#share", "#source-link", "#fullscreen", "#about"]) {
     await expect(page.locator(`#toolbar-menu ${id}`)).toBeVisible();
   }
   // Each says what it is in words there - the About button is not a stray "i".
@@ -609,6 +609,68 @@ test("the app follows the system theme, and a change does not restart it", async
     )
     .not.toBe(dark);
   await expect(field).toHaveValue("still here");
+});
+
+test("the switch in the bar overrides the system theme, and is forgotten again when it agrees with it", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await open(page);
+  const html = page.locator("html");
+  // At the right of the workbench, as in the AI App Builder's and the AI
+  // Agent's bars.
+  const theme = page.locator(".toolbar #theme");
+  const editor = page.locator(".monaco-editor").first();
+  const stored = () => page.evaluate(() => localStorage.getItem("abap2ui5-playground:theme"));
+  const chosen = () => page.evaluate(() => document.documentElement.getAttribute("data-theme"));
+  const appBackground = () =>
+    page.frameLocator("#app").locator("body").evaluate((b) => getComputedStyle(b).backgroundColor);
+
+  // Following the system: nothing chosen, nothing stored, and the switch
+  // says so.
+  expect(await chosen()).toBeNull();
+  expect(await stored()).toBeNull();
+  await expect(theme).toBeVisible();
+  await expect(theme).toHaveAttribute("aria-checked", "false");
+  await expect(editor).toHaveClass(/\bvs\b/);
+  const light = await appBackground();
+
+  // One click: the page, the editor and the running app go dark - the app
+  // told rather than restarted - and the choice is kept for next time.
+  await theme.click();
+  await expect(html).toHaveAttribute("data-theme", "dark");
+  await expect(theme).toHaveAttribute("aria-checked", "true");
+  await expect(editor).toHaveClass(/vs-dark/);
+  expect(await stored()).toBe("dark");
+  await expect.poll(appBackground).not.toBe(light);
+
+  // Next time: dark before the bundle has said anything, and the app starts
+  // in the dark theme.
+  await page.goto("/");
+  expect(await chosen()).toBe("dark");
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
+  await expect(theme).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("#app")).toHaveAttribute("data-src", /sap-ui-theme=sap_horizon_dark/);
+
+  // Switching back to what the system says is not a choice to keep.
+  await theme.click();
+  expect(await chosen()).toBeNull();
+  expect(await stored()).toBeNull();
+  await expect(theme).toHaveAttribute("aria-checked", "false");
+  await expect(editor).toHaveClass(/\bvs\b/);
+});
+
+test("the AI App Builder and the AI Agent carry the same switch in their bars", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  for (const [path, id] of [["/ai/", "#studio-theme"], ["/pilot/", "#pilot-theme"]]) {
+    await page.goto(path);
+    const theme = page.locator(id);
+    await expect(theme).toBeVisible({ timeout: 120000 });
+    await expect(theme).toHaveAttribute("aria-checked", "false");
+    await theme.click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(theme).toHaveAttribute("aria-checked", "true");
+    await theme.click();
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme", /./);
+  }
 });
 
 // The entries of a stored zip, read the way the format is written: a local

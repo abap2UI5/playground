@@ -3493,3 +3493,8 @@ body.is-pilot button.pilot-attach:hover { border-color: var(--pl-signal); }
   .toolbar-brand { flex: 1 1 100%; margin-right: 0; min-height: 34px; }
   .toolbar > .status { flex: 1 1 0; }
 }
+
+/* The theme switch (theme.mjs) is the reader's own page's choice: not in
+   somebody else's page, nor over an app on its own. */
+.is-embedded .theme-switch,
+.is-app-only .theme-switch { display: none; }

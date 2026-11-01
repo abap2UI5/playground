@@ -289,6 +289,9 @@
   <!-- An "i" at desk width, where it is the last thing in a row of words, and
        the word itself in the phone's menu - the glyph alone read as a stray
        character there, on a row of its own. -->
+  <!-- Light or dark (theme.mjs), the same button the AI App Builder's and the
+       AI Agent's bars carry beside their full screen button. -->
+  <button id="theme" class="icon theme-switch" type="button" role="switch" aria-checked="false" aria-label="Dark theme" data-theme-switch data-overflow><span class="icon-glyph" aria-hidden="true">☾</span><span class="menu-word">Dark theme</span></button>
   <button id="about" class="ghost about-button" type="button" data-overflow
           title="About this playground - what it is, how it works and where it stops (?)" aria-label="About this playground: what it is, how it works and where it stops"><span class="icon-glyph" aria-hidden="true">i</span><span class="menu-word">About</span></button>
 
@@ -569,6 +572,7 @@
       <button type="button" role="tab" data-stage="split" class="studio-stage only-wide" aria-selected="false">Split</button>
     </div>
     <span class="studio-status" id="studio-status" role="status" aria-live="polite"></span>
+    <button type="button" id="studio-theme" class="studio-icon theme-switch" role="switch" aria-checked="false" aria-label="Dark theme" data-theme-switch>☾</button>
     <button type="button" id="studio-fullscreen" class="studio-icon" title="Full screen" aria-label="Full screen">⛶</button>
     <button type="button" id="studio-exit" class="studio-icon" title="Leave the AI App Builder - back to the playground"
             aria-label="Leave the AI App Builder">✕</button>
@@ -592,6 +596,7 @@
     </div>
     <button type="button" id="pilot-sees" class="pilot-button" aria-pressed="false"
             title="The screen as Claude reads it - the agent snapshot of the app">What Claude sees</button>
+    <button type="button" id="pilot-theme" class="pilot-icon theme-switch" role="switch" aria-checked="false" aria-label="Dark theme" data-theme-switch>☾</button>
     <button type="button" id="pilot-fullscreen" class="pilot-icon" title="Full screen" aria-label="Full screen">⛶</button>
   </header>
   <nav class="tabs" role="tablist" aria-label="Panes">

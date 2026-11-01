@@ -41,6 +41,7 @@ test("?view=app shows the app and nothing else - no editor and no bar", async ({
   // And no theme switch or links out of it: furniture in somebody else's
   // page keeps to what it was given.
   await expect(page.locator(".toolbar .tool-switch")).toBeHidden();
+  await expect(page.locator("#theme")).toBeHidden();
 
   // The editor is gone from the screen, not from the playground - what runs is
   // still compiled from it, and Run still runs. There is no button to press for
