@@ -258,7 +258,13 @@ test("the Anthropic provider sends the request it always sent", () => {
   Anthropic.APIError = class extends Error {};
   const request = { betas: ["b1"], context_management: { edits: [] } };
   const provider = createProvider({ apiKey: "sk-ant", workspace: "wrkspc_1" }, { Anthropic, request });
-  expect(made[0]).toEqual({ apiKey: "sk-ant", dangerouslyAllowBrowser: true, defaultHeaders: { "anthropic-workspace-id": "wrkspc_1" } });
+  // The key as x-api-key, the bearer the SDK 1.x would send in its place
+  // omitted (tests/ai.spec.js sees the header on the wire).
+  expect(made[0]).toEqual({
+    apiKey: "sk-ant",
+    dangerouslyAllowBrowser: true,
+    defaultHeaders: { "x-api-key": "sk-ant", authorization: null, "anthropic-workspace-id": "wrkspc_1" },
+  });
   expect(provider.priced).toBe(true);
   const speed = { model: "claude-opus-5-5", effort: "medium" };
   expect(provider.modelFor(speed)).toBe("claude-opus-5-5");

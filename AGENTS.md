@@ -216,8 +216,8 @@ Node 22 — `engines.node` is `>=22` and `.nvmrc` says `22` (CONVENTIONS
 section 4). Every npm dependency is pinned **exactly**: the transpiler,
 abaplint and the linter end up inside the bundle a visitor downloads, so
 "whatever resolves today" would change the site under its own tests. The dev
-tooling is pinned the same way (eslint 10.12.0, @eslint/js 10.0.1, globals
-17.12.0, typescript 6.0.3, @xmldom/xmldom 0.9.12). Actions are pinned to
+tooling is pinned the same way (eslint 10.13.0, @eslint/js 10.0.1, globals
+17.13.0, typescript 7.0.2, @xmldom/xmldom 0.9.12). Actions are pinned to
 commits. Type checking is opt-in per file (`// @ts-check`); a module joins by
 adding the comment and passing.
 

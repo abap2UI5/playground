@@ -142,6 +142,7 @@ test("the chat builds an app in the editor, runs it and tells the model what hap
   // The key went to the API as the key, and the editor's files went with the
   // first message so the model knows what is open.
   expect(requests[0].headers["x-api-key"]).toBe(KEY);
+  expect(requests[0].headers.authorization).toBeUndefined();
   expect(requests[0].body.model).toBe("claude-opus-5-5");
   expect(JSON.stringify(requests[0].body.messages[0])).toContain("<editor_files>");
   // The second request carries both tool results, in one message, and the

@@ -631,10 +631,19 @@ export function createProvider({ provider = DEFAULT_PROVIDER, apiKey, workspace,
   const client = new Anthropic({
     apiKey,
     dangerouslyAllowBrowser: true,
-    // A key that is not tied to a workspace is refused without this header
-    // ("This API key is not scoped to a workspace..."); the ordinary key
-    // belongs to one already and sends nothing extra.
-    ...(workspace ? { defaultHeaders: { "anthropic-workspace-id": workspace } } : {}),
+    // The key goes as `x-api-key`, the header the Messages API has always
+    // read a key from. SDK 1.x sends `apiKey` as `Authorization: Bearer`;
+    // its documented way back is a hand-set `X-Api-Key` with `Authorization`
+    // omitted (null). `apiKey` stays passed so the SDK takes it as the
+    // client's credential and never goes looking for another one.
+    defaultHeaders: {
+      "x-api-key": apiKey,
+      authorization: null,
+      // A key that is not tied to a workspace is refused without this header
+      // ("This API key is not scoped to a workspace..."); the ordinary key
+      // belongs to one already and sends nothing extra.
+      ...(workspace ? { "anthropic-workspace-id": workspace } : {}),
+    },
   });
   return {
     kind: "anthropic",

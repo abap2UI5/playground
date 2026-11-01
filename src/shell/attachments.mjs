@@ -365,6 +365,7 @@ export async function wordText(buffer) {
       continue;
     }
     // The outermost table's row this paragraph is in, once.
+    /** @type {Element | null} */
     let row = null;
     for (let at = p.parentNode; at; at = at.parentNode) if (at.localName === "tr" && tableOf(at.parentNode) === null) row = at;
     if (!row || rowsDone.has(row)) continue;
