@@ -44,7 +44,6 @@ import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
 import { setUpInsight, updateInsight } from "./insight.mjs";
 import { restoreCheckerSettings } from "./checker-settings.mjs";
 import { setUpSplitter, setUpTabs, setUpToolbarMenu } from "./layout.mjs";
-import { setUpSearch } from "./search-box.mjs";
 import { announceEdited, announceReady, setUpEmbeddedEditor, startEmbedMessages } from "./embed.mjs";
 import { appUrl, copyToClipboard, shareUrl } from "./share.mjs";
 import { isUntouchedStarter } from "./ai-starter.mjs";
@@ -52,7 +51,6 @@ import { state } from "./state.mjs";
 import { STALLED, startRuntime } from "./runtime-client.mjs";
 import { removeStored, writeStoredJson } from "./storage.mjs";
 import { isDark, onThemeChange, setUpTheme } from "./theme.mjs";
-import { setUpExtra } from "./extra.mjs";
 import { setUpToolSwitch } from "./tool-switch.mjs";
 import { closeOnBackdrop, describeError, setStatus, showOutput } from "./ui.mjs";
 import { warmUpAppFrame } from "./warm-up.mjs";
@@ -203,9 +201,6 @@ async function boot() {
   // embedded playground follows its reader's system rather than a choice
   // made in some other tab (see theme.mjs).
   setUpTheme({ restore: !embedded });
-  // The menu the switch is in opens on its own, being a <details>; this only
-  // closes it on a click anywhere else and on Escape (extra.mjs).
-  setUpExtra();
   // The tool's name in every bar is the menu of the four abap2UI5 tools
   // (tool-switch.mjs).
   setUpToolSwitch();
@@ -233,11 +228,6 @@ async function boot() {
   //
   // Not when embedded (furniture in somebody else's page) and not in an
   // app-only view (a running app, not a place to come back to).
-  // The search box beside them: one box over the documentation and all ~770
-  // samples, over the index the documentation publishes (search-box.mjs).
-  // Not when embedded - an embedded playground is furniture in somebody
-  // else's page, and a dialog that covers it belongs to nobody.
-  if (!embedded) setUpSearch();
   // Never on the Pilot's page: a change to the files there is an app opened
   // beside the others, and a run would restart every one of them.
   // Not on the studio's page either: its toolbar, and with it the switch, is

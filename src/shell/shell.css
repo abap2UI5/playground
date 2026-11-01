@@ -161,43 +161,12 @@ body {
   overflow: hidden;
 }
 
-/* ------------------------------------------------------------------- bar */
+/* --------------------------------------------------------------- toolbar */
 
-/* TWO ROWS, AND THE FIRST ONE IS NOT THIS PAGE'S.
- *
- * It used to be one row carrying both: the project's bar - brand, sections,
- * search, marks, menu - and the workbench's toolbar, undo through Full screen,
- * with the toolbar owning the middle and the sections pushed to the far right.
- * Every other document of the project puts the sections hard against the brand
- * and the search in the middle, so this was the one bar of the four that read
- * differently, and the reader crossing into it met a rearranged version of the
- * row they had just been using. Below 1280px it was also the bar that had to
- * start dropping its own parts to fit.
- *
- * So the row is the catalogue's row, rule for rule (src/catalogue/catalogue.css
- * - the numbers here are that file's numbers, kept in step by hand), and
- * everything that is about THIS page moved down into `.toolbar` beneath it.
- * Four documents, one bar; and the workbench got a row it does not share. */
-.bar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 20px;
-  height: 46px;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg-sunken);
-  /* Positioned, so the search box can be placed against the bar itself rather
-     than centred in what is left over (the rule at min-width 1100 below). */
-  position: relative;
-  flex: none;
-  z-index: 5;
-}
-
-/* The workbench: what makes something run, and what one does with it once it
-   does. The row the bar used to be - it may wrap, and a row that has wrapped
-   has to be allowed to grow, which is why the height here is a floor and not
-   a height. On the page's own background rather than the bar's, so the two
-   rows read as what they are: the project's chrome, then this page's tools. */
+/* The page's one row: the brand and the tool's name, then the workbench -
+   what makes something run, and what one does with it once it does. It may
+   wrap, and a row that has wrapped has to be allowed to grow, which is why
+   the height here is a floor and not a height. */
 .toolbar {
   display: flex;
   align-items: center;
@@ -599,11 +568,10 @@ iframe {
    back the moment something goes wrong, because it carries the only channel
    this mode has left - the log panel sits in the pane this view hides, and a
    blank frame that explains nothing is worse than a bar nobody asked for. */
-.is-app-only .bar,
 .is-app-only .toolbar { display: none; }
-/* What comes back is the TOOLBAR, because the status line is in it. The bar
-   above it is the project's chrome, which is the part that had no business
-   being in somebody's documentation page in the first place. */
+/* What comes back is the toolbar, because the status line is in it - without
+   the brand and the tool's name, which are no business of somebody else's
+   page (.toolbar-brand at the end of this file). */
 .is-app-only.has-trouble .toolbar { display: flex; }
 
 /* --------------------------------------------------------------- insight */
@@ -717,14 +685,7 @@ iframe {
   text-align: center;
 }
 .insight-badge.is-error { background: var(--danger); color: var(--bg); }
-/* The search panel's results and button get the ring the catalogue gives
-   them (catalogue.css), not the browser's default one. */
-.search-scrim a:focus-visible,
-.search-scrim button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: var(--radius-control);
-}
+
 /* The page's own background on the danger colour, not white: white on the
    dark scheme's light red (#ff8092) was 2.4:1, unreadable at 11px. */
 .insight-badge.is-warning { background: var(--line); color: var(--fg); }
@@ -1156,142 +1117,8 @@ button.insight-row {
    looked broken. No href, so there is nothing to follow. */
 .source-link[aria-disabled="true"] { opacity: .5; cursor: help; }
 
-/* ----------------------------------------------------- the rest of the bar */
-
-/* The sections, the box and the marks, which are the sample catalogue's
-   (src/catalogue/catalogue.css) down to the numbers: the brand closed by a
-   hairline, the four sections, the search, a hairline, the two marks, then the
-   button that opens the menu - light or dark, the project's tools and its
-   repositories. Four documents carry that group - this one, the catalogue, the
-   per-sample pages tools/sample-pages.mjs writes and the documentation's bar -
-   and somebody moving between them reads one bar, so it is kept identical by
-   hand rather than left to four interpretations of a house style. Each
-   hairline stands 16px from what is on either side of it, out of these parts:
-   the bar's gap is 16px, a link's padding 10px, the nav's gap 4px, and a mark
-   sits 6px inside its 30px box. */
-/* The four sections, hard against the brand - that is where a reader's eye is
-   when it arrives, and it is what the other three bars do. -10, not 6: `.bar`
-   is a flex row with a 16px gap, and that gap counts between the brand and
-   this group as well; 16 - 10 + the link's own 10px padding is the 16px every
-   hairline on this bar stands from the word beside it. There is no hairline of
-   its own in front of them any more - the brand's `::after` draws that line,
-   and two lines 6px apart is a stutter rather than a separator. */
-.bar-nav { display: flex; align-items: center; gap: 4px; margin-left: -10px; }
 /* A heading for the page that the panes are the body of - read, never drawn. */
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.bar-nav a,
-.bar-nav .here {
-  padding: 5px 10px;
-  border-radius: 5px;
-  color: var(--fg-dim);
-  text-decoration: none;
-}
-.bar-nav a:hover { background: var(--bg); color: var(--fg); }
-/* The one you are on - here always the playground, which is why it is a span
-   and not a link. The look aria-current gets over there. */
-.bar-nav .here { color: var(--fg); font-weight: 600; }
-
-/* The marks, pulled in by the last link's padding, which is invisible until
-   hovered, so that their line stands 16px from the word (10 + 16 - 10) and
-   16px from the mark (10 + 6); the right-hand margin brings the last box
-   flush with the bar's own padding. */
-.socials { display: flex; align-items: center; margin: 0 -6px 0 -10px; }
-.socials::before {
-  content: ""; width: 1px; height: 22px; margin: 0 10px 0 0;
-  background: var(--line);
-}
-.social {
-  display: flex; align-items: center; justify-content: center;
-  width: 30px; height: 30px; color: var(--fg-dim);
-  transition: color .5s;
-}
-.social:hover { color: var(--fg); }
-.social svg { width: 18px; height: 18px; fill: currentColor; }
-
-/* The menu behind the bar's last button: light or dark, then the tools and
-   the repositories. A <details>, so it opens and closes with no script; the
-   summary is drawn as a third mark - the same box, the same two colours - and
-   the menu hangs from it, over the editor and the app. The rules are the
-   catalogue's (src/catalogue/catalogue.css), by hand. */
-.extra { position: relative; display: flex; }
-.extra-button {
-  list-style: none;
-  display: flex; align-items: center; justify-content: center;
-  width: 30px; height: 30px; color: var(--fg-dim);
-  border-radius: 5px; cursor: pointer;
-  transition: color .5s;
-}
-.extra-button::-webkit-details-marker { display: none; }
-.extra-button:hover, .extra[open] .extra-button { color: var(--fg); }
-.extra[open] .extra-button { background: var(--bg); }
-.extra-button svg { width: 18px; height: 18px; fill: currentColor; }
-.menu {
-  position: absolute; top: calc(100% + 8px); right: 0; z-index: 50;
-  display: flex; flex-direction: column;
-  /* Wide enough for the repositories in two columns below, and never wider
-     than the viewport less the bar's own padding; taller than the viewport
-     it scrolls, rather than running off the bottom of a small window. */
-  width: 372px; max-width: calc(100vw - 24px); padding: 6px;
-  max-height: calc(100vh - 62px); overflow-y: auto;
-  /* On a phone `100vh` is the screen with the browser's own bars retracted,
-     and the menu opens with them showing: its last rows sat under the bottom
-     bar, and a list that fit its own box had nothing to scroll. The small
-     viewport is the screen with the bars up, whatever the page has done
-     since; the line above is what a browser without the unit keeps. */
-  max-height: calc(100svh - 62px);
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
-  font-size: 14px;
-}
-.menu a, .menu .theme {
-  display: flex; align-items: center;
-  padding: 6px 10px;
-  border-radius: 5px;
-  color: var(--fg);
-  text-decoration: none;
-  white-space: nowrap;
-}
-.menu .theme {
-  /* A button that reads as a row like the links around it. */
-  font: inherit;
-  width: 100%;
-  background: none; border: 0; text-align: left; cursor: pointer;
-}
-.menu a:hover, .menu .theme:hover { background: var(--bg-sunken); }
-.menu .glyph { display: inline-block; width: 16px; margin-right: 8px; text-align: center; }
-.menu-head {
-  margin: 6px 0 2px; padding: 8px 10px 0;
-  border-top: 1px solid var(--line);
-  font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
-  color: var(--fg-dim);
-}
-/* The repositories, by kind, in two columns: each kind is a small group under
-   a dim heading, kept whole across the column break, in rows a little tighter
-   than the menu's own so twenty-odd links read as a list rather than a wall. */
-.menu-repos { columns: 2; column-gap: 4px; }
-.menu-group { break-inside: avoid; padding-bottom: 4px; }
-.menu-sub { display: block; padding: 6px 10px 2px; font-size: 12px; color: var(--fg-dim); }
-.menu-repos a { padding: 4px 10px; }
-@media (max-width: 420px) { .menu-repos { columns: 1; } }
-/* The switch says what a press does, so it swaps its whole label with the
-   theme - over the same media query and data-theme the palette uses, so it
-   says the right thing before this bundle has been evaluated; theme.mjs keeps
-   aria-checked in step for a screen reader. */
-.when-dark { display: none; }
-:root[data-theme="dark"] .when-light { display: none; }
-:root[data-theme="dark"] .when-dark { display: inline; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .when-light { display: none; }
-  :root:not([data-theme="light"]) .when-dark { display: inline; }
-}
-
-/* Furniture in somebody else's page keeps no links out of it, and its theme
-   is its reader's system, not something to switch from inside a frame. The
-   whole first row goes, which is the brand, the four sections, the search and
-   the marks in one line - it used to be four rules and a wrapper. */
-.is-embedded .bar { display: none; }
 
 /* A read-only embedded example (?readonly=1, `data-readonly` on the loader's
    element - src/shell/embed.mjs): everything that rewrites the source goes
@@ -1464,21 +1291,9 @@ button.insight-row {
   .versions { display: none; }
 }
 
-/* The bar on a phone, as the catalogue drops the same two things at the same
-   width: the name beside the mark, and the two marks - the menu stays, because
-   the theme switch is in it and GitHub is one of its rows. */
-@media (max-width: 620px) {
-  .bar { gap: 10px; padding: 0 12px; }
-}
-
-/* The name beside the mark and the two marks on the right, at the width the
-   row needs them gone - the second of the two windows above. */
 @media (max-width: 760px) {
-  /* Clipped rather than removed, as on the catalogue (catalogue.css): a name
-     that is not displayed at all is a name a screen reader does not read
-     either. The brand is a span here rather than a link, so nothing is left
-     nameless - but the two bars are read as one bar, and they hide the word
-     the same way. */
+  /* The brand's word goes on a narrow screen and the mark stays: clipped
+     rather than removed, so a screen reader still reads the link's name. */
   .brand span {
     position: absolute;
     width: 1px;
@@ -1487,14 +1302,7 @@ button.insight-row {
     clip-path: inset(50%);
     white-space: nowrap;
   }
-  .social { display: none; }
 }
-
-/* The two widths that used to be here - the brand's name at 1440 and the whole
-   nav at 1280 - were the crowded row paying for itself. There is no crowded
-   row: the bar carries the brand, four words, a box and three glyphs, which is
-   what the catalogue's bar carries, and it drops the same two things at the
-   same width it does (below). */
 
 @media (max-width: 820px) {
   /* The bar is the one cost on this page that is paid before anything is
@@ -1519,16 +1327,6 @@ button.insight-row {
   .toolbar > [data-overflow] { display: none; }
   .toolbar-more { display: block; margin-left: auto; flex: none; }
   .toolbar > button { flex: none; }
-  /* The marks at the far end go the way the catalogue drops its own below
-     620px - the nav went at 1280. The menu stays: the theme switch is in it,
-     and GitHub is one of its rows. The search goes with them, and only on
-     THIS bar: it is a 30px box on a row that is already two rows of controls,
-     and it took the bar back over the height tests/shell.spec.js holds it to.
-     The catalogue and the per-sample pages keep theirs on a phone - their bars
-     carry nothing else - and the documentation's keeps its own. What is lost
-     here is one way in to a search that is one tap away on all three of the
-     places this bar links to. */
-
   .panes {
     display: block;
     position: relative;
@@ -1588,7 +1386,6 @@ button.insight-row {
   .toolbar button.icon { padding: .2rem .35rem; }
 }
 
-
 /* The samples browser on a narrow screen: the whole viewport, the filters
    above the list rather than beside it (a 15rem side of a 390px phone is
    nothing left for the rows), and the boxes back in a row that wraps. The
@@ -1622,415 +1419,6 @@ button.insight-row {
   .examples-head { flex-wrap: wrap; }
   .examples-count { display: none; }
 }
-
-/* ---------------------------------------------------------- the search ---
- *
- * One box for the whole project: the pages of the documentation and all ~770
- * samples, over the index the documentation publishes
- * (src/shell/search-box.mjs, and search-engine.mjs beside it). The catalogue's
- * own field is a different thing and stays - that one FILTERS the rows in
- * front of you and writes the URL; this one answers "where is X in this
- * project" and leaves the page.
- *
- * Drawn as the field it opens rather than as a glyph: a magnifier alone is a
- * button somebody has to guess at. The numbers are the bar's own - 30px like
- * the marks beside it, the 5px radius of the nav's pills, the page background
- * for the fill so the field reads as recessed into a bar that is already grey.
- * The same values are in the documentation's style.css. */
-.search-slot { display: flex; margin: 0 auto; }
-
-/* THE BOX IS CENTRED ON THE BAR, NOT ON WHAT IS LEFT OVER.
- *
- * Auto margins centre it between the sections and the marks, and those two
- * groups are nothing like equal - four words against three glyphs, with the
- * brand in front of them. `.bar` is positioned, so above the width where the
- * row is comfortable the box is placed against the bar itself and the marks
- * take over holding the right-hand end. Below that the auto margins stay: an
- * absolutely placed box in a narrow row sooner or later sits on the words.
- * The catalogue's rule, to the pixel (src/catalogue/catalogue.css) - including
- * the width, which is 1440 because a box centred on the window does not clear
- * the four sections until 1414. At 1100 it was drawn on top of them: 60px off
- * the last section at 1280, here and on every other page of both sites.
- * See catalogue.css for the arithmetic and for what to re-measure. */
-@media (min-width: 1440px) {
-  .search-slot {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    margin: 0;
-  }
-
-  .socials { margin-left: auto; }
-}
-
-.search-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 8px;
-  height: 30px;
-  min-width: 220px;
-  max-width: 380px;
-  flex: 0 1 320px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  background: var(--bg);
-  color: var(--fg-dim);
-  font: inherit;
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color .25s, color .25s;
-}
-.search-button:hover { border-color: var(--fg-dim); color: var(--fg); }
-.search-button svg { width: 15px; height: 15px; flex: none; }
-.search-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.search-key {
-  padding: 1px 5px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--bg-sunken);
-  color: var(--fg-dim);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11px;
-}
-
-/* The second cap - the ⌘K/Ctrl K one - is the first thing to go when the bar
-   is tight: the box has a minimum, and a reader on a narrow screen has a
-   touch keyboard with no ⌘ on it anyway. The slash stays to the end. */
-@media (max-width: 1000px) { .search-key-combo { display: none; } }
-
-
-/* ---- what it opens ----
- * Near the top rather than centred: the results are read downwards, and a
- * panel in the middle of the screen puts the first one under the reader's
- * hands instead of under their eyes. */
-/* `display: flex` on a class beats the browser's own `[hidden] {display:none}`,
- * so without this line the closed dialog is an invisible sheet over the whole
- * page and nothing in the bar can be clicked. It was, for exactly one test
- * run. */
-.search-scrim[hidden] { display: none; }
-.search-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: flex;
-  justify-content: center;
-  /* Against the top, not stretched to the full height. The scrim is a flex row
-     and its default `align-items: stretch` made the panel as tall as the space
-     it was given, whatever it held: the empty state was a paragraph, a row of
-     chips and the key row, and then four hundred pixels of white nothing under
-     them. `max-height` still caps it, and a long list still scrolls inside. */
-  align-items: flex-start;
-  /* Higher up and roomier than it was: this is a place to browse ~940 entries
-   * in, and 12vh of dimmed page above it was margin nobody reads. */
-  padding: 8vh 16px 16px;
-  background: rgba(0, 0, 0, .45);
-}
-.search-panel {
-  display: flex;
-  flex-direction: column;
-  /* 820, not 680. A sample's row is a title, a class name and a sentence, and
-   * at 680 the sentence wrapped to two lines on most of them - a list of
-   * two-line rows reads as a wall rather than as something to run an eye down. */
-  width: min(820px, 100%);
-  max-height: 82vh;
-  /* The 8vh above it and the 16px below are the scrim's, so on a phone the
-     three together reached past the screen with the browser's bars showing
-     and the key row at the foot was under them. Bounded by the small
-     viewport - the screen with the bars up - less those two; the line above
-     is what a browser without the unit keeps. */
-  max-height: min(82vh, calc(100svh - 8vh - 16px));
-  border: 1px solid var(--line);
-  border-radius: var(--radius-surface);
-  background: var(--bg);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, .25);
-  overflow: hidden;
-}
-.search-field {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--line);
-}
-.search-field svg { width: 18px; height: 18px; flex: none; color: var(--fg-dim); }
-.search-field input {
-  flex: 1;
-  border: 0;
-  background: transparent;
-  color: var(--fg);
-  font: inherit;
-  font-size: 16px;
-  outline: none;
-}
-.search-field input::-webkit-search-cancel-button { display: none; }
-.search-close {
-  padding: 2px 7px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--bg-sunken);
-  color: var(--fg-dim);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-.search-results { padding: 6px; overflow-y: auto; }
-.search-note { margin: 0; padding: 14px 10px; color: var(--fg-dim); font-size: 13px; }
-
-/* WHICH AREA A RESULT CAME FROM IS THE POINT: the answer is sometimes a page
- * of the manual and sometimes one of 772 samples, and the heading is what says
- * which before it is clicked. */
-.search-group-head {
-  padding: 10px 10px 4px;
-  color: var(--fg-dim);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-}
-.search-hit {
-  display: block;
-  padding: 8px 10px;
-  border-radius: 6px;
-  color: var(--fg);
-  text-decoration: none;
-}
-.search-hit.active { background: var(--bg-sunken); }
-.search-hit-title { font-size: 14px; font-weight: 600; }
-.search-hit-where { color: var(--accent); font-size: 13px; }
-.search-hit-code {
-  display: block;
-  color: var(--fg-dim);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11.5px;
-}
-.search-hit-text {
-  display: -webkit-box;
-  margin-top: 2px;
-  color: var(--fg-dim);
-  font-size: 12.5px;
-  overflow: hidden;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-/* The part that was typed, wherever it turned up. Not a fill: half a row in a
- * highlight colour reads as a selection rather than as an explanation. */
-.search-hit .hl { background: none; color: var(--accent); font-weight: 700; }
-
-
-/* ---- the empty state, which is the invitation ----
- *
- * A box that opens on one grey line is a question put to somebody who came to
- * look around. So it says what is in it, in the two numbers that mean
- * something, and then offers eight words to press. Each opens a shelf, and
- * pressing one fills the field, so the next thing the reader does is edit a
- * real query rather than compose one from nothing. */
-.search-empty { padding: 10px 6px 18px; }
-.search-empty .search-note { padding-bottom: 6px; font-size: 14px; line-height: 1.6; }
-.search-empty strong { color: var(--fg); font-weight: 600; }
-.search-try {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-  padding: 6px 10px 0;
-}
-.search-try-head {
-  margin-right: 2px; color: var(--fg-dim);
-  font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
-}
-.search-chip {
-  padding: 5px 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--bg-sunken);
-  color: var(--fg);
-  font: inherit; font-size: 13px; cursor: pointer;
-  transition: border-color .2s, color .2s;
-}
-.search-chip:hover { border-color: var(--accent); color: var(--accent); }
-
-/* How many the group has, beside how many it is showing. */
-.search-count {
-  margin-left: 6px; color: var(--fg-dim);
-  font-weight: 400; letter-spacing: 0; text-transform: none;
-}
-
-/* ---- the keys, on screen the whole time ----
- *
- * They used to be one line in the empty state - gone the moment anybody typed,
- * which is the moment they start mattering - and the shortcut that opens the
- * box was printed on the button outside and nowhere inside it. */
-.search-keys {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px;
-  padding: 9px 14px;
-  border-top: 1px solid var(--line);
-  background: var(--bg-sunken);
-  color: var(--fg-dim);
-  font-size: 12px;
-}
-.search-keys-end { margin-left: auto; }
-.search-keys kbd {
-  display: inline-block; min-width: 17px; margin-right: 3px; padding: 1px 5px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--bg);
-  color: var(--fg-dim);
-  font-family: var(--font-mono);
-  font-size: 11px; line-height: 1.4; text-align: center;
-}
-@media (max-width: 620px) {
-  /* On a phone the row keeps the three keys that work there and drops the one
-     that names a keyboard shortcut for opening it. */
-  .search-keys-end { display: none; }
-}
-
-/* On a narrow bar the field is a glyph - and "narrow" is where the row stops
-   fitting, not a round number. At 820 there were two windows where the bar was
-   simply wider than the screen and the whole page scrolled sideways: 933px of
-   bar at 900 and at 860, 744 at 740 down to 660. The same two windows on the
-   catalogue and on the manual, because all three wear this bar. */
-@media (max-width: 940px) {
-  .search-button { min-width: 0; flex: none; padding: 0 7px; }
-  .search-label, .search-key { display: none; }
-}
-
-/* The box used to go with the marks on a phone, and only on this bar: it was a
- * 30px box on a row that was already two rows of controls, and it took the bar
- * over the height tests/shell.spec.js holds it to. It is not on that row any
- * more. All four documents keep their box on a phone now, as a glyph, which is
- * what the rule above turns it into. */
-
-/* EVERY ITEM IS AS WIDE AS ITS OWN BOLD SELF, ALWAYS.
- *
- * The one you are on is semibold, and semibold is wider - so the moment the
- * marked item changed, everything after it moved: stepping from Home to
- * Documentation pushed Samples and Playground 6px right, and the row twitched
- * under the cursor. It never showed while the marked item was the same word on
- * every page of a site; with four sections, two of them on one deployment, it
- * shows on every click.
- *
- * So each item carries its own label a second time, in bold, in a
- * pseudo-element with no height: never seen, it only reserves the width. The
- * same rule and the same `data-text` attribute as the documentation's bar
- * (theme/style.css over there). */
-.bar-nav a,
-.bar-nav .here {
-  /* A row now, because each item is a mark and a word: the reservation moved
-     one level in, onto the word, where the bold copy belongs. */
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.bar-nav a > span,
-.bar-nav .here > span {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-}
-.bar-nav a > span::after,
-.bar-nav .here > span::after {
-  content: attr(data-text);
-  height: 0;
-  overflow: hidden;
-  visibility: hidden;
-  font-weight: 600;
-  pointer-events: none;
-}
-
-/* THE MARK IN FRONT OF THE WORD. The same four the home page's cards carry
-   over on the documentation - a house, a book, a window, a play button - drawn
-   in the link's own colour, so they dim and brighten with it and the one you
-   are on is marked twice. 15px, which is the search box's glyph: two different
-   icon sizes in one bar is a thing a reader sees without being able to name.
-   Inline SVG rather than a font or a sprite, for the reason the two marks at
-   the other end are: an icon that is an empty square until a stylesheet
-   arrives is worse than one that never needed it. */
-.bar-nav svg {
-  width: 15px;
-  height: 15px;
-  flex: none;
-}
-
-/* ON A PHONE THE FOUR ITEMS ARE THEIR MARKS. Four words and their marks are
-   499px of a 390px screen, and the row simply ran off the end of it - the words
-   alone were 415, so this was true before the marks arrived and the marks are
-   what makes it fixable. Clipped rather than `display: none`: a name that is
-   not displayed at all is a name a screen reader does not read either, and
-   these are the four ways out of the page. */
-@media (max-width: 620px) {
-  .bar-nav a > span,
-  .bar-nav .here > span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-  /* ...AND A MARK ALONE IS NOT A NAME. Four marks with no word under them
-     were four guesses for a reader who arrived on a phone from a link: a
-     house, a book, a window and a play button, and no tooltip under a thumb
-     to say which of the last three is the manual. So on a phone each mark
-     carries its short name under it - Home, Docs, Samples, Play - in 9px,
-     which is what the 46px bar has room for once the mark's 15 are spent.
-     The short word is `data-short` on the same span the full word is on;
-     the full word stays for the screen reader (clipped, above) and the
-     short one is drawn with an empty alt (`/ ""`) so a reader that
-     exposes generated content does not hear the name twice. */
-  .bar-nav a,
-  .bar-nav .here {
-    flex-direction: column;
-    gap: 1px;
-    padding: 3px 5px;
-    min-width: 40px;
-  }
-  .bar-nav a > span[data-short]::after,
-  .bar-nav .here > span[data-short]::after {
-    content: attr(data-short) / "";
-    position: static;
-    height: auto;
-    visibility: visible;
-    font-size: 9px;
-    line-height: 1.1;
-    font-weight: 500;
-    letter-spacing: 0.01em;
-  }
-  .bar-nav a > span[data-short],
-  .bar-nav .here > span[data-short] {
-    position: static;
-    width: auto;
-    height: auto;
-    clip-path: none;
-    font-size: 0;
-    color: inherit;
-  }
-}
-/* MARKS AT 320. With the AI Studio the row was five 40px items, and
-   brand, row, search and the menu came to 355px of a 320px screen: the whole
-   page moved sideways by 35. The studio has moved to the menu since and four
-   items fit, but the rule stays: it is what keeps a fifth from doing that again. Under 380 the items keep the 34px a thumb is
-   given (the coarse-pointer rule below) and lose the rest of their padding,
-   and the bar's gaps close by 2: 42px back, which is the 35 and some air. */
-@media (max-width: 380px) {
-  .bar { gap: 8px; }
-  .bar-nav { gap: 2px; }
-  .bar-nav a,
-  .bar-nav .here { padding: 3px 3px; min-width: 34px; }
-}
-/* UNDER A THUMB A MARK IS A TARGET, and these were drawn for a pointer: 30px
-   of box for the marks at either end, 25px of pill for a section once its
-   word is clipped away, on a screen where 44 is what a finger is asked to be
-   given. The boxes grow to 36 - the bar is 46, so 5 above and 5 below - and
-   the glyphs stay where they were: a pill centres its mark, and the last box
-   gives back the 3px it grew on the outside, so the menu's mark stays flush
-   with the bar's padding. Nothing here moves under a mouse. */
-@media (pointer: coarse) {
-  .bar-nav a,
-  .bar-nav .here { min-width: 34px; min-height: 36px; justify-content: center; }
-  .search-button { height: 36px; }
-  .social, .extra-button { width: 36px; height: 36px; }
-  .extra { margin-right: -3px; }
-}
-
 
 /* ------------------------------------------------------------------- chat */
 
@@ -2236,7 +1624,6 @@ button.chat-suggestion {
   .chat-head .spacer { display: none; }
 }
 
-
 /* -------------------------------------------------------------- AI Studio */
 
 /* Pressing AI turns the page into the AI Studio (src/shell/chat.mjs): the
@@ -2264,7 +1651,6 @@ body.is-studio {
 }
 
 /* What steps aside. */
-body.is-studio > header.bar,
 body.is-studio > .toolbar,
 body.is-studio .tabs,
 body.is-studio .splitter { display: none; }
@@ -2696,7 +2082,6 @@ body.is-studio .chat.is-dropping { outline: 2px dashed var(--accent); outline-of
 .studio-status.error { color: var(--danger); }
 body.is-studio .chat-key button.primary { border: 0; background: var(--st-grad); color: #fff; border-radius: 999px; }
 
-
 /* -------------------------------------------------------------- AI Pilot */
 
 /* The AI Pilot's page (src/shell/pilot.mjs): Claude operates the app, the
@@ -2729,8 +2114,7 @@ body.is-pilot {
   color: var(--pl-ink);
 }
 
-/* What steps aside: the site's bar, the workbench, the editor and its panel. */
-body.is-pilot > header.bar,
+/* What steps aside: the workbench, the editor and its panel. */
 body.is-pilot > .toolbar,
 body.is-pilot .tabs,
 body.is-pilot .splitter,
@@ -3372,7 +2756,6 @@ body.is-pilot button.pilot-attach:hover { border-color: var(--pl-signal); }
    one pane at a time (phone.md) and keeps its tabs. */
 @media (min-width: 821px) {
   body:not(.is-studio):not(.is-pilot):not(.is-embedded):not(.is-app-only) { background: var(--bg-sunken); }
-  body:not(.is-studio):not(.is-pilot):not(.is-embedded):not(.is-app-only) > .bar,
   body:not(.is-studio):not(.is-pilot):not(.is-embedded):not(.is-app-only) > .toolbar { background: transparent; border-bottom: 0; }
   body:not(.is-studio):not(.is-pilot):not(.is-embedded):not(.is-app-only) .panes { padding: 0 14px 14px; }
   body:not(.is-studio):not(.is-pilot):not(.is-embedded):not(.is-app-only) .pane-left,
