@@ -198,103 +198,6 @@
 <!-- __MODULEPRELOADS__ -->
 </head>
 <body>
-<!-- TWO ROWS. The first is the project's bar - the same brand, the same four
-     sections, the same box and the same two marks and menu as the sample
-     catalogue, every per-sample page and the documentation carry, in the same
-     order and at the same measurements. Somebody moving between the four
-     documents reads ONE bar; this used to be the one that read differently,
-     because the workbench shared the row and pushed the sections to the far
-     end of it. The second row is the workbench, and is only this page's. -->
-<header class="bar">
-  <!-- The mark and the name, closed by a hairline (shell.css): the brand the
-       sample catalogue, every per-sample page and the documentation wear
-       (src/catalogue/index.html, tools/sample-pages.mjs, and over there
-       theme/TheBar.vue). The nav beside it says which of them you are on, in
-       bold, so the brand does not say it again. A span rather than the link it
-       is over there - the playground is already here, and a stray click on it
-       would throw away a page that costs seconds to load. -->
-  <a class="brand" href="https://abap2ui5.github.io/" target="_self">
-    <img src="favicon.png" alt="" width="20" height="20">
-    <span>abap2UI5</span>
-  </a>
-
-  <!-- The five sections of the project, hard against the brand, then the
-       search in the middle, then the marks and the menu: the catalogue's bar,
-       the per-sample pages' bar and the documentation's bar, in that order and
-       with those parts (src/catalogue/index.html, tools/sample-pages.mjs, and
-       theme/SiteNav.vue over there). This row used to be that group squeezed
-       against the right-hand end of a toolbar, which made it the one bar of
-       the four that read differently. Everything this PAGE does is a row of
-       its own now, below. -->
-  <!-- A landmark with no name is one of several called "navigation": this bar,
-       the chapter menu on the manual, the trail above a title and the outline
-       beside it. The other three say which they are; this one did not. -->
-  <!-- The box lands here, built by src/shell/search-box.mjs: written as an
-       empty element rather than as markup, because the same box is on three
-       documents of this repository and a fourth over there. -->
-  <span class="search-slot" data-search></span>
-  <div class="socials">
-    <a class="social" href="https://www.linkedin.com/company/abap2ui5/" target="_blank" rel="noopener"
-       aria-label="abap2UI5 on LinkedIn" title="abap2UI5 on LinkedIn">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/></svg>
-    </a>
-    <a class="social" href="https://github.com/abap2UI5/abap2UI5" target="_blank" rel="noopener"
-       aria-label="abap2UI5 on GitHub" title="abap2UI5 on GitHub">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
-    </a>
-    <details class="extra" id="extra">
-      <summary class="extra-button" title="More: light or dark, and the rest of abap2UI5" aria-label="More: light or dark, and the rest of abap2UI5">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2.2"/><circle cx="12" cy="12" r="2.2"/><circle cx="19" cy="12" r="2.2"/></svg>
-      </summary>
-      <div class="menu">
-        <button id="theme" class="theme" type="button" role="switch" aria-checked="false" aria-label="Dark theme">
-          <span class="when-light"><span class="glyph" aria-hidden="true">☾</span>Switch to dark</span>
-          <span class="when-dark"><span class="glyph" aria-hidden="true">☀</span>Switch to light</span>
-        </button>
-        <a href="https://github.com/abap2UI5/abap2UI5/issues" target="_blank" rel="noopener">Issues</a>
-        <a href="https://abap2ui5.github.io/docs/resources/changelog">Release notes</a>
-        <a href="https://abap2ui5.github.io/docs/get_started/quickstart">Install with abapGit</a>
-        <a href="https://abap2ui5.github.io/docs/resources/support">Support</a>
-        <a href="https://abap2ui5.github.io/docs/resources/contribution">Contribute</a>
-        <a href="https://abap2ui5.github.io/docs/resources/sponsor">Sponsor</a>
-        <span class="menu-head">Sites</span>
-        <a href="https://abap2ui5.github.io/">Home</a>
-        <a href="https://abap2ui5.github.io/why/">For managers</a>
-        <a href="https://abap2ui5.github.io/docs/">Docs</a>
-        <a href="https://abap2ui5.github.io/samples-site/">Samples</a>
-        <a href="https://abap2ui5-addons.github.io/">Addons &amp; Tools</a>
-        <span class="menu-head">Tools</span>
-        <a href="ai/" data-site="ai">AI App Builder</a>
-        <a href="https://abap2ui5.github.io/layout-editor/">Layout Editor</a>
-        <a href="https://abap2ui5-addons.github.io/abap-cloud-gui/">Report converter</a>
-        <a href="https://abap2ui5.github.io/linter/">Linter rules</a>
-        <span class="menu-head">Repositories</span>
-        <div class="menu-repos">
-          <div class="menu-group">
-            <span class="menu-sub">Framework</span>
-            <a href="https://github.com/abap2UI5/abap2UI5" target="_blank" rel="noopener">abap2UI5</a>
-            <a href="https://github.com/abap2UI5/frontend" target="_blank" rel="noopener">frontend</a>
-            <a href="https://github.com/abap2UI5/abap2UI5-local" target="_blank" rel="noopener">abap2UI5-local</a>
-            <a href="https://github.com/abap2UI5/mirror-ajson" target="_blank" rel="noopener">mirror-ajson</a>
-            <a href="https://github.com/abap2UI5/mirror-srtti" target="_blank" rel="noopener">mirror-srtti</a>
-            <a href="https://github.com/abap2UI5/web-abap2UI5" target="_blank" rel="noopener">web-abap2UI5</a>
-          </div>
-          <div class="menu-group">
-            <span class="menu-sub">Samples</span>
-            <a href="https://github.com/abap2UI5/samples" target="_blank" rel="noopener">samples</a>
-            <a href="https://github.com/abap2UI5/samples-controls" target="_blank" rel="noopener">samples-controls</a>
-            <a href="https://github.com/abap2UI5/samples-stack" target="_blank" rel="noopener">samples-stack</a>
-          </div>
-          <div class="menu-group">
-            <span class="menu-sub">Sites</span>
-            <a href="https://github.com/abap2UI5/docs" target="_blank" rel="noopener">docs</a>
-            <a href="https://github.com/abap2UI5/playground" target="_blank" rel="noopener">playground</a>
-          </div>
-</div>
-      </div>
-    </details>
-  </div>
-</header>
 
 <!-- The workbench, on a row it does not share: on the left what makes
      something run - undo and redo, Format, the samples browser, Run and the
@@ -313,6 +216,21 @@
      the menu behind the last button, #toolbar-more (setUpToolbarMenu( ) in
      src/shell/layout.mjs). -->
 <div class="toolbar" role="region" aria-label="Workbench">
+  <!-- ONE ROW, as the AI App Builder's and the AI Agent's bars: the mark and
+       "abap2UI5" go home, the tool's name in the accent is the menu of the
+       four abap2UI5 tools (src/shell/tool-switch.mjs), and the workbench
+       follows on the same row. The project's bar that stood above it - the
+       search box, the two marks and the menu - is gone: the tools are reached
+       from the tool's name, the rest of abap2UI5 from the brand. -->
+  <span class="toolbar-brand">
+    <a class="brand" href="https://abap2ui5.github.io/" target="_self" title="To abap2UI5's home page">
+      <img src="favicon.png" alt="" width="20" height="20">
+      <span class="brand-name">abap2UI5</span>
+    </a>
+    <details class="tool-switch" data-tool="playground">
+      <summary class="tool-switch-name" title="The abap2UI5 tools - switch to another one">Playground</summary>
+    </details>
+  </span>
   <!-- Icons only, the three of them: the arrows are undo and redo anywhere,
        and a pair of braces is what a code editor puts on its format action.
        They sit where a toolbar keeps them, first. Undo and Redo are enabled
@@ -325,7 +243,6 @@
   <!-- The AI Studio, a page of its own (ai/, src/shell/chat.mjs): describe an
        app and watch it being built. A link, not a switch - the studio runs
        nothing of this page's and reloads nothing of it. -->
-  <a id="ai-studio" class="invite" href="ai/" data-overflow title="Describe an app and let the AI build it in the browser - the AI App Builder">AI App Builder</a>
   <button id="run"class="primary" disabled title="Run (Ctrl+Enter)">Run</button>
 
   <!-- Run, pressed for you. A switch rather than a button, because it has a
@@ -643,7 +560,8 @@
        (the AI Studio button in the toolbar, the menu) rather than opening
        it over its own work. -->
   <header class="studio-bar" id="studio-bar" hidden>
-    <span class="studio-brand"><a href="https://abap2ui5.github.io/" target="_self"><img src="favicon.png" alt="" width="20" height="20"><span class="studio-brand-name">abap2UI5</span></a> <b>AI App Builder</b></span>
+    <span class="studio-brand"><a href="https://abap2ui5.github.io/" target="_self"><img src="favicon.png" alt="" width="20" height="20"><span class="studio-brand-name">abap2UI5</span></a>
+      <details class="tool-switch" data-tool="ai"><summary class="tool-switch-name" title="The abap2UI5 tools - switch to another one">AI App Builder</summary></details></span>
     <div class="studio-stages" role="tablist" aria-label="What the stage shows">
       <button type="button" role="tab" data-stage="chat" class="studio-stage only-narrow" aria-selected="false">Chat</button>
       <button type="button" role="tab" data-stage="preview" class="studio-stage" aria-selected="false">Preview</button>
@@ -660,7 +578,8 @@
        Claude operates the running app and the reader steers in the chat.
        Hidden everywhere else. -->
   <header class="pilot-bar" id="pilot-bar" hidden>
-    <span class="pilot-brand"><a href="https://abap2ui5.github.io/" target="_self"><img src="favicon.png" alt="" width="20" height="20"><span class="pilot-brand-name">abap2UI5</span></a> <b>AI Agent</b></span>
+    <span class="pilot-brand"><a href="https://abap2ui5.github.io/" target="_self"><img src="favicon.png" alt="" width="20" height="20"><span class="pilot-brand-name">abap2UI5</span></a>
+      <details class="tool-switch" data-tool="pilot"><summary class="tool-switch-name" title="The abap2UI5 tools - switch to another one">AI Agent</summary></details></span>
     <span class="pilot-app" title="The app on screen - Claude operates this one">
       <i class="pilot-live" aria-hidden="true"></i><span id="pilot-app-name">starting…</span>
     </span>
@@ -910,7 +829,7 @@
       <label for="pilot-key-input" id="pilot-key-label">Your Anthropic API key</label>
       <div class="pilot-key-row">
         <input id="pilot-key-input" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
-        <button type="submit" class="primary">Use key</button>
+        <button type="submit" class="primary">Save</button>
         <button type="button" id="pilot-key-remove" class="ghost" hidden>Remove</button>
       </div>
       <!-- Where the key goes, whenever that is not the provider's own default

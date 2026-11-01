@@ -350,36 +350,6 @@ test("the running app cannot take the focus off the examples browser", async ({ 
   await expect.poll(appTakesFocus).toBe(true);
 });
 
-// The bar's search panel is the other modal on the page, and it is not a
-// <dialog>: it makes the page under it inert, which does not keep the frame's
-// own focus() out - an app rendering while it was open (the first render of a
-// Run) took the focus, and the rest of the search was typed into the app.
-test("the running app cannot take the focus off the search panel either", async ({ page }) => {
-  await open(page);
-  await page.locator(".search-button").click();
-  const field = page.locator(".search-panel input");
-  await expect(field).toBeFocused();
-
-  const app = page.frames().find((f) => f !== page.mainFrame());
-  const appTakesFocus = () =>
-    app.evaluate(() => {
-      const probe = document.createElement("input");
-      document.body.append(probe);
-      probe.focus();
-      const took = document.activeElement === probe;
-      probe.remove();
-      return took;
-    });
-
-  expect(await appTakesFocus()).toBe(false);
-  await page.keyboard.type("table");
-  await expect(field).toHaveValue("table");
-
-  await page.keyboard.press("Escape");
-  await expect(page.locator(".search-scrim")).toBeHidden();
-  expect(await appTakesFocus()).toBe(true);
-});
-
 // And not while somebody is typing on the page around it: an app's first
 // render focuses a field of its own, so the app Auto started - or the one the
 // AI Studio ran - took the editor's or the chat's next keystrokes. Once the

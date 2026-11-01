@@ -53,6 +53,7 @@ import { STALLED, startRuntime } from "./runtime-client.mjs";
 import { removeStored, writeStoredJson } from "./storage.mjs";
 import { isDark, onThemeChange, setUpTheme } from "./theme.mjs";
 import { setUpExtra } from "./extra.mjs";
+import { setUpToolSwitch } from "./tool-switch.mjs";
 import { closeOnBackdrop, describeError, setStatus, showOutput } from "./ui.mjs";
 import { warmUpAppFrame } from "./warm-up.mjs";
 import { aiPage, appOnly, cameFromCatalogue, catalogueQuery, embedded, keepsDrafts, params, frameIsolated, pilotPage } from "./page.mjs";
@@ -205,6 +206,9 @@ async function boot() {
   // The menu the switch is in opens on its own, being a <details>; this only
   // closes it on a click anywhere else and on Escape (extra.mjs).
   setUpExtra();
+  // The tool's name in every bar is the menu of the four abap2UI5 tools
+  // (tool-switch.mjs).
+  setUpToolSwitch();
   // The toolbar's own overflow menu, which only a phone shows (layout.mjs).
   setUpToolbarMenu();
   // Another site's bar may step BACK to this page when it is still in the

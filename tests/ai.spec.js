@@ -609,17 +609,17 @@ test("the playground links to the studio's page and never opens it over its own 
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
   await expect(page.locator("#studio-bar")).toBeHidden();
   await expect(page.locator("#chat")).toBeHidden();
-  // The toolbar's link and the menu's, both to the page.
-  await expect(page.locator("#ai-studio")).toBeVisible();
-  await expect(page.locator("#ai-studio")).toHaveAttribute("href", "ai/");
-  await expect(page.locator('#extra .menu a[data-site="ai"]')).toHaveAttribute("href", "ai/");
-  await page.locator("#ai-studio").click();
+  // The tool's name is the menu of the four tools; the studio is a page of
+  // its own in it.
+  await page.locator(".toolbar .tool-switch summary").click();
+  await expect(page.locator('.toolbar .tool-menu a[data-tool="ai"]')).toHaveAttribute("href", "ai/");
+  await page.locator('.toolbar .tool-menu a[data-tool="ai"]').click();
   await expect(page).toHaveURL(/\/ai\/$/);
   await expect(page.locator("body")).toHaveClass(/is-studio/, { timeout: 120000 });
 
   await page.goto("/?embed=1");
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
-  await expect(page.locator("#ai-studio")).toBeHidden();
+  await expect(page.locator(".toolbar .tool-switch")).toBeHidden();
   await expect(page.locator("#studio-bar")).toBeHidden();
   await expect(page.locator("#chat")).toBeHidden();
 });

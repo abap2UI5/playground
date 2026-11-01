@@ -99,7 +99,6 @@ test("Full screen opens the app on its own in a new tab, carrying the code", asy
   // rather than asserted on the class, because what was asked for is a window
   // filled by the app - a bar that is merely transparent would pass a class
   // check and still take the top of the screen.
-  await expect(tab.locator(".bar")).toBeHidden();
   await expect(tab.locator(".toolbar")).toBeHidden();
   const viewport = tab.viewportSize();
   const app = await tab.locator("#app").boundingBox();
@@ -131,7 +130,6 @@ test("the toolbar comes back in the full screen view when something goes wrong",
   await page.goto("/?view=full&src=https://example.invalid/zcl_thing.clas.abap");
   await expect(page.locator("#status")).toContainText("could not be followed", { timeout: 120000 });
   await expect(page.locator(".toolbar")).toBeVisible();
-  await expect(page.locator(".bar")).toBeHidden();
 
   // And it goes again once the trouble does. Run clears the report, so what is
   // on screen afterwards is a running app with nothing over it.
@@ -437,47 +435,51 @@ test("on a phone Run brings the app forward - unless there is no app to bring", 
   await expect(page.locator(".insight-row.is-error").first()).toBeVisible();
 });
 
-test("the bar is the brand, the search box and the marks", async ({ page }) => {
+test("one row: the brand, the tool's name as the menu of the four tools, the workbench", async ({ page }) => {
   await open(page);
 
-  // The same brand: the mark and the name, and nothing more - the nav says
-  // which part of the site this is (src/catalogue/index.html,
-  // tools/sample-pages.mjs).
-  await expect(page.locator(".brand")).toHaveText("abap2UI5");
-  await expect(page.locator(".brand img")).toBeVisible();
+  // The mark and the name go home; there is no project bar above the
+  // workbench any more - no search box, no marks, no menu (the AI App
+  // Builder's and the AI Agent's bars carry none either).
+  await expect(page.locator(".toolbar .brand")).toHaveText("abap2UI5");
+  await expect(page.locator(".toolbar .brand")).toHaveAttribute("href", "https://abap2ui5.github.io/");
+  await expect(page.locator(".toolbar .brand img")).toBeVisible();
+  await expect(page.locator("header.bar")).toHaveCount(0);
+  await expect(page.locator(".search-button")).toHaveCount(0);
+  await expect(page.locator(".social")).toHaveCount(0);
+  await expect(page.locator("#ai-studio")).toHaveCount(0);
 
-  // No row of the other sites: the brand is the way home, and the home page
-  // lists them (CONVENTION.md in abap2UI5/abap2UI5.github.io). The menu
-  // names them. The same box the other bars carry, in the middle of the row.
-  await expect(page.locator(".bar-nav")).toHaveCount(0);
-  await expect(page.locator(".bar .search-button")).toBeVisible();
-  await expect(page.locator(".bar .social")).toHaveCount(2);
-  await expect(page.locator('.bar .social[href*="linkedin.com/company/abap2ui5"]')).toBeVisible();
-  await expect(page.locator('.bar .social[href*="github.com/abap2UI5"]')).toBeVisible();
-  // The menu: closed until pressed, the theme switch and the project's links in
-  // it, closed again on Escape and on a click anywhere else.
-  const extra = page.locator(".bar .extra");
-  const theme = page.locator("#theme");
-  await expect(extra.locator("summary")).toBeVisible();
-  await expect(theme).toBeHidden();
-  await extra.locator("summary").click();
-  await expect(theme).toBeVisible();
-  expect(await extra.locator(".menu a").count()).toBeGreaterThanOrEqual(10);
-  for (const part of ["abap2ui5.github.io/linter/", "abap2ui5-addons.github.io/", "abap2ui5.github.io/docs/", "abap2ui5.github.io/samples-site/",
-    "abap2ui5.github.io/layout-editor/", "abap2ui5-addons.github.io/abap-cloud-gui/", "abap2ui5.github.io/why/"]) {
-    await expect(extra.locator(`.menu a[href*="${part}"]`).first()).toBeVisible();
-  }
+  // The tool's name is the menu of the four tools, this one marked; closed
+  // until pressed, closed again on Escape and on a click anywhere else.
+  const name = page.locator('.toolbar .tool-switch[data-tool="playground"] summary');
+  await expect(name).toHaveText("Playground");
+  const menu = page.locator(".toolbar .tool-menu");
+  await expect(menu).toBeHidden();
+  await name.click();
+  await expect(menu.locator("a")).toHaveText([/Playground/, /Layout Editor/, /AI App Builder/, /AI Agent/]);
+  await expect(menu.locator('a[aria-current="page"]')).toContainText("Playground");
+  await expect(menu.locator('a[data-tool="layout"]')).toHaveAttribute("href", "https://abap2ui5.github.io/layout-editor/");
+  await expect(menu.locator('a[data-tool="ai"]')).toHaveAttribute("href", "ai/");
+  await expect(menu.locator('a[data-tool="pilot"]')).toHaveAttribute("href", "pilot/");
   await page.keyboard.press("Escape");
-  await expect(theme).toBeHidden();
-  await extra.locator("summary").click();
-  await expect(theme).toBeVisible();
+  await expect(menu).toBeHidden();
+  await expect(name).toBeFocused();
+  await name.click();
   await page.locator("#status").click();
-  await expect(theme).toBeHidden();
+  await expect(menu).toBeHidden();
+
+  // The one marked is the page on screen: pressing it only closes the menu.
+  await name.click();
+  await menu.locator('a[aria-current="page"]').click();
+  await expect(menu).toBeHidden();
+  await expect(page.locator("#status")).toHaveText("running");
+
+  // And the AI App Builder is one press away, on its own page.
+  await name.click();
+  await menu.locator('a[data-tool="ai"]').click();
+  await expect(page).toHaveURL(/\/ai\/$/);
 });
 
-// The workbench is a landmark, so nothing in it is content outside every
-// landmark - axe's "region" rule found the Auto switch and the Source link
-// there, and a screen reader's list of landmarks could not reach the bar.
 test("the toolbar's controls sit inside a landmark", async ({ page }) => {
   await open(page);
   await expect(page.getByRole("region", { name: "Workbench" })).toBeVisible();
@@ -506,24 +508,23 @@ test("the header keeps to a few rows on a phone", async ({ page }) => {
   // It wrapped to four rows - a fifth of the screen, spent before the editor or
   // the app got any of it. What it must not do is grow back.
   //
-  // BOTH ROWS, because the header is two now: the project's bar and this
-  // page's toolbar. Measuring only the first would be a check that passes
-  // because it stopped looking at the part that wraps.
-  const bar = await page.locator(".bar").boundingBox();
+  // TWO ROWS, as the studio's bar on a phone: the brand and the tool's name
+  // above, the workbench below - and the workbench is one row: it was two,
+  // with the About button alone on the second.
   const toolbar = await page.locator(".toolbar").boundingBox();
-  expect(bar.height + toolbar.height, "the header is not a fifth of the phone").toBeLessThan(152);
-  // And the toolbar is ONE row: it was two, with the About button alone on
-  // the second.
-  expect(toolbar.height, "the toolbar is one row").toBeLessThanOrEqual(47);
+  expect(toolbar.height, "the header is not a fifth of the phone").toBeLessThan(152);
+  const run = await page.locator("#run").boundingBox();
+  const about = await page.locator("#toolbar-more").boundingBox();
+  expect(Math.abs(run.y - about.y), "the workbench is one row").toBeLessThan(10);
 
   // And nothing that has to be reachable was compacted away with the rows:
   // what the row has no room for is one tap away, in its menu.
-  for (const id of ["#undo", "#redo", "#examples", "#run", "#status", "#toolbar-more", ".bar .extra summary"]) {
+  for (const id of ["#undo", "#redo", "#examples", "#run", "#status", "#toolbar-more", ".toolbar .tool-switch summary"]) {
     await expect(page.locator(id)).toBeVisible();
   }
   await page.locator("#toolbar-more").click();
   await expect(page.locator("#toolbar-more")).toHaveAttribute("aria-expanded", "true");
-  for (const id of ["#format", "#ai-studio", "#autorun", "#share", "#source-link", "#fullscreen", "#about"]) {
+  for (const id of ["#format", "#autorun", "#share", "#source-link", "#fullscreen", "#about"]) {
     await expect(page.locator(`#toolbar-menu ${id}`)).toBeVisible();
   }
   // Each says what it is in words there - the About button is not a stray "i".
@@ -542,12 +543,8 @@ test("the header keeps to a few rows on a phone", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(page.locator("#toolbar-more")).toBeHidden();
   const order = await page.locator(".toolbar > [id]").evaluateAll((all) => all.map((c) => c.id));
-  expect(order.slice(0, 8)).toEqual(["undo", "redo", "format", "examples", "ai-studio", "run", "autorun", "status"]);
+  expect(order.slice(0, 7)).toEqual(["undo", "redo", "format", "examples", "run", "autorun", "status"]);
   await expect(page.locator("#about")).toBeVisible();
-  await page.setViewportSize({ width: 390, height: 760 });
-  // The theme switch is one press further, in the menu - reachable, not gone.
-  await page.locator(".bar .extra summary").click();
-  await expect(page.locator("#theme")).toBeVisible();
 });
 
 /* And under a thumb the bar's marks are targets - the rule the catalogue's bar
@@ -557,14 +554,10 @@ test("the header keeps to a few rows on a phone", async ({ page }) => {
 test.describe("under a thumb", () => {
   test.use({ hasTouch: true, viewport: { width: 390, height: 760 } });
 
-  test("the bar's marks are targets on a phone, and the header keeps its rows", async ({ page }) => {
+  test("the header keeps its rows under a thumb", async ({ page }) => {
     await open(page);
-    const more = await page.locator(".bar .extra summary").boundingBox();
-    expect(Math.min(more.width, more.height), "the menu's mark is a target").toBeGreaterThanOrEqual(36);
-    const bar = await page.locator(".bar").boundingBox();
     const toolbar = await page.locator(".toolbar").boundingBox();
-    expect(bar.height, "in a bar that did not grow to hold them").toBeLessThanOrEqual(47);
-    expect(bar.height + toolbar.height, "the header is still not a fifth of the phone").toBeLessThan(152);
+    expect(toolbar.height, "the header is still not a fifth of the phone").toBeLessThan(152);
   });
 });
 
@@ -575,9 +568,8 @@ test.describe("on a 360px phone", () => {
 
   test("the header keeps to two toolbar rows", async ({ page }) => {
     await open(page);
-    const bar = await page.locator(".bar").boundingBox();
     const toolbar = await page.locator(".toolbar").boundingBox();
-    expect(bar.height + toolbar.height, "the header is still not a fifth of the phone").toBeLessThan(152);
+    expect(toolbar.height, "the header is still not a fifth of the phone").toBeLessThan(152);
   });
 });
 
@@ -617,57 +609,6 @@ test("the app follows the system theme, and a change does not restart it", async
     )
     .not.toBe(dark);
   await expect(field).toHaveValue("still here");
-});
-
-test("the switch in the bar overrides the system theme, and is forgotten again when it agrees with it", async ({ page }) => {
-  await page.emulateMedia({ colorScheme: "light" });
-  await open(page);
-  const html = page.locator("html");
-  const theme = page.locator("#theme");
-  // In the menu behind the bar's last button, which a reload closes again.
-  const openMenu = () => page.locator(".bar .extra summary").click();
-  const editor = page.locator(".monaco-editor").first();
-  const stored = () => page.evaluate(() => localStorage.getItem("abap2ui5-playground:theme"));
-  const chosen = () => page.evaluate(() => document.documentElement.getAttribute("data-theme"));
-  const appBackground = () =>
-    page.frameLocator("#app").locator("body").evaluate((b) => getComputedStyle(b).backgroundColor);
-
-  // Following the system: nothing chosen, nothing stored, and the switch
-  // says so.
-  expect(await chosen()).toBeNull();
-  expect(await stored()).toBeNull();
-  await expect(theme).toHaveAttribute("aria-checked", "false");
-  await expect(editor).toHaveClass(/\bvs\b/);
-  const light = await appBackground();
-
-  // One click: the page, the editor and the running app go dark - the app
-  // told rather than restarted, as for a system change - and the choice is
-  // kept for next time.
-  await openMenu();
-  await theme.click();
-  await expect(html).toHaveAttribute("data-theme", "dark");
-  await expect(theme).toHaveAttribute("aria-checked", "true");
-  await expect(editor).toHaveClass(/vs-dark/);
-  expect(await stored()).toBe("dark");
-  await expect.poll(appBackground).not.toBe(light);
-
-  // Next time: dark before the bundle has said anything - the inline script
-  // at the top of the document applies the stored choice - and the app
-  // starts in the dark theme.
-  await page.goto("/");
-  expect(await chosen()).toBe("dark");
-  await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
-  await expect(theme).toHaveAttribute("aria-checked", "true");
-  await expect(page.locator("#app")).toHaveAttribute("data-src", /sap-ui-theme=sap_horizon_dark/);
-
-  // Switching back to what the system says is not a choice to keep: the
-  // page follows the system again, and nothing is stored.
-  await openMenu();
-  await theme.click();
-  expect(await chosen()).toBeNull();
-  expect(await stored()).toBeNull();
-  await expect(theme).toHaveAttribute("aria-checked", "false");
-  await expect(editor).toHaveClass(/\bvs\b/);
 });
 
 // The entries of a stored zip, read the way the format is written: a local
