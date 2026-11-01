@@ -202,7 +202,7 @@ export async function followNavigation(files) {
           }
         }),
       )
-    ).filter(Boolean);
+    ).filter((file) => file !== undefined);
 
     if (fetched.length === 0) break;
     for (const file of fetched) seen.add(file.name);

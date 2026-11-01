@@ -122,6 +122,7 @@ test("the Pilot types into the app on screen, presses its button and reads the a
   expect(first).toContain('"path":"/NAME"');
   expect(first).toContain('"event":"GREET"');
   expect(requests[0].headers["x-api-key"]).toBe(KEY);
+  expect(requests[0].headers.authorization).toBeUndefined();
   // A long conversation clears its old tool results server-side, late and in
   // large steps - the history the page sends stays append-only.
   expect(requests[0].headers["anthropic-beta"]).toContain("context-management-2025-06-27");
