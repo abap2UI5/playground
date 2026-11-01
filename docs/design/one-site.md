@@ -16,6 +16,25 @@ takes from here is a URL contract (the embed frame, `?src=`, share links) and
 published files (`apps.json`). The AI Studio wears the same palette through
 its `--st-*` tokens and the family's mark instead of a spark of its own.
 
+**The four tools wear one look.** The Playground, the AI App Builder
+(`/ai/`), the AI Agent (`/pilot/`) and the Layout Editor
+(abap2UI5/layout-editor) are one family to a reader, and say so: each bar
+leads with the mark, "abap2UI5" and the tool's own name in the accent, and
+that name is a menu of all four with a line on each (`tool-switch.mjs`,
+`TOOLS`; the layout editor carries the same list in its `index.html`). The
+look is the studio's - the sunken page, the work on white cards with an
+18px radius, a hairline and a soft shadow, 14px apart, pills for what is
+pressed, the app in its window with the three dots, Claude's answers with
+the ✦ mark and the reader's in the accent - and the Pilot and the
+playground's workbench were brought onto it, the layout editor's palette
+moved from Fiori Horizon onto this one. **The playground is one row now**,
+as the studio's bar is: the brand and the tool's name lead the workbench,
+and the project's bar that stood above it - the search box, the two marks
+and the menu with the theme switch - is gone, and with it the toolbar's
+link to the AI App Builder, which the tool's name now leads to. What
+follows about the bar describes the 404's copy (`tools/sample-frame.mjs`)
+and the history.
+
 What follows is the history of the one-site design. The mechanisms inside
 this origin (the four bars here, the search box, the site memory between the
 playground and the catalogue) still work as described; the documentation's

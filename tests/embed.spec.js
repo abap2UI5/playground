@@ -34,16 +34,13 @@ test("?view=app shows the app and nothing else - no editor and no bar", async ({
   // Measured rather than asserted on the class, for the same reason the full
   // screen test measures: a bar that is merely transparent would pass a class
   // check and still take the top of the box.
-  await expect(page.locator(".bar")).toBeHidden();
+  await expect(page.locator(".toolbar-brand")).toBeHidden();
   const app = await page.locator("#app").boundingBox();
   expect(Math.round(app.y), "the app starts at the top of the frame").toBe(0);
 
   // And no theme switch or links out of it: furniture in somebody else's
   // page keeps to what it was given.
-  await expect(page.locator("#theme")).toBeHidden();
-  await expect(page.locator(".bar-nav")).toBeHidden();
-  await expect(page.locator(".social")).toHaveCount(2);
-  await expect(page.locator(".social").first()).toBeHidden();
+  await expect(page.locator(".toolbar .tool-switch")).toBeHidden();
 
   // The editor is gone from the screen, not from the playground - what runs is
   // still compiled from it, and Run still runs. There is no button to press for
