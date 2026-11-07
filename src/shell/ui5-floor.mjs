@@ -22,7 +22,11 @@ let select;
 
 function reflect(ui5) {
   const known = [...RELEASES, LATEST];
-  const options = known.map((v) => new Option(v === LATEST ? `latest (${v})` : v, v));
+  // 1.71 is named for what it is: a first-time visitor read the default of
+  // this select as the UI5 the app beside it runs on, and the page as six
+  // years old. The app runs on the site's UI5 (ui5-libraries.mjs); this is
+  // the release the linter holds the view to.
+  const options = known.map((v) => new Option(v === LATEST ? `latest (${v})` : v === "1.71" ? "1.71 (oldest supported)" : v, v));
   if (!known.includes(ui5)) options.push(new Option(ui5, ui5));
   select.replaceChildren(...options);
   select.value = ui5;
