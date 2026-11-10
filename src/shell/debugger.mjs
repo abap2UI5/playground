@@ -192,6 +192,11 @@ export function setUpDebugger(page) {
       page.showTab();
       await refreshWatches();
       page.redrawIf("debug");
+      // A stop that a click in the app caused leaves the focus in the app's
+      // frame, where F8 never reaches this page. It comes back to Continue.
+      if (document.activeElement instanceof HTMLIFrameElement) {
+        /** @type {HTMLElement | null} */ (document.querySelector(".debug-bar .is-primary"))?.focus({ preventScroll: true });
+      }
       // For the tests, and for anybody watching the page with tools.
       document.documentElement.dataset.debugger = "stopped";
     } else if (message.event === "resumed" || message.event === "stopped") {

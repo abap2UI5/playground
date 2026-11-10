@@ -334,8 +334,8 @@ test("the table view, the hover, run to the cursor and a stop at RAISE EXCEPTION
   // The value under the mouse.
   await page.evaluate((line) => window.monaco.editor.getEditors()[0].revealLineInCenter(line), L.total);
   await page.locator(".view-line", { hasText: "total = lv_sum." }).getByText("lv_sum").hover();
-  await expect(page.locator(".monaco-hover")).toContainText("lv_sum");
-  await expect(page.locator(".monaco-hover")).toContainText("= 6");
+  const hover = page.locator(".monaco-hover").filter({ hasText: "lv_sum" }).first();
+  await expect(hover).toContainText("lv_sum = 6 - i");
 
   // Run to the cursor: the caret on ENDMETHOD (four lines further down in
   // this version of the app).
@@ -349,8 +349,8 @@ test("the table view, the hover, run to the cursor and a stop at RAISE EXCEPTION
   await page.keyboard.press("F8");
   await running(page);
 
-  // Stop at RAISE EXCEPTION, then the click that raises.
-  await page.locator('[data-insight="debug"]').click();
+  // Stop at RAISE EXCEPTION, then the click that raises. (The tab is still
+  // in front - a click on it now would fold the panel away.)
   await page.locator(".debug-option input").first().check();
   await page.frameLocator("#app").locator('[id$="--more"]').click();
   await stopped(page);
