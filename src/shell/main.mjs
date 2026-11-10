@@ -42,7 +42,7 @@ import { humanUrl, originOf } from "./deep-link.mjs";
 import { writeOpenFile } from "./persistence.mjs";
 import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
 import { setUpInsight, showInsight, updateInsight } from "./insight.mjs";
-import { offersDebugger, setUpDebugger } from "./debug.mjs";
+import { debugPaused, offersDebugger, setUpDebugger } from "./debug.mjs";
 import { restoreCheckerSettings } from "./checker-settings.mjs";
 import { setUpSplitter, setUpTabs, setUpToolbarMenu } from "./layout.mjs";
 import { announceEdited, announceReady, setUpEmbeddedEditor, startEmbedMessages } from "./embed.mjs";
@@ -333,7 +333,7 @@ async function boot() {
     state.runtime = runtime;
     offerFrameBridge({ room: pilot ?? chat, chat, pilot });
     // The debugger's chunk, on the playground's own page (debug.mjs).
-    setUpDebugger(showInsight);
+    setUpDebugger(showInsight, () => tabs.show("left"));
     const version = `abap2UI5 ${state.runtime.abapVersion()}`;
     document.getElementById("versions").textContent = version;
     document.getElementById("about-versions").textContent = version;
@@ -389,7 +389,9 @@ async function boot() {
   // show( ) only marks the tab because both panes are already on screen. Not
   // when the run did not get that far: the panel it left open, the problems or
   // the log, is exactly what the reader has to be looking at.
-  const runAndShow = () => run().then((started) => started && tabs.show("right"));
+  // Not when the app's start stopped at a breakpoint: then the code is what
+  // there is to look at (debug.mjs brings it forward).
+  const runAndShow = () => run().then((started) => started && !debugPaused() && tabs.show("right"));
 
   runButton.addEventListener("click", runAndShow);
   undoButton.addEventListener("click", () => {

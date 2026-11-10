@@ -189,6 +189,11 @@ Run first ends the stop; Auto never does. F5-F8 and Shift+F8 are taken in the
 capture phase while stopped (F5 would reload the page, F8 is Monaco's "next
 problem"); F9 is a Monaco command and works whenever the editor has focus.
 
+On a phone the stop brings the ABAP pane forward (the app has the screen
+there, and a Run whose app start stopped no longer switches to it); a tap
+in the glyph margin sets a breakpoint, and the step bar wraps above the
+stack.
+
 Breakpoints are model decorations in the glyph margin, so they move with
 the text typed above them; the list follows the decorations. They are kept
 under `abap2ui5-playground:breakpoints` by file name, validated like every

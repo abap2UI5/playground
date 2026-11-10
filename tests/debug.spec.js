@@ -358,3 +358,28 @@ test("the table view, the hover, run to the cursor and a stop at RAISE EXCEPTION
   await page.keyboard.press("F8");
   await expect(page.frameLocator("#app").locator('[id$="--more"]')).toContainText("Total 16", { timeout: 30000 });
 });
+
+test.describe("on a phone", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("a tap sets a breakpoint, and a stop brings the code forward rather than the app", async ({ page }) => {
+    await open(page);
+    // A tap in the glyph margin next to line 25 of the sample.
+    const at = await page.evaluate(() => {
+      const editor = window.monaco.editor.getEditors()[0];
+      editor.revealLineInCenter(25);
+      const layout = editor.getLayoutInfo();
+      const box = editor.getDomNode().getBoundingClientRect();
+      return { x: box.left + layout.glyphMarginLeft + 5, y: box.top + editor.getTopForLineNumber(25) - editor.getScrollTop() + 8 };
+    });
+    await page.touchscreen.tap(at.x, at.y);
+    await expect(page.locator(".bp-glyph")).toHaveCount(1);
+    await page.locator("#run").click();
+    await stopped(page);
+    await expect(page.locator('.tab[data-pane="left"]')).toHaveClass(/is-active/);
+    await expect(page.locator("#pane-left")).toBeVisible();
+    await expect(page.locator(".debug-bar button", { hasText: "Continue" })).toBeVisible();
+    await page.locator(".debug-bar button", { hasText: "Continue" }).click();
+    await running(page);
+  });
+});

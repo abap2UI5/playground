@@ -21,8 +21,9 @@ let loading;
 
 // Fetches the chunk and hands it what it needs of the page (the chunk rule
 // in docs/design/load-time.md: it imports no shell module). Called once the
-// runtime is up; `showInsight` brings the panel's Debugger tab forward.
-export function setUpDebugger(showInsight) {
+// runtime is up; `showInsight` brings the panel's Debugger tab forward, and
+// `showCode` the editor's pane on a phone, where the app has the screen.
+export function setUpDebugger(showInsight, showCode = () => {}) {
   if (!offersDebugger) return Promise.resolve();
   const tab = document.querySelector('[data-insight="debug"]');
   tab?.removeAttribute("hidden");
@@ -32,7 +33,10 @@ export function setUpDebugger(showInsight) {
       editor,
       redraw,
       redrawIf,
-      showTab: () => showInsight("debug"),
+      showTab: () => {
+        showCode();
+        showInsight("debug");
+      },
       empty,
       blockHead,
       setStatus,
