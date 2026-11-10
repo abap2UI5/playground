@@ -114,6 +114,15 @@ takes one only from `window.parent` and the site's origin. The bridge's
 own `__z2ui5PlaygroundPilot`/`__z2ui5PlaygroundRestart` remain on the
 FRAME's window, for tests only.
 
+## The debugger's channel
+
+Beside the operations, the worker takes the debugger's commands
+(`{ debug: true, id, cmd, args }`) and answers them at once rather than
+queuing them: the one moment a Continue matters is while an operation is
+stopped at a breakpoint. It sends `{ type: "debug", event }` - `paused`,
+`resumed`, `reply`. The page holds the watchdog while stopped, and Stop is
+the runaway path's terminate-and-restart. See [debugger.md](debugger.md).
+
 ## The runtime worker gives things up
 
 The worker runs whatever ABAP the editor holds, `WRITE '@KERNEL …'` (plain

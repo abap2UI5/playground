@@ -275,7 +275,8 @@ export const languageServer = (method, params, files) => call("ls", method, para
 
 // Compiles the editor's files in the worker; rejects with an Error that
 // carries `problems` when the transpiler refused something at a line.
-export const compile = (files) => call("compile", files);
+// `options.debug` asks for the debug build (transpile-core.mjs).
+export const compile = (files, options) => call("compile", files, options);
 
 // Every class and interface completion can offer: the corpus's, told once,
 // with the user's own merged in - read off the file names, which is where

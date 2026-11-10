@@ -21,7 +21,8 @@ import { announceAppHeight, announceProblems } from "./embed.mjs";
 import { clearRoundtrips, roundtripList } from "./roundtrips.mjs";
 import { markLinkedCodeRan } from "./linked-code.mjs";
 import { state } from "./state.mjs";
-import { RUNAWAY } from "./runtime-client.mjs";
+import { DEBUG_STOPPED, RUNAWAY } from "./runtime-client.mjs";
+import { compileOptions, debugCompiled, debuggerReady, debugPaused, stopDebugging } from "./debug.mjs";
 import { isDark } from "./theme.mjs";
 import { hideOutput, setStatus, showOutput } from "./ui.mjs";
 import { appOnly, frame, pilotPage } from "./page.mjs";
@@ -279,6 +280,13 @@ export async function run({ quiet = false } = {}) {
   // the one-shot load listener, and the second reset would land under a frame
   // that is still booting the first.
   if (running) return;
+  // A program stopped at a breakpoint: Run ends it first, as the new Run
+  // replaces it anyway. Not for Auto - the editor cannot be typed in while
+  // stopped, and nothing else should end a stop the reader is looking at.
+  if (debugPaused()) {
+    if (quiet) return;
+    stopDebugging();
+  }
   running = true;
   // Whatever the last run's tests said is not about this one: a run that
   // stops before its tests (an abaplint error, a transpiler refusal) used to
@@ -325,7 +333,10 @@ export async function run({ quiet = false } = {}) {
     }
 
     setStatus("compiling…");
-    const { chunks, tests } = await compile(files);
+    const compiled = await compile(files, compileOptions());
+    const { chunks, tests } = compiled;
+    await debuggerReady();
+    debugCompiled(compiled);
     // Waited for: the worker evaluates each chunk with `new Function`, and a
     // chunk V8 refuses, or one that throws while defining itself, is the
     // error to show. Left unawaited it was an "Uncaught (in promise)" in the
@@ -363,7 +374,7 @@ export async function run({ quiet = false } = {}) {
         // reference - stopped the runner itself, and took the whole run with
         // it: no Tests row, no app. The tests are reported as not run, the
         // Log says why, and the app starts, as it does for a failed test.
-        if (e?.name === RUNAWAY) throw e;
+        if (e?.name === RUNAWAY || e?.name === DEBUG_STOPPED) throw e;
         results = tests.flatMap((t) =>
           t.methods.map((method) => ({
             class: t.class.toUpperCase(),
@@ -440,6 +451,13 @@ export async function run({ quiet = false } = {}) {
     // problems list is what the reader now needs to be looking at.
     return true;
   } catch (e) {
+    // Stopped in the debugger while it defined the classes or ran the
+    // tests: what the reader asked for, not a failure.
+    if (e?.name === DEBUG_STOPPED) {
+      setStatus("the program was stopped in the debugger - Run starts the app again", true);
+      stopped("stopped in the debugger");
+      return;
+    }
     setStatus("the app could not be started", true);
     showOutput("Run", String(e.message || e));
     stopped("the code on screen did not start");

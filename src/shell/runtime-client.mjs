@@ -56,6 +56,10 @@ export function startRuntime() {
       failAll(error);
     };
     const onMessage = (message) => {
+      if (message?.type === "debug") {
+        heardDebug(message);
+        return;
+      }
       if (message?.type === "loaded") {
         arrived = true;
         return;
@@ -182,7 +186,14 @@ export function startRuntime() {
       fresh.addEventListener("message", (event) => {
         const message = event.data;
         if (message?.type === "ready") {
+          // A fresh worker knows no breakpoints: what the page last told the
+          // old one is told again, before anything can run in it.
+          for (const [cmd, args] of sticky) fresh.postMessage({ debug: true, id: -1, cmd, args });
           resolve();
+          return;
+        }
+        if (message?.type === "debug") {
+          heardDebug(message);
           return;
         }
         const waiting = pending.get(message?.id);
@@ -224,20 +235,87 @@ export function startRuntime() {
         clearTimeout(watchdog);
         fn(value);
       };
-      pending.set(id, { resolve: done(resolve), reject: done(reject) });
+      // The watchdog sleeps while the program is stopped in the debugger:
+      // a reader looking at a breakpoint for a minute is not a loop that
+      // never ends. Let go, it starts again with the whole limit.
+      const arm = () => {
+        clearTimeout(watchdog);
+        if (!WATCHED.has(op) || !pending.has(id)) return;
+        watchdog = setTimeout(() => {
+          if (!pending.has(id)) return;
+          const error = new Error(
+            `The ABAP ran for more than ${Math.round(limit() / 1000)} seconds without finishing - ` +
+              "a loop that never ends? It was stopped, and the runtime started again.",
+          );
+          error.name = RUNAWAY;
+          failAll(error);
+          restart();
+        }, limit());
+      };
+      pending.set(id, { resolve: done(resolve), reject: done(reject), arm, disarm: () => clearTimeout(watchdog) });
       worker.postMessage({ id, op, args });
-      if (!WATCHED.has(op)) return;
-      watchdog = setTimeout(() => {
-        if (!pending.has(id)) return;
-        const error = new Error(
-          `The ABAP ran for more than ${Math.round(limit() / 1000)} seconds without finishing - ` +
-            "a loop that never ends? It was stopped, and the runtime started again.",
-        );
-        error.name = RUNAWAY;
-        failAll(error);
-        restart();
-      }, limit());
+      if (debugPaused) return;
+      arm();
     });
+  };
+
+  // ------------------------------------------------------------ debugger
+
+  // What the worker's debugger says (src/runtime/debug.mjs): a stop, a go
+  // on, and the answers to the commands below. A stop holds every watchdog;
+  // a go on starts them again.
+  let debugPaused = false;
+  const debugListeners = new Set();
+  const debugReplies = new Map();
+  let nextDebug = 0;
+  function heardDebug(message) {
+    if (message.event === "reply") {
+      const call = debugReplies.get(message.id);
+      if (call === undefined) return;
+      debugReplies.delete(message.id);
+      if (message.ok) call.resolve(message.value);
+      else call.reject(new Error(message.error));
+      return;
+    }
+    if (message.event === "paused") {
+      debugPaused = true;
+      for (const call of pending.values()) call.disarm?.();
+    } else if (message.event === "resumed") {
+      debugPaused = false;
+      for (const call of pending.values()) call.arm?.();
+    }
+    for (const fn of debugListeners) fn(message);
+  }
+
+  // One command to the debugger, answered at once - the worker does not
+  // queue these behind the operation that is stopped (worker.mjs).
+  const STICKY = new Set(["breakpoints", "options"]);
+  const sticky = new Map();
+  const debug = async (cmd, args) => {
+    if (STICKY.has(cmd)) sticky.set(cmd, args);
+    await whenReady();
+    if (restarted) await restarted;
+    return new Promise((resolve, reject) => {
+      const id = nextDebug++;
+      debugReplies.set(id, { resolve, reject });
+      worker.postMessage({ debug: true, id, cmd, args });
+    });
+  };
+
+  // Stop: the program is not unwound - a CATCH would catch that, a CLEANUP
+  // would run the reader's code, and the framework would write a dump.
+  // The worker goes, as it does for a loop that never ends, and a fresh one
+  // starts; whatever was waiting on the old one hears DEBUG_STOPPED.
+  const stopProgram = () => {
+    const error = new Error("The program was stopped in the debugger.");
+    error.name = DEBUG_STOPPED;
+    for (const call of debugReplies.values()) call.reject(error);
+    debugReplies.clear();
+    failAll(error);
+    const was = debugPaused;
+    debugPaused = false;
+    restart();
+    if (was) for (const fn of debugListeners) fn({ event: "stopped" });
   };
 
   return {
@@ -249,6 +327,14 @@ export function startRuntime() {
     defineClasses: (sources) => call("defineClasses", sources),
     resetDatabase: () => call("resetDatabase"),
     runUnitTests: (tests) => call("runUnitTests", tests),
+    // The debugger (src/shell/debug.mjs is the page's half).
+    debug,
+    onDebug: (fn) => {
+      debugListeners.add(fn);
+      return () => debugListeners.delete(fn);
+    },
+    isPaused: () => debugPaused,
+    stopProgram,
     // Known from the ready message, so this can stay synchronous.
     abapVersion: () => version ?? "unknown",
   };
@@ -256,6 +342,10 @@ export function startRuntime() {
 
 // The name on the error whenReady( ) gives up with, for boot( ) to test.
 export const STALLED = "RuntimeStalled";
+
+// The name on the error every waiting call gets when the reader stops the
+// program in the debugger - nothing went wrong, so nothing is reported.
+export const DEBUG_STOPPED = "DebugStopped";
 
 // The name on the error a call gives up with when the ABAP it ran did not
 // finish (see call( )), and how long that is: generous, because a roundtrip

@@ -1,4 +1,4 @@
-# The bottom panel: View, Tests, Roundtrips, Console, State
+# The bottom panel: View, Tests, Roundtrips, Console, State, Debugger
 
 > Design notes, moved out of `AGENTS.md`. Read this before touching `src/shell/insight*.mjs`, the View tab's edit mode (`chain-*.mjs`, `view-edit.mjs`), unit tests or dump locating.
 > The rules in short, and every other area, are in [AGENTS.md](../../AGENTS.md).
@@ -189,6 +189,14 @@ fields and are read through `FRIENDS_ACCESS_INSTANCE` (see
 The snapshot travels as the roundtrip answer's `state`, counts towards the
 roundtrip budget, and is reset with them by every Run. Read-only: the app's
 state is what the app made it.
+
+## The Debugger tab
+
+After State, on the playground's own page only: the stop's step bar, the call
+stack, the variables of the frame chosen (the State tab's rows, opened on
+demand from the worker), the breakpoints with their conditions, and the
+watches. Drawn by the `debugger.mjs` chunk; brought forward by a stop. The
+whole design is in [debugger.md](debugger.md).
 
 ## Around the editor: first steps and the lesson bar
 

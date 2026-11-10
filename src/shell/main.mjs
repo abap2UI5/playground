@@ -41,7 +41,8 @@ import { loadSampleFiles } from "../editor/samples.mjs";
 import { humanUrl, originOf } from "./deep-link.mjs";
 import { writeOpenFile } from "./persistence.mjs";
 import { render as renderFiles, setUpFiles } from "./files-ui.mjs";
-import { setUpInsight, updateInsight } from "./insight.mjs";
+import { setUpInsight, showInsight, updateInsight } from "./insight.mjs";
+import { offersDebugger, setUpDebugger } from "./debug.mjs";
 import { restoreCheckerSettings } from "./checker-settings.mjs";
 import { setUpSplitter, setUpTabs, setUpToolbarMenu } from "./layout.mjs";
 import { announceEdited, announceReady, setUpEmbeddedEditor, startEmbedMessages } from "./embed.mjs";
@@ -268,7 +269,7 @@ async function boot() {
   const starting = await startingReady;
   const { files, from, openFile: shownBefore } = starting;
   setRunContext({ startedFrom: from });
-  await createEditor(document.getElementById("editor"), files, { onChange: remember, dark: isDark(), editor: !appOnly });
+  await createEditor(document.getElementById("editor"), files, { onChange: remember, dark: isDark(), editor: !appOnly, glyphMargin: offersDebugger });
   // A restored draft opens on the file that was on screen (persistence.mjs).
   if (shownBefore) openFile(shownBefore);
   // What a link or the default sample put in is not the reader's work until
@@ -331,6 +332,8 @@ async function boot() {
     await runtime.whenReady();
     state.runtime = runtime;
     offerFrameBridge({ room: pilot ?? chat, chat, pilot });
+    // The debugger's chunk, on the playground's own page (debug.mjs).
+    setUpDebugger(showInsight);
     const version = `abap2UI5 ${state.runtime.abapVersion()}`;
     document.getElementById("versions").textContent = version;
     document.getElementById("about-versions").textContent = version;

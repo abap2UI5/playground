@@ -19,6 +19,7 @@
 import { Transpiler, UnknownTypesEnum } from "@abaplint/transpiler";
 import { entryClass, getRegistry, hasEntryClass, updateFiles, userObjects } from "./registry-core.mjs";
 import { isSeedFile, isTableFile, parseSeed, readTable } from "./tables.mjs";
+import { instrument, statementStarts } from "./instrument.mjs";
 
 // Runs in the registry worker, beside the registry it compiles against; the
 // page reaches it through compile( ) in src/editor/registry.mjs. The
@@ -40,7 +41,13 @@ function onlyTheUsersObjects(reg) {
 // order the runtime can define them in. Rejects with a readable message when the
 // transpiler cannot handle what was written - that is the honest answer to "this
 // ABAP is valid but the playground cannot run it".
-export async function compile(files) {
+//
+// `debug` asks for the debug build: every method framed and every statement
+// the debugger can stop at hooked (instrument.mjs). The answer then carries
+// `stops` - per file, each method's lines a breakpoint can sit on - and
+// `debugProblems`, the objects that could not be instrumented and run
+// without breakpoints. Without it the output is what it always was.
+export async function compile(files, { debug = false } = {}) {
   updateFiles(files);
   const reg = getRegistry();
 
@@ -97,9 +104,15 @@ export async function compile(files) {
     reg.parse();
   }
 
+  const starts = debug ? statementsOfUserFiles() : undefined;
+  /** @type {Record<string, any[]>} */
+  const stops = {};
+  /** @type {string[]} */
+  const debugProblems = [];
   /** @type {{ object: string | undefined, name: string | undefined, js: string, lines: any[][] }[]} */
   const chunks = ordered(output.objects.filter((o) => o.chunk)).map((o) => {
     const before = prologue(o);
+    const code = starts ? debugBuild(o, starts, stops, debugProblems) : o.chunk.getCode();
     return {
       object: o.object.name,
       // The chunk's name, for the stack a runtime error carries: the
@@ -107,7 +120,7 @@ export async function compile(files) {
       // says zcl_x.clas.mjs:LINE rather than <anonymous>:LINE, and LINE can
       // be looked up in `lines` - see locate( ) in src/runtime/index.mjs.
       name: baseName(o.filename),
-      js: before + o.chunk.getCode() + tableSetup(o, reg, seeds),
+      js: before + code + tableSetup(o, reg, seeds),
       lines: lineTable(o.chunk, before),
     };
   });
@@ -116,7 +129,41 @@ export async function compile(files) {
     throw new Error(`The transpiler produced no JavaScript for ${entry}.`);
   }
   chunks.push(schemaChunk(output.databaseSetup?.schemas?.sqlite ?? []));
-  return { chunks, tests: listTests() };
+  return debug ? { chunks, tests: listTests(), stops, debugProblems } : { chunks, tests: listTests() };
+}
+
+// Where each statement of the user's files starts, by file name - what
+// instrument( ) matches the transpiler's mappings against.
+function statementsOfUserFiles() {
+  const out = new Map();
+  for (const obj of userObjects()) {
+    // A table has no ABAP files - and no getABAPFiles( ) to ask.
+    if (typeof obj.getABAPFiles !== "function") continue;
+    for (const file of obj.getABAPFiles()) out.set(baseName(file.getFilename()), statementStarts(file));
+  }
+  return out;
+}
+
+// One object's debug build, or its plain code when it cannot have one. The
+// instrumented code is parsed here, before it goes anywhere: a hook that
+// turned the transpiler's output into a SyntaxError costs the reader their
+// breakpoints in that object, never the Run.
+const AsyncFunction = /** @type {FunctionConstructor} */ ((async () => {}).constructor);
+function debugBuild(o, starts, stops, problems) {
+  const plain = o.chunk.getCode();
+  let result;
+  try {
+    result = instrument(plain, o.chunk.mappings ?? [], starts);
+    if (result) new AsyncFunction("abap", result.js);
+  } catch (e) {
+    problems.push(`${baseName(o.filename)}: ${String(e?.message ?? e)}`);
+    return plain;
+  }
+  if (!result) return plain;
+  for (const m of result.methods) {
+    (stops[m.file] ??= []).push({ cls: m.cls, method: m.method, start: m.start, end: m.end, lines: m.lines });
+  }
+  return result.js;
 }
 
 // The unit tests among the user's files: every local class FOR TESTING in a

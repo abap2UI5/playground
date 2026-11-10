@@ -67,14 +67,16 @@ read them before touching `tools/` or `src/runtime/`.
 | `search-box.mjs` | The 404's search box (through `src/catalogue/search-entry.mjs`); the playground's page has none |
 | `search-engine.mjs` | Its matcher — a copy of abap2UI5/docs' `search-engine.js`, plus `normalise` |
 | `search-terms.mjs` | The dialog's and catalogue's free-text filter (`foldCase`, `queryTerms`) |
-| `runtime-client.mjs` | The page's handle on the runtime worker (HEAD probe, STALLED) |
+| `runtime-client.mjs` | The page's handle on the runtime worker (HEAD probe, STALLED); the debugger's channel, the watchdog held while stopped, Stop (`DEBUG_STOPPED`) |
+| `debug.mjs` | The debugger in the shell entry, kept small: `offersDebugger`, the compile option, `debuggerReady()`, the chunk's import |
+| `debugger.mjs` | The debugger (chunk): breakpoints, the stop, stepping, the Debugger tab (stack, variables, watches, table view), F5-F9 |
 | `warm-up.mjs` | The app frame's first load, fetched into the HTTP cache during the parse |
 | `frontend-bridge.js` | Injected into the app frame, talks to the page by `postMessage` only: the fetch interception, restart in place, the AI calls, storage shims for an opaque frame |
 | `sw.js` | The service worker (build id, hashes and chunks substituted by the build; `verifiedHit()`) |
 | `roundtrips.mjs` | The recorded roundtrips (bounded at 200, cleared per Run) |
 | `insight.mjs` | The bottom panel: strip, folding, drag, redraw, empty-tab shrink |
 | `insight-common.mjs` | What a tab may ask of the panel (`empty()`, `blockHead()`, …) |
-| `insight-<tab>.mjs` | One module per tab: `problems` (+ Fix them bar, `fixableSaid()`), `outline`, `view` (`viewTab()`), `tests` (`testsTab()`), `roundtrips` (`roundtripsTab()`), `state` (app attributes per roundtrip), `console` (WRITE output, `#console-count`), `log`, `config` (the two checkers' tabs) |
+| `insight-<tab>.mjs` | One module per tab: `problems` (+ Fix them bar, `fixableSaid()`), `outline`, `view` (`viewTab()`), `tests` (`testsTab()`), `roundtrips` (`roundtripsTab()`), `state` (app attributes per roundtrip), `console` (WRITE output, `#console-count`), `log`, `config` (the two checkers' tabs); the Debugger tab is drawn by the `debugger.mjs` chunk |
 | `highlight.mjs`, `xml-pretty.mjs` | Colour for the panel's XML/JSON; XML one element per line |
 | `chain-read.mjs`, `view-edit.mjs`, `chain-patch.mjs`, `chain-write.mjs` | View edit: chain read back by executing it; edited view matched to the shown one; change patched into the ABAP that is there; fallback rewrite in the house layout |
 | `chat.mjs` | AI App Builder on screen (chunk, its page only) |
@@ -110,7 +112,8 @@ read them before touching `tools/` or `src/runtime/`.
 | `registry.mjs` | The page's client of the registry worker |
 | `registry-worker.mjs` | The worker's entry: abaplint, the corpus, the transpiler |
 | `registry-core.mjs` | abaplint as it runs there; `formatFiles()`, `FORMAT_RULES`, clock-yielded parse |
-| `transpile-core.mjs` | Single-object transpile in the worker; source maps for dumps |
+| `transpile-core.mjs` | Single-object transpile in the worker; source maps for dumps; the debug build (`debugBuild()`, parsed before it leaves) |
+| `instrument.mjs` | The debugger's hooks written into a chunk (pure): a frame per method, a hook per stoppable statement, `stops` |
 | `transpile.mjs` | The page's side of the compile |
 | `providers.mjs` | Monaco's language providers over the worker |
 | `lint-core.mjs` | The abap2UI5 linter in the worker |
@@ -123,7 +126,8 @@ read them before touching `tools/` or `src/runtime/`.
 
 | Module | Purpose |
 | --- | --- |
-| `worker.mjs` | The framework bundle's entry, answering over `postMessage`; imports `lockdown.mjs` first |
+| `worker.mjs` | The framework bundle's entry, answering over `postMessage`; imports `lockdown.mjs` first; the debugger's commands bypass its queue |
+| `debug.mjs` | `abap.dbg` (the hooks' other end: frames, `hit()`, `stop()`, steps, the yield) and the debugger's commands (variables, paths, conditions, watchpoints) |
 | `lockdown.mjs` | Takes `caches`, `indexedDB`, `Worker`, `SharedWorker`, `navigator.serviceWorker` off the worker before user code runs |
 | `index.mjs` | `roundtrip()` (with `console`, `state`), `defineClasses()` (class and DDIC put-back), `runUnitTests()`, `locate()`, user tables |
 | `app-state.mjs` | The State tab's snapshot (`snapshot()`, bounded) |
@@ -157,10 +161,12 @@ read them before touching `tools/` or `src/runtime/`.
 | `tools/service-worker.mjs` | `writeServiceWorker()`: build id, hashes, precached chunks |
 | `tools/esbuild-plugins.mjs` | The load-bearing esbuild plugins (shims, stubs, Monaco CSS) |
 | `tools/check-size.mjs` | The size budget and the stack budget |
+| `tools/check-instrument.mjs` | The debug build over abap2UI5, the samples and open-abap: every object must parse instrumented |
 | `tools/serve.mjs` | Dev/test server; mounts `dist/` three ways, answers misses with `404.html` |
 | `tools/vendor-agent.mjs` | Vendors and checks `src/vendor/agent/` |
 | `tools/ai-eval-summary.mjs` | The AI App Builder's measurement (`ai-eval.jsonl`) as the job summary's table; fails on a task without a line |
 | `tests/*.spec.js` | Playwright against the built `dist/` (`bfcache.spec.js` reads rather than runs) |
+| `tests/fixtures/debug/` | ABAP the debugger's node tests and benchmark transpile (`instrument.test.mjs`) |
 | `tests/node/*.test.mjs` | `node:test` over the pure modules; `dom.mjs` over `@xmldom/xmldom`; fixture from abap2UI5/samples `z2ui5_cl_smp_app_494` |
 | `tests/fixtures/` | Office/PDF files for the chats, unit-test ABAP |
 
@@ -175,6 +181,7 @@ npm run check      # build -> check:size -> test, what check.yml runs
 npm run lint       # ESLint
 npm run typecheck  # tsc over files that start with // @ts-check (jsconfig: checkJs off)
 npm run test:unit  # node:test over tests/node/*.test.mjs - no build, no browser
+npm run check:instrument  # the debugger's hooks over every sample and framework class (after a build)
 ```
 
 - `npm test` alone runs against whatever `dist/` holds; on a fresh clone it
@@ -198,7 +205,7 @@ npm run test:unit  # node:test over tests/node/*.test.mjs - no build, no browser
 
 | | |
 |---|---|
-| `check.yml` | Every non-main branch and PR: a `lint` job (lint, typecheck, test:unit) beside four test shards — Chromium `--shard=n/3` ×3 and WebKit on its own — each building with `.github/actions/build` (caches for `deps/`, `~/.ui5`, the downport) and checking the size budget. Two workers per runner, traces on retry, the service worker blocked except in `worker.spec.js` |
+| `check.yml` | Every non-main branch and PR: a `lint` job (lint, typecheck, test:unit) beside four test shards — Chromium `--shard=n/3` ×3 and WebKit on its own — each building with `.github/actions/build` (caches for `deps/`, `~/.ui5`, the downport) and checking the size budget and the debug build (`check-instrument.mjs`). Two workers per runner, traces on retry, the service worker blocked except in `worker.spec.js` |
 | `pages.yml` | Pushes to `main` and **nightly**: the same lint job and four shards, a fifth runner building the artefact, deploy once all are green (`needs: [lint, test, build]`) |
 | `upstream.yml` | Weekly: build and test against upstream `HEAD` without moving pins; opens or extends an issue on failure |
 | `ai-eval.yml` | Weekly, after a merge that moves the pins or the studio's rules, and by hand: `tests/ai-eval.spec.js` against the real model with the `ANTHROPIC_API_KEY` secret, the table in the job summary (`tools/ai-eval-summary.mjs`), the lines as an artifact. A measurement, not a gate - red only when a task wrote no line; without the secret a green no-op |
@@ -247,6 +254,13 @@ Each bullet names the design doc that explains it. Keep them true.
 - Frame and page exchange messages only (`frame-link.mjs` ↔ `frontend-bridge.js`), never reach into each other's window or document; nothing secret goes to a frame. On `/ai/` and `/pilot/` the frame is sandboxed without `allow-same-origin`.
 - The runtime worker imports `lockdown.mjs` before anything else.
 - Run = a fresh database (SQLite reopened on the empty image, user tables rebuilt from their text) and the app restarted in place where possible.
+
+**Debugger** ([debugger.md](docs/design/debugger.md))
+- Only the playground's own page offers it (`offersDebugger`) and runs the debug build - always there, not only with a breakpoint set. Embeds, `?view=app`/`full` and the AI pages get the plain build, byte for byte.
+- A hook goes on a line that is already there, never a new one (the line table and `locate()` depend on it); an instrumented chunk is parsed before it leaves the registry worker and falls back to the plain one; `check-instrument.mjs` must stay green over the whole corpus.
+- Nothing the reader types is evaluated as code: watches, conditions, hover and the variables tree are paths (`parsePath()`), and a scope is read through the `switch` the build writes, not `eval`.
+- The debugger's commands bypass the worker's queue; the watchdog sleeps while stopped; Stop terminates the worker (`DEBUG_STOPPED`), it never unwinds the ABAP.
+- The chunk imports no shell module - `debug.mjs` hands it the page.
 
 **Load time** ([load-time.md](docs/design/load-time.md))
 - Both workers start from the inline script in `index.html`; the preloads must match what the page actually fetches; `boot()`'s two orderings and `heard()` keep costs overlapping.
@@ -328,6 +342,10 @@ Each bullet names the design doc that explains it. Keep them true.
   compiles an uncalled class lazily), and would make a catalogued sample that
   reaches one (`cl_abap_datfm`, `cl_abap_dyn_prg`) die with the stub's
   message where the gate cannot see it. Not worth it.
+- **The debugger stops in the reader's classes only**, and not inside a
+  CATCH or CLEANUP block (the transpiler writes those without mappings).
+  Instrumenting the framework too was measured and left out
+  ([debugger.md](docs/design/debugger.md)).
 - **The `?src=` host allow list stays short.** The playground fetches on
   behalf of whoever opened the link and must not become a general-purpose
   reader for arbitrary URLs.
@@ -348,6 +366,7 @@ sample pages' per-line markup and the 220 MB site budget
 | The narrow layout, toolbar and ⋯ menu, panel strip, Auto (`autorun.mjs`) | [phone.md](docs/design/phone.md) |
 | Format, `FORMAT_RULES`, the formatting provider | [format.md](docs/design/format.md) |
 | abaplint, the linter, Config tabs, `ui5-floor.mjs`, stored settings, the draft (`file-sets.mjs`), Fix them, Reset, the parser hint | [checkers.md](docs/design/checkers.md) |
+| The debugger: `instrument.mjs`, `src/runtime/debug.mjs`, `debug.mjs`/`debugger.mjs`, the debug paths of `runtime-client.mjs`, `worker.mjs`, `run.mjs` | [debugger.md](docs/design/debugger.md), [runtime.md](docs/design/runtime.md) |
 | The bottom panel's tabs, View edit (`chain-*.mjs`, `view-edit.mjs`), unit tests, dumps, `guides.mjs`/`first-steps.mjs`/`learn-path.mjs` | [panel.md](docs/design/panel.md) |
 | The AI App Builder, providers, keys, attachments, `agent-hooks.mjs`, `linked-code.mjs` | [ai-chat.md](docs/design/ai-chat.md) |
 | The AI Agent, `frame-drive.mjs`, the vendored agent client | [ai-pilot.md](docs/design/ai-pilot.md) |

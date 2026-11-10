@@ -14,7 +14,7 @@ import { carriedSampleFiles } from "../editor/samples.mjs";
 import { updateInsight } from "./insight.mjs";
 import { recordRoundtrip, roundtripList } from "./roundtrips.mjs";
 import { state } from "./state.mjs";
-import { RUNAWAY } from "./runtime-client.mjs";
+import { DEBUG_STOPPED, RUNAWAY } from "./runtime-client.mjs";
 import { readStoredJson, removeStored } from "./storage.mjs";
 import { currentLog, setStatus, showOutput } from "./ui.mjs";
 import { aiPage, frame, pilotPage } from "./page.mjs";
@@ -97,7 +97,7 @@ export function offerFrameBridge({ room, chat, pilot }) {
         // Listed like an answer that failed: the AI's run waits for the
         // first roundtrip and read "none arrived within ten seconds",
         // with nothing in the status or the Log to say why.
-        const failed = { status: 500, body: `${e?.name === RUNAWAY ? "" : "JavaScript error in the app: "}${String(e?.message ?? e)}` };
+        const failed = { status: 500, body: `${e?.name === RUNAWAY || e?.name === DEBUG_STOPPED ? "" : "JavaScript error in the app: "}${String(e?.message ?? e)}` };
         if (e?.console) failed.console = e.console;
         recordRoundtrip({ request: body, response: failed, ms: performance.now() - started });
         // And to the AI Pilot's mirror of that tab, which otherwise never

@@ -113,8 +113,8 @@ const OPS = {
     }
     return core.languageServer(method, params);
   },
-  compile(files) {
-    return compile(files);
+  compile(files, options) {
+    return compile(files, options);
   },
   validateSettings(next) {
     core.validateSettings(next);
