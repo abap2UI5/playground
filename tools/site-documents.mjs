@@ -11,7 +11,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { stripHtmlComments } from "./html.mjs";
+import { stripHtmlComments, withPlaygroundPolicy } from "./html.mjs";
 import { THEME_BOOT, inlineScript } from "../src/shell/theme-boot.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -76,7 +76,7 @@ export function writeIndex({ metafile, monacoCss }) {
       /* Monaco's stylesheet, linked by the same script on the same pages. */
       .replace("__EDITOR_CSS__", JSON.stringify(monacoCss)),
   );
-  fs.writeFileSync(path.join(DIST, "index.html"), html);
+  fs.writeFileSync(path.join(DIST, "index.html"), withPlaygroundPolicy(html));
   log(`index.html (${tags.length} chunk${tags.length === 1 ? "" : "s"} preloaded, Monaco's ${editorPreloads.length} where the editor is shown)`);
   writeAiPage(html, metafile);
   writePilotPage(html, metafile);
@@ -103,7 +103,7 @@ function writeAiPage(html, metafile) {
     }
   }
   fs.mkdirSync(path.join(DIST, "ai"), { recursive: true });
-  fs.writeFileSync(path.join(DIST, "ai", "index.html"), page);
+  fs.writeFileSync(path.join(DIST, "ai", "index.html"), withPlaygroundPolicy(page, { models: true }));
   log("ai/index.html (the AI App Builder)");
 }
 
@@ -125,7 +125,7 @@ function writePilotPage(html, metafile) {
     }
   }
   fs.mkdirSync(path.join(DIST, "pilot"), { recursive: true });
-  fs.writeFileSync(path.join(DIST, "pilot", "index.html"), page);
+  fs.writeFileSync(path.join(DIST, "pilot", "index.html"), withPlaygroundPolicy(page, { models: true }));
   log("pilot/index.html (the AI Agent)");
 }
 

@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { openConfig } from "./helpers.mjs";
 
 // The AI Studio (src/shell/chat.mjs, src/shell/ai-agent.mjs), on its own page
 // ai/index.html - the playground carries no way into it. No test talks to
@@ -402,7 +403,7 @@ test("without a key the welcome offers a model on the reader's own machine", asy
 test("the header follows a release applied in the Config tab", async ({ page }) => {
   await openStudio(page);
   await page.locator('.studio-stage[data-stage="code"]').click();
-  await page.locator('[data-insight="abaplint"]').click();
+  await openConfig(page, "abaplint");
   const box = page.locator(".config-text");
   const config = JSON.parse(await box.inputValue());
   config.version = "v757";
@@ -1348,4 +1349,25 @@ test("a base URL somebody else stored is said on the key form, and one that is n
   await expect(page.locator("#status")).toHaveText("ready - describe the app you want", { timeout: 120000 });
   await expect(page.locator("#chat-base-url")).toHaveValue("https://api.openai.com/v1");
   await expect(page.locator("#chat-key-target")).toBeHidden();
+});
+
+// Without a key the welcome offers a worked example: played into the log, its
+// class put into the editor and run through the same host the model uses -
+// a real app on the right, built against the pinned framework. Nothing is
+// sent, and the page says the example is written by hand.
+test("without a key, Watch an example builds and runs the example app", async ({ page }) => {
+  let sent = 0;
+  await page.route("https://api.anthropic.com/**", (route) => {
+    sent += 1;
+    return route.abort();
+  });
+  await openStudio(page);
+  await page.getByRole("button", { name: "Watch an example - no key needed" }).click();
+  await expect(page.locator("#chat-log")).toContainText("written by hand, nothing was sent anywhere");
+  await expect(page.locator("#chat-log")).toContainText("A to-do list where I can add, tick off and delete entries");
+  await expect(page.locator("#chat-log")).toContainText("That was the example", { timeout: 60000 });
+  const app = page.frameLocator("#app");
+  await expect(app.getByText("Describe an app")).toBeVisible({ timeout: 30000 });
+  await app.getByRole("button", { name: "Add" }).waitFor();
+  expect(sent).toBe(0);
 });

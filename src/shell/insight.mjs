@@ -23,7 +23,7 @@ import { consoleTab } from "./insight-console.mjs";
 import { stateTab } from "./insight-state.mjs";
 import { debugTab } from "./debug.mjs";
 import { logTab, paintLogDot } from "./insight-log.mjs";
-import { abaplintTab, linterTab } from "./insight-config.mjs";
+import { configTab } from "./insight-config.mjs";
 
 export { setTestResults } from "./insight-tests.mjs";
 
@@ -123,9 +123,11 @@ export function setUpInsight() {
       }
       expand();
       remember(false);
-      if (tab.dataset.insight !== view) sized = false;
+      const other = tab.dataset.insight !== view;
+      if (other) sized = false;
       view = tab.dataset.insight;
       render();
+      if (other && GROWS.has(view)) requestAnimationFrame(growToFit);
     });
   }
 
@@ -275,8 +277,7 @@ const VIEWS = {
   debug: debugTab,
   console: consoleTab,
   log: logTab,
-  abaplint: abaplintTab,
-  abap2ui5: linterTab,
+  config: configTab,
 };
 
 // Which view the body last drew, so a redraw of the SAME view - every edit
@@ -370,6 +371,27 @@ function fit(nothing) {
   const was = panel.classList.contains("is-empty");
   panel.classList.toggle("is-empty", nothing && !sized);
   if (was && !panel.classList.contains("is-empty")) refit();
+}
+
+// The tabs whose controls are no use half shown. The Debugger's toolbar, its
+// note, Breakpoints and Watches were cut off below Breakpoints at the default
+// height (1440 by 900), and Watches is where a stop is read. Clicking one grows
+// the panel once to what it holds - never past half the window, never on a
+// phone (the panel there is a sheet of its own), and never over a height the
+// reader chose: a stored or dragged height wins. Not stored either. Only on a
+// click of the tab: a stop opens the tab too (showInsight( )), and growing
+// then pushed the line it stopped at - already scrolled to - off the editor.
+const GROWS = new Set(["debug"]);
+
+function growToFit() {
+  if (sized || panel.classList.contains("is-collapsed") || readStored(HEIGHT_KEY) !== null) return;
+  if (window.matchMedia(NARROW).matches) return;
+  const missing = body.scrollHeight - body.clientHeight;
+  if (missing <= 0) return;
+  const half = document.body.getBoundingClientRect().height / 2;
+  const now = panel.getBoundingClientRect().height;
+  if (now >= half) return;
+  panel.style.height = `${Math.round(Math.min(now + missing, half))}px`;
 }
 
 // The panel at its own height again, for a hand about to change it - so the

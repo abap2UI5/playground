@@ -199,3 +199,14 @@ measurement rather than a gate: the input lives in another repository and the
 run takes minutes. A failure is not automatically the documentation's, either.
 An example may name framework API newer than the commit `tools/fetch-deps.mjs`
 pins, and then the playground is right to refuse it and the pin is what moves.
+
+**Since 2026-11 it runs weekly** (`.github/workflows/docs-examples.yml`, and by
+hand): the job checks out abap2UI5/docs beside this repository, takes the
+worklist from its `scripts/list-runnable.mjs --json` (plain Node, nothing to
+install there), builds the playground the way `check.yml` does and runs the
+spec with Playwright's JSON reporter. `tools/docs-examples-summary.mjs` turns
+the report into "n of m started" and a row per failing page for the job
+summary, and a red run opens or extends one issue labelled `docs-examples`.
+Still a measurement: it publishes nothing and blocks nothing, and an empty
+worklist is red rather than a quiet green. The hand-run measurement went stale
+twice between quarters; a weekly one cannot.

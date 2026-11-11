@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { getSource, MAIN_CLASS, markers, open, runSample, sampleFiles, setSource } from "./helpers.mjs";
+import { getSource, MAIN_CLASS, markers, open, openConfig, runSample, sampleFiles, setSource } from "./helpers.mjs";
 
 // The panel under the editor: the problems list, the outline, and the second
 // checker that feeds the first.
@@ -240,7 +240,7 @@ test("the abaplint config decides what the editor reports", async ({ page }) => 
     .replace(/ENDCLASS\.\n+CLASS/, "ENDCLASS.\n\n\n\n\n\n\nCLASS"));
   await expect(page.locator(".insight-row", { hasText: "sequential blank" })).toHaveCount(0);
 
-  await page.locator('[data-insight="abaplint"]').click();
+  await openConfig(page, "abaplint");
   const box = page.locator(".config-text");
   const config = JSON.parse(await box.inputValue());
   config.rules.sequential_blank = true;
@@ -256,7 +256,7 @@ test("the abaplint config decides what the editor reports", async ({ page }) => 
 
 test("a config that names a rule abaplint does not have says so", async ({ page }) => {
   await open(page);
-  await page.locator('[data-insight="abaplint"]').click();
+  await openConfig(page, "abaplint");
 
   const box = page.locator(".config-text");
   const config = JSON.parse(await box.inputValue());
@@ -279,7 +279,7 @@ test("the abaplint release is one abaplint knows, and ABAP Cloud is held to as C
   await setSource(page, withIcon("accept").replace("  METHOD view_display.\n", "  METHOD view_display.\n    WRITE `x`.\n"));
   const notInCloud = page.locator(".insight-row", { hasText: /configured ABAP version/i });
 
-  await page.locator('[data-insight="abaplint"]').click();
+  await openConfig(page, "abaplint");
   const box = page.locator(".config-text");
   const config = JSON.parse(await box.inputValue());
   for (const version of ["cloud", "v760"]) {
@@ -306,7 +306,7 @@ test("the abap2UI5 lint config decides which UI5 release the view is held to", a
   await setSource(page, withAriaHasPopup());
   await expect(tooNewRow(page).first()).toBeVisible({ timeout: 20000 });
 
-  await page.locator('[data-insight="abap2ui5"]').click();
+  await openConfig(page, "abap2ui5");
   const box = page.locator(".config-text");
   expect(JSON.parse(await box.inputValue())).toEqual({ ui5: "1.71", distribution: "openui5" });
 
@@ -321,7 +321,7 @@ test("the abap2UI5 lint config decides which UI5 release the view is held to", a
   await page.locator('[data-insight="problems"]').click();
   await expect(tooNewRow(page)).toHaveCount(0);
 
-  await page.locator('[data-insight="abap2ui5"]').click();
+  await openConfig(page, "abap2ui5");
   await page.locator(".config-row button", { hasText: "Reset" }).click();
   await expect(page.locator(".config-said")).toContainText("applied");
   expect(JSON.parse(await page.locator(".config-text").inputValue()).ui5).toBe("1.71");
@@ -340,14 +340,14 @@ test("a changed checker setting is still there after a reload", async ({ page })
   await setSource(page, withAriaHasPopup());
   await expect(tooNewRow(page).first()).toBeVisible({ timeout: 20000 });
 
-  await page.locator('[data-insight="abap2ui5"]').click();
+  await openConfig(page, "abap2ui5");
   await page.locator(".config-text").fill(JSON.stringify({ ui5: "1.120", distribution: "openui5" }));
   await page.locator(".config-row .primary").click();
   await expect(page.locator(".config-said")).toContainText("applied");
 
   await page.reload();
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
-  await page.locator('[data-insight="abap2ui5"]').click();
+  await openConfig(page, "abap2ui5");
   expect(JSON.parse(await page.locator(".config-text").inputValue()).ui5).toBe("1.120");
   // And it is in force, not merely on screen: the draft came back with it.
   await page.locator('[data-insight="problems"]').click();
@@ -356,19 +356,19 @@ test("a changed checker setting is still there after a reload", async ({ page })
   // Reset puts it back - to the default of the day rather than to a frozen
   // copy of it, which is why a setting that equals the default is forgotten
   // rather than stored.
-  await page.locator('[data-insight="abap2ui5"]').click();
+  await openConfig(page, "abap2ui5");
   await page.locator(".config-row button", { hasText: "Reset" }).click();
   await expect(page.locator(".config-said")).toContainText("applied");
 
   await page.reload();
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
-  await page.locator('[data-insight="abap2ui5"]').click();
+  await openConfig(page, "abap2ui5");
   expect(JSON.parse(await page.locator(".config-text").inputValue()).ui5).toBe("1.71");
 });
 
 test("an embedded playground does not pick up a stored checker setting", async ({ page }) => {
   await open(page);
-  await page.locator('[data-insight="abap2ui5"]').click();
+  await openConfig(page, "abap2ui5");
   await page.locator(".config-text").fill(JSON.stringify({ ui5: "1.120", distribution: "openui5" }));
   await page.locator(".config-row .primary").click();
   await expect(page.locator(".config-said")).toContainText("applied");
@@ -405,7 +405,7 @@ test("a stored setting that no longer makes sense is dropped rather than fatal",
   await page.reload();
   await expect(page.locator("#status")).toHaveText("running", { timeout: 120000 });
 
-  await page.locator('[data-insight="abaplint"]').click();
+  await openConfig(page, "abaplint");
   const config = JSON.parse(await page.locator(".config-text").inputValue());
   expect(config.rules.no_such_rule_at_all).toBeUndefined();
   expect(config.rules.check_syntax).toBe(true);
@@ -477,11 +477,11 @@ test("collapsing works after the panel has been dragged", async ({ page }) => {
 test("each config tab links to where its rules are documented", async ({ page }) => {
   await open(page);
 
-  await page.locator('[data-insight="abaplint"]').click();
+  await openConfig(page, "abaplint");
   await expect(page.locator('#insight-body a[href*="rules.abaplint.org"]')).toBeVisible();
   await expect(page.locator('#insight-body a[href*="github.com/abaplint/abaplint"]')).toBeVisible();
 
-  await page.locator('[data-insight="abap2ui5"]').click();
+  await openConfig(page, "abap2ui5");
   await expect(page.locator('#insight-body a[href*="github.com/abap2UI5/linter"]')).toBeVisible();
   await expect(page.locator('#insight-body a[href*="npmjs.com"]')).toBeVisible();
   // They leave the playground, so they open where a link should.
@@ -745,11 +745,11 @@ test("an empty tab shrinks the panel to one line, and its height comes back with
 });
 
 // At 1440 by 900 the default height ended above Apply and Reset.
-test("the config tabs keep Apply and Reset on screen", async ({ page }) => {
+test("both checkers in the Config tab keep Apply and Reset on screen", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await open(page);
   for (const tab of ["abaplint", "abap2ui5"]) {
-    await page.locator(`[data-insight="${tab}"]`).click();
+    await openConfig(page, tab);
     const apply = page.locator(".config-row .primary");
     await expect(apply).toBeVisible();
     const box = await apply.boundingBox();
@@ -804,4 +804,36 @@ test("a missing full stop is asked about, and the problem points at its line", a
   const pos = await page.evaluate(() => window.monaco.editor.getEditors()[0].getPosition());
   expect(pos.lineNumber).toBe(at + 1);
   expect(pos.column, "at the end of the line, where the full stop goes").toBe(lines[at].trimEnd().length + 1);
+});
+
+// The two checkers' settings share one tab, with a switch at its top: with a
+// tab each the strip was eleven long.
+test("Config holds both checkers, one at a time", async ({ page }) => {
+  await open(page);
+  await expect(page.locator('[data-insight="abaplint"], [data-insight="abap2ui5"]')).toHaveCount(0);
+  await page.locator('[data-insight="config"]').click();
+  await expect(page.locator('[data-config="abaplint"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#insight-body")).toContainText("rules.abaplint.org");
+  await page.locator('[data-config="abap2ui5"]').click();
+  await expect(page.locator('[data-config="abap2ui5"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#insight-body")).toContainText("@abap2ui5/linter");
+});
+
+// Opening the Debugger grows the panel once to what it holds, so Watches is
+// on screen - and a height the reader chose is left alone.
+test("the Debugger tab grows the panel to show Watches, but not over a chosen height", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await open(page);
+  await page.locator('[data-insight="debug"]').click();
+  const watches = page.locator("#insight-body").getByText("Watches", { exact: true });
+  await expect(watches).toBeInViewport();
+  const body = await page.locator("#insight-body").boundingBox();
+  const box = await watches.boundingBox();
+  expect(box.y + box.height).toBeLessThanOrEqual(body.y + body.height + 1);
+
+  await page.evaluate(() => localStorage.setItem("abap2ui5-playground:insight-height", "120"));
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 90000 });
+  await page.locator('[data-insight="debug"]').click();
+  await expect.poll(async () => Math.round((await page.locator("#insight").boundingBox()).height)).toBe(120);
 });

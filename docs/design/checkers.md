@@ -24,14 +24,17 @@ phone's ⋯ menu - `src/shell/ui5-floor.mjs`, `tests/ui5-floor.spec.js`) is the
 linter's floor, offered as 1.71, 1.84, 1.96, 1.108, 1.120 and `latest
 (<UI5_VERSION>)`, the release this site carries; a floor typed into the tab
 that is not on the list is shown as itself. It is the SAME setting the
-**abap2UI5 lint** tab edits as JSON (`ui5`), not a second one: a change goes
+**Config → abap2UI5 lint** edits as JSON (`ui5`), not a second one: a change goes
 through `applyLinterSettings( )` and is kept by `keepLinterSettings( )` exactly
 as an Apply in the tab is, and each face follows what the other applied
 (`onLinterSettings( )` in `abap2ui5-lint.mjs`). Default 1.71; hidden on embeds
 and app-only pages.
 
-Both configurations are live in the panel's **abaplint** and **abap2UI5 lint**
-tabs (`src/shell/insight-config.mjs`); the defaults stay the curated lists. Every
+Both configurations are live in the panel's **Config** tab, one at a time
+behind a switch at its top (`configTab( )` in `src/shell/insight-config.mjs`).
+They were a tab each until 2026-11: with eleven tabs the strip ran past the
+half of a 1280px window it has and cut Log off. The checker last shown is
+kept for the visit, not stored; the defaults stay the curated lists. Every
 Problems row links the page that explains its rule (`rule ↗`, outside the row's
 button): rules.abaplint.org through the `codeDescription` abaplint's
 diagnostics carry, the linter's rules page through `ruleUrl( )` in
@@ -155,3 +158,32 @@ It is counted off the rows, each of which carries a `fixable` flag from its
 checker (`registry-core.mjs` sets it on abaplint's diagnostics); where the
 rows fall short of the checkers' own total it says the plain number. The
 contract above is unchanged.
+
+## Two presentations of abaplint's messages
+
+Both in `src/editor/parser-hint.mjs`, applied to every abaplint diagnostic by
+`analysis.mjs`, and neither patches abaplint:
+
+- **The missing full stop** (above).
+- **abaplint's function names** at the end of some "not found" messages
+  (`Method "shell" not found, methodCallChain`) are cut by
+  `withoutInternals( )`. The list is closed - read off `@abaplint/core`'s
+  `5_syntax` sources (`methodCallChain`, `findTop`, `MethodSource`,
+  `SourceFieldSymbol`, `dynamic`, `Target`, `FSTarget`, `Unassign`) - so a
+  message that only looks like one keeps its words. A new name after a bump
+  shows as it did before; add it to the list. `buildStructureTypeError` is
+  left alone: it is a stand-in TYPE name inside a follow-on error, not a
+  suffix.
+
+## The rename offer
+
+`structuralProblem( )` in `run.mjs` refuses a file whose declared object is
+not its name, as a system does. The commonest cause is a class pasted over the
+open one, so the Log entry carries one action (`showOutput( )`'s third
+argument): *Rename the file to `<name>` and run*. `renamedFiles( )` in
+`files.mjs` decides it - the test include goes with the class, the order is
+kept (the first file is the app), and where the new name is not an abapGit
+name or another open file has it there is no offer, only the sentence.
+`renameInPlace( )` in `file-sets.mjs` writes the set without treating it as a
+pick: nothing is kept as a draft, and Compare/Reset lose their original. Never
+done unasked, and only where `keepsDrafts` (not an embed, not the AI pages).

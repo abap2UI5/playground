@@ -18,11 +18,30 @@
 // (docs/design/public-surfaces.md); the AI Studio and the Pilot have rooms
 // of their own. keepsDrafts already says "none of the three"; app-only is
 // said here because that view keeps the draft rules of the playground.
-import { currentFile, focusProblem, getFiles, getSource } from "../editor/editor.mjs";
+import { currentFile, focusProblem, getFiles, getSource, lintViewsFor, refreshNow } from "../editor/editor.mjs";
 import { SAMPLES } from "../editor/samples.mjs";
 import { showInsight } from "./insight.mjs";
-import { readStored, writeStored } from "./storage.mjs";
+import { lastTests, runWhenFree } from "./run.mjs";
+import { readStored, removeStored, writeStored } from "./storage.mjs";
 import { appOnly, cameFromCatalogue, keepsDrafts } from "./page.mjs";
+
+/** The lessons whose exercise was solved, as a JSON list of class names. */
+export const SOLVED_KEY = "abap2ui5-playground:lessons-solved";
+
+// What a lesson's Check decides on (learn-path.mjs, checkExercise( )): the
+// code is Run first - that is what makes the tests run and the views current -
+// then the views the linter rebuilt, the ABAP and the Run's tests are read.
+async function exerciseNow() {
+  await runWhenFree();
+  const problems = await refreshNow();
+  const files = getFiles();
+  return {
+    views: files.flatMap((f) => lintViewsFor(f.name).docs),
+    sources: files.map((f) => f.source),
+    tests: lastTests(),
+    errors: problems.filter((p) => p.severity === 1 && p.source === "abaplint").length,
+  };
+}
 
 /** Set once the strip has been closed; never cleared by the page. */
 export const FIRST_STEPS_KEY = "abap2ui5-playground:first-steps";
@@ -32,14 +51,22 @@ let lessons = null;
 
 /**
  * @param {{ from: string, failure?: unknown, declined?: unknown }} starting what boot( ) opened on
- * @param {{ openSample: (id: string) => unknown, openLinked: (url: string) => unknown, openSamples: () => unknown }} open
+ * @param {{ openSample: (id: string) => unknown, openLinked: (url: string | string[]) => unknown, openSamples: () => unknown }} open
  */
 export function startGuides(starting, open) {
   if (!keepsDrafts || appOnly) return;
   import("./learn-path.mjs")
     .then((m) => {
       lessons = m;
-      m.setUpLearnPath({ ...open, getFiles, samples: SAMPLES });
+      m.setUpLearnPath({
+        ...open,
+        getFiles,
+        samples: SAMPLES,
+        exercise: exerciseNow,
+        readSolved: () => readStored(SOLVED_KEY),
+        // Forgotten when empty, like every stored setting.
+        writeSolved: (text) => (text === null ? removeStored(SOLVED_KEY) : writeStored(SOLVED_KEY, text)),
+      });
     })
     .catch(() => {});
   // The strip is for a FIRST visit, and only the default sample is one: a

@@ -190,3 +190,32 @@ class constructor is lost), and `state`, the app's attributes, read by
 wrapping the handler's `main_end_save` and `snapshot( )` in
 `src/runtime/app-state.mjs`. The panel's Console and State tabs show them -
 see [panel.md](panel.md).
+
+## The page's Content-Security-Policy
+
+The workbench, `ai/` and `pilot/` are published with a `<meta>` policy
+(`withPlaygroundPolicy( )` in `tools/html.mjs`, at the write in
+`tools/site-documents.mjs`). What decided its shape:
+
+- **No `'unsafe-eval'`, no `'wasm-unsafe-eval'`.** The runtime evaluates each
+  transpiled chunk with `new Function` and instantiates SQLite's wasm - but in
+  its worker, and a worker loaded from a URL takes its policy from its own
+  response, which GitHub Pages sends without one. A document's `<meta>`
+  policy does not reach it, and the page itself evaluates nothing.
+- **The app frame is a document of its own** (`dist/app/index.html`) and is
+  not under this policy; UI5 there is unaffected.
+- **`style-src` keeps `'unsafe-inline'`**: Monaco writes styles inline, and so
+  does the page (heights, the splitter).
+- **`connect-src`**: this origin, `raw.githubusercontent.com` and
+  `gist.githubusercontent.com` (the `?src=` allow list in `deep-link.mjs`, the
+  AI's `read_sample`), `api.github.com` (gists). On the two AI pages also
+  `https:` and `http:`: the reader may type any OpenAI-compatible server,
+  plain http to a local one included (`llm-provider.mjs`), and there is no
+  list to narrow that to.
+- Inline scripts by hash of the text written, as on the catalogue pages.
+
+`tests/csp.spec.js` listens for `securitypolicyviolation` through boot, a Run
+that stops in the debugger, the samples dialog, and both AI pages (the
+worked example included). A new host the page fetches from, a script added
+inline without going through the build, or a library that starts to `eval`
+on the page shows there, not in production.

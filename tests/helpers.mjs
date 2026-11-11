@@ -172,3 +172,10 @@ export async function allowClipboard(context, browserName) {
   if (browserName !== "chromium") return;
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
 }
+
+// The Config tab, on one checker's settings: "abaplint" or "abap2ui5".
+export async function openConfig(page, checker) {
+  const tab = page.locator('[data-insight="config"]');
+  if ((await tab.getAttribute("aria-selected")) !== "true") await tab.click();
+  await page.locator(`[data-config="${checker}"]`).click();
+}

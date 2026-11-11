@@ -26,6 +26,19 @@
 // wrong costs a question mark, never a false error.
 
 const PARSER_ERROR = "parser_error";
+
+// abaplint's syntax check ends some "not found" messages with the name of the
+// function in abaplint that noticed - `Method "shell" not found,
+// methodCallChain` - which says nothing to somebody writing ABAP. Those names
+// are cut, and only those: a closed list, read off @abaplint/core's
+// 5_syntax sources, so a message that merely looks like one keeps its words.
+const INTERNAL_NAMES = ["methodCallChain", "findTop", "MethodSource", "SourceFieldSymbol", "dynamic", "Target", "FSTarget", "Unassign"];
+const INTERNAL_TAIL = new RegExp(`(" not found), (?:${INTERNAL_NAMES.join("|")})$`);
+
+/** A message without the abaplint function name some of them end in. */
+export function withoutInternals(message) {
+  return message.replace(INTERNAL_TAIL, "$1");
+}
 const NOT_A_STATEMENT = /^Statement does not exist in the configured ABAP version/;
 
 // The line as ABAP reads it: without a full-line comment (a `*` in the first
@@ -98,7 +111,7 @@ export function missingFullStop(lines, start) {
  * @returns {{ message: string, start?: { line: number, character: number } }}
  */
 export function explainDiagnostic(diagnostic, lines) {
-  const message = diagnostic.message.replace("ABAP version(or", "ABAP version (or");
+  const message = withoutInternals(diagnostic.message.replace("ABAP version(or", "ABAP version (or"));
   if (diagnostic.code !== PARSER_ERROR || !NOT_A_STATEMENT.test(diagnostic.message)) return { message };
   const at = missingFullStop(lines, diagnostic.range.start.line);
   if (at === undefined) {

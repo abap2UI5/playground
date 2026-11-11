@@ -34,6 +34,11 @@ import "monaco-editor/editor/contrib/wordHighlighter/browser/wordHighlighter.js"
 import "monaco-editor/editor/contrib/comment/browser/comment.js";
 import "monaco-editor/editor/contrib/contextmenu/browser/contextmenu.js";
 import "monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching.js";
+// Folding, for one range only: the sample's metadata header (see
+// headerFoldOf( ) below). The provider registered here answers for ABAP, so
+// Monaco's indentation ranges are never offered - one fold, not a gutter of
+// them.
+import { FoldingController } from "monaco-editor/editor/contrib/folding/browser/folding.js";
 // Ctrl+M (Ctrl+Shift+M on a Mac): Tab moves the focus instead of indenting.
 import "monaco-editor/editor/contrib/toggleTabFocusMode/browser/toggleTabFocusMode.js";
 // The diff editor's arithmetic, on this thread - see showDiff( ) below. All
@@ -43,7 +48,7 @@ import "monaco-editor/editor/contrib/toggleTabFocusMode/browser/toggleTabFocusMo
 import { StandaloneServices } from "monaco-editor/editor/standalone/browser/standaloneServices.js";
 import { IEditorWorkerService } from "monaco-editor/editor/common/services/editorWorker.js";
 import { linesDiffComputers } from "monaco-editor/editor/common/diff/linesDiffComputers.js";
-import { dependentsOf, uriFor } from "./files.mjs";
+import { dependentsOf, headerEnd, uriFor } from "./files.mjs";
 import { isSeedFile, isTableFile } from "./tables.mjs";
 import { registerProviders } from "./providers.mjs";
 import { applyAbaplintFixes, applyLinterFixes, formatFiles, knownObjectNames } from "./registry.mjs";
@@ -185,7 +190,11 @@ export function createEditor(container, files, options = {}) {
     // The debugger's breakpoints sit in the glyph margin, and only the
     // playground's own page has a debugger (src/shell/debug.mjs).
     glyphMargin: options.glyphMargin === true,
+    folding: true,
+    showFoldingControls: "mouseover",
+    foldingHighlight: false,
   });
+  setUpHeaderFold();
   // A disposed file's markers go with it. Monaco clears them itself only for
   // its own URI schemes, not for file:/// - so every file closed, and every
   // file a sample or the AI chat replaced, left its underlines in the marker
@@ -458,8 +467,12 @@ export function setFiles(files) {
   fileOrder = files.map((f) => f.name);
   modelGeneration += 1;
   for (const file of files) {
-    if (modelFor(file.name)) writeSource(file.name, file.source);
-    else createModel(file);
+    // A file rewritten in place is a new text: its header folds again.
+    const kept = modelFor(file.name);
+    if (kept) {
+      headerFolded.delete(kept);
+      writeSource(file.name, file.source);
+    } else createModel(file);
   }
   closeUndoSteps();
   editor.setModel(modelFor(files[0].name));
@@ -474,6 +487,9 @@ export function setFiles(files) {
   for (const model of monaco.editor.getModels()) {
     if (model.uri.scheme === "file" && !wanted.has(model.uri.path.replace(/^\//, ""))) model.dispose();
   }
+  // The same model kept on screen fires no model change, so a sample written
+  // over the open file is folded here.
+  foldHeaderOf(editor.getModel());
   if (connected) refresh();
   onChange?.(getFiles());
 }
@@ -937,4 +953,32 @@ function pathAt(text, column) {
     return { text: path, start: m.index, end };
   }
   return undefined;
+}
+
+// The header a catalogued sample starts with - `" @keywords …`, `" @summary …`,
+// `" @docs …` - is data for the catalogue, three lines wider than the pane,
+// and it was the first thing a visitor read. It is folded the first time a
+// file is shown, once: unfolded by hand, it stays open, and the text is never
+// touched - the share link, the draft and Compare see every line.
+const headerFolded = new WeakSet();
+
+function setUpHeaderFold() {
+  monaco.languages.registerFoldingRangeProvider("abap", {
+    provideFoldingRanges(model) {
+      const end = headerEnd(model.getLinesContent());
+      return end ? [{ start: 1, end, kind: monaco.languages.FoldingRangeKind.Comment }] : [];
+    },
+  });
+  editor.onDidChangeModel(() => foldHeaderOf(editor.getModel()));
+  foldHeaderOf(editor.getModel());
+}
+
+async function foldHeaderOf(model) {
+  if (!model || headerFolded.has(model) || model.getLanguageId() !== "abap") return;
+  if (!headerEnd(model.getLinesContent())) return;
+  headerFolded.add(model);
+  const folding = await FoldingController.get(editor)?.getFoldingModel();
+  if (!folding || editor.getModel() !== model) return;
+  const region = folding.getRegionAtLine(1);
+  if (region && !region.isCollapsed && region.startLineNumber === 1) folding.toggleCollapseState([region]);
 }

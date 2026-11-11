@@ -395,6 +395,8 @@ test("a loop that never ends is stopped, and the next Run works again", async ({
   await page.locator("#run").click();
   // The app frame's first roundtrip is where the loop runs; it is stopped.
   await expect.poll(() => outputText(page), { timeout: 30000 }).toContain("without finishing");
+  // The reader's loop, not the page's fault: no "Report this" under it.
+  await expect(page.locator(".log-report")).toHaveCount(0);
 
   await setSource(page, app("Second Version", "out = `after the loop`."));
   await page.locator("#run").click();

@@ -17,6 +17,7 @@ import * as esbuild from "esbuild";
 import { MONACO_CSS, abap2ui5LinterPlugin, monacoCssPlugin, nodeStubPlugin } from "./esbuild-plugins.mjs";
 import { SAMPLE_LIST, SAMPLE_REPO } from "../src/editor/sample-list.mjs";
 import { rawUrlOf } from "../src/shell/catalogue-urls.mjs";
+import { exercisesFrom } from "../src/shell/exercise-check.mjs";
 import { writeIndex } from "./site-documents.mjs";
 import { chunks, writeServiceWorker } from "./service-worker.mjs";
 
@@ -307,7 +308,7 @@ function writeSamples() {
       `\n};\n`,
   );
   log(`samples: ${index.length} from ${SAMPLE_REPO}, ${copied.size} file(s), ${first.files.length} in the bundle`);
-  writeLessons(catalogue);
+  writeLessons(catalogue, readExercises(repo), repo);
 }
 
 // The lessons the playground steps through (src/shell/learn-path.mjs): the
@@ -324,7 +325,17 @@ function writeSamples() {
 // template (catalogue-urls.mjs), so the page has no second copy of it.
 // A catalogue with no learning path writes an empty list, and the page then
 // shows no lesson bar - it is a guide, not something to fail a build over.
-function writeLessons(catalogue) {
+//
+// Each lesson carries its exercise where the samples repository has one
+// (scripts/lib/exercises.json there, read by readExercises( ) below): a task,
+// a hint and the check the lesson bar's Check button decides
+// (src/shell/learn-path.mjs).
+//
+// A lesson whose class has a test include in the repository (Basics VI) names
+// it as `tests`: a lesson that is not carried opens over ?src=, which fetches
+// the linked file and the classes it calls, never a test include - and Basics
+// VI's exercise is to add a test to that include.
+function writeLessons(catalogue, exercises = {}, repo = "") {
   const stage = (catalogue.learningPath || [])[0];
   const sources = [{ id: "learn", repo: SAMPLE_REPO }];
   const lessons = stage
@@ -334,6 +345,8 @@ function writeLessons(catalogue) {
           class: s.class.toLowerCase(),
           title: String(s.title || s.class),
           raw: rawUrlOf({ source: "learn", file: s.file }, sources),
+          ...testsOf(s.file, repo, sources),
+          ...(exercises[s.class.toLowerCase()] ? { exercise: exercises[s.class.toLowerCase()] } : {}),
         }))
         .filter((l) => l.raw !== undefined)
     : [];
@@ -341,7 +354,27 @@ function writeLessons(catalogue) {
     path.join(BUILD_SAMPLES, "lessons.json"),
     JSON.stringify({ stage: stage ? String(stage.title || stage.id) : "", repo: SAMPLE_REPO, lessons }, null, 2) + "\n",
   );
-  log(`samples: ${lessons.length} lesson(s) on the learning path`);
+  const withExercise = lessons.filter((l) => l.exercise).length;
+  log(`samples: ${lessons.length} lesson(s) on the learning path, ${withExercise} with an exercise`);
+}
+
+// The lessons' exercises, from the samples pin: scripts/lib/exercises.json,
+// which that repository's check:exercises holds to its own lessons. A pin from
+// before the file existed has none, and the lesson bar is then what it was -
+// an exercise is a guide, not something to fail a build over.
+// The include's address is the class's with the suffix swapped: rawUrlOf( )
+// takes object files only, which is right for everything else it is asked.
+function testsOf(file, repo, sources) {
+  const include = String(file).replace(/\.clas\.abap$/, ".clas.testclasses.abap");
+  if (include === file || !repo || !fs.existsSync(path.join(repo, include))) return {};
+  const raw = rawUrlOf({ source: "learn", file }, sources);
+  return raw ? { tests: raw.replace(/\.clas\.abap$/, ".clas.testclasses.abap") } : {};
+}
+
+function readExercises(repo) {
+  const file = path.join(repo, "scripts", "lib", "exercises.json");
+  if (!fs.existsSync(file)) return {};
+  return exercisesFrom(JSON.parse(fs.readFileSync(file, "utf8")), log);
 }
 
 writeSamples();

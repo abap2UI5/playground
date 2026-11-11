@@ -681,6 +681,16 @@ function showWelcome() {
     list.append(b);
   }
   intro.append(title, lead, list);
+  // What a build looks like, for somebody without a key - who otherwise meets
+  // a key form and nothing else. Played from a chunk; nothing is sent.
+  if (!room.hasKey()) {
+    const watch = document.createElement("button");
+    watch.type = "button";
+    watch.className = "chat-watch";
+    watch.textContent = "Watch an example - no key needed";
+    watch.addEventListener("click", () => watchExample());
+    intro.append(watch);
+  }
   // Without a key nothing here answers; a local model is the way in that
   // costs nothing (chat-ui.mjs). Offered while no key is held.
   const local = room.localModelOffer();
@@ -688,6 +698,45 @@ function showWelcome() {
   const offer = resumeOffer();
   if (offer) intro.append(offer);
   el.log.append(intro);
+}
+
+// A worked example, played into the log the way a conversation is drawn,
+// with its class put into the editor and run through the same host the model
+// uses (setFiles, run) - so what appears on the right is a real app built
+// here, not a picture of one. Written by hand (ai-demo.json; tests/ai.spec.js
+// holds it to the pin) and said to be an example, not a recording of a
+// model. Not kept as a conversation: there is no turn behind it to take up.
+let watching = false;
+async function watchExample() {
+  if (watching) return;
+  watching = true;
+  try {
+    const { default: demo } = await import("./ai-demo.json");
+    el.log.replaceChildren();
+    room.addLine("notice", "A worked example of a build - written by hand, nothing was sent anywhere. Add a key (Key, above) to build your own.");
+    room.addLine("user", demo.prompt);
+    const pause = () => new Promise((resolve) => setTimeout(resolve, 450));
+    for (const step of demo.steps) {
+      await pause();
+      if (step.role === "assistant") renderMarkdown(room.addLine("assistant", ""), step.text);
+      else room.addLine("tool", step.text);
+      if (step.role === "did" && /^Wrote /.test(step.text)) {
+        host.setFiles(demo.files);
+        await host.run();
+        appUpdated();
+      }
+      room.scrollDown(true);
+    }
+    const again = document.createElement("p");
+    again.className = "chat-watch-end";
+    again.textContent = "That was the example. Describe your own app below once a key is in - or change the class in the Code stage and run it.";
+    el.log.append(again);
+    room.scrollDown(true);
+  } catch (e) {
+    room.addLine("notice is-error", `The example could not be played: ${String(e?.message ?? e)}`);
+  } finally {
+    watching = false;
+  }
 }
 
 // The last build this browser kept (main.mjs stores the studio's files

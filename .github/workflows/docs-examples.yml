@@ -1,0 +1,97 @@
+name: docs-examples
+
+# Do the examples abap2UI5/docs gives a Run button actually start here?
+#
+# That repository decides WHICH examples get a button and gates the
+# bookkeeping around it, but whether a buttoned example runs is the one
+# question its CI cannot answer - only a playground can. The driving half has
+# always lived here (tests/docs-examples.spec.js); this makes the measurement
+# that used to be redone by hand, once a quarter, a weekly one.
+#
+# A measurement, not a gate: it publishes nothing and blocks nothing. A red run
+# opens (or extends) one issue, with the table naming each page that failed.
+
+on:
+  schedule:
+    - cron: "17 5 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: docs-examples
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    if: github.repository == 'abap2UI5/playground'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The pages as they are published today. list-runnable.mjs reads the
+      # markdown and the Run button's own rules (docs/.vitepress/playground.mjs)
+      # and needs nothing installed.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: abap2UI5/docs
+          path: docs-site
+
+      - uses: ./.github/actions/build
+
+      - name: The worklist
+        run: |
+          node docs-site/scripts/list-runnable.mjs --json > "$RUNNER_TEMP/runnable.json"
+          node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).length + ' examples')" "$RUNNER_TEMP/runnable.json"
+
+      - run: npx playwright install --with-deps chromium
+
+      - name: Open each example in the playground
+        env:
+          RUNNABLE_JSON: ${{ runner.temp }}/runnable.json
+          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/docs-examples.json
+        run: npx playwright test docs-examples --project=chromium --reporter=line,json --trace=off
+
+      - name: The table
+        if: always()
+        run: node tools/docs-examples-summary.mjs test-results/docs-examples.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Say so, once, if an example did not start
+        if: failure()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { execFileSync } = require("node:child_process");
+            let table = "";
+            try {
+              table = execFileSync("node", ["tools/docs-examples-summary.mjs", "test-results/docs-examples.json"], { encoding: "utf8" });
+            } catch (e) {
+              table = String(e.stdout || "");
+            }
+            const title = "A documentation example does not start in the playground";
+            const { data: open } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              labels: "docs-examples",
+            });
+            const existing = open.find((i) => i.title === title);
+            const body =
+              `${table}\n\n` +
+              `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\n` +
+              `The examples are the ones abap2UI5/docs gives a Run button (\`npm run runnable\` there). ` +
+              `Nothing here was published or blocked by this run.`;
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing.number, body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: ["docs-examples"],
+              });
+            }

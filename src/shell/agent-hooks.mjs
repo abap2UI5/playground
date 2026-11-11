@@ -109,7 +109,7 @@ export function offerFrameBridge({ room, chat, pilot }) {
         // frame only sees a failed request, so the page says what happened.
         if (e?.name === RUNAWAY) {
           setStatus("the app was stopped - its ABAP did not finish", true);
-          showOutput("Run", String(e.message));
+          showOutput("Run", String(e.message), { reader: true });
         }
         throw e;
       }

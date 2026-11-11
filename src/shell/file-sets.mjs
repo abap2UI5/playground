@@ -213,11 +213,14 @@ export async function loadAppFromTable(tableName, tabs) {
 // classes it needs looked for beside it, the first file the app - just without
 // the page reload a link would cost, because the registry this page has
 // already built serves the new files as well as it served the old.
+// `url` may be a list: the class first, then files that go with it but are
+// not found by following its calls - a lesson's test include (learn-path.mjs).
 export async function loadLinked(url, tabs) {
   const pick = ++latestPick;
   try {
     setStatus("fetching the example…");
-    const linked = checkFileSet(await fetchLinkedFiles(new URLSearchParams([["src", url]])));
+    const urls = Array.isArray(url) ? url : [url];
+    const linked = checkFileSet(await fetchLinkedFiles(new URLSearchParams(urls.map((u) => ["src", u]))));
     const alongside = await followNavigation(linked);
     if (pick !== latestPick) return;
     const kept = replaceWith(checkFileSet([...linked, ...alongside]));
@@ -237,4 +240,15 @@ export async function loadLinked(url, tabs) {
 export async function linkedFiles(url) {
   const linked = checkFileSet(await fetchLinkedFiles(new URLSearchParams([["src", url]])));
   return checkFileSet([...linked, ...(await followNavigation(linked))]);
+}
+
+// The files renamed (renamedFiles( ) in files.mjs) - not a pick: nothing of
+// the reader's is replaced, so nothing is kept as a draft and nothing is said
+// about one. What was opened is no longer what is on screen under these
+// names, so Compare and Reset have no original to go back to.
+export function renameInPlace(files) {
+  setFiles(files.map((f) => ({ ...f })));
+  opened = undefined;
+  openedChanged?.();
+  renderFiles();
 }
