@@ -278,6 +278,9 @@ open models' version ids and a generation counter — so anything that changes
 the text recomputes and a second reader of unchanged text does not. A checker
 whose *configuration* changed under unchanged text is invisible to that key,
 which is why the Config tabs call `invalidateAnalysis()` before asking again.
+That call bumps a settings generation which is part of the key, so an
+analysis already sent under the old settings is not joined by the next reader
+nor kept when it lands: it is asked again, as when the text moves on.
 **And the walk is one message.** The worker's `analyse` op answers with
 abaplint's diagnostics per file and its fixable count — one `findIssues()`
 over the user's objects, grouped by file and mapped with abaplint's own

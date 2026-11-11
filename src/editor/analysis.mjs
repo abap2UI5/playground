@@ -16,7 +16,8 @@
 // does not - a second reader asking the same question - gets the answer
 // already computed. What that does NOT cover is a checker whose configuration
 // changed under unchanged text, which is why the Config tabs call
-// invalidateAnalysis( ) before they ask again.
+// invalidateAnalysis( ) before they ask again - and why that call also
+// retires the analysis still under way, not only the kept one (below).
 //
 // This module knows nothing of Monaco. The files, the key and where the
 // underlines go come from a HOST (useHost below): Monaco's models on the
@@ -76,7 +77,20 @@ let analysis = { key: undefined, problems: [], fixable: 0, lint: {} };
 
 // Throws the kept answer away. For the one caller whose change is invisible to
 // the key: a checker reconfigured while the text stayed exactly as it was.
+//
+// The answer still on its way goes with it. Throwing away only the kept one
+// left the round trip already sent - asked under the old configuration, about
+// the same text - to be joined by the next reader (same key) and kept as the
+// answer: switching the UI5 floor 1.96 -> 1.71 before the 1.96 check came back
+// said "checked against UI5 1.71" over 1.96's findings, and kept saying so
+// until the text changed. So the key carries a generation this bumps: the
+// answer in flight is about a key nobody holds any more, and analyseKey( )
+// asks again, as it does when the text moved on.
+let generation = 0;
+const currentKey = () => `${generation}\n${host.key()}`;
+
 export function invalidateAnalysis() {
+  generation++;
   analysis = { key: undefined, problems: [], fixable: 0, lint: {} };
 }
 
@@ -95,10 +109,11 @@ async function analyse() {
   // corpus has landed, has to do the work.
   if (!connected) return { problems: [], fixable: 0 };
 
-  const key = host.key();
+  const key = currentKey();
   if (key === analysis.key) return analysis;
   if (inFlight?.key === key) return inFlight.promise;
-  if (key !== transpilerKey) forgetTranspilerProblems();
+  // The transpiler's problems are about the text, not the checkers' settings.
+  if (host.key() !== transpilerKey) forgetTranspilerProblems();
 
   const promise = analyseKey(key).finally(() => {
     if (inFlight?.key === key) inFlight = undefined;
@@ -113,10 +128,11 @@ async function analyseKey(key) {
   // abaplint's diagnostics per file and its count of what it could fix, and
   // the abap2UI5 linter's findings per file with the views they came from.
   const told = await analyseInWorker(files);
-  // The text moved on while the worker was answering: this answer is about a
-  // key nobody holds any more, so it is thrown away and the question asked
-  // again about the text that is there now.
-  if (host.key() !== key) return analyse();
+  // The text moved on while the worker was answering, or a checker was
+  // reconfigured (invalidateAnalysis): this answer is about a key nobody holds
+  // any more, so it is thrown away and the question asked again about the
+  // text - and the settings - that are there now.
+  if (currentKey() !== key) return analyse();
 
   const problems = [];
   let fixable = told.fixable;

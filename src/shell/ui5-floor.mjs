@@ -19,6 +19,9 @@ const LATEST = UI5_VERSION.split(".").slice(0, 2).join(".");
 const RELEASES = ["1.71", "1.84", "1.96", "1.108", "1.120"];
 
 let select;
+// Bumped by every applied change, from either face: what a change() finds
+// when its check comes back says whether a newer one was made meanwhile.
+let applied = 0;
 
 function reflect(ui5) {
   const known = [...RELEASES, LATEST];
@@ -34,8 +37,10 @@ function reflect(ui5) {
 
 async function change() {
   const ui5 = select.value;
+  let mine;
   try {
     applyLinterSettings({ ...linterSettings(), ui5 });
+    mine = applied;
     keepLinterSettings(linterSettings());
   } catch (e) {
     setStatus(String(e?.message ?? e), true);
@@ -45,6 +50,10 @@ async function change() {
   // the text, so it is thrown away and asked for again - what Apply does.
   invalidateAnalysis();
   const problems = await refreshNow();
+  // Another floor was chosen while this one was being checked (1.96, then
+  // 1.71 before 1.96 came back): the newer change says its own sentence, and
+  // this one - which can land after it - must not put "1.96" back over it.
+  if (mine !== applied) return;
   problemsChanged(problems);
   setStatus(`checked against UI5 ${ui5} - ${problems.length} problem${problems.length === 1 ? "" : "s"}`);
 }
@@ -54,7 +63,10 @@ export function setUpUi5Floor() {
   select = document.getElementById("ui5-floor");
   if (!select) return;
   reflect(linterSettings().ui5);
-  onLinterSettings((now) => reflect(now.ui5));
+  onLinterSettings((now) => {
+    applied++;
+    reflect(now.ui5);
+  });
   select.addEventListener("change", change);
   select.disabled = false;
 }
