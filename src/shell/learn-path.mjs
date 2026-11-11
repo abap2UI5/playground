@@ -66,7 +66,9 @@ export function setUpLearnPath({ openSample, openLinked, getFiles, samples, exer
     if (!lesson) return;
     const carried = samples.find((s) => s.files[0] === fileOf(lesson));
     if (carried) openSample(carried.id);
-    else openLinked(lesson.raw);
+    // With its test include where it has one (Basics VI): following the
+    // class's calls never finds that file, and the lesson's task is in it.
+    else openLinked(lesson.tests ? [lesson.raw, lesson.tests] : lesson.raw);
   };
 
   anchor = document.createElement("div");

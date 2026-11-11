@@ -308,7 +308,7 @@ function writeSamples() {
       `\n};\n`,
   );
   log(`samples: ${index.length} from ${SAMPLE_REPO}, ${copied.size} file(s), ${first.files.length} in the bundle`);
-  writeLessons(catalogue, readExercises(repo));
+  writeLessons(catalogue, readExercises(repo), repo);
 }
 
 // The lessons the playground steps through (src/shell/learn-path.mjs): the
@@ -330,7 +330,12 @@ function writeSamples() {
 // (scripts/lib/exercises.json there, read by readExercises( ) below): a task,
 // a hint and the check the lesson bar's Check button decides
 // (src/shell/learn-path.mjs).
-function writeLessons(catalogue, exercises = {}) {
+//
+// A lesson whose class has a test include in the repository (Basics VI) names
+// it as `tests`: a lesson that is not carried opens over ?src=, which fetches
+// the linked file and the classes it calls, never a test include - and Basics
+// VI's exercise is to add a test to that include.
+function writeLessons(catalogue, exercises = {}, repo = "") {
   const stage = (catalogue.learningPath || [])[0];
   const sources = [{ id: "learn", repo: SAMPLE_REPO }];
   const lessons = stage
@@ -340,6 +345,7 @@ function writeLessons(catalogue, exercises = {}) {
           class: s.class.toLowerCase(),
           title: String(s.title || s.class),
           raw: rawUrlOf({ source: "learn", file: s.file }, sources),
+          ...testsOf(s.file, repo, sources),
           ...(exercises[s.class.toLowerCase()] ? { exercise: exercises[s.class.toLowerCase()] } : {}),
         }))
         .filter((l) => l.raw !== undefined)
@@ -356,6 +362,15 @@ function writeLessons(catalogue, exercises = {}) {
 // which that repository's check:exercises holds to its own lessons. A pin from
 // before the file existed has none, and the lesson bar is then what it was -
 // an exercise is a guide, not something to fail a build over.
+// The include's address is the class's with the suffix swapped: rawUrlOf( )
+// takes object files only, which is right for everything else it is asked.
+function testsOf(file, repo, sources) {
+  const include = String(file).replace(/\.clas\.abap$/, ".clas.testclasses.abap");
+  if (include === file || !repo || !fs.existsSync(path.join(repo, include))) return {};
+  const raw = rawUrlOf({ source: "learn", file }, sources);
+  return raw ? { tests: raw.replace(/\.clas\.abap$/, ".clas.testclasses.abap") } : {};
+}
+
 function readExercises(repo) {
   const file = path.join(repo, "scripts", "lib", "exercises.json");
   if (!fs.existsSync(file)) return {};

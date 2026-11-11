@@ -284,5 +284,19 @@ storage is handed in, never imported). Neither appears on an embed, on
   test of a UI needs a client the ABAP Unit run has not got. A pin from before
   `exercises.json` existed has none, and the bar is what it was.
 
+  **A view pattern sees only what the linter rebuilds**, which leaves out an
+  attribute set from a variable (`t = greet`) and writes an event without its
+  name (`press=".eB()"`); abap2UI5/samples#900 moved Basics IV and VII to
+  source patterns for that reason. **A lesson that is not carried** opens
+  over `?src=`, which follows calls but never finds a test include - so the
+  build records one where the repository has it (`tests` in lessons.json,
+  `testsOf( )`), and the bar opens both (`loadLinked( )` takes a list).
+  **Every exercise is solved in `tests/onboarding.spec.js`**, opened the way a
+  reader opens it, so a samples bump that renames what an exercise names is a
+  red bump PR. Basics VI is marked `test.fail`: its own
+  `test_negative_half_away` fails here because `@abaplint/runtime` rounds
+  -10.5 to -10 (abap2UI5's backlog, `runtime-packed-round-half-away`); the
+  mark comes off when a runtime bump fixes it.
+
 `tests/onboarding.spec.js` holds both; every other spec starts with the strip
 closed ([testing.md](testing.md)).

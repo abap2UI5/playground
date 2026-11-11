@@ -51,7 +51,7 @@ let lessons = null;
 
 /**
  * @param {{ from: string, failure?: unknown, declined?: unknown }} starting what boot( ) opened on
- * @param {{ openSample: (id: string) => unknown, openLinked: (url: string) => unknown, openSamples: () => unknown }} open
+ * @param {{ openSample: (id: string) => unknown, openLinked: (url: string | string[]) => unknown, openSamples: () => unknown }} open
  */
 export function startGuides(starting, open) {
   if (!keepsDrafts || appOnly) return;

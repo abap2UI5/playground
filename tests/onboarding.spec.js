@@ -230,3 +230,77 @@ test("a task about the view is decided on the view the linter rebuilt", async ({
   await card.getByRole("button", { name: "Check" }).click();
   await expect(card.locator(".lesson-card-verdict")).toHaveText(/^Solved/, { timeout: 60000 });
 });
+
+// Every exercise can actually be solved, against the samples the pin carries.
+// A samples bump that renames what an exercise names (an event, an attribute,
+// a line a solution starts from) turns this red in the bump's PR instead of
+// leaving a learner with a task that cannot be done. Basics I and II are
+// solved by the two tests above; these are III to VII, each opened the way a
+// reader opens it - by the lesson bar's link, test include and all.
+const SOLUTIONS = {
+  z2ui5_cl_smp_app_495: [
+    ["    ELSEIF client->check_on_event( `CALL` ).", "    ELSEIF client->check_on_event( `CLEAR` ).\n      CLEAR t_log.\n\n    ELSEIF client->check_on_event( `CALL` )."],
+    ["            )->a( n = `text`  v = `Call a Sub-App`\n            )->a( n = `class` v = `sapUiTinyMarginBegin` ).",
+      "            )->a( n = `text`  v = `Call a Sub-App`\n            )->a( n = `class` v = `sapUiTinyMarginBegin`\n        )->tag( `Button`\n            )->a( n = `press` v = client->_event( `CLEAR` )\n            )->a( n = `text`  v = `Clear` )."],
+  ],
+  z2ui5_cl_smp_app_004: [
+    ["      WHEN `BUTTON_ERROR`.", "      WHEN `BUTTON_HELLO`.\n        client->message_toast_display( `Hello` ).\n      WHEN `BUTTON_ERROR`."],
+    ["                        )->a( n = `text`  v = `Error not caught by the app` ).",
+      "                        )->a( n = `text`  v = `Error not caught by the app`\n                    )->tag( `Button`\n                        )->a( n = `press` v = client->_event( `BUTTON_HELLO` )\n                        )->a( n = `text`  v = `Hello` )."],
+  ],
+  z2ui5_cl_smp_app_496: [
+    ["    DATA text       TYPE string.\n", "    DATA text       TYPE string.\n    DATA comment    TYPE string.\n"],
+    ["                )->a( n = `value` v = client->_bind( text )", "                )->a( n = `value` v = client->_bind( text )\n            )->tag( `Input`\n                )->a( n = `value` v = client->_bind( comment )"],
+  ],
+  z2ui5_cl_smp_app_503: [
+    ["testclasses", "    METHODS test_negative_half_away FOR TESTING.", "    METHODS test_negative_half_away FOR TESTING.\n    METHODS test_two_hundred FOR TESTING."],
+    ["testclasses", "  ENDMETHOD.\n\nENDCLASS.", "  ENDMETHOD.\n\n  METHOD test_two_hundred.\n\n    cl_abap_unit_assert=>assert_equals( exp = 220\n                                        act = cut->gross_amount( net     = 200\n                                                                 percent = 10 ) ).\n\n  ENDMETHOD.\n\nENDCLASS."],
+  ],
+  z2ui5_cl_smp_app_519: [
+    ["    DATA greet       TYPE string.\n", "    DATA greet       TYPE string.\n    DATA tip         TYPE string.\n"],
+    ["    greet       = 'Greet'(003).\n", "    greet       = 'Greet'(003).\n    tip         = 'Say hello'(004).\n"],
+    ["            )->a( n = `text`  t = greet", "            )->a( n = `text`  t = greet\n            )->a( n = `tooltip` t = tip"],
+  ],
+};
+
+// Basics VI cannot be solved in this page yet, and not for the exercise's
+// sake: the sample's own test_negative_half_away already fails here, because
+// @abaplint/runtime rounds a value assigned to a packed field with Math.round
+// - -10.5 to -10, where ABAP rounds half away from zero to -11
+// (`numberToScaled( )` in its types/packed.js). Written up for upstream in
+// abap2UI5's backlog (runtime-packed-round-half-away). Marked as failing so
+// the day a runtime bump fixes it, this turns red and the mark comes off.
+const BLOCKED = { z2ui5_cl_smp_app_503: "the runtime rounds -10.5 to -10 - the sample's own test fails here" };
+
+for (const [cls, edits] of Object.entries(SOLUTIONS)) {
+  test(`the exercise of ${cls} can be solved`, async ({ page }) => {
+    test.fail(cls in BLOCKED, BLOCKED[cls]);
+    const at = LESSONS.findIndex((l) => l.class === cls);
+    test.skip(at < 1 || !LESSONS[at].exercise, "the pinned samples carry no exercise for it");
+    await serveSamplesRepo(page);
+    await boot(page);
+    await page.getByRole("button", { name: "Close the first steps" }).click();
+    // Reached the way a reader reaches it: from Basics II, by › lesson after
+    // lesson.
+    for (let step = 2; step <= at; step++) {
+      await page.getByRole("button", { name: `Next lesson: ${LESSONS[step].title}` }).click();
+      await expect(lesson(page)).toHaveText(`Lesson ${step + 1} of ${LESSONS.length}`, { timeout: 60000 });
+      await expect(page.locator("#status")).toHaveText(/^running/, { timeout: 60000 });
+    }
+    const card = page.locator("#lesson-card");
+    await expect(card).toBeVisible({ timeout: 30000 });
+
+    // Unsolved as opened.
+    await card.getByRole("button", { name: "Check" }).click();
+    await expect(card.locator(".lesson-card-verdict")).toHaveText(/^Not yet: /, { timeout: 60000 });
+
+    for (const edit of edits) {
+      const [file, from, to] = edit.length === 3 ? [`${cls}.clas.testclasses.abap`, edit[1], edit[2]] : [`${cls}.clas.abap`, edit[0], edit[1]];
+      const source = await getSource(page, file);
+      expect(source, `${file} still has the line the solution starts from`).toContain(from);
+      await setSource(page, source.replace(from, to), file);
+    }
+    await card.getByRole("button", { name: "Check" }).click();
+    await expect(card.locator(".lesson-card-verdict")).toHaveText(/^Solved/, { timeout: 60000 });
+  });
+}

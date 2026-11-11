@@ -213,11 +213,14 @@ export async function loadAppFromTable(tableName, tabs) {
 // classes it needs looked for beside it, the first file the app - just without
 // the page reload a link would cost, because the registry this page has
 // already built serves the new files as well as it served the old.
+// `url` may be a list: the class first, then files that go with it but are
+// not found by following its calls - a lesson's test include (learn-path.mjs).
 export async function loadLinked(url, tabs) {
   const pick = ++latestPick;
   try {
     setStatus("fetching the example…");
-    const linked = checkFileSet(await fetchLinkedFiles(new URLSearchParams([["src", url]])));
+    const urls = Array.isArray(url) ? url : [url];
+    const linked = checkFileSet(await fetchLinkedFiles(new URLSearchParams(urls.map((u) => ["src", u]))));
     const alongside = await followNavigation(linked);
     if (pick !== latestPick) return;
     const kept = replaceWith(checkFileSet([...linked, ...alongside]));
