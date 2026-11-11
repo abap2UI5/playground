@@ -27,13 +27,20 @@ test("a draft saved under a name comes back another day, and can be deleted", as
   await page.keyboard.press("Escape");
 
   // Replaced by a sample, then brought back from the list - and it runs.
+  //
+  // Each step waits for the files it put in, not for the status: the sample
+  // arrives a moment after the dialog closes, and until it does the status
+  // still says "running" - about the app before it. Read then, the sample's
+  // file was not open yet (getSource( ) answered undefined), in about every
+  // other run.
   await pickSample(page, OTHER.id);
-  await expect(page.locator("#status")).toHaveText(/running/, { timeout: 60000 });
+  await expect.poll(() => getSource(page, OTHER.files[0]), { timeout: 60000 }).toBeDefined();
   expect(await getSource(page, OTHER.files[0])).not.toContain(MARKER);
+  await expect(page.locator("#status")).toHaveText(/running/, { timeout: 60000 });
   await page.locator("#examples").click();
   await row.click();
+  await expect.poll(() => getSource(page), { timeout: 60000 }).toContain(MARKER);
   await expect(page.locator("#status")).toHaveText(/running/, { timeout: 60000 });
-  expect(await getSource(page)).toContain(MARKER);
   await expect(page.frameLocator("#app").getByText(MARKER)).toBeVisible();
 
   // Another day: still there.
