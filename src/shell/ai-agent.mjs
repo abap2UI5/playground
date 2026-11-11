@@ -19,6 +19,10 @@
 //                                          the AI Pilot's eyes and hands
 //                                          (src/shell/ai-operator.mjs), so the
 //                                          model can try what it built
+//   inspect                                the debugger for one look: the app
+//                                          stopped at a line, its variables
+//                                          read, and let go (studioDebugger( )
+//                                          in agent-hooks.mjs)
 //
 // So nothing here compiles, checks or renders anything itself: what the model
 // is told is what the reader sees, and a file it writes is a file in the editor
@@ -114,6 +118,9 @@ How the playground works, and what that means for you:
   cheap, never spend a turn on them alone; a dump names the line. Iterate
   until it runs without errors and warnings, then stop calling tools. run_app is only for
   running again without changing anything.
+- When the app runs but shows or computes the wrong thing, do not guess:
+  inspect stops it at a line and shows the values there (and, with event,
+  after a click). One inspect is cheaper than two rewrites.
 - There are no database tables here, no RFC, no files, no HTTP. You write
   class files only, so when the app needs data, fill internal tables in the
   code (VALUE #( ... ), or APPEND where the release has no VALUE) under a
@@ -290,6 +297,33 @@ const TOOLS = [
     },
   },
   {
+    name: "inspect",
+    description:
+      "Stop the app at one ABAP line, as a breakpoint does in the debugger, and read what the program holds " +
+      "there: the call stack, the locals and parameters, the attributes of me, the system fields, and the " +
+      "`watch` paths (lv_x, ls_s-comp, lt_t[ 1 ]-field, me->attr, lo->attr, <fs>). The program then goes on by " +
+      "itself. Without `event` the app is run again and stops if its start reaches the line; with `event` (and " +
+      "`values`, `row`, `args`, as for act) that event is fired on the running app. `condition` stops only when " +
+      "it holds (lv_x > 5, lv_x = 'A', ls_s-comp IS INITIAL). Use it when the app runs but computes the wrong " +
+      "thing - it shows the values instead of guessing them. Answers where it stopped and the values, or that " +
+      "the line was not reached.",
+    eager_input_streaming: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        line: { type: "number", description: "The ABAP line to stop at (1-based)" },
+        file: { type: "string", description: "The file; the app (the first file) when left out" },
+        condition: { type: "string", description: "Stop only when this holds" },
+        watch: { type: "array", items: { type: "string" }, description: "Variable paths to read beside the frame's own" },
+        event: { type: "string", description: "Fire this event of the running app (as act) instead of running the app again" },
+        values: { type: "object", description: "As for act: typed into the fields before the event" },
+        row: { type: "number" },
+        args: { type: "array" },
+      },
+      required: ["line"],
+    },
+  },
+  {
     name: "read_sample",
     description: "The ABAP source of a sample class that search_samples found.",
     eager_input_streaming: true,
@@ -330,6 +364,26 @@ export function filesAsText(files, { all = files } = {}) {
   return `files in the editor: ${list}\n\n${parts.join("\n\n")}`;
 }
 
+// A stop as the model reads it: where, the stack, and the values - a
+// container by its size; the watch paths are how it looks inside one.
+function stopText(hit, watched) {
+  const v = hit.variables;
+  const value = (n) => (n.value !== undefined ? (n.value === "" ? "initial" : n.value) : n.open === "rows" ? `${n.size} rows` : `${n.size} fields`);
+  const list = (nodes) => nodes.map((n) => `  ${n.name} (${[n.kind, n.type].filter(Boolean).join(" ")}) = ${clip(value(n), 300)}`).join("\n") || "  (none)";
+  const stack = hit.frames.map((f) => `${f.cls}->${f.method.toLowerCase()} line ${f.line}`).join("\n  called from ");
+  const parts = [
+    `Stopped at ${hit.file} line ${hit.line}${hit.detail && hit.reason === "breakpoint" ? ` (${hit.detail})` : ""}.`,
+    `Call stack:\n  ${stack}`,
+    `Locals and parameters:\n${list(v.locals)}`,
+    `${v.staticMethod ? `Static attributes of ${v.cls}` : "Attributes of me"}:\n${list(v.me)}`,
+    `System fields:\n${list(v.system.filter((n) => ["sy-subrc", "sy-tabix", "sy-index", "sy-datum", "sy-uzeit"].includes(n.name)))}`,
+  ];
+  if (watched.length) {
+    parts.push(`Watched:\n${watched.map((w) => `  ${w.path} = ${w.error ? `(${w.error})` : clip(value(w.node), 600)}`).join("\n")}`);
+  }
+  return parts.join("\n\n");
+}
+
 /**
  * One conversation. `host` is the page (setUpStudio( ) in
  * src/shell/agent-hooks.mjs hands it over through chat.mjs); `ui` is what the chat draws.
@@ -338,6 +392,7 @@ export function filesAsText(files, { all = files } = {}) {
  *   host.setFiles(files)   -> puts a whole file set into the editor (throws on a bad name)
  *   host.run()             -> the report of one Run, see describeRun( )
  *   host.show(name)        -> puts that file on screen in the editor
+ *   host.debugger          -> the `inspect` tool's debugger (studioDebugger( ) in agent-hooks.mjs)
  *
  *   ui.assistantStart()  ui.text(delta)  ui.notice(text)
  *   ui.thinkingStart()  ui.thinking(delta)     the model's progress notes between tool calls
@@ -660,8 +715,61 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
       case "act": return act(input);
       case "search_samples": return searchSamples(input);
       case "read_sample": return readSample(input);
+      case "inspect": return inspect(input);
       default: return { error: `There is no tool called ${name}.` };
     }
+  }
+
+  // The debugger, for one look: a breakpoint, the run or the event that
+  // reaches it, the frame read, and the program let go again - whatever
+  // happens, the breakpoint is gone afterwards and nothing stays stopped.
+  async function inspect(input) {
+    const d = host.debugger;
+    if (!d) return { error: "There is no debugger on this page." };
+    const files = host.files();
+    const file = str(input.file)?.trim() || files[0]?.name;
+    const line = count(input.line, "line");
+    if (!files.some((f) => f.name === file)) return { error: `There is no file ${file} in the editor.` };
+    if (!line) return { error: "inspect needs the line to stop at." };
+    const event = str(input.event);
+    const methods = d.stops()?.[file];
+    if (methods) {
+      const method = methods.find((m) => line >= m.start && line <= m.end);
+      if (!method) return { error: `Line ${line} of ${file} is not inside a method - nothing runs there.` };
+      if (!method.lines.includes(line)) {
+        const near = method.lines.filter((l) => Math.abs(l - line) <= 6).join(", ");
+        return { error: `Line ${line} of ${file} is no statement the debugger can stop at (a declaration, a comment, ELSE, WHEN, CATCH, or a statement in a CATCH block). Lines nearby it can stop at: ${near || "none"}.` };
+      }
+    }
+    const condition = str(input.condition)?.trim() || undefined;
+    const watch = Array.isArray(input.watch) ? input.watch.map((w) => str(w)?.trim()).filter(Boolean).slice(0, 20) : [];
+    const stopped = d.nextStop(event ? 15000 : 30000);
+    try {
+      await d.arm([{ file, line, condition }]);
+    } catch (e) {
+      return { error: `The breakpoint could not be set: ${e?.message ?? e}` };
+    }
+    // Not awaited: a roundtrip that stops does not answer until it goes on.
+    const trigger = (event ? act({ values: input.values, event, row: input.row, args: input.args }) : host.run().then(runReport))
+      .catch((e) => ({ error: String(e?.message ?? e) }));
+    const hit = await stopped;
+    let text;
+    if (hit) {
+      let watched = [];
+      if (watch.length) watched = await d.watch(watch).catch(() => []);
+      text = stopText(hit, watched);
+    }
+    await d.arm([]).catch(() => {});
+    if (hit) await d.resume().catch(() => {});
+    const after = await trigger;
+    const how = event ? `the event ${event}` : "the run";
+    if (!hit) {
+      return {
+        text: `Not stopped: ${how} did not reach line ${line} of ${file}${condition ? ` with ${condition} true` : ""}.\n\n${after?.text ?? after?.error ?? ""}`,
+        summary: `line ${line} not reached`,
+      };
+    }
+    return { text: `${text}\n\nThen the program went on. What ${how} did:\n${after?.text ?? after?.error ?? ""}`, summary: `stopped at line ${line} and read the values` };
   }
 
   async function act(input) {
@@ -893,6 +1001,7 @@ export function pendingText(name, input) {
     case "search_samples": return `searching samples${str(input.query) ? ` for "${input.query}"` : ""}…`;
     case "read_sample": return `reading sample ${str(input.class) ?? ""}…`;
     case "look": return "looking at the app…";
+    case "inspect": return `stopping at line ${count(input.line, "line") ?? "?"}…`;
     case "act": {
       const event = str(input.event);
       const keys = input.values && typeof input.values === "object" ? Object.keys(input.values) : [];

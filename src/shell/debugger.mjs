@@ -128,26 +128,41 @@ export function setUpDebugger(page) {
   // an ELSE - moves to the next statement of the same method, as SAP's
   // does; outside any method it stays, hollow, and is not sent.
   function verify(bp) {
+    bp.reason = undefined;
     const methods = stops[bp.file];
     if (!methods) {
       bp.verified = Object.keys(stops).length === 0 ? undefined : false;
+      if (bp.verified === false) bp.reason = "this file has no ABAP the debugger runs";
       return;
     }
     const method = methods.find((m) => bp.line >= m.start && bp.line <= m.end);
     if (!method) {
       bp.verified = false;
+      bp.reason = "not inside a method";
       return;
     }
     if (method.lines.includes(bp.line)) {
       bp.verified = true;
       return;
     }
+    const blind = method.blind ?? [];
+    if (blind.includes(bp.line)) {
+      bp.verified = false;
+      bp.reason = "a statement in a CATCH or CLEANUP block - the transpiler gives those no line yet, so the debugger cannot stop there";
+      return;
+    }
+    // Moved to the next statement, as SAP's does - but never over one that
+    // cannot be stopped at, or it would stop somewhere else than asked.
     const next = method.lines.find((l) => l > bp.line);
-    if (next !== undefined && !breakpoints.some((b) => b !== bp && b.file === bp.file && b.line === next)) {
+    const skipped = next !== undefined && blind.some((l) => l > bp.line && l < next);
+    if (next !== undefined && !skipped && !breakpoints.some((b) => b !== bp && b.file === bp.file && b.line === next)) {
       bp.line = next;
       bp.verified = true;
     } else {
       bp.verified = false;
+      bp.reason = skipped
+        ? "the next statement is in a CATCH or CLEANUP block, where the debugger cannot stop yet"
+        : "no statement the debugger can stop at on this line or below it in the method";
     }
   }
 
@@ -166,6 +181,7 @@ export function setUpDebugger(page) {
   let expanded = new Map();
   const opened = new Set();
   let breakOnRaise = false;
+  let pauseWaiting = false;
 
   /** @type {{ id: number, path: string, onChange: boolean, node?: any, error?: string }[]} */
   let watches = [];
@@ -177,6 +193,7 @@ export function setUpDebugger(page) {
 
   async function onDebug(message) {
     if (message.event === "paused") {
+      pauseWaiting = false;
       previous = current;
       current = new Map();
       expanded = new Map();
@@ -241,9 +258,20 @@ export function setUpDebugger(page) {
     rt()?.debug("resume", args).catch(() => {});
   }
 
-  function stopProgram() {
+  // Stop ends the program and starts the app again - with every stop held
+  // until that start's first roundtrip is over (src/runtime/debug.mjs), or
+  // a BREAK-POINT in the app's start would stop it again at once.
+  // A Run that ends a stop starts the app itself: `rerun: false`.
+  async function stopProgram(options) {
     if (!stop) return;
+    const rerun = options?.rerun !== false && page.rerun;
+    if (rerun) rt()?.debug("options", { raise: breakOnRaise, suspend: "roundtrip" }).catch(() => {});
     rt()?.stopProgram();
+    if (!rerun) return;
+    const started = await page.rerun().catch(() => false);
+    page.setStatus(started
+      ? "the program was stopped - the app started again, without stopping at its start"
+      : "the program was stopped in the debugger - Run starts the app again", !started);
   }
 
   async function showFrame(index) {
@@ -345,7 +373,19 @@ export function setUpDebugger(page) {
   function tab() {
     const wrap = el("div", "debugger");
     wrap.append(toolbar());
-    if (stop) {
+    if (!stop && pauseWaiting) {
+      // A Pause with nothing running waits for whatever runs next - a click
+      // in the app, a timer, a Run. Said, and taken back here.
+      const waiting = el("p", "debug-where");
+      waiting.append(el("strong", "", "Pause is waiting"), " - the next ABAP statement that runs stops: a click in the app, a timer, or Run. ");
+      waiting.append(button("Cancel", "Take the Pause back", () => {
+        pauseWaiting = false;
+        rt()?.debug("unpause").catch(() => {});
+        page.setStatus("running");
+        page.redrawIf("debug");
+      }));
+      wrap.append(waiting);
+    } else if (stop) {
       const where = el("p", "debug-where");
       where.append(el("strong", "", `${reason}`), ` - line ${stop.line} of ${stop.file}`);
       wrap.append(where);
@@ -381,8 +421,10 @@ export function setUpDebugger(page) {
       button("■ Stop", "Stop the program (Shift+F8) - the app ends; Run starts it again", stopProgram, { disabled: off }),
       button("⏸ Pause", "Stop at the next ABAP statement that runs - in a loop that is running now, or at the next click in the app", () => {
         rt()?.debug("pause").catch(() => {});
+        pauseWaiting = true;
         page.setStatus("the debugger stops at the next statement that runs");
-      }, { disabled: !off }),
+        page.redrawIf("debug");
+      }, { disabled: !off || pauseWaiting }),
     );
     const raise = el("label", "debug-option");
     const box = /** @type {HTMLInputElement} */ (el("input"));
@@ -436,7 +478,7 @@ export function setUpDebugger(page) {
       const where = el("button", "debug-link", `${bp.file.replace(/\.clas\.(testclasses\.)?abap$/, "")}:${bp.line}`);
       where.dataset.file = bp.file;
       where.dataset.line = String(bp.line);
-      where.title = bp.verified === false ? "Not on a statement the debugger can stop at" : "Show the line";
+      where.title = bp.verified === false ? `Not stopped at: ${bp.reason ?? "no statement the debugger can stop at"}` : "Show the line";
       const condition = /** @type {HTMLInputElement} */ (el("input", "debug-condition"));
       condition.placeholder = "condition, e.g. lv_x > 5";
       condition.value = bp.condition;
@@ -452,6 +494,7 @@ export function setUpDebugger(page) {
       }, { cls: "is-icon" });
       row.append(on, where, condition, remove);
       if (bp.problem) row.append(el("span", "debug-problem", bp.problem));
+      else if (bp.verified === false && bp.reason) row.append(el("span", "debug-problem", `Not stopped at: ${bp.reason}.`));
       list.append(row);
     }
     box.append(list);

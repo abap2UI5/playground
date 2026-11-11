@@ -808,7 +808,7 @@ export function showBreakpoints(list) {
         glyphMarginClassName: `bp-glyph${bp.enabled ? "" : " is-off"}${bp.condition ? " is-conditional" : ""}${bp.verified === false ? " is-unverified" : ""}`,
         glyphMarginHoverMessage: {
           value: bp.verified === false
-            ? "Breakpoint - not on a statement the debugger can stop at"
+            ? `Breakpoint - not stopped at: ${bp.reason ?? "no statement the debugger can stop at"}`
             : bp.condition ? `Breakpoint if \`${bp.condition}\`` : bp.enabled ? "Breakpoint (F9 removes it)" : "Breakpoint, switched off",
         },
       },

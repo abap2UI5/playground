@@ -161,7 +161,7 @@ function debugBuild(o, starts, stops, problems) {
   }
   if (!result) return plain;
   for (const m of result.methods) {
-    (stops[m.file] ??= []).push({ cls: m.cls, method: m.method, start: m.start, end: m.end, lines: m.lines });
+    (stops[m.file] ??= []).push({ cls: m.cls, method: m.method, start: m.start, end: m.end, lines: m.lines, blind: m.blind });
   }
   return result.js;
 }

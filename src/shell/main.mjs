@@ -58,7 +58,7 @@ import { warmUpAppFrame } from "./warm-up.mjs";
 import { aiPage, appOnly, cameFromCatalogue, catalogueQuery, embedded, keepsDrafts, params, frameIsolated, pilotPage } from "./page.mjs";
 import { FROM_LAST_SESSION, startingFiles } from "./starting-files.mjs";
 import { autorunAfterChange, markBooted, setUpAutorun } from "./autorun.mjs";
-import { applyFrameTheme, isRunning, isRunWaiting, lastRun, run, setRunContext, uiTheme } from "./run.mjs";
+import { applyFrameTheme, isRunning, isRunWaiting, lastRun, run, runWhenFree, setRunContext, uiTheme } from "./run.mjs";
 import { reflectCodeErrors, sayBriefly } from "./run-status.mjs";
 import { keepDraft, loadAppFromTable, loadDraft, loadLinked, loadSample, linkedFiles, markOpened } from "./file-sets.mjs";
 import { AI_STORAGE_KEY, carriedFiles, offerFrameBridge, setUpPilotHooks, setUpStudio } from "./agent-hooks.mjs";
@@ -333,7 +333,7 @@ async function boot() {
     state.runtime = runtime;
     offerFrameBridge({ room: pilot ?? chat, chat, pilot });
     // The debugger's chunk, on the playground's own page (debug.mjs).
-    setUpDebugger(showInsight, () => tabs.show("left"));
+    setUpDebugger(showInsight, () => tabs.show("left"), () => runWhenFree());
     const version = `abap2UI5 ${state.runtime.abapVersion()}`;
     document.getElementById("versions").textContent = version;
     document.getElementById("about-versions").textContent = version;

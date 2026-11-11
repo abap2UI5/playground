@@ -56,6 +56,10 @@ test("the stops are the statements, not ELSE, WHEN, CATCH or the declarations", 
   // static call, ENDMETHOD.
   assert.deepEqual(run, [40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 54, 56, 57, 58, 60, 62, 64, 65, 71, 72, 73, 74, 75, 76, 77]);
   for (const notOne of [36, 37, 39, 53, 55, 59, 61, 66, 68]) assert.ok(!run.includes(notOne), `line ${notOne}`);
+  // The CATCH and CLEANUP bodies run but have no line in the transpiler's
+  // output (yet): said, so a breakpoint there is not moved past them.
+  assert.deepEqual(result.methods.find((m) => m.method === "RUN").blind, [67, 69]);
+  assert.deepEqual(result.methods.find((m) => m.method === "TWICE").blind, []);
   // A static method's body is the static one, not its instance forwarder.
   assert.deepEqual(linesOf(result, "TWICE"), [27, 28, 29]);
   assert.match(result.js, /static async twice\(INPUT\) \{ let \$dbg; try \{/);

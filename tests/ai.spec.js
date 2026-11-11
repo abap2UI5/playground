@@ -642,6 +642,69 @@ test("the studio's page starts on a minimal class: no run, no sample, and no way
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://abap2ui5.github.io/playground/ai/");
 });
 
+// The debugger for the model (inspect in src/shell/ai-agent.mjs): the app
+// stopped at a line on a page with no debugger on screen, its values read,
+// the program let go - and a BREAK-POINT in the model's code holds nothing.
+test("inspect stops the app at a line and tells the model the values there", async ({ page }) => {
+  const source = `CLASS zcl_ai_app DEFINITION PUBLIC CREATE PUBLIC.
+  PUBLIC SECTION.
+    INTERFACES z2ui5_if_app.
+    DATA total TYPE i.
+ENDCLASS.
+CLASS zcl_ai_app IMPLEMENTATION.
+  METHOD z2ui5_if_app~main.
+    IF client->check_on_init( ).
+      DATA(lv_sum) = 0.
+      DO 4 TIMES.
+        lv_sum = lv_sum + sy-index.
+      ENDDO.
+      BREAK-POINT.
+      total = lv_sum.
+      DATA(view) = z2ui5_cl_ui5_view_builder=>factory(
+          )->ele( n = \`View\` ns = \`mvc\`
+              )->a( n = \`xmlns\`     v = \`sap.m\`
+              )->a( n = \`xmlns:mvc\` v = \`sap.ui.core.mvc\` ).
+      view->ele( \`Page\`
+          )->a( n = \`title\` v = \`${MARK}\` ).
+      client->view_display( view->stringify( ) ).
+    ENDIF.
+  ENDMETHOD.
+ENDCLASS.`;
+  const line = source.split("\n").findIndex((l) => l.includes("total = lv_sum.")) + 1;
+  const requests = [];
+  await page.route("https://api.anthropic.com/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    requests.push(request.postDataJSON());
+    const answer = requests.length === 1
+      ? sse({ tools: [{ name: "write_file", input: { name: APP_FILE, source, as_app: true } }] })
+      : requests.length === 2
+        ? sse({ tools: [{ name: "inspect", input: { line, watch: ["total", "lv_sum"] } }] })
+        : sse({ text: "The sum is right." });
+    await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: answer });
+  });
+  await openStudio(page);
+  await saveKey(page);
+  await page.locator("#chat-input").fill("Sum the first four numbers");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toContainText("The sum is right.", { timeout: 120000 });
+
+  // The run after write_file went through its BREAK-POINT: nothing on this
+  // page could have continued it.
+  const written = requests[1].messages.at(-1).content.find((c) => c.type === "tool_result");
+  expect(JSON.stringify(written.content)).toContain("running");
+  // inspect stopped where it was asked, before `total` was set, and said so.
+  const inspected = JSON.stringify(requests[2].messages.at(-1).content.find((c) => c.type === "tool_result").content);
+  expect(inspected).toContain(`Stopped at ${APP_FILE} line ${line}`);
+  expect(inspected).toContain("ZCL_AI_APP->z2ui5_if_app~main");
+  expect(inspected).toContain("lv_sum (i) = 10");
+  expect(inspected).toContain("total (i) = 0");
+  expect(inspected).toContain("Then the program went on");
+  // And it went on: the app is on the stage.
+  await expect(page.frameLocator("#app").getByText(MARK)).toBeVisible({ timeout: 30000 });
+  await expect(page.locator(".chat-tool").last()).toContainText(`stopped at line ${line}`);
+});
+
 function cors() {
   return {
     "access-control-allow-origin": "*",

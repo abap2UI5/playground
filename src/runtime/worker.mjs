@@ -73,10 +73,10 @@ async function handle(event) {
   try {
     if (fn === undefined) throw new Error(`The ABAP runtime has no operation called ${op}.`);
     const value = await fn(...(args ?? []));
-    operationEnded();
+    operationEnded(op);
     self.postMessage({ id, ok: true, value });
   } catch (e) {
-    operationEnded();
+    operationEnded(op);
     // An Error does not survive structured cloning with its name and stack
     // intact in every browser, so the three fields the page reports are
     // sent as plain strings and put back together on the other side.

@@ -26,7 +26,7 @@
  *   a statement from its first token to its last: rows 1-based, columns
  *   0-based, as the mappings count
  * @typedef {{ cls: string, method: string, file: string, start: number, end: number,
- *   lines: number[], locals: string[] }} MethodInfo
+ *   lines: number[], blind: number[], locals: string[] }} MethodInfo
  * @typedef {{ generated: { line: number, column: number },
  *   original: { line: number, column: number }, source: string }} Mapping
  */
@@ -163,13 +163,24 @@ export function instrument(code, mappings, statements) {
       stops.push({ index: j, line: at.s.row, kind: at.s.type === "Raise" ? "raise" : "" });
     }
     const methodIndex = methods.length;
+    const stopLines = [...new Set(stops.map((s) => s.line))].sort((a, b) => a - b);
+    // Statements of the method that run but got no hook: the transpiler
+    // wrote them without a mapping (the body of a CATCH or CLEANUP block,
+    // before abaplint/transpiler kept those). A breakpoint there must not
+    // slide to a later line - it would stop somewhere else than asked.
+    const hooked = new Set(stopLines);
+    const blind = [...new Set((byFile.get(head.file) ?? [])
+      .filter((st) => st.row > head.s.row && st.row < endLine && !st.kernel && !NOT_STOPPABLE.has(st.type) && st.type !== "EndMethod")
+      .map((st) => st.row)
+      .filter((row) => !hooked.has(row)))].sort((a, b) => a - b);
     methods.push({
       cls: head.s.cls,
       method: head.s.method,
       file: head.file,
       start: head.s.row,
       end: endLine,
-      lines: [...new Set(stops.map((s) => s.line))].sort((a, b) => a - b),
+      lines: stopLines,
+      blind,
       locals,
     });
     const accessor = locals.length === 0
@@ -196,7 +207,7 @@ export function instrument(code, mappings, statements) {
     i = close;
   }
   if (methods.length === 0) return undefined;
-  out[0] = `const $dbgm = abap.dbg.methods(${JSON.stringify(methods.map(({ lines: _l, ...m }) => m))}); ${out[0]}`;
+  out[0] = `const $dbgm = abap.dbg.methods(${JSON.stringify(methods.map(({ lines: _l, blind: _b, ...m }) => m))}); ${out[0]}`;
   return { js: out.join("\n"), methods };
 }
 

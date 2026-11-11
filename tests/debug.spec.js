@@ -197,22 +197,77 @@ test("a value is changed while stopped, a condition decides, a watchpoint stops 
   await expect(variable(page, "iv").locator(".state-value")).toHaveText("2");
 });
 
-test("Stop ends the program, and Run starts it again", async ({ page }) => {
+test("Stop ends the program and starts the app again, held only for that start", async ({ page }) => {
   await open(page);
   await setSource(page, APP);
   await page.locator("#run").click();
   await stopped(page);
   await page.keyboard.press("Shift+F8");
-  await expect(page.locator("#status")).toContainText("stopped in the debugger");
+  // The app is there again - its start ran through the BREAK-POINT that
+  // stopped it, or Stop would stop again at once.
+  const more = page.frameLocator("#app").locator('[id$="--more"]');
+  await expect(more).toContainText("Total 6", { timeout: 60000 });
+  await expect(page.locator("#status")).toContainText("the app started again");
   await expect(page.locator(".debug-line")).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.monaco.editor.getEditors()[0].getOption(window.monaco.editor.EditorOption.readOnly))).toBe(false);
 
-  // Run while stopped: the stop ends, the new Run starts (and stops again
-  // at its BREAK-POINT, which is gone now).
+  // ...and only that start: the next click stops at a breakpoint as before.
+  await toggleBreakpoint(page, L.more);
+  await more.click();
+  await stopped(page);
+  await expect(where(page)).toContainText(`breakpoint - line ${L.more} of`);
+
+  // Run while stopped: the stop ends, and the Run is the only start - the
+  // app comes up once, from the code on screen.
+  await toggleBreakpoint(page, L.more);
   await setSource(page, APP.replace("      BREAK-POINT.\n", ""));
   await page.locator("#run").click();
   await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
-  await expect(page.frameLocator("#app").locator('[id$="--more"]')).toContainText("Total 6", { timeout: 30000 });
+  await expect(more).toContainText("Total 6", { timeout: 30000 });
+});
+
+test("a Pause with nothing running says it waits, and can be taken back", async ({ page }) => {
+  await open(page);
+  await setSource(page, APP.replace("      BREAK-POINT.\n", ""));
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+  await page.locator('[data-insight="debug"]').click();
+  await page.locator(".debug-bar button", { hasText: "Pause" }).click();
+  await expect(where(page)).toContainText("Pause is waiting");
+  await expect(page.locator(".debug-bar button", { hasText: "Pause" })).toBeDisabled();
+  await where(page).locator("button", { hasText: "Cancel" }).click();
+  await expect(where(page)).toHaveCount(0);
+  // Taken back: a click in the app runs through.
+  const more = page.frameLocator("#app").locator('[id$="--more"]');
+  await more.click();
+  await expect(more).toContainText("Total 16", { timeout: 30000 });
+  await expect(page.locator("html")).not.toHaveAttribute("data-debugger", "stopped");
+
+  // Not taken back: the next click stops at its first statement.
+  await page.locator(".debug-bar button", { hasText: "Pause" }).click();
+  await more.click();
+  await stopped(page);
+  await expect(where(page)).toContainText("paused");
+  await page.keyboard.press("F8");
+  await expect(more).toContainText("Total 26", { timeout: 30000 });
+});
+
+test("a breakpoint in a CATCH block is drawn hollow and says why, and is not moved past it", async ({ page }) => {
+  await open(page);
+  const catching = APP.replace("      total = add( 10 ).\n", "      TRY.\n          total = 1 / 0.\n        CATCH cx_sy_zerodivide.\n          total = add( 10 ).\n      ENDTRY.\n");
+  await setSource(page, catching);
+  const lines = catching.split("\n");
+  const inCatch = lines.findIndex((l) => l.includes("total = add( 10 ).")) + 1;
+  await toggleBreakpoint(page, inCatch);
+  await page.locator("#run").click();
+  await stopped(page); // the BREAK-POINT of the app start
+  await page.evaluate((l) => window.monaco.editor.getEditors()[0].revealLineInCenter(l), inCatch);
+  await expect(page.locator(".bp-glyph.is-unverified")).toHaveCount(1);
+  await expect(page.locator(".debug-bp")).toHaveClass(/is-unverified/);
+  await expect(page.locator(".debug-bp .debug-problem")).toContainText("CATCH or CLEANUP block");
+  await expect(page.locator(".debug-bp .debug-link")).toHaveText(new RegExp(`:${inCatch}$`));
+  await page.keyboard.press("F8");
+  await running(page);
 });
 
 test("a breakpoint on a line with no statement moves to the next one, and is kept for the next visit", async ({ page }) => {
@@ -253,8 +308,11 @@ test("Pause stops a loop that is running, and Stop ends it", async ({ page }) =>
   await expect(where(page)).toContainText("paused");
   const sum = Number(await variable(page, "lv_sum").locator(".state-value").textContent());
   expect(sum).toBeGreaterThan(100);
-  await page.locator(".debug-bar button", { hasText: "Stop" }).click();
-  await expect(page.locator("#status")).toContainText("stopped in the debugger");
+  // Stop, without a restart of the loop for this test: a Run is pressed at
+  // once with code that ends.
+  await setSource(page, APP.replace("      BREAK-POINT.\n", ""));
+  await page.locator("#run").click();
+  await expect(page.frameLocator("#app").locator('[id$="--more"]')).toContainText("Total 6", { timeout: 60000 });
 });
 
 test("a breakpoint in a unit test stops while the tests run", async ({ page }) => {
@@ -308,11 +366,28 @@ ENDCLASS.
   await expect(page.locator("#test-count")).toHaveText("✓");
 });
 
-test("an app-only page does not stop at BREAK-POINT and shows no debugger", async ({ page }) => {
+test("an app-only page and a plain embed do not stop at BREAK-POINT and show no debugger", async ({ page }) => {
   const fragment = await encodeFiles([{ name: MAIN_FILE, source: APP }]);
-  await page.goto(`/?view=app#${fragment}`);
-  await expect(page.frameLocator("#app").locator('[id$="--more"]')).toContainText("Total 6", { timeout: 90000 });
-  await expect(page.locator('[data-insight="debug"]')).toBeHidden();
+  for (const query of ["?view=app", "?embed=1"]) {
+    await page.goto(`/${query}#${fragment}`);
+    await expect(page.frameLocator("#app").locator('[id$="--more"]')).toContainText("Total 6", { timeout: 90000 });
+    await expect(page.locator('[data-insight="debug"]')).toBeHidden();
+  }
+});
+
+test("an embed that asks for it (?debug=1) has the debugger, and keeps no breakpoints", async ({ page }) => {
+  const fragment = await encodeFiles([{ name: MAIN_FILE, source: APP }]);
+  await page.goto(`/?embed=1&debug=1#${fragment}`);
+  await stopped(page);
+  await expect(page.locator('[data-insight="debug"]')).toBeVisible();
+  await expect(where(page)).toContainText(`BREAK-POINT - line ${L.brk} of`);
+  await toggleBreakpoint(page, L.more);
+  await page.keyboard.press("F8");
+  await page.frameLocator("#app").locator('[id$="--more"]').click();
+  await stopped(page);
+  await expect(where(page)).toContainText(`breakpoint - line ${L.more} of`);
+  // An embed never writes the stored settings - its breakpoints included.
+  expect(await page.evaluate(() => localStorage.getItem("abap2ui5-playground:breakpoints"))).toBeNull();
 });
 
 test("the table view, the hover, run to the cursor and a stop at RAISE EXCEPTION", async ({ page }) => {

@@ -80,7 +80,7 @@ read them before touching `tools/` or `src/runtime/`.
 | `highlight.mjs`, `xml-pretty.mjs` | Colour for the panel's XML/JSON; XML one element per line |
 | `chain-read.mjs`, `view-edit.mjs`, `chain-patch.mjs`, `chain-write.mjs` | View edit: chain read back by executing it; edited view matched to the shown one; change patched into the ABAP that is there; fallback rewrite in the house layout |
 | `chat.mjs` | AI App Builder on screen (chunk, its page only) |
-| `ai-agent.mjs` | AI App Builder's conversation and tools (`runTools()`), chunk on use |
+| `ai-agent.mjs` | AI App Builder's conversation and tools (`runTools()`, `inspect` - the debugger for one look), chunk on use |
 | `ai-starter.mjs` | The class the studio starts on |
 | `target-system.mjs` | The studio's target system: `TARGETS` (abaplint releases the header offers, the rules the model is told), `systemTodos()` (the `" TODO(system):` lines the download lists), `functionCalls()`/`uncheckedCallsText()` (every CALL FUNCTION - nothing else here reports one) |
 | `pilot.mjs` | AI Agent on screen and the bridge's half (chunk) |
@@ -256,7 +256,8 @@ Each bullet names the design doc that explains it. Keep them true.
 - Run = a fresh database (SQLite reopened on the empty image, user tables rebuilt from their text) and the app restarted in place where possible.
 
 **Debugger** ([debugger.md](docs/design/debugger.md))
-- Only the playground's own page offers it (`offersDebugger`) and runs the debug build - always there, not only with a breakpoint set. Embeds, `?view=app`/`full` and the AI pages get the plain build, byte for byte.
+- The playground's own page offers it (`offersDebugger`) and runs the debug build - always there, not only with a breakpoint set; an embed only with `?debug=1` (and never stores its breakpoints). The AI App Builder's page runs the debug build for the model's `inspect` tool, with `BREAK-POINT` switched off. `?view=app`/`full` and the AI Agent's page get the plain build, byte for byte.
+- Stop starts the app again with every stop held until that start's first roundtrip has ended; a Run that ends a stop asks for no restart.
 - A hook goes on a line that is already there, never a new one (the line table and `locate()` depend on it); an instrumented chunk is parsed before it leaves the registry worker and falls back to the plain one; `check-instrument.mjs` must stay green over the whole corpus.
 - Nothing the reader types is evaluated as code: watches, conditions, hover and the variables tree are paths (`parsePath()`), and a scope is read through the `switch` the build writes, not `eval`.
 - The debugger's commands bypass the worker's queue; the watchdog sleeps while stopped; Stop terminates the worker (`DEBUG_STOPPED`), it never unwinds the ABAP.
@@ -343,7 +344,8 @@ Each bullet names the design doc that explains it. Keep them true.
   reaches one (`cl_abap_datfm`, `cl_abap_dyn_prg`) die with the stub's
   message where the gate cannot see it. Not worth it.
 - **The debugger stops in the reader's classes only**, and not inside a
-  CATCH or CLEANUP block (the transpiler writes those without mappings).
+  CATCH or CLEANUP block until the transpiler pin carries the mappings for
+  them (fixed upstream; a breakpoint there is drawn hollow and says why).
   Instrumenting the framework too was measured and left out
   ([debugger.md](docs/design/debugger.md)).
 - **The `?src=` host allow list stays short.** The playground fetches on

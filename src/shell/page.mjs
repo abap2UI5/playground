@@ -12,6 +12,10 @@ export const params = new URLSearchParams(window.location.search);
 // fragment as usual.
 export const embedded = params.get("embed") === "1";
 
+// An embed that asked for the debugger (`?debug=1`, the loader's
+// `data-debug`): see src/shell/debug.mjs.
+export const embedDebug = embedded && params.get("debug") === "1";
+
 // The AI Studio's page (ai/index.html, written by tools/build-site.mjs from
 // this document): the studio opens on its own, on the minimal class of
 // ai-starter.mjs, and what is built there is neither restored from nor stored

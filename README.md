@@ -74,8 +74,11 @@ pipeline and moves the last step into the browser.
   (a watchpoint), give a breakpoint a condition (`lv_x > 5`), stop at
   `RAISE EXCEPTION`, hover a variable for its value. It stops in unit tests
   and class constructors too, and the breakpoints are kept with the draft.
-  Only in your own classes, and only on the playground's page — an embed runs
-  without it ([docs/design/debugger.md](docs/design/debugger.md)).
+  Stop ends the program and starts the app again. Only in your own classes;
+  an embedded demo has it only when its page asks for it (`data-debug`), and
+  the AI App Builder uses it too — when an app computes the wrong thing, the
+  model stops it at a line and reads the values instead of guessing
+  ([docs/design/debugger.md](docs/design/debugger.md)).
 - **A second opinion.** The [abap2UI5 linter](https://www.npmjs.com/package/@abap2ui5/linter)
   runs beside abaplint and answers a different question: abaplint says whether
   the ABAP compiles, the linter reconstructs the view your builder chain

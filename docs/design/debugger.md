@@ -102,8 +102,9 @@ SAP's does, and to draw one outside any method hollow.
 ## When the debug build is used
 
 **Always, on the playground's own page** (`offersDebugger` in
-`src/shell/debug.mjs`: not embedded, not `?view=app`/`full`, not `/ai/` or
-`/pilot/`). Not only when a breakpoint is set: then a breakpoint set on a
+`src/shell/debug.mjs`: not `?view=app`/`full`, not `/pilot/`; an embed only
+with `?debug=1`, the loader's `data-debug`). The AI App Builder's page runs
+it too, without the tab, for the model's `inspect` tool (below). Not only when a breakpoint is set: then a breakpoint set on a
 running app takes effect at once, Pause works on any program, and nothing
 has to be compiled again to start debugging - which would mean redefining
 the classes under a running app (its static attributes and class
@@ -180,8 +181,14 @@ the last visit is in the worker before the app's first roundtrip.
   does; every waiting call rejects with `DEBUG_STOPPED`, which `run.mjs` and
   `agent-hooks.mjs` take as "nothing to report". The program is not unwound
   by a thrown error: a `CATCH` would catch it, a `CLEANUP` would run the
-  reader's code, and the framework would write a dump. The app frame is left
-  as it was; Run starts it again.
+  reader's code, and the framework would write a dump. Then the app is
+  started again (`runWhenFree( )`), with every stop **held until that start's
+  first roundtrip has ended** (`options({ suspend: "roundtrip" })`): a
+  `BREAK-POINT` in the app's start would otherwise stop the restart at once,
+  and Stop would never get the reader an app. A Run that ends a stop starts
+  the app itself, so it asks for no restart (`stop({ rerun: false })`).
+- **A Pause with nothing running** waits for whatever runs next - a click,
+  a timer, a Run. The tab says so, with Cancel (`unpause`).
 
 While stopped the editor is read-only (`setDebugLock( )`) - the marks must
 not move under the text - without the grey of the View tab's lock, and a
@@ -199,6 +206,18 @@ the text typed above them; the list follows the decorations. They are kept
 under `abap2ui5-playground:breakpoints` by file name, validated like every
 stored setting, and only on the page that offers the debugger.
 
+## The AI App Builder's `inspect`
+
+The model gets the debugger as one tool: `inspect({ line, file, condition,
+watch, event, values })` sets the one breakpoint, runs the app again - or,
+with `event`, fires it on the running app as `act` does - waits for the
+stop (`studioDebugger( )` in `agent-hooks.mjs`), reads the frame and the
+`watch` paths, takes the breakpoint away and lets the program go on, and
+answers with the stack, the values and what the run or the event did after
+(`stopText( )` in `ai-agent.mjs`). A line the last build cannot stop at is
+refused with the lines nearby that it can. Nothing stays stopped whatever
+happens. `tests/ai.spec.js` holds it.
+
 ## Deliberate limits
 
 - **Only the reader's classes.** The framework and open-abap are the
@@ -208,16 +227,24 @@ stored setting, and only on the page that offers the debugger.
   planned as a stretch; `check-instrument.mjs` shows the hooks would hold
   for all of it. Not done: it is a second 5.5 MB runtime to build, cache and
   budget for, for stepping through code the reader did not write.
-- **Statements inside a CATCH or CLEANUP block cannot be stopped at.** The
-  transpiler writes those blocks without mappings, so there is no ABAP line
-  to put a hook on. The CATCH's handler runs; a breakpoint there is drawn
-  hollow. The fix belongs in the transpiler (mappings for the catch body).
+- **Statements inside a CATCH or CLEANUP block cannot be stopped at** with
+  the pinned transpiler: it writes those blocks without mappings, so there
+  is no ABAP line to put a hook on. The build reports them per method
+  (`blind`); a breakpoint on one is drawn hollow and says why, and one on a
+  line above is never moved past them - it would stop somewhere else than
+  asked. Fixed upstream in abaplint/transpiler (`TryTranspiler` builds the
+  handlers as chunks); once a release carries it and the pin moves,
+  `blind` is empty and this limit goes.
 - **A runtime error is not stopped at** (a division by zero raised by the
   runtime, not by a RAISE): it is pointed at as a dump, as before.
 - **Watches and conditions are paths and comparisons**, not ABAP
   expressions: a method call in a watch would run the reader's code from the
   debugger.
-- **No debugger in an embed, on `?view=app`/`full`, or on the AI pages**
-  (above). An opt-in for an embed would be a contract with abap2UI5/docs.
+- **No debugger on `?view=app`/`full` or on the AI Agent's page, and in an
+  embed only on request** (`?debug=1`, the loader's `data-debug` - a contract
+  with abap2UI5/docs, [public-surfaces.md](public-surfaces.md)). An embed
+  never stores its breakpoints. On the AI App Builder's page `BREAK-POINT`
+  does not stop (`options({ statements: false })`): nobody would continue
+  it.
 - **A moved breakpoint is checked at the next Run.** Edits move the marks,
   but what runs is the last Run's build; the line sent is the editor's.

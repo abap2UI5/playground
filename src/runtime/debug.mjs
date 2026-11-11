@@ -32,6 +32,15 @@ let modeDepth = 0;
 let cursor;
 let pauseRequested = false;
 let breakOnRaise = false;
+// Held: nothing stops - the page's Stop restarts the app this way, or a
+// BREAK-POINT in the app's start would stop the restart again. "roundtrip"
+// holds until the next roundtrip has ended: the app's start, which comes
+// after the classes are defined, the tests and the database reset.
+let suspended = false;
+// Whether the statement BREAK-POINT stops. Not on a page with no debugger
+// to continue it - the AI App Builder's, where only its own tool sets
+// breakpoints.
+let breakStatements = true;
 /** @type {{ id: number, path: string, target: any, frame: Frame, last: string }[]} */
 let watchpoints = [];
 // Any of the above that makes every statement worth a look.
@@ -77,6 +86,7 @@ class Frame {
   // Map lookup for the breakpoints, a counter for the clock.
   hit(line, raise) {
     this.line = line;
+    if (suspended) return false;
     if (armed || (raise === 1 && breakOnRaise)) return true;
     const lines = breakpoints.get(this.info.file);
     if (lines !== undefined && lines.has(line)) return true;
@@ -98,7 +108,8 @@ class Frame {
   }
 
   reason(line, kind) {
-    if (kind === 2 && inWorker) return { reason: "break", detail: "BREAK-POINT" };
+    if (suspended) return undefined;
+    if (kind === 2 && inWorker && breakStatements) return { reason: "break", detail: "BREAK-POINT" };
     if (pauseRequested) return { reason: "pause" };
     if (kind === 1 && breakOnRaise) return { reason: "raise", detail: "RAISE EXCEPTION" };
     if (stepDone(this, line)) return { reason: "step" };
@@ -201,7 +212,8 @@ export function installDebugger(abap) {
 // Called by the worker after each operation it ran to its end: a step that
 // was still pending belongs to that operation and ends with it, or the next
 // click in the app would stop on its first statement.
-export function operationEnded() {
+export function operationEnded(op) {
+  if (suspended === "roundtrip" && op === "roundtrip") suspended = false;
   mode = "run";
   cursor = undefined;
   stack.length = 0;
@@ -235,8 +247,17 @@ const COMMANDS = {
     breakpoints = next;
     return problems;
   },
-  options({ raise }) {
+  options({ raise, suspend, statements }) {
     breakOnRaise = raise === true;
+    breakStatements = statements !== false;
+    suspended = suspend === "roundtrip" ? "roundtrip" : suspend === true;
+    return true;
+  },
+  // A Pause asked for while nothing runs waits for the next statement that
+  // does; this takes it back.
+  unpause() {
+    pauseRequested = false;
+    rearm();
     return true;
   },
   pause() {

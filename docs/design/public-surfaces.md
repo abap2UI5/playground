@@ -43,6 +43,11 @@ deploy — readers get the published playground, never your checkout.
   the payload and the order; `tests/shell.spec.js` the page.
 - **`?embed=1`**: drops the chrome, and never reads or writes the stored
   draft — an embedding must not overwrite a reader's work.
+- **`?debug=1`** (embedded only, not with `?view=app`; the loader's
+  `data-debug`, `url({ debug })`): the playground's debugger in the demo -
+  breakpoints, `BREAK-POINT`, stepping, the variables. Off by default, because
+  a stop nobody expects holds the demo. The breakpoints are not stored
+  ([debugger.md](debugger.md)).
 - **`?readonly=1`** (embedded only): the editor takes no typing
   (`lockEditor( )` in `src/editor/monaco-editor.mjs` - a floor the View tab's
   edit mode cannot lift), and Format, Undo, Redo, Fix them and the View tab's
