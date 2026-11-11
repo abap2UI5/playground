@@ -15,18 +15,8 @@ import { partialParse } from "@anthropic-ai/sdk/_vendor/partial-json-parser/pars
 
 // The speeds are src/shell/ai-speeds.mjs (the shell writes the header's
 // options from it); re-exported here for the agents and the chats.
-export { SPEEDS, DEFAULT_SPEED } from "./ai-speeds.mjs";
-import { SPEEDS, DEFAULT_SPEED } from "./ai-speeds.mjs";
-
-// What a token costs, in dollars per million, from Anthropic's price list
-// as of October 2026 - an estimate for the header, not a bill: a plan's
-// rates, a cache write (a quarter more than fresh input) and a cache read
-// (a tenth) are the parts that move. Kept here, in one place, so a price
-// change is one edit.
-export const PRICES = {
-  "claude-opus-5-5": { input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2 },
-  "claude-sonnet-5-5": { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2 },
-};
+export { SPEEDS, DEFAULT_SPEED, PRICES, PRICES_AS_OF } from "./ai-speeds.mjs";
+import { SPEEDS, DEFAULT_SPEED, PRICES, PRICES_AS_OF } from "./ai-speeds.mjs";
 
 /*
  * Old tool results are cleared by the API once a conversation is long - a
@@ -466,7 +456,7 @@ export function usageText({ input, output, cached, written = 0, dollars }) {
     text: `${k(input + cached)} in · ${k(output)} out${cost}`,
     title:
       `${input - written} input tokens read fresh, ${written} written to the cache, ${cached} read from the cache, ` +
-      `${output} output tokens${dollars === undefined ? "" : ` - about $${dollars.toFixed(3)} at the list prices of October 2026`}; ` +
+      `${output} output tokens${dollars === undefined ? "" : ` - about $${dollars.toFixed(3)} at the list prices of ${PRICES_AS_OF}`}; ` +
       "billed to your key at your plan's rates",
   };
 }

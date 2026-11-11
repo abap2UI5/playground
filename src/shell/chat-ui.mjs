@@ -161,18 +161,30 @@ export function createChatRoom({ prefix, el, onBusy, onStartOver, showWelcome, r
     model.focus();
   }
 
-  /** The welcome's way in without a key, as a paragraph (`${prefix}-local`),
-   *  or null while a key is held. The rooms remove it once a key is. */
+  /** The welcome's two ways to a model, as one paragraph (`${prefix}-local`),
+   *  or null while a key is held: the key form opened on request, or a model
+   *  on the reader's own machine. The key form itself starts closed - open,
+   *  it took the upper half of the chat and pushed the welcome, its examples
+   *  and these offers below the fold, on a phone the welcome's heading too. */
   function localModelOffer() {
     if (sessionKey !== null) return null;
     const local = document.createElement("p");
     local.className = `${prefix}-local`;
+    const key = document.createElement("button");
+    key.type = "button";
+    key.className = `ghost ${prefix}-key-open`;
+    key.textContent = "Add your API key";
+    key.addEventListener("click", () => {
+      showKeyForm(true);
+      el.keyInput.focus();
+    });
     const button = document.createElement("button");
     button.type = "button";
     button.className = `ghost ${prefix}-local-open`;
     button.textContent = "Use a model on your own machine";
     button.addEventListener("click", offerLocalModel);
-    local.append("No API key? ", button, " - Ollama or LM Studio, no key and no cost; it needs a model that can call tools.");
+    local.append(key, " - kept for this visit only, never stored. Or ", button,
+      " - Ollama or LM Studio, no key and no cost; it needs a model that can call tools.");
     return local;
   }
 

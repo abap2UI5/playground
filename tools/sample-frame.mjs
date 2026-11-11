@@ -71,7 +71,8 @@ export const SOCIALS = `<div class="socials">
         <a href="https://abap2ui5.github.io/samples-site/">Samples</a>
         <a href="https://abap2ui5-addons.github.io/">Addons &amp; Tools</a>
         <span class="menu-head">Tools</span>
-        <a href="https://abap2ui5.github.io/playground/ai/" data-site="ai">AI Studio</a>
+        <a href="https://abap2ui5.github.io/playground/ai/" data-site="ai">AI App Builder</a>
+        <a href="https://abap2ui5.github.io/playground/pilot/" data-site="pilot">AI Agent</a>
         <a href="https://abap2ui5.github.io/layout-editor/">Layout Editor</a>
         <a href="https://abap2ui5-addons.github.io/abap-cloud-gui/">Report converter</a>
         <a href="https://abap2ui5.github.io/linter/">Linter rules</a>

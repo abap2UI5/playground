@@ -116,6 +116,24 @@ indistinguishable from its editable one — same colours, and a caret that still
 lands where it is clicked — and nobody should have to type into it to find out
 that it will not take it.
 
+
+**Properties** is the edit without XML - the first cut of the visual builder
+(`docs/concepts/visual-builder.md` in abap2UI5/abap2UI5): the view's controls
+as a tree (`.view-tree`, document order, indented by depth), one picked, its
+attributes in a sheet beside it, a row to add one. Apply sets the values on a
+DOM copy of the XML that was shown and hands the serialised result to
+`sourceWithView( )` - the path Save takes, so chain-patch writes over exactly
+the values that changed and a value left alone keeps its ABAP. An attribute
+the reconstruction rendered as an expression (`{NAME}`, `.eB(…)`) is drawn
+dashed and says that a new value there becomes a literal. The sheet is kept
+across the panel's redraws while the view and the pick are unchanged (a
+roundtrip landing redraws), and follows the new view after a write, the same
+control picked by its place. It does not make the editor read-only: a write
+is one edit, like Save. Not yet: picking by a click in the running app, the
+UI5 metadata's properties to choose from, binding to an attribute, adding a
+control - steps 1, 3, 4 and 5 of the concept. `tests/view-edit.spec.js`
+holds a value changed and one added with the binds intact, and a refused name.
+
 ## Unit tests and dumps
 
 **Unit tests run before the app** (`tests/unit.spec.js`, the `unit-tests`

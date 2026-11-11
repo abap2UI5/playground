@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { addNamedFile, allowClipboard, clickEditor, getSource, MAIN_CLASS, MAIN_FILE, MAIN_MARK, open, runSample, SAMPLES, setSource } from "./helpers.mjs";
+import { addNamedFile, allowClipboard, clickEditor, getSource, MAIN_CLASS, MAIN_FILE, MAIN_MARK, open, runSample, SAMPLES, setSource, zipEntries } from "./helpers.mjs";
 
 // A sample other than the one the page opens on - it brings its own class name,
 // which is what makes replacing a draft with it interesting.
@@ -672,29 +672,6 @@ test("the AI App Builder and the AI Agent carry the same switch in their bars", 
     await expect(page.locator("html")).not.toHaveAttribute("data-theme", /./);
   }
 });
-
-// The entries of a stored zip, read the way the format is written: a local
-// header per entry, name and bytes right behind it. Enough to check what the
-// Share dialog hands out without a zip library in the tests either.
-function zipEntries(bytes) {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const entries = [];
-  let at = 0;
-  while (at + 30 <= bytes.length && view.getUint32(at, true) === 0x04034b50) {
-    const size = view.getUint32(at + 18, true);
-    const nameLength = view.getUint16(at + 26, true);
-    const extraLength = view.getUint16(at + 28, true);
-    const name = new TextDecoder().decode(bytes.subarray(at + 30, at + 30 + nameLength));
-    const start = at + 30 + nameLength + extraLength;
-    // Both, because one of these files is asserted on at the byte level: a
-    // TextDecoder swallows a byte order mark by default, which is exactly the
-    // thing .abapgit.xml is checked for.
-    const data = bytes.subarray(start, start + size);
-    entries.push({ name, text: new TextDecoder().decode(data), bytes: data });
-    at = start + size;
-  }
-  return entries;
-}
 
 test("the Share dialog offers an embed block, a markdown fence and an abapGit zip", async ({ page, context, browserName }) => {
   await allowClipboard(context, browserName);

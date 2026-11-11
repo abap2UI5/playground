@@ -258,6 +258,99 @@ ${[{ name: "MANDT", key: true, rollname: "MANDT" }, ...fields].map(fieldXml).joi
 `;
 }
 
+// The built-in types write_table takes, with the length a type fixes for
+// itself; CHAR, NUMC and DEC take the model's. Currency and quantity fields
+// (CURR, QUAN) are left out: they need a reference field, and a table that
+// imports with a warning is worse than one with a DEC.
+const TABLE_TYPES = {
+  CHAR: { length: true },
+  NUMC: { length: true },
+  DEC: { length: true },
+  INT1: { leng: 3 },
+  INT2: { leng: 5 },
+  INT4: { leng: 10 },
+  INT8: { leng: 19 },
+  FLTP: { leng: 16 },
+  DATS: { leng: 8 },
+  TIMS: { leng: 6 },
+  STRG: { leng: 0 },
+};
+
+/*
+ * write_table's input as the two files "+ table" writes - the definition by
+ * tableXml( ) above, the rows as JSON - or the one thing wrong with
+ * it, said so the model can correct it - the AI App Builder's write_table
+ * (src/shell/ai-agent.mjs). Pure, for tests/node.
+ */
+const whole = (v) => {
+  const n = typeof v === "number" ? v : typeof v === "string" && /^\s*\d+\s*$/.test(v) ? Number(v) : NaN;
+  return Number.isInteger(n) ? n : NaN;
+};
+
+export function tableFiles(input) {
+  const str = (v) => (typeof v === "string" ? v : undefined);
+  const name = str(input?.name)?.trim().toLowerCase();
+  if (!name || !/^[yz][a-z0-9_]{0,15}$/.test(name)) {
+    return { error: "write_table needs a name: lower case, z or y first, letters, digits and _, at most 16 characters (e.g. zorders)." };
+  }
+  if (!Array.isArray(input.fields) || input.fields.length === 0) return { error: "write_table needs fields - at least one, one of them key." };
+  const seen = new Set();
+  const columns = [];
+  for (const [i, f] of input.fields.entries()) {
+    const field = str(f?.name)?.trim().toUpperCase();
+    if (!field || !/^[A-Z][A-Z0-9_]{0,29}$/.test(field)) return { error: `Field ${i + 1}: a name of letters, digits and _, a letter first, at most 30 characters.` };
+    if (field === "MANDT") continue; // added by itself, first
+    if (seen.has(field)) return { error: `Field ${field} is there twice.` };
+    seen.add(field);
+    const type = str(f.type)?.trim().toUpperCase();
+    const spec = TABLE_TYPES[type];
+    if (!spec) return { error: `Field ${field}: type ${f.type ?? "(none)"} - one of ${Object.keys(TABLE_TYPES).join(", ")}.` };
+    let leng = spec.leng;
+    if (spec.length) {
+      leng = whole(f.length);
+      if (!(leng >= 1 && leng <= (type === "DEC" ? 31 : 255))) return { error: `Field ${field}: a ${type} needs a length (1-${type === "DEC" ? 31 : 255}).` };
+    }
+    const column = { name: field, datatype: type, leng, key: f.key === true };
+    if (type === "DEC") {
+      const decimals = f.decimals === undefined ? 0 : whole(f.decimals);
+      const most = Math.min(14, Math.max(0, leng - 1));
+      if (!(decimals >= 0 && decimals <= most)) return { error: `Field ${field}: a DEC of length ${leng} takes 0 to ${most} decimals.` };
+      column.decimals = decimals;
+    }
+    if (column.key && type === "STRG") return { error: `Field ${field}: a STRG field cannot be key.` };
+    columns.push(column);
+  }
+  if (columns.length === 0) return { error: "write_table needs a field besides MANDT, which is added by itself." };
+  // The key fields lead, as a table's key does on a system.
+  if (!columns.some((c) => c.key)) return { error: "write_table needs at least one key field (key: true)." };
+  const firstNonKey = columns.findIndex((c) => !c.key);
+  if (firstNonKey !== -1 && columns.slice(firstNonKey).some((c) => c.key)) return { error: "The key fields come first, before every other field." };
+  const rows = input.rows === undefined ? [] : input.rows;
+  if (!Array.isArray(rows)) return { error: "rows is a list of objects, one per row." };
+  if (rows.length > MAX_ROWS) return { error: `${rows.length} rows - a table here starts with at most ${MAX_ROWS}.` };
+  const known = new Set(["MANDT", ...columns.map((c) => c.name)]);
+  const out = [];
+  for (const [i, row] of rows.entries()) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) return { error: `Row ${i + 1} is not an object of field names and values.` };
+    const clean = {};
+    for (const [k, v] of Object.entries(row)) {
+      const field = k.trim().toUpperCase();
+      if (!known.has(field)) return { error: `Row ${i + 1}: there is no field ${field}. The fields: ${[...known].join(", ")}.` };
+      if (v !== null && typeof v === "object") return { error: `Row ${i + 1}, ${field}: a value is a string, a number or a boolean.` };
+      clean[field.toLowerCase()] = v;
+    }
+    out.push(clean);
+  }
+  const description = str(input.description)?.trim().replace(/[<>&]/g, " ").slice(0, 60) || `table ${name}`;
+  return {
+    tabname: name.toUpperCase(),
+    fields: columns.length,
+    rows: out.length,
+    table: { name: `${name}.tabl.xml`, source: tableXml(name, columns, description) },
+    seed: { name: `${name}.tabu.json`, source: `${out.length ? `[\n${out.map((r) => `  ${JSON.stringify(r)}`).join(",\n")}\n]` : "[]"}\n` },
+  };
+}
+
 // The example "Add table" puts into the file set: a few products with a
 // price and a stock, which is enough to SELECT, filter, sum and show in a
 // table control - and a name that says what it is.

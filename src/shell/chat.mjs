@@ -30,7 +30,10 @@ import { createChatRoom, narrow } from "./chat-ui.mjs";
 import { abapGitZip, download } from "./export.mjs";
 import { createDriver } from "./frame-drive.mjs";
 import { frameApi as apiOf } from "./frame-link.mjs";
+import { openIn } from "./hand-off.mjs";
+import { handoverMarkdown } from "./handover.mjs";
 import { readProviderSettings } from "./llm-provider.mjs";
+import { SPEEDS } from "./ai-speeds.mjs";
 import { renderMarkdown } from "./markdown.mjs";
 import { frame } from "./page.mjs";
 import { readSessionJson, readStored, removeSession, removeStored, writeSessionJson, writeStored } from "./storage.mjs";
@@ -67,6 +70,9 @@ const driver = createDriver();
 let mirror;
 const frameApi = () => apiOf(frame);
 let open = false;
+// Whether this load took up a conversation kept for the tab - then there is
+// no welcome to offer the key, and the key form opens with the studio.
+let restored = false;
 let el;
 // The conversation as text, for the export: { role, text } per line.
 let transcript = [];
@@ -267,7 +273,7 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
   // A drop anywhere on the studio's own page.
   if (startOpen) listenForFileDrops({ highlight: el.chat, onFiles: (files) => chatDropped(files) });
 
-  el.download.addEventListener("click", () => {
+  el.download.addEventListener("click", async () => {
     // The starting class as it was handed out is nothing to take home.
     if (host.files().every(isUntouchedStarter)) {
       setStatus("nothing to download yet - describe the app first");
@@ -275,7 +281,10 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
       return;
     }
     try {
-      const zip = abapGitZip(host.files());
+      // The record beside the class (handover.mjs): asked for, checked,
+      // tried, left to connect - read off the page as it is now.
+      const handover = await handoverNow();
+      const zip = abapGitZip(host.files(), undefined, [{ name: "HANDOVER.md", data: handover }]);
       download(zip.name, zip.bytes);
       setStatus(`${zip.name} is on its way`);
       placeholderNotice();
@@ -283,6 +292,33 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
       setStatus("the zip could not be written", true);
       room.addLine("notice", String(e?.message ?? e));
     }
+  });
+
+  // The build in another tool, in a new tab (hand-off.mjs). Not while a
+  // turn runs - half the files written is no app to hand on - and not the
+  // untouched starter, which is nothing to open.
+  const openInMenu = document.getElementById("chat-open-in");
+  for (const button of openInMenu.querySelectorAll("button[data-hand-off]")) {
+    button.addEventListener("click", async () => {
+      openInMenu.open = false;
+      if (room.busy) {
+        setStatus("wait until the step is done");
+        return;
+      }
+      if (host.files().every(isUntouchedStarter)) {
+        setStatus("nothing to open yet - describe the app first");
+        return;
+      }
+      const tool = button.dataset.handOff === "pilot" ? "pilot" : "playground";
+      await openIn(tool, host.files());
+      setStatus(`opened in the ${tool === "pilot" ? "AI Agent" : "playground"}, in a new tab`);
+    });
+  }
+  document.addEventListener("click", (e) => {
+    if (openInMenu.open && !openInMenu.contains(/** @type {Node} */ (e.target))) openInMenu.open = false;
+  });
+  openInMenu.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") openInMenu.open = false;
   });
 
   // The conversation as a markdown file - what was asked, what the model
@@ -307,7 +343,8 @@ export function setUpChat(chatHost, { onToggle, startOpen = false } = {}) {
   // kept by remember( ) in main.mjs, and both are offered back here.
 
   setUpTarget();
-  if (!restoreConversation()) showWelcome();
+  restored = restoreConversation();
+  if (!restored) showWelcome();
   if (el.toggle) el.toggle.disabled = false;
   if (startOpen) setOpen(true);
 }
@@ -364,16 +401,43 @@ function setUpTarget() {
 // the TODO(system) lines the model left above what stands in for the
 // reader's system (target-system.mjs) - the part "it ran here" says nothing
 // about.
-function placeholderNotice() {
-  const label = targetLabel(host.abapRelease?.() ?? DEFAULT_TARGET);
-  // The TODO(system) lines, and the CALL FUNCTIONs nobody marked as one.
+// The TODO(system) lines, and the CALL FUNCTIONs nobody marked as one, in
+// the order of the files and their lines.
+function todosNow() {
   const files = host.files();
   const order = (name) => files.findIndex((f) => f.name === name);
-  const todos = [
+  return [
     ...systemTodos(files),
     ...functionCalls(files).filter((c) => !c.marked)
       .map((c) => ({ file: c.file, line: c.line, text: `CALL FUNCTION ${c.name} - not checked here, it may not exist on your system` })),
   ].sort((x, y) => order(x.file) - order(y.file) || x.line - y.line);
+}
+
+// HANDOVER.md for the download: the reader's messages, the checks as they
+// are now (the last run's status and tests, the problems of the code on
+// screen), what was tried in the app (the act rows), what is left to connect.
+async function handoverNow() {
+  const files = host.files();
+  const checks = (await host.checks?.()) ?? { status: "", problems: [], tests: [] };
+  const settings = readProviderSettings();
+  return handoverMarkdown({
+    app: files[0].name.replace(/\.clas\.abap$/, "").toUpperCase(),
+    files,
+    requests: transcript.filter((t) => t.role === "user").map((t) => t.text),
+    release: targetLabel(host.abapRelease?.() ?? DEFAULT_TARGET),
+    ui5: host.ui5?.() ?? "1.71",
+    status: checks.status,
+    problems: checks.problems,
+    tests: checks.tests,
+    tried: transcript.filter((t) => t.role === "did" && /^(typed|pressed)\b/.test(t.text)).map((t) => t.text),
+    todos: todosNow(),
+    model: settings.provider === "openai" ? settings.model : SPEEDS[el.speed.value]?.label,
+  });
+}
+
+function placeholderNotice() {
+  const label = targetLabel(host.abapRelease?.() ?? DEFAULT_TARGET);
+  const todos = todosNow();
   const text = todos.length === 0
     ? `Checked against ${label}. Nothing in the code is marked as left to connect on your system - what stands in for SAP data or objects would carry a "TODO(system):" comment.`
     : `Checked against ${label}. ${todos.length} place${todos.length === 1 ? " is" : "s are"} left to connect on your system (the "TODO(system):" comments and the function module calls in the code):`;
@@ -600,9 +664,13 @@ function setOpen(value) {
   // seen yet; a wide screen on the chat beside code and app.
   setStage(narrow() ? "chat" : stored ?? (window.innerWidth >= 1500 ? "split" : "preview"));
   showAppName();
-  room.showKeyForm(!room.hasKey());
-  if (el.keyForm.hidden) el.input.focus();
-  else el.keyInput.focus();
+  // The key form starts closed where the welcome offers it
+  // (localModelOffer( ) in chat-ui.mjs); a conversation taken up after a
+  // reload has no welcome and waits for the key, so there it is open. A
+  // message sent without a key opens it either way.
+  const asking = restored && !room.hasKey();
+  room.showKeyForm(asking);
+  (asking ? el.keyInput : el.input).focus();
 }
 
 // What the stage shows. A stage the width does not offer is mapped onto one
@@ -680,7 +748,12 @@ function showWelcome() {
     });
     list.append(b);
   }
-  intro.append(title, lead, list);
+  intro.append(title, lead);
+  // Above the examples, in the order somebody arriving needs them: the last
+  // build back, what a build looks like, how to get a model to answer. Below
+  // the examples they were under the fold of a laptop's screen.
+  const offer = resumeOffer();
+  if (offer) intro.append(offer);
   // What a build looks like, for somebody without a key - who otherwise meets
   // a key form and nothing else. Played from a chunk; nothing is sent.
   if (!room.hasKey()) {
@@ -691,12 +764,11 @@ function showWelcome() {
     watch.addEventListener("click", () => watchExample());
     intro.append(watch);
   }
-  // Without a key nothing here answers; a local model is the way in that
-  // costs nothing (chat-ui.mjs). Offered while no key is held.
+  // Without a key nothing here answers: the key form on request, or a local
+  // model, which costs nothing (chat-ui.mjs). Offered while no key is held.
   const local = room.localModelOffer();
   if (local) intro.append(local);
-  const offer = resumeOffer();
-  if (offer) intro.append(offer);
+  intro.append(list);
   el.log.append(intro);
 }
 
@@ -745,27 +817,35 @@ async function watchExample() {
 // what the editor holds with the first message (<editor_files>). On the
 // welcome, and under a conversation taken up after a reload.
 function resumeOffer() {
+  if (!host.files().every(isUntouchedStarter)) return null;
   const last = host.lastBuild?.();
-  if (last && host.files().every(isUntouchedStarter)) {
+  const earlier = host.earlierBuilds?.() ?? [];
+  if (!last && earlier.length === 0) return null;
+  const wrap = document.createElement("div");
+  wrap.className = "chat-resume-wrap";
+  // One build back into the editor, run so the stage shows it; the report
+  // goes nowhere.
+  const reopen = (files, what) => {
+    try {
+      host.setFiles(files);
+    } catch (e) {
+      room.addLine("notice is-error", `${what} could not be opened: ${String(e?.message ?? e)}`);
+      return false;
+    }
+    wrap.remove();
+    showAppName();
+    room.addLine("notice", `${what} is back in the editor - ask for a change, or describe something new.`);
+    host.run().catch(() => {});
+    return true;
+  };
+  if (last) {
     const block = document.createElement("div");
     block.className = "chat-resume";
     const open = document.createElement("button");
     open.type = "button";
     open.className = "chat-suggestion chat-resume-open";
     open.textContent = `Open the last build again · ${last[0].name.replace(/\.clas\.abap$/, "").toUpperCase()}${last.length > 1 ? ` · ${last.length} files` : ""}`;
-    open.addEventListener("click", () => {
-      try {
-        host.setFiles(last);
-      } catch (e) {
-        room.addLine("notice is-error", `The last build could not be opened: ${String(e?.message ?? e)}`);
-        return;
-      }
-      block.remove();
-      showAppName();
-      room.addLine("notice", "The last build is back in the editor - ask for a change, or describe something new.");
-      // Run, so the stage shows it; the report goes nowhere.
-      host.run().catch(() => {});
-    });
+    open.addEventListener("click", () => reopen(last, "The last build"));
     const forget = document.createElement("button");
     forget.type = "button";
     forget.className = "ghost chat-resume-forget";
@@ -775,7 +855,38 @@ function resumeOffer() {
       block.remove();
     });
     block.append(open, forget);
-    return block;
+    wrap.append(block);
   }
-  return null;
+  // The builds before it, one per app (agent-hooks.mjs keeps them): a
+  // second app described used to be the end of the first one here.
+  if (earlier.length) {
+    const block = document.createElement("div");
+    block.className = "chat-earlier";
+    const head = document.createElement("span");
+    head.className = "chat-earlier-head";
+    head.textContent = "Earlier builds:";
+    block.append(head);
+    for (const build of earlier) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "ghost chat-earlier-open";
+      b.textContent = build.app;
+      b.title = `${build.files.length} file${build.files.length === 1 ? "" : "s"}${build.at ? `, last changed ${new Date(build.at).toLocaleString()}` : ""}`;
+      b.addEventListener("click", () => {
+        if (reopen(build.files, build.app)) host.takeEarlierBuild?.(build.app);
+      });
+      block.append(b);
+    }
+    const forget = document.createElement("button");
+    forget.type = "button";
+    forget.className = "ghost chat-resume-forget";
+    forget.textContent = "forget them";
+    forget.addEventListener("click", () => {
+      host.forgetEarlierBuilds?.();
+      block.remove();
+    });
+    block.append(forget);
+    wrap.append(block);
+  }
+  return wrap;
 }

@@ -55,12 +55,14 @@ function nameFrom(url) {
   const last = url.pathname.split("/").pop() ?? "";
   // A class, an interface, or a class's test include - the third is the file
   // src/editor/files.mjs is written to take beside its class, and a link that
-  // names both is a link to an app with its tests.
+  // names both is a link to an app with its tests. And a table: its
+  // definition and its rows, the two files src/editor/tables.mjs takes.
   // Case-insensitive like the name it returns: Z2UI5_X.CLAS.ABAP is the same
   // object as z2ui5_x.clas.abap.
-  if (!/\.(clas|intf)\.abap$|\.clas\.testclasses\.abap$/i.test(last)) {
+  if (!/\.(clas|intf)\.abap$|\.clas\.testclasses\.abap$|\.tabl\.xml$|\.tabu\.json$/i.test(last)) {
     throw new Error(
-      `${last || url.href} is not an ABAP object file. A link points at a .clas.abap, a .intf.abap or a .clas.testclasses.abap.`,
+      `${last || url.href} is not an ABAP object file. A link points at a .clas.abap, a .intf.abap, a .clas.testclasses.abap, ` +
+        "or a table's .tabl.xml and .tabu.json.",
     );
   }
   return last.toLowerCase();
@@ -146,6 +148,47 @@ export function instantiatedClasses(source) {
   return [...names];
 }
 
+// The database tables of the reader's own this source reads or writes: a
+// SELECT's FROM and JOIN, INSERT, UPDATE, MODIFY, DELETE FROM, and a TYPE that
+// names one (TYPE ztab, TYPE STANDARD TABLE OF ztab). Only z and y names -
+// SAP's tables are nobody's sibling file - and read off the text for the
+// same reason the classes are.
+export function usedTables(source) {
+  const names = new Set();
+  const add = (name) => {
+    if (/^[yz]\w*$/i.test(name) && !/^(yes|zero)$/i.test(name)) names.add(name.toLowerCase());
+  };
+  const code = withoutComments(source);
+  for (const [, name] of code.matchAll(/\b(?:FROM|JOIN)\s+([a-z_]\w*)\b/gi)) add(name);
+  for (const [, name] of code.matchAll(/\b(?:INSERT|UPDATE|MODIFY)\s+([a-z_]\w*)\s+(?:FROM|SET)\b/gi)) add(name);
+  for (const [, name] of code.matchAll(/\bINSERT\s+INTO\s+([a-z_]\w*)\b/gi)) add(name);
+  for (const [, name] of code.matchAll(/\bTYPE\s+(?:(?:STANDARD|SORTED|HASHED)\s+)?(?:TABLE\s+OF\s+)?([a-z_]\w*)\b/gi)) add(name);
+  // A class or interface named like a table (zcl_, zif_) is not one.
+  return [...names].filter((n) => !/^[yz](cl|cx|if)_/i.test(n));
+}
+
+// Where a table's two files are, beside a class at `from`: the definition
+// next to it, the rows where abapGit keeps table contents (../data/, see
+// src/shell/export.mjs) or, failing that, next to it as well.
+const tablePlaces = (name, from) => ({
+  table: [new URL(`${name}.tabl.xml`, from).href],
+  rows: [new URL(`../data/${name}.tabu.json`, from).href, new URL(`${name}.tabu.json`, from).href],
+});
+
+// One optional sibling: the text, or undefined when it is not there, not
+// allowed, does not answer within eight seconds or does not look like `kind`.
+async function optionalSibling(href, looksRight) {
+  try {
+    checkAllowed(new URL(href), ALLOWED_HOSTS);
+    const response = await fetch(href, { signal: AbortSignal.timeout(8000) });
+    if (!response.ok) return undefined;
+    const source = await response.text();
+    return looksRight(source) ? source : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // Follows those names to the files next to the one that was linked, so a link
 // to an app that calls another app opens both. Deliberately narrow:
 //
@@ -168,15 +211,42 @@ export async function followNavigation(files) {
 
   for (let depth = 0; depth < MAX_DEPTH && found.length < MAX_FOLLOWED; depth++) {
     const wanted = new Map();
+    const tables = new Map();
     for (const file of frontier) {
       const from = origins.get(file.name);
       if (from === undefined) continue;
+      if (/\.abap$/.test(file.name)) {
+        for (const name of usedTables(file.source)) {
+          if (seen.has(`${name}.tabl.xml`) || tables.has(name)) continue;
+          tables.set(name, from);
+        }
+      }
       for (const name of instantiatedClasses(file.source)) {
         // An interface's constants are read with `=>` too, and its file is
         // an .intf.abap - asked for as a class it could never be found.
         const fileName = /^[yz]if_/i.test(name) ? `${name}.intf.abap` : `${name}.clas.abap`;
         if (seen.has(fileName) || wanted.has(fileName)) continue;
         wanted.set(fileName, new URL(fileName, from).href);
+      }
+    }
+    // A table the code uses, with its rows when they are there - the pair a
+    // link would otherwise have had to name in two more ?src= parameters.
+    // Within the same bound as the classes; a table found counts as one.
+    for (const [name, from] of [...tables].slice(0, MAX_FOLLOWED - found.length)) {
+      const places = tablePlaces(name, from);
+      const table = await optionalSibling(places.table[0], (t) => /<abapGit\b/.test(t) && /<DD02V>/.test(t));
+      if (table === undefined) continue;
+      const tableName = `${name}.tabl.xml`;
+      origins.set(tableName, places.table[0]);
+      found.push({ name: tableName, source: table });
+      seen.add(tableName);
+      for (const href of places.rows) {
+        const rows = await optionalSibling(href, (t) => /^\s*\[/.test(t.replace(/^\uFEFF/, "")));
+        if (rows === undefined) continue;
+        origins.set(`${name}.tabu.json`, href);
+        found.push({ name: `${name}.tabu.json`, source: rows });
+        seen.add(`${name}.tabu.json`);
+        break;
       }
     }
     if (wanted.size === 0) break;

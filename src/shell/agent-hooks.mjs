@@ -10,13 +10,14 @@ import { keepAbaplintSettings } from "./checker-settings.mjs";
 import { problemsChanged } from "./insight-common.mjs";
 import { compile } from "../editor/transpile.mjs";
 import { checkFileSet } from "../editor/files.mjs";
+import { linterSettings } from "../editor/abap2ui5-lint.mjs";
 import { carriedSampleFiles } from "../editor/samples.mjs";
 import { updateInsight } from "./insight.mjs";
 import { recordRoundtrip, roundtripList } from "./roundtrips.mjs";
 import { state } from "./state.mjs";
 import { DEBUG_STOPPED, RUNAWAY } from "./runtime-client.mjs";
 import { lastStops } from "./debug.mjs";
-import { readStoredJson, removeStored } from "./storage.mjs";
+import { readStoredJson, removeStored, writeStoredJson } from "./storage.mjs";
 import { currentLog, setStatus, showOutput } from "./ui.mjs";
 import { aiPage, frame, pilotPage } from "./page.mjs";
 import { caretMayMove, firstLine, isRunning, lastTests, pointAtDump, run, uiTheme, withRunLock } from "./run.mjs";
@@ -25,6 +26,45 @@ import { frameApi, serveFrames } from "./frame-link.mjs";
 
 // The AI Studio's last build (see remember( ) in main.mjs, and chat.mjs).
 export const AI_STORAGE_KEY = "abap2ui5-playground:ai-files";
+// The builds before it: one per app class, its last state, the newest first,
+// at most EARLIER_BUILDS. A build moves here when another app class takes
+// the studio's first file - a new app described, New chat and another app -
+// so "the last build" no longer means "everything before it is gone".
+export const AI_BUILDS_KEY = "abap2ui5-playground:ai-builds";
+const EARLIER_BUILDS = 8;
+
+const appOf = (files) => String(files?.[0]?.name ?? "").replace(/\.clas\.abap$/, "").toUpperCase();
+
+/** main.mjs's remember( ) on the studio's page: the files as the current
+ *  build, and the build they replace among the earlier ones when it was
+ *  another app. A full storage drops the oldest earlier build and tries
+ *  again, never the current one. */
+export function rememberBuild(files) {
+  const current = readStoredJson(AI_STORAGE_KEY);
+  if (Array.isArray(current) && current.length && appOf(current) !== appOf(files)) {
+    const earlier = (readStoredJson(AI_BUILDS_KEY) ?? []).filter((b) => b && appOf(b.files) !== appOf(current) && appOf(b.files) !== appOf(files));
+    const list = [{ at: Date.now(), files: current }, ...earlier].slice(0, EARLIER_BUILDS);
+    while (list.length && !writeStoredJson(AI_BUILDS_KEY, list)) list.pop();
+    if (!list.length) removeStored(AI_BUILDS_KEY);
+  }
+  writeStoredJson(AI_STORAGE_KEY, files);
+}
+
+/** The earlier builds that the editor can hold, newest first: { app, at, files }. */
+function earlierBuilds() {
+  const list = readStoredJson(AI_BUILDS_KEY);
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  for (const b of list) {
+    try {
+      const files = checkFileSet(b.files);
+      out.push({ app: appOf(files), at: Number(b.at) || 0, files });
+    } catch {
+      // A set the editor cannot hold is no build to offer.
+    }
+  }
+  return out;
+}
 
 // The draft id a frame's request is on - none for an app start.
 function draftOf(body) {
@@ -256,6 +296,14 @@ export function setUpStudio(chat) {
       // typed code.
       setFiles: (files) => replaceWith(checkFileSet(files), { asOpened: false }),
       run: () => runForAgent(),
+      // What HANDOVER.md says the checks found (handover.mjs): the last
+      // run's status and unit tests, and the problems of the code as it is.
+      checks: async () => ({
+        status: document.getElementById("status").textContent,
+        problems: await refreshNow(),
+        tests: lastTests(),
+      }),
+      ui5: () => linterSettings().ui5,
       show: (name) => openFile(name),
       // The debugger without its tab, for the `inspect` tool (ai-agent.mjs):
       // a breakpoint set, the first stop waited for, the frame read, and the
@@ -274,6 +322,15 @@ export function setUpStudio(chat) {
         }
       },
       forgetLastBuild: () => removeStored(AI_STORAGE_KEY),
+      earlierBuilds: () => earlierBuilds(),
+      // An earlier build opened is the current one from then on (remember( )
+      // moves the one it replaces down); taken out of the list here.
+      takeEarlierBuild: (app) => {
+        const list = (readStoredJson(AI_BUILDS_KEY) ?? []).filter((b) => appOf(b?.files) !== app);
+        if (list.length) writeStoredJson(AI_BUILDS_KEY, list);
+        else removeStored(AI_BUILDS_KEY);
+      },
+      forgetEarlierBuilds: () => removeStored(AI_BUILDS_KEY),
       // The release the syntax check holds the code to - abaplint's
       // `version`, the Config tab's setting - which the chat header offers
       // as the reader's target system (target-system.mjs) and the model is

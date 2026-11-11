@@ -529,3 +529,46 @@ ENDCLASS.`);
     expect(read.root.children[0].children.map((c) => c.name)).toEqual(["Button"]);
   }
 });
+
+// Properties: the same direction without typing XML - a control picked from
+// the tree, a value changed and one added in its sheet, written through the
+// same path Save takes. The binds the sheet did not touch stay binds.
+test("Properties: a control picked, a value changed and one added - the chain is patched, the binds survive", async ({ page }) => {
+  await open(page);
+  await runSample(page, SAMPLE);
+  await page.locator('[data-insight="view"]').click();
+  await expect(page.locator(".view-xml")).toContainText("<Button", { timeout: 30000 });
+  await expect(page.locator("#view-properties")).toBeEnabled();
+  await page.locator("#view-properties").click();
+  const tree = page.locator(".view-tree button");
+  await expect(tree.first()).toBeVisible();
+  await tree.filter({ hasText: /^Button/ }).first().click();
+  await expect(page.locator(".view-props-title")).toHaveText("Button");
+  // The event the button raises is ABAP in the chain, and the sheet says so.
+  await expect(page.locator(".view-prop.is-bound")).toHaveCount(1);
+  await page.locator('.view-prop input[data-attr="text"]').fill("Say hello");
+  await page.locator("#view-prop-new-name").fill("icon");
+  await page.locator("#view-prop-new-value").fill("sap-icon://email");
+  await page.locator("#view-props-apply").click();
+  await expect(page.locator("#status")).toContainText("Button: written into the builder chain");
+
+  const abap = await getSource(page, APP);
+  expect(abap).toContain("v = `Say hello`");
+  expect(abap).toContain("v = `sap-icon://email`");
+  expect(abap).not.toContain("v = `Greet`");
+  expect(abap).toContain("v = client->_bind( name )");
+  expect(abap).toContain("v = client->_bind( greeting )");
+  expect(abap).toContain("v = client->_event( `GREET` )");
+
+  // The sheet follows the new view, the same control still picked.
+  await expect(page.locator('.view-prop input[data-attr="icon"]')).toHaveValue("sap-icon://email", { timeout: 30000 });
+  await page.locator("#view-properties-done").click();
+  await expect(page.locator(".view-xml")).toContainText('text="Say hello"');
+
+  // A name that is not one is refused, and nothing is written.
+  await page.locator("#view-properties").click();
+  await page.locator("#view-prop-new-name").fill("not a name");
+  await page.locator("#view-props-apply").click();
+  await expect(page.locator("#view-props-said")).toHaveText("not a name is not a property name.");
+  expect(await getSource(page, APP)).toBe(abap);
+});

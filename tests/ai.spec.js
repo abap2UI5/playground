@@ -1,5 +1,6 @@
+import { readFileSync } from "node:fs";
 import { test, expect } from "@playwright/test";
-import { openConfig } from "./helpers.mjs";
+import { openConfig, zipEntries } from "./helpers.mjs";
 
 // The AI Studio (src/shell/chat.mjs, src/shell/ai-agent.mjs), on its own page
 // ai/index.html - the playground carries no way into it. No test talks to
@@ -75,6 +76,9 @@ async function openStudio(page) {
 }
 
 async function saveKey(page) {
+  // Closed until asked for (the welcome's offer, the Key button, a message
+  // sent without one) - open after a reload that took a conversation up.
+  if (await page.locator("#chat-key").isHidden()) await page.locator("#chat-key-button").click();
   await expect(page.locator("#chat-key")).toBeVisible();
   await page.locator("#chat-key-input").fill(KEY);
   await page.locator("#chat-key button[type=submit]").click();
@@ -132,10 +136,10 @@ test("the chat builds an app in the editor, runs it and tells the model what hap
   await page.locator('.studio-stage[data-stage="code"]').click();
   await expect(page.locator("#editor")).toBeVisible();
   await expect(page.locator("#app")).toBeHidden();
-  // The file strip without the playground's "+ table": the model writes
-  // classes only.
+  // The file strip with the playground's "+ table" - the model writes
+  // tables of the app's own as well (write_table).
   await expect(page.locator(".file-add")).toBeVisible();
-  await expect(page.locator(".file-add-table")).toBeHidden();
+  await expect(page.locator(".file-add-table")).toBeVisible();
   // ...and the card brings the app back.
   await page.locator(".chat-card").click();
   await expect(page.locator("#app")).toBeVisible();
@@ -188,6 +192,82 @@ test("an interface written before the app's class leaves the starting class unti
   expect(results.map((r) => r.is_error ?? false)).toEqual([false, false]);
   await expect(page.locator("#files .file-name")).toHaveText([APP_FILE, "zif_ai_thing.intf.abap"]);
   await expect(page.frameLocator("#app").getByText(MARK)).toBeVisible();
+});
+
+// write_table: a table of the app's own, the two abapGit files written by
+// the page, created at the run with its rows - and the app SELECTs them.
+test("write_table gives the app a table of its own that it SELECTs, and the download carries it", async ({ page }) => {
+  const app = `CLASS zcl_ai_app DEFINITION PUBLIC CREATE PUBLIC.
+  PUBLIC SECTION.
+    INTERFACES z2ui5_if_app.
+ENDCLASS.
+CLASS zcl_ai_app IMPLEMENTATION.
+  METHOD z2ui5_if_app~main.
+    IF client->check_on_init( ).
+      SELECT SINGLE name FROM zai_orders WHERE order_id = 'A2' INTO @DATA(name).
+      DATA(view) = z2ui5_cl_ui5_view_builder=>factory(
+          )->ele( n = \`View\` ns = \`mvc\`
+              )->a( n = \`xmlns\`     v = \`sap.m\`
+              )->a( n = \`xmlns:mvc\` v = \`sap.ui.core.mvc\` ).
+      view->ele( \`Page\`
+          )->a( n = \`title\` v = |Order { name }| ).
+      client->view_display( view->stringify( ) ).
+    ENDIF.
+  ENDMETHOD.
+ENDCLASS.`;
+  const requests = [];
+  await page.route("https://api.anthropic.com/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors() });
+    requests.push({ body: request.postDataJSON() });
+    const answer = requests.length === 1
+      ? sse({ tools: [
+          { name: "write_table", input: {
+            name: "zai_orders",
+            description: "Orders",
+            fields: [{ name: "order_id", type: "CHAR", length: 10, key: true }, { name: "name", type: "CHAR", length: 40 }],
+            rows: [{ order_id: "A1", name: "Ada" }, { order_id: "A2", name: "Grace" }],
+          } },
+          { name: "write_file", input: { name: APP_FILE, source: app, as_app: true } },
+        ] })
+      : requests.length === 2
+        ? sse({ tools: [{ name: "write_table", input: { name: "mara", fields: [{ name: "matnr", type: "CHAR", length: 18, key: true }] } }] })
+        : sse({ text: "The orders come from the table." });
+    await route.fulfill({ status: 200, headers: { ...cors(), "content-type": "text/event-stream" }, body: answer });
+  });
+  await openStudio(page);
+  await saveKey(page);
+  await page.locator("#chat-input").fill("Show order A2 from a table");
+  await page.locator("#chat-input").press("Enter");
+  await expect(page.locator(".chat-assistant").last()).toContainText("The orders come from the table.", { timeout: 90000 });
+
+  // The rules tell the model it may have tables of its own, and the tool is offered.
+  expect(requests[0].body.tools.map((t) => t.name)).toContain("write_table");
+  expect(JSON.stringify(requests[0].body.system)).toContain("write_table");
+  // Both files, beside the app; the run after them was clean and the app read the row.
+  await expect(page.locator("#files .file-name")).toHaveText([APP_FILE, "zai_orders.tabl.xml", "zai_orders.tabu.json"]);
+  const first = requests[1].body.messages.at(-1).content;
+  expect(first.map((r) => r.is_error ?? false)).toEqual([false, false]);
+  expect(first[0].content).toContain("Created the table ZAI_ORDERS (2 fields, 2 rows)");
+  expect(first[1].content).toContain("status: running");
+  await expect(page.locator(".chat-tool").first()).toHaveText("created table zai_orders · 2 rows");
+  await expect(page.frameLocator("#app").getByText("Order Grace")).toBeVisible();
+  // A table of SAP's is refused with how to name one of the app's own.
+  const second = requests[2].body.messages.at(-1).content;
+  expect(second[0].is_error).toBe(true);
+  expect(second[0].content).toContain("z or y first");
+
+  // The download carries the table in src/ and its rows in data/.
+  const downloaded = page.waitForEvent("download");
+  await page.locator("#chat-download").click();
+  const entries = zipEntries(new Uint8Array(readFileSync(await (await downloaded).path())));
+  expect(entries.map((e) => e.name)).toEqual(expect.arrayContaining(["src/zai_orders.tabl.xml", "data/zai_orders.tabu.json", "HANDOVER.md"]));
+  // The record beside it: what was asked, the checks of the code as it is.
+  const handover = entries.find((e) => e.name === "HANDOVER.md").text;
+  expect(handover).toContain("# Handover: ZCL_AI_APP");
+  expect(handover).toContain("> Show order A2 from a table");
+  expect(handover).toContain("- `zai_orders.tabl.xml`");
+  expect(handover).toMatch(/\| abaplint \(syntax\) \| ABAP 7\.50\+ \/ S\/4HANA \| 0 \|/);
 });
 
 test("a change is run by the page itself, its report rides on the change, and the turn shows what it is doing", async ({ page }) => {
@@ -386,6 +466,18 @@ test("the download says what the model left to connect on the reader's system", 
 
 test("without a key the welcome offers a model on the reader's own machine", async ({ page }) => {
   await openStudio(page);
+  // The key form starts closed, and both ways to a model are on screen
+  // above the examples - not under the fold below them.
+  await expect(page.locator("#chat-key")).toBeHidden();
+  await expect(page.locator(".chat-welcome h2")).toBeInViewport();
+  await expect(page.locator(".chat-key-open")).toBeInViewport();
+  await expect(page.locator(".chat-local-open")).toBeInViewport();
+  await expect(page.locator(".chat-watch")).toBeInViewport();
+  await page.locator(".chat-key-open").click();
+  await expect(page.locator("#chat-key")).toBeVisible();
+  await expect(page.locator("#chat-key-input")).toBeFocused();
+  await page.locator("#chat-key-button").click();
+  await expect(page.locator("#chat-key")).toBeHidden();
   await page.locator(".chat-local-open").click();
   await expect(page.locator("#chat-key")).toBeVisible();
   await expect(page.locator("#chat-provider")).toHaveValue("openai");
@@ -1336,6 +1428,7 @@ test("a base URL somebody else stored is said on the key form, and one that is n
     localStorage.setItem("abap2ui5-playground:llm", JSON.stringify({ provider: "openai", baseUrl: "https://collector.example/v1", model: "m" }));
   });
   await openStudio(page);
+  await page.locator(".chat-key-open").click();
   await expect(page.locator("#chat-key")).toBeVisible();
   await expect(page.locator("#chat-key-target")).toHaveText("Your key will be sent to collector.example.");
   // Plain http to another machine is said as well.

@@ -2,12 +2,16 @@
   {
     "id": "flights-filter",
     "prompt": "A table of flights with a search field that filters by carrier",
-    "expect": ["Carrier"]
+    "expect": [
+      "Carrier"
+    ]
   },
   {
     "id": "travel-form",
     "prompt": "A form to enter a travel request - name, destination, dates - with validation and a confirmation popup",
-    "expect": ["Destination"]
+    "expect": [
+      "Destination"
+    ]
   },
   {
     "id": "todo-list",
@@ -27,7 +31,9 @@
   {
     "id": "editable-table",
     "prompt": "An editable table of products (name, price, stock) with buttons to add and delete rows and a total of the stock below it",
-    "expect": ["Price"]
+    "expect": [
+      "Price"
+    ]
   },
   {
     "id": "sales-orders-702",
@@ -40,5 +46,41 @@
     "prompt": "A product list with a search field over the product description - for our S/4HANA Cloud system",
     "target": "Cloud",
     "expect": []
+  },
+  {
+    "id": "orders-table",
+    "prompt": "A list of orders - customer and amount - where I can add an order and delete one. Keep the orders in a database table.",
+    "files": [
+      "\\.tabl\\.xml$"
+    ],
+    "expect": []
+  },
+  {
+    "id": "discount-tests",
+    "prompt": "An input for an amount, a customer group A, B or C and a button that shows the discounted price: A gets 10 percent, B 5 percent, C none. With unit tests for the discount.",
+    "files": [
+      "\\.clas\\.testclasses\\.abap$"
+    ],
+    "tried": true,
+    "expect": []
+  },
+  {
+    "id": "orders-from-sheet",
+    "prompt": "Show the orders in this sheet in a table, with a total of the quantity below it",
+    "attach": [
+      "tests/fixtures/orders.xlsx"
+    ],
+    "expect": [
+      "Carol",
+      "Eve"
+    ]
+  },
+  {
+    "id": "follow-up-column",
+    "prompt": "A table of three products with their name and price",
+    "followUp": "Add a column for the stock, and sort the table by price",
+    "expect": [
+      "Stock"
+    ]
   }
 ]

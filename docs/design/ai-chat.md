@@ -1,4 +1,10 @@
-# The AI chat (AI Studio)
+# The AI App Builder
+
+> **Names.** On screen it is the **AI App Builder**, and the AI Pilot is the
+> **AI Agent** - the names of the tool menu (`TOOLS` in `tool-switch.mjs`),
+> the titles and every user-facing text. The code and these notes still say
+> "studio" and "Pilot" (`chat.mjs`, `is-studio`, `pilot.mjs`, `is-pilot`):
+> internal names, kept so a rename does not touch every selector and test.
 
 > Design notes, moved out of `AGENTS.md`. Read this before touching `chat.mjs`, `chat-ui.mjs`, `ai-agent.mjs`, `ai-common.mjs`, `llm-*.mjs`, `markdown.mjs` or `attach-ui.mjs`.
 > The rules in short, and every other area, are in [AGENTS.md](../../AGENTS.md).
@@ -12,13 +18,14 @@ document one directory down, with `<base href="../">` (so the bundle, the
 workers the inline script starts, the app frame and the service worker's scope
 all resolve where the playground's do: one build, two doors), `data-page="ai"`
 on `<html>`, its own title and canonical (`…/playground/ai/`), in the sitemap.
-The way in is the **AI Studio** link beside Samples in the toolbar
-(`#ai-studio`, an `<a>` dressed as the invite button - a switch that turned
-the page into the studio over the reader's own draft was tried and refused)
-and the Tools section of the menu, on all three copies of the bar
-(`index.html`, `src/catalogue/index.html`, `tools/sample-frame.mjs`; the
-documentation's copy lives in abap2UI5/docs). An embedded playground shows
-neither. The Pilot's page is still unlinked and `noindex`. `page.mjs` reads
+The way in is the tool menu behind the tool's name in every bar
+(`tool-switch.mjs`; the 404's bar lists both AI pages under Tools,
+`tools/sample-frame.mjs`). The toolbar's own link beside Samples went with
+the one-row bar (`tests/shell.spec.js` holds that it stays gone); a switch
+that turned the page into the studio over the reader's own draft was tried
+and refused before that. An embedded playground shows neither. The Agent's
+page is published the same way: indexed, a canonical of its own, in the
+sitemap. `page.mjs` reads
 `data-page` (`aiPage`) and `main.mjs` acts on it: only there is `setUpChat( )` called (with `startOpen`), the editor
 starts on one minimal class (`AI_STARTER` in `ai-starter.mjs`: `z2ui5_if_app`
 implemented, `main( )` empty) without a run - the placeholder says
@@ -264,6 +271,47 @@ talks to a model or needs a key.
   stops a DATA( ) at v702, the rules in the request, kept over a reload) and
   the download's list; `tests/node/target-system.test.mjs` the releases and
   the matching.
+- **Tables of the app's own** (`write_table` in `ai-agent.mjs`,
+  `tableFiles( )` in `src/editor/tables.mjs`). The rules used to say "no
+  database tables here", while the playground had them all along - so every
+  app that keeps records invented them in the constructor and `TODO(system)`
+  marked a SELECT that could have been a real one. The model does not write
+  abapGit's TABL XML itself: it hands over fields (built-in types only,
+  CURR/QUAN left out for their reference fields) and rows as JSON, and
+  `tableFiles( )` writes the two files `+ table` writes, through
+  `tableXml( )`, or answers what is wrong in a sentence (a name not z/y, no
+  key, keys not first, a row field the table does not have, more than
+  `MAX_ROWS`). A run follows as after any file tool (`FILE_TOOLS`).
+  `delete_file` takes a table's rows with it (`dependentsOf( )`). SAP's own
+  tables stay out: the rules say never to `write_table` one, and the name
+  rule refuses VBAK and MARA. `+ table` is on the studio's file strip again.
+  `tests/node/table-files.test.mjs` holds the refusals, `tests/ai.spec.js`
+  the table the app SELECTs and the zip that carries it.
+- **Unit tests, and the handover record.** The rules ask for an ABAP Unit
+  test include for logic beyond the view (and say a screen without logic
+  needs none); Run already runs it and `describeRun( )` already reported it.
+  The download puts `HANDOVER.md` at the zip's root (`handover.mjs`,
+  `handoverNow( )` in `chat.mjs`, the third argument of `abapGitZip( )`):
+  the reader's messages, the files, the checks of the code as it is now
+  (`host.checks( )`: the status line, `refreshNow( )`, `lastTests( )`) with
+  the release and UI5 floor they ran at, what was typed and pressed in the
+  app (the act rows of the transcript), the `TODO(system)` lines and unmarked
+  function calls, and what the checks do not cover - abap2UI5's
+  `docs/concepts/ai-package.md` asks for exactly that record, and for
+  "checked" never to be read as "correct".
+- **Earlier builds, and the build in another tool.** `rememberBuild( )` in
+  `agent-hooks.mjs` keeps the current build under `AI_STORAGE_KEY` as before
+  and, when another app class takes the first file, moves the one it
+  replaces to `AI_BUILDS_KEY` - one per app class, its last state, the
+  newest first, eight at most, the oldest dropped when the storage is full.
+  The welcome lists them under the last build (`resumeOffer( )`); one opened
+  becomes the current build and leaves the list. **Open in…** in the header
+  (`hand-off.mjs`) opens the files in the playground or the Agent in a new
+  tab, as a share link's fragment - the tab opened inside the click (a popup
+  blocker allows that, not a promise), its opener cut, the address set once
+  the files are encoded; never while a turn runs or on the untouched
+  starter. The Agent asks before it runs a link's code, as for any link.
+  `tests/hand-off.spec.js` holds both.
 - **A turn that is not getting anywhere ends, and the reader is asked.**
   Nothing ended a turn whose model kept calling tools, and every round is a
   billed request with the whole conversation read again. Two limits, both

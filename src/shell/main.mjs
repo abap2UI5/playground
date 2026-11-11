@@ -50,7 +50,7 @@ import { appUrl, copyToClipboard, shareUrl } from "./share.mjs";
 import { isUntouchedStarter } from "./ai-starter.mjs";
 import { state } from "./state.mjs";
 import { STALLED, startRuntime } from "./runtime-client.mjs";
-import { removeStored, writeStoredJson } from "./storage.mjs";
+import { removeStored } from "./storage.mjs";
 import { isDark, onThemeChange, setUpTheme } from "./theme.mjs";
 import { setUpToolSwitch } from "./tool-switch.mjs";
 import { closeOnBackdrop, describeError, setStatus, showOutput } from "./ui.mjs";
@@ -61,7 +61,7 @@ import { autorunAfterChange, markBooted, setUpAutorun } from "./autorun.mjs";
 import { applyFrameTheme, isRunning, isRunWaiting, lastRun, run, runWhenFree, setRunContext, uiTheme } from "./run.mjs";
 import { reflectCodeErrors, sayBriefly } from "./run-status.mjs";
 import { keepDraft, loadAppFromTable, loadDraft, loadLinked, loadSample, linkedFiles, markOpened } from "./file-sets.mjs";
-import { AI_STORAGE_KEY, carriedFiles, offerFrameBridge, setUpPilotHooks, setUpStudio } from "./agent-hooks.mjs";
+import { carriedFiles, offerFrameBridge, rememberBuild, setUpPilotHooks, setUpStudio } from "./agent-hooks.mjs";
 import { discardCachedSite, keepAssetsForNextTime, servedFromCache } from "./site-cache.mjs";
 import { lessonChanged, startGuides } from "./guides.mjs";
 // Compare/Reset against the original, and the bar's UI5 floor (their own modules).
@@ -630,7 +630,7 @@ function remember(files) {
   // time, and the chat's welcome offers the last build back (chat.mjs).
   if (aiPage) {
     const built = files ?? getFiles();
-    if (!built.every(isUntouchedStarter)) writeStoredJson(AI_STORAGE_KEY, built);
+    if (!built.every(isUntouchedStarter)) rememberBuild(built);
     return;
   }
   keepDraft(files ?? getFiles());

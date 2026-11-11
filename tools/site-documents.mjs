@@ -84,8 +84,8 @@ export function writeIndex({ metafile, monacoCss }) {
 
 // The AI Studio's page, ai/index.html: the playground's own document, one
 // directory down, marked as the studio - linked from the toolbar and the
-// menu, in the sitemap, with a canonical of its own (it is published; the
-// Pilot below is not yet). `<base href="../">` makes every relative URL
+// menu, in the sitemap, with a canonical of its own - as the Agent's below.
+// `<base href="../">` makes every relative URL
 // in it - the bundle, the workers the inline script starts, the app frame,
 // the service worker's scope - resolve where the playground's own do, so
 // there is one build of everything and two doors into it. main.mjs reads
@@ -111,14 +111,15 @@ function writeAiPage(html, metafile) {
 // directory down, the way ai/index.html is - see writeAiPage( ). main.mjs
 // reads `data-page="pilot"` and src/shell/pilot.mjs turns the page into the
 // Pilot: the app on the stage, Claude operating it from the chat beside it.
-// Not linked and not indexed while it is being built.
+// Published like the studio since it went into the tool menu of every bar:
+// indexed, in the sitemap, with a canonical of its own.
 function writePilotPage(html, metafile) {
   const page = html
     .replace(/<html([^>]*)>/, '<html$1 data-page="pilot">')
-    .replace("<head>", `<head>\n<base href="../">\n<meta name="robots" content="noindex">${preloadsFor(metafile, "src/shell/pilot.mjs")}`)
+    .replace("<head>", `<head>\n<base href="../">${preloadsFor(metafile, "src/shell/pilot.mjs")}`)
     .replace(/<title>[^<]*<\/title>/, "<title>AI Agent · abap2UI5</title>")
-    .replace(/<link rel="canonical"[^>]*>\n?/, "");
-  for (const mark of ['data-page="pilot"', '<base href="../">', "<title>AI Agent"]) {
+    .replace(/<link rel="canonical"[^>]*>/, '<link rel="canonical" href="https://abap2ui5.github.io/playground/pilot/">');
+  for (const mark of ['data-page="pilot"', '<base href="../">', "<title>AI Agent", 'canonical" href="https://abap2ui5.github.io/playground/pilot/"']) {
     if (!page.includes(mark)) {
       console.error(`build-site: ERROR the Pilot page could not be written - ${mark} did not land in src/shell/index.html's copy`);
       process.exit(1);

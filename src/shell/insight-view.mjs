@@ -10,6 +10,13 @@
 // there is to learn the builder - move a control, see the ABAP that moves it -
 // and the fastest way to try a property on a control without looking up which
 // call sets it.
+//
+// Properties is the same direction without typing XML - the first cut of the
+// visual builder (docs/concepts/visual-builder.md in abap2UI5/abap2UI5): the
+// view's controls as a tree, one picked, its attributes in a sheet. A value
+// changed or added there is put into the XML that was shown and goes through
+// exactly the path Save takes (sourceWithView( ): chain-patch writes over that
+// value alone), so a value left alone keeps its ABAP and a bind stays a bind.
 import { currentFile, getSource, lintViewsFor, setEditorReadOnly, setSourceOf } from "../editor/editor.mjs";
 import { copyToClipboard } from "./share.mjs";
 import { prettyXml } from "./xml-pretty.mjs";
@@ -37,6 +44,17 @@ export function viewTab() {
   // caret is in it are not things to rebuild from the source, which is exactly
   // what everything else in this panel is.
   if (editing) return editing.element;
+  if (sheet && sheet.file !== file) sheet = undefined;
+  if (sheet && docs.length === 1) {
+    // Kept while the view and the pick are what they were: a roundtrip
+    // landing redraws the panel, and a value half typed into the sheet is
+    // not something to rebuild from the source.
+    if (sheet.element && sheet.xml === docs[0] && sheet.drawn === sheet.index) return sheet.element;
+    sheet.xml = docs[0];
+    sheet.drawn = sheet.index;
+    sheet.element = propertySheet(file, source, docs[0]);
+    return sheet.element;
+  }
 
   const wrap = document.createElement("div");
   wrap.className = "view-preview";
@@ -46,7 +64,7 @@ export function viewTab() {
     actions.className = "log-actions";
     // One view per file is what can be edited: with two, which chain a change
     // belongs to is a guess, and the reader is one click from the ABAP anyway.
-    if (docs.length === 1) actions.append(editButton(source, doc, pretty));
+    if (docs.length === 1) actions.append(sheetButton(source, doc), editButton(source, doc, pretty));
     const copy = document.createElement("button");
     copy.type = "button";
     copy.className = "ghost";
@@ -188,5 +206,199 @@ function buildViewEditor() {
   });
 
   wrap.append(head, area, said);
+  return wrap;
+}
+
+// ------------------------------------------------------------ Properties
+
+// The sheet that is open, or nothing: the file it is about and which element
+// is picked, by its place in document order - what survives the re-render a
+// write sets off, when the linter has reconstructed the view again.
+let sheet;
+
+function sheetButton(source, doc) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "ghost";
+  button.id = "view-properties";
+  button.textContent = "Properties";
+  const can = viewEditable(source, doc);
+  if (can.ok) {
+    button.title = "Pick a control and change its properties; the builder chain is patched where the value is";
+    button.addEventListener("click", () => {
+      sheet = { file: currentFile(), index: 0 };
+      redraw();
+      document.querySelector(".view-tree button")?.focus();
+    });
+  } else {
+    button.disabled = true;
+    button.title = can.why;
+  }
+  return button;
+}
+
+const elementsOf = (doc) => [...doc.getElementsByTagName("*")];
+
+// A control as the tree names it: its tag, and what tells two of a kind
+// apart - an id, a text, a title.
+function labelOf(el) {
+  const hint = el.getAttribute("id") ?? el.getAttribute("text") ?? el.getAttribute("title") ?? el.getAttribute("label");
+  return hint ? `${el.tagName}  ${hint.length > 32 ? `${hint.slice(0, 32)}…` : hint}` : el.tagName;
+}
+
+function depthOf(el) {
+  let n = 0;
+  for (let p = el.parentElement; p; p = p.parentElement) n += 1;
+  return n;
+}
+
+function propertySheet(file, source, xml) {
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  const elements = elementsOf(doc);
+  if (sheet.index >= elements.length) sheet.index = 0;
+  const wrap = document.createElement("div");
+  wrap.className = "view-preview view-sheet";
+
+  const actions = document.createElement("span");
+  actions.className = "log-actions";
+  const done = document.createElement("button");
+  done.type = "button";
+  done.className = "ghost";
+  done.id = "view-properties-done";
+  done.textContent = "Done";
+  done.addEventListener("click", () => {
+    sheet = undefined;
+    redraw();
+    document.getElementById("view-properties")?.focus();
+  });
+  actions.append(done);
+  const head = blockHead("Properties", actions);
+
+  const body = document.createElement("div");
+  body.className = "view-sheet-body";
+  const tree = document.createElement("ul");
+  tree.className = "view-tree";
+  tree.setAttribute("aria-label", "The controls of the view");
+  elements.forEach((el, i) => {
+    const item = document.createElement("li");
+    const pick = document.createElement("button");
+    pick.type = "button";
+    pick.textContent = labelOf(el);
+    pick.style.paddingInlineStart = `${0.4 + depthOf(el) * 0.9}rem`;
+    if (i === sheet.index) pick.setAttribute("aria-current", "true");
+    pick.addEventListener("click", () => {
+      sheet.index = i;
+      redraw();
+      document.querySelector('.view-tree button[aria-current="true"]')?.focus();
+    });
+    item.append(pick);
+    tree.append(item);
+  });
+
+  const picked = elements[sheet.index];
+  const form = document.createElement("form");
+  form.className = "view-props";
+  form.setAttribute("aria-label", `Properties of ${picked.tagName}`);
+  const title = document.createElement("p");
+  title.className = "view-props-title";
+  title.textContent = picked.tagName;
+  form.append(title);
+  // The attributes the element has, namespace declarations aside - those
+  // belong to the document, not to a control.
+  const own = [...picked.attributes].filter((a) => a.name !== "xmlns" && !a.name.startsWith("xmlns:"));
+  const inputs = [];
+  for (const attr of own) {
+    const row = document.createElement("label");
+    row.className = "view-prop";
+    const name = document.createElement("span");
+    name.textContent = attr.name;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = attr.value;
+    input.dataset.attr = attr.name;
+    input.spellcheck = false;
+    // An expression the reconstruction rendered ({NAME}, .eB(...)) is ABAP
+    // in the chain - a bind, an event. Changed here it becomes a literal;
+    // left alone it stays what it is, which the sheet says.
+    if (/^\{.*\}$|^\.eB\(|^\.eF\(/.test(attr.value)) {
+      input.title = "Bound or an event in the ABAP - left alone it stays that; a new value here becomes a literal";
+      row.classList.add("is-bound");
+    }
+    row.append(name, input);
+    form.append(row);
+    inputs.push(input);
+  }
+  const add = document.createElement("div");
+  add.className = "view-prop view-prop-new";
+  const addName = document.createElement("input");
+  addName.type = "text";
+  addName.placeholder = "new property";
+  addName.id = "view-prop-new-name";
+  addName.setAttribute("aria-label", "Name of a property to add");
+  addName.spellcheck = false;
+  const addValue = document.createElement("input");
+  addValue.type = "text";
+  addValue.placeholder = "value";
+  addValue.id = "view-prop-new-value";
+  addValue.setAttribute("aria-label", "Its value");
+  addValue.spellcheck = false;
+  add.append(addName, addValue);
+  form.append(add);
+  const row = document.createElement("div");
+  row.className = "config-row";
+  const apply = document.createElement("button");
+  apply.type = "submit";
+  apply.className = "primary";
+  apply.id = "view-props-apply";
+  apply.textContent = "Apply";
+  const said = document.createElement("span");
+  said.className = "config-said view-said";
+  said.id = "view-props-said";
+  said.setAttribute("role", "status");
+  row.append(apply, said);
+  form.append(row);
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    said.classList.remove("is-error");
+    let changed = false;
+    for (const input of inputs) {
+      if (input.value !== picked.getAttribute(input.dataset.attr)) {
+        picked.setAttribute(input.dataset.attr, input.value);
+        changed = true;
+      }
+    }
+    const newName = addName.value.trim();
+    if (newName !== "") {
+      if (!/^[A-Za-z_][\w.:-]*$/.test(newName)) {
+        said.classList.add("is-error");
+        said.textContent = `${newName} is not a property name.`;
+        return;
+      }
+      if (picked.hasAttribute(newName)) {
+        said.classList.add("is-error");
+        said.textContent = `${picked.tagName} has ${newName} already - change it above.`;
+        return;
+      }
+      picked.setAttribute(newName, addValue.value);
+      changed = true;
+    }
+    if (!changed) {
+      said.textContent = "Nothing changed.";
+      return;
+    }
+    const written = sourceWithView(getSource(file), xml, new XMLSerializer().serializeToString(doc));
+    if (!written.ok) {
+      said.classList.add("is-error");
+      said.textContent = written.why;
+      return;
+    }
+    setSourceOf(file, written.source);
+    setStatus(`${picked.tagName}: written into the builder chain`);
+    redraw();
+  });
+
+  body.append(tree, form);
+  wrap.append(head, body);
   return wrap;
 }

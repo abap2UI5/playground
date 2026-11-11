@@ -90,7 +90,10 @@ pipeline and moves the last step into the browser.
   that release does not have, an icon that is in no icon font. Those compile,
   and at run time they render nothing and log nothing.
 - **Editing the view instead of the chain.** The **View** tab shows the XML
-  that reconstruction produces, coloured; **Edit** turns it around. Change the
+  that reconstruction produces, coloured; **Properties** lists its controls as
+  a tree and the picked one's properties in a sheet - change a value or add
+  one, Apply, and the chain is patched where that value is; **Edit** turns
+  the whole XML around. Change the
   XML — move a control, add a property, insert a `Label` — press Save, and the
   builder chain is written again to build it, in the layout the abap2UI5
   repositories hold their chains in. An attribute you leave alone keeps the
@@ -144,8 +147,10 @@ Where it stops:
   every Run, and nothing an app writes outlives the Run. A field typed by a
   data element needs that data element to exist in the framework corpus; a
   `MANDT` the rows leave out is the current client; a table may not reuse a
-  name the framework or open-abap already has. `?src=` still opens ABAP only;
-  a gist carries both files, and **Download for abapGit** puts the table in
+  name the framework or open-abap already has. `?src=` takes a table's two
+  files as well, and a linked class brings the tables of its own that it
+  uses (the definition beside it, the rows from abapGit's `data/` folder or
+  beside it); a gist carries both files, and **Download for abapGit** puts the table in
   `src/` and its rows in `data/`, abapGit's own data layout.
 - **No business tables, no RFC, no files.** The database holds the
   framework's own tables and yours. `SELECT` from a business table has nothing
@@ -239,8 +244,8 @@ it back to the curated list of the day.
 ## Build an app by describing it
 
 The **AI App Builder** has a page of its own, [`/playground/ai/`](https://abap2ui5.github.io/playground/ai/)
-- the **AI App Builder** button beside Samples, and the menu's Tools section on
-every page of this site. It starts on a minimal
+- the tool's name in every bar is the menu of the four abap2UI5 tools
+(Playground, Layout Editor, AI App Builder, AI Agent). It starts on a minimal
 class: `z2ui5_if_app` implemented, `main` still empty. The chat runs down the left, and the stage beside it shows the running
 app in a window of its own, the code, or both side by side (**Preview**,
 **Code**, **Split** in the studio's bar; a phone takes them in turns, the chat
@@ -295,10 +300,31 @@ with abapGit.
   that changed the files offers them back under its answer; ✎ on your
   latest message takes the exchange out and puts the text back to send
   again. **Export** writes the conversation as a markdown file, and the
-  files stay in this browser - the welcome offers the last build back.
-- **The limits are the playground's.** No tables of your own, no RFC, only the
-  UI5 libraries built in (see *What it can and cannot do*) — the model is told
-  so, and fills internal tables where a real app would `SELECT`.
+  files stay in this browser - the welcome offers the last build back, and
+  the builds before it, one per app (eight at most).
+- **Open in…** hands the build to the **Playground** (to go on by hand, with
+  the debugger and Share) or to the **AI Agent** (to have it used while you
+  watch), in a new tab, the files in the link as a share link carries them.
+  The playground's Share dialog offers the same way to the Agent.
+- **Tables of the app's own.** When the app keeps records, the model gives
+  it a table (`write_table`: the fields and the rows it starts with), which
+  the page writes as abapGit writes a table and creates afresh at every run —
+  the app `SELECT`s, `INSERT`s and `DELETE`s it as it would on a system, and
+  the download carries the table and its rows. **+ table** in the file strip
+  adds one for the model to use.
+- **The limits are the playground's.** No SAP tables, no RFC, only the UI5
+  libraries built in (see *What it can and cannot do*) — the model is told so,
+  and fills internal tables where a real app would read SAP's data, under a
+  `" TODO(system):` line that says which.
+- **Unit tests for the logic.** Anything that computes, validates or filters
+  gets an ABAP Unit test in the class's test include; every run runs it, and a
+  failing test is fixed like any other problem. A screen with no logic of its
+  own gets none.
+- **A handover record in the zip.** **Download for abapGit** puts
+  `HANDOVER.md` beside the class: what you asked for, the files, the checks
+  that ran and at which release (abaplint, the abap2UI5 linter), the unit
+  tests, what was tried in the running app, the places left to connect on
+  your system — and what "checked" does not mean.
 
 The select in the chat's header picks the model and how long it thinks:
 **Balanced** (Opus 5.5, the default), **Thorough** (Opus 5.5, thinking longer)
@@ -318,8 +344,8 @@ real app on the right, built in your browser. It is written by hand, says
 so, and sends nothing anywhere.
 ## Let Claude operate an app
 
-**Still being built, and not linked from the playground either:** the **AI
-Agent** has a page of its own, [`/playground/pilot/`](https://abap2ui5.github.io/playground/pilot/).
+The **AI Agent** has a page of its own, [`/playground/pilot/`](https://abap2ui5.github.io/playground/pilot/),
+in the same tool menu.
 Where the AI App Builder builds an app, the Agent *uses* one: the app runs on the
 stage, the chat stands beside it, and you say what you want done — *"greet
 Carol"*, *"open the value help sample and pick the third colour"*. Claude reads

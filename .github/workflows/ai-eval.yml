@@ -15,7 +15,10 @@ name: ai-eval
 #
 # It needs a key, billed for every run: the repository secret
 # ANTHROPIC_API_KEY. Without it the job says so in its summary and stops -
-# a fork, or a repository that never set it up, gets a green no-op.
+# a fork gets a green no-op. abap2UI5/playground itself does not: there the
+# missing secret is a warning on every run and a red job on the weekly and
+# the hand-started ones, because thirteen green runs of six seconds each
+# (2026-10 to 2026-11) read as "measured" when nothing had been.
 
 on:
   # After a pin bump has merged: the guide in the prompt moved with it.
@@ -51,8 +54,9 @@ concurrency:
 jobs:
   eval:
     runs-on: ubuntu-latest
-    # Eight tasks of up to thirteen minutes each, and the build.
-    timeout-minutes: 120
+    # Twelve tasks of up to thirteen minutes each - twenty-three for the one
+    # with a follow-up message - and the build.
+    timeout-minutes: 180
     env:
       AI_EVAL_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       AI_EVAL_SPEED: ${{ inputs.speed || 'balanced' }}
@@ -61,7 +65,17 @@ jobs:
     steps:
       - name: Without a key there is nothing to measure
         if: env.AI_EVAL_KEY == ''
-        run: echo "Skipped - the repository has no ANTHROPIC_API_KEY secret." >> "$GITHUB_STEP_SUMMARY"
+        env:
+          HOME_REPOSITORY: ${{ github.repository == 'abap2UI5/playground' }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          echo "Skipped - the repository has no ANTHROPIC_API_KEY secret, so nothing was measured." >> "$GITHUB_STEP_SUMMARY"
+          if [ "$HOME_REPOSITORY" = "true" ]; then
+            echo "::warning::ai-eval measured nothing: set the repository secret ANTHROPIC_API_KEY"
+            # A push is somebody's merge, which did nothing wrong; the
+            # weekly run and a run started by hand are asked for a number.
+            if [ "$EVENT" != "push" ]; then exit 1; fi
+          fi
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: env.AI_EVAL_KEY != ''

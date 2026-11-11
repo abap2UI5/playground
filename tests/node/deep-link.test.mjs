@@ -9,11 +9,13 @@ import assert from "node:assert/strict";
 import {
   REPOSITORY_HOSTS,
   fetchLinkedFiles,
+  followNavigation,
   forgetOrigins,
   humanUrl,
   instantiatedClasses,
   originOf,
   rawFor,
+  usedTables,
 } from "../../src/shell/deep-link.mjs";
 
 const PAGE = "https://abap2ui5.github.io/playground/";
@@ -113,4 +115,56 @@ test("the classes a source needs from beside it - not the framework's, not a com
     "    z2ui5_cl_util=>x( ). cl_abap_typedescr=>describe( ). NEW lcl_local( ).",
   ].join("\n");
   assert.deepEqual(instantiatedClasses(source).sort(), ["zcl_created", "zcl_detail", "zcl_typed", "zcl_util"]);
+});
+
+test("the tables of the reader's own a source reads or writes - not SAP's, not a class, not a comment's", () => {
+  const source = [
+    "* reads zfrom_comment",
+    "    SELECT * FROM zorders INTO TABLE @DATA(orders).",
+    "    SELECT a~id FROM zhead AS a INNER JOIN zitem AS b ON a~id = b~id INTO TABLE @DATA(x).",
+    "    SELECT * FROM vbak INTO TABLE @DATA(y).",
+    "    INSERT zlog FROM @entry. UPDATE zstock SET qty = 1. MODIFY zprice FROM TABLE @p. DELETE FROM zold WHERE id = 1.",
+    "    INSERT INTO ynote VALUES @n.",
+    "    DATA rows TYPE STANDARD TABLE OF zrow WITH EMPTY KEY. DATA one TYPE zone.",
+    "    DATA o TYPE REF TO zcl_other. DATA s TYPE string.",
+  ].join("\n");
+  assert.deepEqual(usedTables(source).sort(), ["zhead", "zitem", "zlog", "zold", "zone", "zorders", "zprice", "zrow", "zstock", "ynote"].sort());
+});
+
+test("a table file is a link of its own, and a linked class brings its table and the rows from data/", async (t) => {
+  // Linked by name: the definition and the rows, beside the class.
+  const files = await fetchLinkedFiles(params(
+    "https://raw.githubusercontent.com/o/r/main/src/zcl_app.clas.abap",
+    "https://raw.githubusercontent.com/o/r/main/src/zorders.tabl.xml",
+    "https://raw.githubusercontent.com/o/r/main/data/zorders.tabu.json",
+  ));
+  assert.deepEqual(files.map((f) => f.name), ["zcl_app.clas.abap", "zorders.tabl.xml", "zorders.tabu.json"]);
+
+  // Followed: the class SELECTs from ztasks; its definition is next to it,
+  // its rows under ../data/ where abapGit and the playground's export put them.
+  forgetOrigins();
+  const TABLE = "<?xml version=\"1.0\"?>\n<abapGit>\n <DD02V><TABNAME>ZTASKS</TABNAME></DD02V>\n</abapGit>\n";
+  t.mock.method(globalThis, "fetch", async (href) => {
+    const url = String(href);
+    requested.push(url);
+    if (url.endsWith("/src/zcl_app.clas.abap")) return new Response("CLASS zcl_app DEFINITION PUBLIC.\nENDCLASS.\nCLASS zcl_app IMPLEMENTATION.\n  METHOD x.\n    SELECT * FROM ztasks INTO TABLE @DATA(t).\n  ENDMETHOD.\nENDCLASS.\n");
+    if (url.endsWith("/src/ztasks.tabl.xml")) return new Response(`\uFEFF${TABLE}`);
+    if (url.endsWith("/data/ztasks.tabu.json")) return new Response("[ { \"id\": 1 } ]\n");
+    return new Response("Not Found", { status: 404 });
+  });
+  const linked = await fetchLinkedFiles(params("https://raw.githubusercontent.com/o/r/main/src/zcl_app.clas.abap"));
+  const followed = await followNavigation(linked);
+  assert.deepEqual(followed.map((f) => f.name), ["ztasks.tabl.xml", "ztasks.tabu.json"]);
+  assert.equal(originOf("ztasks.tabu.json"), "https://raw.githubusercontent.com/o/r/main/data/ztasks.tabu.json");
+  // A table that is not there is not an error, and costs one request.
+  forgetOrigins();
+  requested = [];
+  t.mock.method(globalThis, "fetch", async (href) => {
+    requested.push(String(href));
+    if (String(href).endsWith(".clas.abap")) return new Response("CLASS zcl_b DEFINITION PUBLIC.\nENDCLASS.\n* nothing\nSELECT * FROM zgone INTO TABLE @DATA(t).\n");
+    return new Response("Not Found", { status: 404 });
+  });
+  const lone = await followNavigation(await fetchLinkedFiles(params("https://raw.githubusercontent.com/o/r/main/src/zcl_b.clas.abap")));
+  assert.deepEqual(lone, []);
+  assert.deepEqual(requested.filter((r) => r.includes("zgone")), ["https://raw.githubusercontent.com/o/r/main/src/zgone.tabl.xml"]);
 });
