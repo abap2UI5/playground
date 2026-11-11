@@ -137,11 +137,18 @@ export function setUpTabs(appOnly = false) {
 // knows where they are, and the order a keyboard meets them in is the order
 // on screen at either width. Until this runs the stylesheet keeps them off
 // the phone's row, so the row does not first wrap and then snap back.
+//
+// Between the phone and a wide desk (821-1279px) the row still wrapped to two:
+// at 1024px every Run started a row below the bar. There only the controls
+// marked `data-overflow="early"` move - the UI5 floor, Compare, Reset, Full
+// screen and About, none of which is wanted on every Run - and Format, Auto,
+// Share and Source stay on the row. Same elements, same mechanism.
 export function setUpToolbarMenu() {
   const toggle = document.getElementById("toolbar-more");
   const menu = document.getElementById("toolbar-menu");
   if (!toggle || !menu) return;
   const narrow = window.matchMedia("(max-width: 820px)");
+  const medium = window.matchMedia("(max-width: 1279px)");
   // Each control's place in the row, held by an empty comment before it, so
   // it goes back exactly where it was.
   const places = [...document.querySelectorAll(".toolbar > [data-overflow]")].map((control) => {
@@ -156,14 +163,22 @@ export function setUpToolbarMenu() {
     toggle.setAttribute("aria-expanded", "false");
     if (focus) toggle.focus();
   };
+  const inMenu = (control) => narrow.matches || (medium.matches && control.dataset.overflow === "early");
   const place = () => {
     close();
     for (const { control, mark } of places) {
-      if (narrow.matches) menu.append(control);
+      if (inMenu(control)) menu.append(control);
       else mark.after(control);
     }
+    // The button names what is behind it, which is not the same list at the
+    // two widths.
+    const names = [...menu.children].map(menuName).filter(Boolean);
+    const label = `More: ${names.join(", ")}`;
+    toggle.title = label;
+    toggle.setAttribute("aria-label", label);
   };
   narrow.addEventListener("change", place);
+  medium.addEventListener("change", place);
   place();
 
   toggle.addEventListener("click", () => {
@@ -191,4 +206,13 @@ export function setUpToolbarMenu() {
     const chosen = e.target instanceof Element ? e.target.closest("button, a") : null;
     if (chosen && chosen.id !== "autorun") close();
   });
+}
+
+// A control's short name in the menu button's label: the word it shows in
+// the menu where it has one, else its own text.
+function menuName(control) {
+  const word = control.querySelector(".menu-word")?.textContent.trim();
+  if (word) return word.replace(/ with original| to original/, "");
+  if (control.id === "fullscreen") return "Full screen";
+  return control.textContent.trim().split("\n")[0];
 }

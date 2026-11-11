@@ -238,3 +238,14 @@ export async function linkedFiles(url) {
   const linked = checkFileSet(await fetchLinkedFiles(new URLSearchParams([["src", url]])));
   return checkFileSet([...linked, ...(await followNavigation(linked))]);
 }
+
+// The files renamed (renamedFiles( ) in files.mjs) - not a pick: nothing of
+// the reader's is replaced, so nothing is kept as a draft and nothing is said
+// about one. What was opened is no longer what is on screen under these
+// names, so Compare and Reset have no original to go back to.
+export function renameInPlace(files) {
+  setFiles(files.map((f) => ({ ...f })));
+  opened = undefined;
+  openedChanged?.();
+  renderFiles();
+}

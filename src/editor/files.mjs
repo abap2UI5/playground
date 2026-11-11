@@ -213,3 +213,34 @@ export function checkFileSet(files) {
   }
   return files.map(({ name, source }) => ({ name, source }));
 }
+
+// The metadata header a catalogued sample starts with (`" @keywords …`,
+// `" @summary …`, `" @docs …`), which the editor folds the first time it shows
+// the file (monaco-editor.mjs). The 1-based last line of that leading block,
+// or 0 where there is no block of two lines or more.
+const HEADER_LINE = /^\s*" @[a-z]/i;
+export function headerEnd(lines) {
+  let end = 0;
+  while (end < lines.length && HEADER_LINE.test(lines[end])) end += 1;
+  return end >= 2 ? end : 0;
+}
+
+// The file set with one file renamed after the object it declares - and its
+// test include with it - for a reader who pasted their own class over the one
+// that was open. Undefined where that is not a clean answer: a name that is no
+// abapGit name, or one another open file already has.
+export function renamedFiles(files, from, declared) {
+  const parsed = parseName(from);
+  if (!parsed || parsed.include || (parsed.kind !== "clas" && parsed.kind !== "intf")) return undefined;
+  const to = `${String(declared).toLowerCase()}.${parsed.kind}.abap`;
+  if (to === from) return undefined;
+  const moves = new Map([[from, to]]);
+  for (const dependent of dependentsOf(from)) {
+    moves.set(dependent, dependent.replace(from.replace(/\.(clas|intf)\.abap$/, ""), to.replace(/\.(clas|intf)\.abap$/, "")));
+  }
+  const others = files.map((f) => f.name).filter((n) => !moves.has(n));
+  for (const name of moves.values()) {
+    if (others.includes(name) || !parseName(name)) return undefined;
+  }
+  return { to, files: files.map((f) => ({ name: moves.get(f.name) ?? f.name, source: f.source })) };
+}

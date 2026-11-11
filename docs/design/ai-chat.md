@@ -385,3 +385,23 @@ talks to a model or needs a key.
   only while the reader is at its end. Errors are
   said in the chat by `explainError( )` from the SDK's typed errors; a refused
   key brings the key form back.
+
+## The worked example — `src/shell/ai-demo.json`
+
+Without a key the studio's welcome was a key form and nothing else: nobody
+could see what the tool does before paying for it. **Watch an example**
+(`watchExample( )` in `chat.mjs`, offered while no key is held) plays a
+worked build into the log - the request, two answers, the Wrote/Ran rows -
+and puts its class into the editor and runs it through the same host the
+model uses (`host.setFiles( )`, `host.run( )`), so the app on the right is a
+real one built here against the pin, not a picture. The data is a chunk
+reached only from `chat.mjs`, so it stays out of the precache with the rest
+of the AI pages.
+
+It is **written by hand, and says so** in its first line - not a recording of
+a model, which would need a key to make and would be one model's one run.
+`tests/ai.spec.js` holds it to the pin (the app starts, its controls are
+there) and to sending nothing to the model API. It is not kept as a
+conversation: there is no turn behind it for a model to take up. To replace
+it with a recorded run, keep the same shape (`prompt`, `steps` of
+`assistant`/`did`, `files`) and keep the first line honest about what it is.

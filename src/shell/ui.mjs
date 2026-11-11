@@ -7,6 +7,9 @@ const statusEl = () => document.getElementById("status");
 export function setStatus(text, isError = false) {
   const el = statusEl();
   el.textContent = text;
+  // The bar cuts a long status with an ellipsis rather than wrapping (shell.css,
+  // `.toolbar > .status`), so the whole sentence is on hover too.
+  el.title = text;
   el.classList.toggle("error", isError);
   // The same line in the app frame's placeholder while that is still on
   // screen (src/shell/index.html): the toolbar's status is 12px in a corner,
@@ -43,6 +46,12 @@ export function setStatus(text, isError = false) {
 //
 // Kept here rather than in insight.mjs because everything that reports already
 // calls these two, and the panel is a detail of where the text ends up.
+// An entry may carry one action - a button under the text that does the thing
+// the text says would help ({ label, act }), such as renaming a file to the
+// class it declares. Never more than one: a log is not a menu. And it says
+// whether it is about the reader's own code (`reader`) - then the Log offers
+// no "Report this" (insight-log.mjs): a loop that never ends or a statement
+// the transpiler refuses is not the page's to fix.
 let log = { title: "", body: "" };
 const listeners = new Set();
 
@@ -52,8 +61,8 @@ const announce = () => {
   for (const fn of listeners) fn(currentLog());
 };
 
-export function showOutput(title, body) {
-  log = { title, body };
+export function showOutput(title, body, { action, reader = false } = {}) {
+  log = { title, body, ...(action ? { action } : {}), ...(reader ? { reader } : {}) };
   announce();
 }
 

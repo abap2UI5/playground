@@ -156,3 +156,34 @@ test("two runs at once do not race", async ({ page }) => {
   await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
   await expect(page.frameLocator("#app").getByText(MAIN_MARK)).toBeVisible();
 });
+
+// Pasting one's own class over the open one is the first thing an ABAP
+// developer tries, and the file still carries the sample's name. Run says why
+// it cannot start, and offers the rename - it never does it unasked.
+test("a class pasted over the open one gets the file renamed after it on request", async ({ page }) => {
+  await open(page);
+  const pasted = (await getSource(page)).replaceAll(MAIN_FILE.replace(".clas.abap", ""), "zcl_mine");
+  await setSource(page, pasted);
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toHaveText("the playground cannot start this");
+  const offer = page.locator(".log-action");
+  await expect(offer).toHaveText("Rename the file to zcl_mine.clas.abap and run");
+  expect(await openFiles(page)).toEqual([MAIN_FILE]);
+
+  await offer.click();
+  await expect(page.locator("#status")).toHaveText("running");
+  expect(await openFiles(page)).toEqual(["zcl_mine.clas.abap"]);
+  expect(await getSource(page, "zcl_mine.clas.abap")).toBe(pasted);
+});
+
+test("the rename is not offered when the declared name is taken by another open file", async ({ page }) => {
+  await open(page);
+  await runSample(page, "navigation");
+  const [app, called] = sampleFiles("navigation");
+  const source = await getSource(page, app);
+  await setSource(page, source.replaceAll(app.replace(".clas.abap", ""), called.replace(".clas.abap", "")), app);
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toHaveText("the playground cannot start this");
+  await expect(page.locator(".log-body")).toContainText("the name and the file go together");
+  await expect(page.locator(".log-action")).toHaveCount(0);
+});

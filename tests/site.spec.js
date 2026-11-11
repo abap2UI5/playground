@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { getSource, MAIN_CLASS, open, setSource } from "./helpers.mjs";
 
 test("the page loads clean", async ({ page }) => {
   const errors = [];
@@ -174,4 +175,32 @@ test("a startup failure says what went wrong, not only where", async ({ page }) 
   // frames with nothing saying what had happened. See describeError( ) in
   // src/shell/ui.mjs.
   await expect(page.locator(".log-body")).toContainText("corpus.json: 503");
+});
+
+// What the page itself got wrong carries a prefilled issue, opened in a new
+// tab and sent nowhere until it is submitted there; the code goes along only
+// when asked. What is about the reader's own code does not.
+test("a startup failure offers a prefilled issue, with the code only on request", async ({ page }) => {
+  await page.route("**/editor/corpus.json", (route) => route.fulfill({ status: 503, body: "" }));
+  await page.goto("/");
+  await expect(page.locator("#status")).toHaveText("the playground could not start", { timeout: 120000 });
+  const report = page.locator(".log-report a");
+  await expect(report).toHaveText("Report this");
+  await expect(report).toHaveAttribute("target", "_blank");
+  const url = new URL(await report.getAttribute("href"));
+  expect(url.origin + url.pathname).toBe("https://github.com/abap2UI5/playground/issues/new");
+  expect(url.searchParams.get("title")).toMatch(/^Startup: /);
+  expect(url.searchParams.get("body")).toContain("corpus.json: 503");
+  expect(url.searchParams.get("body")).not.toContain("The code:");
+
+  await page.locator(".log-report input[type=checkbox]").check();
+  await expect.poll(async () => new URL(await report.getAttribute("href")).searchParams.get("body")).toContain("- The code: http");
+});
+
+test("a file that does not match its class is the reader's to fix, and offers no report", async ({ page }) => {
+  await open(page);
+  await setSource(page, (await getSource(page)).replaceAll(MAIN_CLASS, "zcl_mine"));
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toHaveText("the playground cannot start this");
+  await expect(page.locator(".log-report")).toHaveCount(0);
 });

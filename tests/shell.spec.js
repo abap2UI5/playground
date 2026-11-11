@@ -851,3 +851,44 @@ test("?gist= opens a gist's ABAP with the app first, and the Share dialog writes
   await expect(page.locator("#share-gist-caution")).toHaveCount(0);
   await expect(page.locator("#share-gist-token")).toBeEnabled();
 });
+
+// A long status used to wrap the bar at desk width, and the editor moved down
+// by a row the moment an error appeared. The status gives way first now.
+for (const width of [1024, 1440]) {
+  test(`at ${width}px a long status does not move the editor`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await open(page);
+    const top = () => page.locator(".monaco-editor").evaluate((e) => Math.round(e.getBoundingClientRect().top));
+    const before = await top();
+    await page.locator("#status").evaluate((e) => {
+      e.textContent = "running - the code on screen has 1 error, said at a length no bar has room for";
+    });
+    expect(await top()).toBe(before);
+  });
+}
+
+// Between the phone and a wide desk only the controls marked
+// data-overflow="early" go behind the ⋯ button; the rest stay on the row, and
+// the button names what it holds.
+test("a narrow desk keeps the row and puts the rarely used five in the menu", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await open(page);
+  const more = page.locator("#toolbar-more");
+  await expect(more).toBeVisible();
+  await expect(more).toHaveAttribute("aria-label", "More: Check against UI5, Compare, Reset, Full screen, About");
+  for (const id of ["#format", "#autorun", "#share", "#source-link"]) {
+    await expect(page.locator(`.toolbar > ${id}`)).toBeVisible();
+  }
+  await more.click();
+  for (const id of ["#ui5-floor", "#compare", "#reset-original", "#fullscreen", "#about"]) {
+    await expect(page.locator(`#toolbar-menu ${id}`)).toBeVisible();
+  }
+  await page.locator("#about").click();
+  await expect(page.locator("#about-dialog")).toBeVisible();
+
+  // And back at a wide desk nothing is in the menu and the button is gone.
+  await page.keyboard.press("Escape");
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(more).toBeHidden();
+  await expect(page.locator(".toolbar > #fullscreen")).toBeVisible();
+});

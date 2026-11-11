@@ -61,7 +61,16 @@ config rather than `tests/helpers.mjs`, because most specs open the page with
   its four buttons, closing for good) and the lesson bar.
 - `original.spec.js` - Compare with the original (the diff dialog) and Reset
   to it, one Ctrl+Z away.
-- `ui5-floor.spec.js` - the bar's UI5 select and the lint tab kept in step,
+- `csp.spec.js` - the playground's own Content-Security-Policy: no violation
+  through boot, Run, the debugger, the samples dialog and both AI pages.
+- `a11y.spec.js` - axe-core's WCAG 2.x A/AA rules over the page's own markup
+  (Monaco and the app frame left out): after boot, the samples, share and
+  about dialogs, light and dark, and the phone's row and menu. Serious and
+  critical fail. One allowance, scoped to its node: the tool's name in the
+  family accent (#d03c4a on #f4f5f7, 4.34:1) - the accent is the family's to
+  change, not this page's. Its first run found the ⋯ menu's Reset and Compare
+  named differently from what they show (`label-content-name-mismatch`).
+- `ui5-floor.spec.js` - the bar's UI5 select and Config → abap2UI5 lint kept in step,
   stored, and the check run again.
 - `layout-editor.spec.js` - Open in Layout Editor's two hand-overs (`?src=`
   for an unchanged GitHub class, clipboard + `#playground=` otherwise).

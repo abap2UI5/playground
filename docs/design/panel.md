@@ -18,8 +18,21 @@ view as a node and knows nothing of the strip: `insight-problems.mjs`,
 of the stored height without changing it, so the panel comes back to the
 height the reader gave it once there is something to show; growing back waits
 1.2 s (`SETTLE_MS`) so typing that briefly clears a list does not make the
-panel jump. A drag keeps its height until another tab is opened. The two
-Config tabs scroll, with Apply and Reset in a sticky row at their foot.
+panel jump. A drag keeps its height until another tab is opened. The Config
+tab scrolls, with Apply and Reset in a sticky row at its foot.
+
+**The Debugger tab grows the panel once** (`GROWS`, `growToFit( )` in
+`insight.mjs`): at the default height its toolbar, note and Breakpoints left
+Watches below the panel's edge at 1440 by 900. Clicking it grows the panel to
+what it holds, never past half the window, never below 820px, never over a
+stored or dragged height, and the grown height is not stored. Not when a
+stop opens the tab: the editor has already scrolled to the stopped line, and
+growing then pushed it off screen (`debug.spec.js` caught it).
+
+**The strip fits half of a 1280px window** with no badge lit: ten tabs (the
+two checkers share Config), an empty badge takes no room
+(`.insight-badge:empty`), tabs padded .4rem. A lit badge can still push it
+over; then it scrolls with the fades below, as on a phone.
 
 ## The View tab and its edit mode
 
@@ -137,6 +150,27 @@ in `run.mjs`, which lists the line under Problems as a `runtime`
 problem, underlines it and puts the cursor there, the way a transpiler
 error is pointed at; the frame keeps showing the framework's own error page.
 
+## The Log tab: one action, and a report
+
+The Log holds the one message the page has (`showOutput( )` in `ui.mjs`).
+An entry may carry **one action** - a button under the text that does what
+the text says would help; today only the rename offer (checkers.md). Not a
+list: a log is not a menu.
+
+**Report this** sits under every entry that is the page's own fault -
+Startup, Run, Tests, Format, Fix them, Share, Compare, Samples, Drafts, the
+linter's load - and not under what is about the reader's code: an entry
+written with `reader: true` (file and class disagree, the transpiler refused
+a statement, the ABAP ran into the 30-second watchdog), or `Link` (the link's
+code could not be read). It is a link to a new GitHub issue with the title, the message (1500
+characters at most), the version line, the browser and the page's address
+without query or fragment filled in (`issueUrl( )` in `insight-log.mjs`):
+nothing leaves the browser until the reader submits it there, which keeps
+the page's "no server, no telemetry" true. The code goes along only when the
+box is ticked, as a share link, and only while the whole address stays under
+8000 characters; past that the box unticks and says to paste the Share link
+instead. Never on an embedded playground.
+
 ## The Roundtrips tab
 
 The **Roundtrips tab** (`src/shell/roundtrips.mjs`, `roundtripsTab()` in
@@ -229,6 +263,26 @@ storage is handed in, never imported). Neither appears on an embed, on
   draft it replaces is kept and said the same way. The list is
   `build/samples/lessons.json`, written by `writeLessons( )` in
   `tools/build-site.mjs`; an empty one means no bar.
+- **The lesson's task** (`learn-path.mjs`, `exercise-check.mjs`): a lesson
+  whose class has an exercise in abap2UI5/samples' `scripts/lib/
+  exercises.json` (read from the samples pin by `readExercises( )`, kept by
+  `exercisesFrom( )` only where every pattern compiles) adds a **Task** pill
+  to the bar and a card under it: the task, **Hint** (folded) and **Check**.
+  Check runs the code (`runWhenFree( )`) and decides offline -
+  `checkExercise( )` over the views the linter rebuilt (`lintViewsFor( )`),
+  the ABAP of the open files, the Run's unit tests and abaplint's errors -
+  and says what is still missing in words, never the patterns. A solved
+  lesson is marked ✓ in the bar and stored
+  (`abap2ui5-playground:lessons-solved`, a JSON list of class names, read
+  like a typed setting and removed when empty). The card opens by itself
+  once per visit when the reader MOVES to an unsolved lesson - not on the
+  lesson the page opened on, where the first-steps strip is the guide and a
+  card over the code before anything was asked for was one thing too many -
+  and hangs over the editor's top right like the bar, so it never moves the
+  code. Why patterns and not unit tests: an exercise's test is red until it
+  is solved, which in abap2UI5/samples' `src/` would turn its CI red, and a
+  test of a UI needs a client the ABAP Unit run has not got. A pin from before
+  `exercises.json` existed has none, and the bar is what it was.
 
 `tests/onboarding.spec.js` holds both; every other spec starts with the strip
 closed ([testing.md](testing.md)).

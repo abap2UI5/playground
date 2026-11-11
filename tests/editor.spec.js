@@ -162,3 +162,15 @@ test("the pretty printer reformats the class", async ({ page }) => {
   const after = await page.evaluate(() => window.monaco.editor.getModels()[0].getValue());
   expect(after, "abaplint's pretty printer indents the section again").toContain("  PUBLIC SECTION.");
 });
+
+// The catalogue's metadata header (" @keywords, " @summary, " @docs) is folded
+// the first time a file is shown: the first line the visitor reads is the
+// class, and the text itself is untouched.
+test("the sample's metadata header is folded, and nothing of it is lost", async ({ page }) => {
+  await open(page);
+  const visible = () => page.locator("#editor .view-line").evaluateAll((lines) =>
+    lines.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top).map((l) => l.textContent.replace(/\u00a0/g, " ")));
+  await expect.poll(async () => (await visible())[1]).toContain(`CLASS ${MAIN_CLASS} DEFINITION`);
+  const source = await page.evaluate((f) => window.monaco.editor.getModel(window.monaco.Uri.parse(`file:///${f}`)).getValue(), MAIN_FILE);
+  expect(source.split("\n").slice(0, 3).every((l) => l.startsWith('" @'))).toBe(true);
+});

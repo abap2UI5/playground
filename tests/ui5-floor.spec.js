@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { getSource, MAIN_CLASS, open, setSource } from "./helpers.mjs";
+import { getSource, MAIN_CLASS, open, openConfig, setSource } from "./helpers.mjs";
 
 // "Check against UI5" in the bar (src/shell/ui5-floor.mjs): the abap2UI5
 // linter's floor, the same setting the abap2UI5 lint tab writes - one source
@@ -50,7 +50,7 @@ test("the bar's UI5 select is the lint tab's ui5, both ways, and re-runs the che
   await expect(page.locator("#status")).toContainText("checked against UI5 1.120");
   await expect(iconRow(page)).toHaveCount(0);
   expect(await page.evaluate((k) => JSON.parse(localStorage.getItem(k)), LINTER_KEY)).toEqual({ ui5: "1.120", distribution: "openui5" });
-  await page.locator('[data-insight="abap2ui5"]').click();
+  await openConfig(page, "abap2ui5");
   expect(JSON.parse(await page.locator(".config-text").inputValue()).ui5).toBe("1.120");
 
   // Changed in the tab: the select follows, including a release not on its list.

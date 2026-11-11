@@ -36,9 +36,8 @@ export function stripHtmlComments(html) {
  * this origin: the search index at /docs/, the embed's playground frame,
  * apps.json.
  *
- * NOT the playground's own document. That one runs module workers, WebAssembly
- * and Monaco's blob workers and hosts UI5 in a frame; its policy is a
- * different piece of work. */
+ * The playground's own three documents (the workbench, ai/, pilot/) carry a
+ * policy of their own - playgroundPolicy( ) below. */
 import { createHash } from "node:crypto";
 
 export function inlineScriptsIn(html) {
@@ -81,6 +80,62 @@ export function withPolicy(html) {
   const at = html.indexOf('<meta charset="utf-8">');
   if (at < 0) throw new Error("withPolicy: no <meta charset> to put the policy after");
   const meta = `<meta http-equiv="Content-Security-Policy" content="${contentSecurityPolicy(inlineScriptsIn(html))}">`;
+  const cut = at + '<meta charset="utf-8">'.length;
+  return `${html.slice(0, cut)}\n${meta}${html.slice(cut)}`;
+}
+
+/* ---- THE PLAYGROUND'S OWN DOCUMENTS ------------------------------------
+ *
+ * The workbench (index.html) and the two AI pages are the same document
+ * (tools/site-documents.mjs). What they run that the catalogue pages do not:
+ *
+ *  - two module workers (the registry, the ABAP runtime) from this origin.
+ *    The runtime evaluates each transpiled chunk with `new Function` and
+ *    instantiates SQLite's wasm - inside the worker, which a document's
+ *    <meta> policy does not reach: a worker loaded from a URL takes its
+ *    policy from its own response, and GitHub Pages sends none. So no
+ *    'unsafe-eval' and no 'wasm-unsafe-eval' here; `tests/csp.spec.js`
+ *    listens for a violation through boot, Run, the debugger and the AI pages.
+ *  - the app in a frame of this origin, whose document (dist/app/index.html)
+ *    is a document of its own and is not under this policy either.
+ *  - Monaco, which writes styles inline; so does UI5 in the frame and the
+ *    page itself (heights, the splitter): style-src keeps 'unsafe-inline'.
+ *  - fetches: this origin; raw.githubusercontent.com and
+ *    gist.githubusercontent.com (?src=, deep-link.mjs' allow list, and the
+ *    AI's read_sample); api.github.com (?gist=, writing a gist).
+ *  - the AI pages, and only they, talk to a model: api.anthropic.com, or any
+ *    OpenAI-compatible server the reader types - https anywhere, or plain
+ *    http to a local one (llm-provider.mjs). There is no list to narrow that
+ *    to, so connect-src is wide there and nowhere else.
+ *
+ * Inline scripts by hash, as above; `<base href="../">` on the AI pages is
+ * this origin. */
+export function playgroundPolicy(inlineScripts, { models = false } = {}) {
+  const connect = models
+    ? ["'self'", "https:", "http:"]
+    : ["'self'", "https://raw.githubusercontent.com", "https://gist.githubusercontent.com", "https://api.github.com"];
+  return [
+    "default-src 'self'",
+    ["script-src", "'self'", ...inlineScripts.map(hashOf)].join(" "),
+    "style-src 'self' 'unsafe-inline'",
+    // Attachments are previewed from blob: and data: URLs on the AI pages.
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data:",
+    ["connect-src", ...connect].join(" "),
+    "worker-src 'self'",
+    "frame-src 'self'",
+    "manifest-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ].join("; ");
+}
+
+/** A playground document with its policy, right after <meta charset>. */
+export function withPlaygroundPolicy(html, options) {
+  const at = html.indexOf('<meta charset="utf-8">');
+  if (at < 0) throw new Error("withPlaygroundPolicy: no <meta charset> to put the policy after");
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${playgroundPolicy(inlineScriptsIn(html), options)}">`;
   const cut = at + '<meta charset="utf-8">'.length;
   return `${html.slice(0, cut)}\n${meta}${html.slice(cut)}`;
 }

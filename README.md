@@ -10,7 +10,9 @@ browser — no server, no SAP system, no backend of any kind.
 four first steps over the editor's last lines: change the code and press Run,
 turn on Auto, edit the view in the View tab, browse the samples. ✕ or Escape
 closes it for good in this browser. While the app in the editor is one of the
-learning path's "Start here" lessons (Basics I–VII), **Lesson n of m** over the
+learning path's "Start here" lessons (Basics I–VII), each with a **Task** you
+can **Check** right there (the view, the code and the tests are checked in the
+browser; a solved lesson keeps its ✓), and **Lesson n of m** over the
 file strip steps to the lesson before or after. Neither appears on a link
 somebody sent you, an embed or the AI pages.
 
@@ -49,7 +51,9 @@ pipeline and moves the last step into the browser.
   the editor can check your classes against them.
 - **Editing.** Monaco — the editor from VS Code — with abaplint behind it:
   diagnostics against the actual framework, hover, go to definition, rename,
-  references and quick fixes. **Format** ({ } in the bar, and Shift+Alt+F, which does the same) is
+  references and quick fixes. A sample's metadata header (`" @keywords`,
+  `" @summary`, `" @docs`) is folded the first time the file is shown, so the
+  first line you read is the class; the text itself is untouched. **Format** ({ } in the bar, and Shift+Alt+F, which does the same) is
   abaplint's pretty printer with its layout fixes in front of it — indentation
   and keyword case, and also the tab, the trailing space, the double space
   after a keyword, an `=` or a bracket (padding in front of a token is kept, as
@@ -186,13 +190,30 @@ abap2UI5 holds its own shipped apps to, and therefore the floor an example
 copied out of the playground has to clear. **UI5** in the bar, after Auto
 ("Check against UI5" in the ⋯ menu on a phone), moves that floor: 1.71, 1.84,
 1.96, 1.108, 1.120 or the latest this site carries — *"my system runs 1.84,
-what will not render there?"*. It is the same setting as the abap2UI5 lint
-tab's `ui5`, kept between visits the same way.
+what will not render there?"*. It is the same setting as `ui5` under
+**Config → abap2UI5 lint**, kept between visits the same way. Below 1280px
+it sits in the ⋯ menu with Compare, Reset, Full screen and About.
 
 The two are kept apart on purpose, in the list and in what they block: an
 abaplint error means the ABAP does not compile, so Run stops and says so. An
 abap2UI5 finding means the app runs and is wrong somewhere — and the fastest
 way to understand one is to look at the app it produced, so Run goes ahead.
+
+**A class pasted over the open one** is the first thing most people try, and
+the file still carries the old name. Run refuses the pair, as a system would,
+and the Log offers *Rename the file to `<class>.clas.abap` and run* — its test
+include goes with it. Nothing is renamed unasked, and there is no offer where
+the name is taken by another open file.
+
+**abaplint's own function names** are cut from its "not found" messages
+(`Method "shell" not found` rather than `…, methodCallChain`): a closed list,
+read off abaplint's sources, so no other message loses a word.
+
+**When the page itself fails** - it does not start, a Run breaks, Format or
+Share throws - the Log carries **Report this**: a new GitHub issue with the
+message, the versions and the browser filled in, sent nowhere until you
+submit it there. Your code goes along only if you tick the box (as a share
+link). Your own ABAP's problems carry no such link.
 
 **A missing full stop** is said as one. abaplint reports a statement it cannot
 parse as *"Statement does not exist in the configured ABAP version (or a parser
@@ -207,8 +228,8 @@ one edit per file, so Ctrl+Z takes the whole rewrite back rather than unpicking
 it fix by fix. Nothing that has no correct answer is guessed at: an icon that
 does not exist stays reported rather than invented.
 
-Both lists are only a default. The **abaplint** and **abap2UI5 lint** tabs hold
-the live configuration: add any of abaplint's 188 rules, change the ABAP release
+Both lists are only a default. The panel's **Config** tab holds the live
+configuration of both, one at a time behind the switch at its top: add any of abaplint's 188 rules, change the ABAP release
 the syntax check holds you to, or lower the UI5 floor the view is checked
 against to find a control an older system would not render. Apply reports how
 many problems there are now, so a rule can be tried rather than argued about,
@@ -290,6 +311,11 @@ fallback model the API picks rather than dropped. The SDK and
 the guide are a chunk of their own (~70 KB compressed), downloaded only by
 somebody who sends a message.
 
+
+**No key yet?** The welcome offers **Watch an example**: a worked build of a
+to-do list played into the chat, its class put into the editor and run — a
+real app on the right, built in your browser. It is written by hand, says
+so, and sends nothing anywhere.
 ## Let Claude operate an app
 
 **Still being built, and not linked from the playground either:** the **AI

@@ -36,10 +36,11 @@ read them before touching `tools/` or `src/runtime/`.
 | `agent-hooks.mjs` | `offerFrameBridge()` (the frames' roundtrips), the AI App Builder's and Pilot's hosts, `runForAgent()`, `addAppFiles()` |
 | `site-cache.mjs` | `keepAssetsForNextTime()` (registers `sw.js`), `discardCachedSite()` |
 | `frame-link.mjs` | The page's half of the frame line, messages only: `isolate()`, `navigate()`, `serveFrames()`, `tellFrames()`, `frameApi()`, `linkOf()`, `onFrameMessage()` |
-| `guides.mjs`, `first-steps.mjs`, `learn-path.mjs` | The first-visit hint strip and "Lesson n of m" (chunks after the first run), and the module that decides on them |
+| `guides.mjs`, `first-steps.mjs`, `learn-path.mjs` | The first-visit hint strip and "Lesson n of m" with the lesson's Task card (chunks after the first run), and the module that decides on them and hands the Check its run |
+| `exercise-check.mjs` | Pure: `exercisesFrom()` (the build's read of abap2UI5/samples' `scripts/lib/exercises.json`) and `checkExercise()` (view, source, sourceNot, tests) |
 | `original.mjs`, `compare-dialog.mjs` | Compare (± Monaco diff dialog, chunk) and Reset (⟲) against the original; `unchangedRawUrl()` |
 | `layout-editor.mjs` | The Share dialog's "Open in Layout Editor" (`?src=` or clipboard + `#playground=`) |
-| `ui5-floor.mjs` | The bar's UI5 select: the linter's `ui5` floor, kept in step with the lint tab |
+| `ui5-floor.mjs` | The bar's UI5 select: the linter's `ui5` floor, kept in step with Config → abap2UI5 lint |
 | `index.html` | The document; its inline script starts both workers, the wasm fetch and Monaco's preloads before the bundle arrives |
 | `shell.css` | The page's styles and the palette's original (`catalogue.css` copies it) |
 | `layout.mjs` | Splitter at desk width, ABAP/App tabs below 820px |
@@ -48,7 +49,7 @@ read them before touching `tools/` or `src/runtime/`.
 | `storage.mjs` | Every `localStorage` touch (access may throw) |
 | `persistence.mjs` | The draft and the file on screen between visits |
 | `drafts.mjs` | Named drafts (fifty at most), listed in the samples dialog |
-| `checker-settings.mjs` | What the two Config tabs were last set to |
+| `checker-settings.mjs` | What the two checkers' configurations (the Config tab) were last set to |
 | `theme.mjs` | The playground's light/dark switch, handed to editor and frame |
 | `theme-boot.mjs` | `THEME_BOOT`/`THEME_MENU`: the inline theme scripts every document carries (the one `localStorage` touch outside `storage.mjs`) |
 | `tool-switch.mjs` | `TOOLS`, the four abap2UI5 tools; the tool's name in every bar (playground, studio, Pilot) as the menu of all four. abap2UI5/layout-editor carries the same list - change both |
@@ -76,12 +77,13 @@ read them before touching `tools/` or `src/runtime/`.
 | `roundtrips.mjs` | The recorded roundtrips (bounded at 200, cleared per Run) |
 | `insight.mjs` | The bottom panel: strip, folding, drag, redraw, empty-tab shrink |
 | `insight-common.mjs` | What a tab may ask of the panel (`empty()`, `blockHead()`, …) |
-| `insight-<tab>.mjs` | One module per tab: `problems` (+ Fix them bar, `fixableSaid()`), `outline`, `view` (`viewTab()`), `tests` (`testsTab()`), `roundtrips` (`roundtripsTab()`), `state` (app attributes per roundtrip), `console` (WRITE output, `#console-count`), `log`, `config` (the two checkers' tabs); the Debugger tab is drawn by the `debugger.mjs` chunk |
+| `insight-<tab>.mjs` | One module per tab: `problems` (+ Fix them bar, `fixableSaid()`), `outline`, `view` (`viewTab()`), `tests` (`testsTab()`), `roundtrips` (`roundtripsTab()`), `state` (app attributes per roundtrip), `console` (WRITE output, `#console-count`), `log` (and its one action, e.g. the rename offer), `config` (one tab, a switch between the two checkers); the Debugger tab is drawn by the `debugger.mjs` chunk |
 | `highlight.mjs`, `xml-pretty.mjs` | Colour for the panel's XML/JSON; XML one element per line |
 | `chain-read.mjs`, `view-edit.mjs`, `chain-patch.mjs`, `chain-write.mjs` | View edit: chain read back by executing it; edited view matched to the shown one; change patched into the ABAP that is there; fallback rewrite in the house layout |
 | `chat.mjs` | AI App Builder on screen (chunk, its page only) |
 | `ai-agent.mjs` | AI App Builder's conversation and tools (`runTools()`, `inspect` - the debugger for one look), chunk on use |
 | `ai-starter.mjs` | The class the studio starts on |
+| `ai-demo.json` | The worked example the studio's welcome plays without a key ("Watch an example"): hand-written, says so, run through the model's own host |
 | `target-system.mjs` | The studio's target system: `TARGETS` (abaplint releases the header offers, the rules the model is told), `systemTodos()` (the `" TODO(system):` lines the download lists), `functionCalls()`/`uncheckedCallsText()` (every CALL FUNCTION - nothing else here reports one) |
 | `pilot.mjs` | AI Agent on screen and the bridge's half (chunk) |
 | `pilot-agent.mjs` | AI Agent's conversation, mirror and tools (chunk) |
@@ -102,7 +104,7 @@ read them before touching `tools/` or `src/runtime/`.
 | Module | Purpose |
 | --- | --- |
 | `editor.mjs` | The editor as the page sees it; one API answered by one of two halves |
-| `monaco-editor.mjs` | Monaco itself (0.82 MB chunk, never on `?view=app`/`full`); `lockEditor()`, `markLines()`, `showDiff()`/`closeDiff()` |
+| `monaco-editor.mjs` | Monaco itself (0.82 MB chunk, never on `?view=app`/`full`); `lockEditor()`, `markLines()`, `showDiff()`/`closeDiff()`; the one fold it offers, a sample's `" @…` metadata header (`headerEnd()` in `files.mjs`), folded once per file |
 | `file-store.mjs` | The other half: a plain file list for app-only pages |
 | `files.mjs` | File naming and checks (abapGit names, test includes, tables) |
 | `analysis.mjs` | One analysis, three readers; applies `parser-hint.mjs` |
@@ -155,7 +157,7 @@ read them before touching `tools/` or `src/runtime/`.
 | `tools/not-found-page.mjs` | `dist/404.html`, which guesses |
 | `tools/sample-sources.mjs` | The printed ABAP, one tarball per ref |
 | `tools/abap-highlight.mjs` | Build-time ABAP colouring (published: the docs import it) |
-| `tools/html.mjs` | Comment stripping and `withPolicy()` (CSP) for every written document |
+| `tools/html.mjs` | Comment stripping, `withPolicy()` (CSP) for the catalogue's documents and `withPlaygroundPolicy()` for the workbench and the two AI pages |
 | `tools/build-site.mjs` | The page, worker, linter and catalogue bundles; corpus; samples (`lessons.json`); examples; embed |
 | `tools/site-documents.mjs` | `writeIndex()`, the AI and Pilot pages, `preloadsFor()`, `writeCatalogueDocument()` |
 | `tools/service-worker.mjs` | `writeServiceWorker()`: build id, hashes, precached chunks |
@@ -164,6 +166,7 @@ read them before touching `tools/` or `src/runtime/`.
 | `tools/check-instrument.mjs` | The debug build over abap2UI5, the samples and open-abap: every object must parse instrumented |
 | `tools/serve.mjs` | Dev/test server; mounts `dist/` three ways, answers misses with `404.html` |
 | `tools/vendor-agent.mjs` | Vendors and checks `src/vendor/agent/` |
+| `tools/docs-examples-summary.mjs` | The documentation examples' measurement (Playwright's JSON report of `docs-examples.spec.js`) as the job summary's table; fails on an empty or red one |
 | `tools/ai-eval-summary.mjs` | The AI App Builder's measurement (`ai-eval.jsonl`) as the job summary's table; fails on a task without a line |
 | `tests/*.spec.js` | Playwright against the built `dist/` (`bfcache.spec.js` reads rather than runs) |
 | `tests/fixtures/debug/` | ABAP the debugger's node tests and benchmark transpile (`instrument.test.mjs`) |
@@ -192,8 +195,8 @@ npm run check:instrument  # the debugger's hooks over every sample and framework
   checkouts can test at once. `PW_WEBKIT=1` adds the WebKit project (boot, embed, shell specs).
 - `PG_DEBUG=1` builds unminified bundles with source maps.
 - `RUNNABLE_JSON=/tmp/runnable.json npm test -- docs-examples` runs the
-  documentation's runnable examples here — a measurement, not part of `npm test`
-  ([public-surfaces.md](docs/design/public-surfaces.md)).
+  documentation's runnable examples here — a measurement, not part of `npm test`,
+  run weekly by `docs-examples.yml` ([public-surfaces.md](docs/design/public-surfaces.md)).
 - `AI_EVAL_KEY=sk-ant-… npm test -- ai-eval` has a real model build the apps of
   `tests/fixtures/ai-eval-tasks.json` in the AI App Builder and writes a line per task
   to `test-results/ai-eval.jsonl` — a measurement billed to the key, not part of
@@ -208,6 +211,7 @@ npm run check:instrument  # the debugger's hooks over every sample and framework
 | `check.yml` | Every non-main branch and PR: a `lint` job (lint, typecheck, test:unit) beside four test shards — Chromium `--shard=n/3` ×3 and WebKit on its own — each building with `.github/actions/build` (caches for `deps/`, `~/.ui5`, the downport) and checking the size budget and the debug build (`check-instrument.mjs`). Two workers per runner, traces on retry, the service worker blocked except in `worker.spec.js` |
 | `pages.yml` | Pushes to `main` and **nightly**: the same lint job and four shards, a fifth runner building the artefact, deploy once all are green (`needs: [lint, test, build]`) |
 | `upstream.yml` | Weekly: build and test against upstream `HEAD` without moving pins; opens or extends an issue on failure |
+| `docs-examples.yml` | Weekly and by hand: checks out abap2UI5/docs, takes its Run-button worklist (`scripts/list-runnable.mjs --json`) and opens every example here (`tests/docs-examples.spec.js`); `tools/docs-examples-summary.mjs` writes "n of m started" and a row per failing page into the job summary, and a red run opens or extends one `docs-examples` issue. A measurement, not a gate |
 | `ai-eval.yml` | Weekly, after a merge that moves the pins or the studio's rules, and by hand: `tests/ai-eval.spec.js` against the real model with the `ANTHROPIC_API_KEY` secret, the table in the job summary (`tools/ai-eval-summary.mjs`), the lines as an artifact. A measurement, not a gate - red only when a task wrote no line; without the secret a green no-op |
 | `bump-linter.yaml` | Weekly: pins `@abap2ui5/linter` to its latest release behind the full gate |
 | `bump-sources.yaml` | Weekly: `fetch-deps.mjs --update-pins` (runtime pins together, samples pin beside) behind the full gate |
@@ -224,7 +228,7 @@ section 4). Every npm dependency is pinned **exactly**: the transpiler,
 abaplint and the linter end up inside the bundle a visitor downloads, so
 "whatever resolves today" would change the site under its own tests. The dev
 tooling is pinned the same way (eslint 10.13.0, @eslint/js 10.0.1, globals
-17.13.0, typescript 7.0.2, @xmldom/xmldom 0.9.12). Actions are pinned to
+17.13.0, typescript 7.0.2, @xmldom/xmldom 0.9.12, @axe-core/playwright 4.14.0). Actions are pinned to
 commits. Type checking is opt-in per file (`// @ts-check`); a module joins by
 adding the comment and passing.
 
@@ -253,6 +257,7 @@ Each bullet names the design doc that explains it. Keep them true.
 - The frame POSTs to its own URL because the component gets `checkLocal: true` in its component data; `window.z2ui5` no longer exists. The bridge intercepts by origin and pathname only.
 - Frame and page exchange messages only (`frame-link.mjs` ↔ `frontend-bridge.js`), never reach into each other's window or document; nothing secret goes to a frame. On `/ai/` and `/pilot/` the frame is sandboxed without `allow-same-origin`.
 - The runtime worker imports `lockdown.mjs` before anything else.
+- The workbench, `ai/` and `pilot/` carry `playgroundPolicy()` (tools/html.mjs): no `unsafe-eval`, scripts by hash, `connect-src` to this origin and GitHub - wide only on the two AI pages, for the model a reader types. A new host the page fetches from goes into that policy, or `tests/csp.spec.js` fails.
 - Run = a fresh database (SQLite reopened on the empty image, user tables rebuilt from their text) and the app restarted in place where possible.
 
 **Debugger** ([debugger.md](docs/design/debugger.md))
@@ -278,7 +283,7 @@ Each bullet names the design doc that explains it. Keep them true.
 - View edit: what nobody edited is not rewritten; what it cannot do it refuses with a sentence, never guesses.
 
 **Phone** ([phone.md](docs/design/phone.md))
-- Below 820px the toolbar is one row and every `data-overflow` control moves into its ⋯ menu (the same element, still reachable); the panel starts folded; Run brings the app forward only when it started one; autorun never moves the caret or the pane.
+- Below 820px the toolbar is one row and every `data-overflow` control moves into its ⋯ menu (the same element, still reachable); from 821 to 1279px only `data-overflow="early"` does (UI5 floor, Compare, Reset, Full screen, About); the status gives way with an ellipsis rather than wrapping the row; the panel starts folded; Run brings the app forward only when it started one; autorun never moves the caret or the pane.
 
 **AI** ([ai-chat.md](docs/design/ai-chat.md), [ai-pilot.md](docs/design/ai-pilot.md))
 - A key or token is held in memory for the visit and never stored; a key goes only to the server it was typed for. The Pilot opens a link's code only after asking (the app steers the model); the Gist section asks once a link's code has run (the playground's frame is same-origin).
@@ -367,7 +372,7 @@ sample pages' per-line markup and the 220 MB site budget
 | Boot order, workers, preloads, warm-up, chunks, `sw.js`, `site-cache.mjs`, `check-size.mjs`, `storage.mjs`, dialogs/focus | [load-time.md](docs/design/load-time.md) |
 | The narrow layout, toolbar and ⋯ menu, panel strip, Auto (`autorun.mjs`) | [phone.md](docs/design/phone.md) |
 | Format, `FORMAT_RULES`, the formatting provider | [format.md](docs/design/format.md) |
-| abaplint, the linter, Config tabs, `ui5-floor.mjs`, stored settings, the draft (`file-sets.mjs`), Fix them, Reset, the parser hint | [checkers.md](docs/design/checkers.md) |
+| abaplint, the linter, the Config tab, `ui5-floor.mjs`, stored settings, the draft (`file-sets.mjs`), Fix them, Reset, the parser hint | [checkers.md](docs/design/checkers.md) |
 | The debugger: `instrument.mjs`, `src/runtime/debug.mjs`, `debug.mjs`/`debugger.mjs`, the debug paths of `runtime-client.mjs`, `worker.mjs`, `run.mjs` | [debugger.md](docs/design/debugger.md), [runtime.md](docs/design/runtime.md) |
 | The bottom panel's tabs, View edit (`chain-*.mjs`, `view-edit.mjs`), unit tests, dumps, `guides.mjs`/`first-steps.mjs`/`learn-path.mjs` | [panel.md](docs/design/panel.md) |
 | The AI App Builder, providers, keys, attachments, `agent-hooks.mjs`, `linked-code.mjs` | [ai-chat.md](docs/design/ai-chat.md) |

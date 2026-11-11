@@ -15,7 +15,8 @@ import {
 } from "../editor/editor.mjs";
 import { declaredObjectName, entryClass } from "../editor/registry.mjs";
 import { compile } from "../editor/transpile.mjs";
-import { parseName } from "../editor/files.mjs";
+import { parseName, renamedFiles } from "../editor/files.mjs";
+import { renameInPlace } from "./file-sets.mjs";
 import { setTestResults, showInsight, updateInsight } from "./insight.mjs";
 import { announceAppHeight, announceProblems } from "./embed.mjs";
 import { clearRoundtrips, roundtripList } from "./roundtrips.mjs";
@@ -25,7 +26,7 @@ import { DEBUG_STOPPED, RUNAWAY } from "./runtime-client.mjs";
 import { compileOptions, debugCompiled, debuggerReady, debugPaused, stopDebugging } from "./debug.mjs";
 import { isDark } from "./theme.mjs";
 import { hideOutput, setStatus, showOutput } from "./ui.mjs";
-import { appOnly, frame, pilotPage } from "./page.mjs";
+import { appOnly, frame, keepsDrafts, pilotPage } from "./page.mjs";
 import { fromALink } from "./starting-files.mjs";
 import { cancelAutorun, reflectRunButton } from "./autorun.mjs";
 import { linkOf, navigate, tellFrames } from "./frame-link.mjs";
@@ -174,6 +175,29 @@ function structuralProblem(files) {
   return undefined;
 }
 
+// The way out of the commonest structural problem: somebody pasted their own
+// class over the one that was open, and the file still carries the old name.
+// Offered, never done unasked - the name is the reader's to decide - and only
+// where renamedFiles( ) has a clean answer.
+function renameOffer(files) {
+  for (const file of files) {
+    const parsed = parseName(file.name);
+    if (!parsed || parsed.include || parsed.kind === "tabl") continue;
+    const declared = declaredObjectName(file.source);
+    if (declared === undefined || declared === parsed.object) continue;
+    const renamed = renamedFiles(files, file.name, declared);
+    if (!renamed) return undefined;
+    return {
+      label: `Rename the file to ${renamed.to} and run`,
+      act: () => {
+        renameInPlace(renamed.files);
+        runWhenFree();
+      },
+    };
+  }
+  return undefined;
+}
+
 // Asks the frame to start the new Run's app without reloading its document
 // - see frontend-bridge.js. Answers false wherever that cannot be asked: the
 // first Run (no document yet), a frame whose bridge never spoke (an error
@@ -304,7 +328,8 @@ export async function run({ quiet = false } = {}) {
     const structural = structuralProblem(files);
     if (structural) {
       setStatus("the playground cannot start this", true);
-      showOutput("ABAP", structural);
+      // Not in an embed or on the AI pages: there the files are somebody else's.
+      showOutput("ABAP", structural, { action: keepsDrafts ? renameOffer(files) : undefined, reader: true });
       stopped("the code on screen cannot be started");
       return;
     }
@@ -459,7 +484,9 @@ export async function run({ quiet = false } = {}) {
       return;
     }
     setStatus("the app could not be started", true);
-    showOutput("Run", String(e.message || e));
+    // What the transpiler refused, and ABAP that never finished, are the
+    // reader's code; anything else stopping a start is the page's.
+    showOutput("Run", String(e.message || e), { reader: e?.problems?.length > 0 || e?.name === RUNAWAY });
     stopped("the code on screen did not start");
     // What the transpiler refused, at the lines it named: underlined and in
     // the Problems list, the way the checkers' findings are - the Log has

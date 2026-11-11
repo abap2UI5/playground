@@ -24,6 +24,13 @@ both are easy to undo by tidying up:
   element, put back where it was at desk width: Format, Auto, the UI5 select
   ("Check against UI5"), Share, Back to the catalog, Source, Compare with
   original, Reset to original, Full screen and About, each with its word.
+  Between 821 and 1279px (a narrow desk, where the row wrapped to two at
+  1024px) only the controls marked `data-overflow="early"` go there - the UI5
+  select, Compare, Reset, Full screen and About - and the ⋯ button's label is
+  written from what it holds. The status line's basis is 0 at every width, so
+  a long status ends in an ellipsis (whole in its title) instead of wrapping
+  the row: "running - the code on screen has 1 error" moved the editor down by
+  41px at 1280 and 1440px. `tests/shell.spec.js` holds both.
   Escape and a choice close it. Nothing is *removed*: every control is still
   reachable, one tap away, which is what `tests/shell.spec.js` holds it to,
   along with the toolbar at one row (≤ 47px) and both header rows together

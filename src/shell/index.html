@@ -257,7 +257,7 @@
 
   <!-- The abap2UI5 linter's UI5 floor, the `ui5` of the abap2UI5 lint tab -
        one setting with two faces (src/shell/ui5-floor.mjs fills it). -->
-  <label class="ui5-floor" data-overflow title="Which UI5 release the abap2UI5 linter checks the view against - not the UI5 the app runs on, which is the newest">
+  <label class="ui5-floor" data-overflow="early" title="Which UI5 release the abap2UI5 linter checks the view against - not the UI5 the app runs on, which is the newest">
     <span class="icon-glyph">UI5</span><span class="menu-word">Check against UI5</span>
     <select id="ui5-floor" disabled aria-label="Check against UI5"><option>1.71</option></select>
   </label>
@@ -281,9 +281,9 @@
        beside Source, the other thing about where the code came from: live
        only over files that were opened from something and have moved since -
        their titles say which of the two is missing. -->
-  <button id="compare" class="icon" data-overflow disabled title="Compare with the original" aria-label="Compare with the original"><span class="icon-glyph" aria-hidden="true">&#xB1;</span><span class="menu-word">Compare with original</span></button>
-  <button id="reset-original" class="icon" data-overflow disabled title="Reset to the original" aria-label="Reset to the original"><span class="icon-glyph" aria-hidden="true">&#x27F2;</span><span class="menu-word">Reset to original</span></button>
-  <button id="fullscreen" data-overflow disabled title="Open the app on its own, in a new tab">Full screen</button>
+  <button id="compare" class="icon" data-overflow="early" disabled title="Compare with the original" aria-label="Compare with original"><span class="icon-glyph" aria-hidden="true">&#xB1;</span><span class="menu-word">Compare with original</span></button>
+  <button id="reset-original" class="icon" data-overflow="early" disabled title="Reset to the original" aria-label="Reset to original"><span class="icon-glyph" aria-hidden="true">&#x27F2;</span><span class="menu-word">Reset to original</span></button>
+  <button id="fullscreen" data-overflow="early" disabled title="Open the app on its own, in a new tab">Full screen</button>
 
   <span id="versions" class="versions"></span>
   <!-- An "i" at desk width, where it is the last thing in a row of words, and
@@ -292,11 +292,14 @@
   <!-- Light or dark (theme.mjs), the same button the AI App Builder's and the
        AI Agent's bars carry beside their full screen button. -->
   <button id="theme" class="icon theme-switch" type="button" role="switch" aria-checked="false" aria-label="Dark theme" data-theme-switch data-overflow><span class="icon-glyph" aria-hidden="true">☾</span><span class="menu-word">Dark theme</span></button>
-  <button id="about" class="ghost about-button" type="button" data-overflow
+  <button id="about" class="ghost about-button" type="button" data-overflow="early"
           title="About this playground - what it is, how it works and where it stops (?)" aria-label="About this playground: what it is, how it works and where it stops"><span class="icon-glyph" aria-hidden="true">i</span><span class="menu-word">About</span></button>
 
-  <!-- What the phone's one row has no room for (layout.mjs moves it in);
-       nothing at desk width, where the button is not shown. -->
+  <!-- What the row has no room for (layout.mjs moves it in): on a phone
+       everything marked data-overflow, on a narrow desk (821-1279px) only what
+       is marked data-overflow="early" - the UI5 floor, Compare, Reset, Full
+       screen and About, the things nobody needs on every Run. At 1280px and
+       wider the button is not shown. Its label is written from what is in it. -->
   <div class="toolbar-more">
     <button id="toolbar-more" class="icon" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="toolbar-menu"
             title="More: Format, Auto, UI5, Share, Source, Compare, Reset, Full screen, About" aria-label="More: Format, Auto, UI5, Share, Source, Compare, Reset, Full screen, About">&#x22EF;</button>
@@ -655,10 +658,12 @@
             Log <span id="log-dot" class="insight-badge"></span>
           </button>
           <span class="insight-gap"></span>
-          <button type="button" data-insight="abaplint" class="insight-tab" role="tab"
-                  aria-selected="false" aria-controls="insight-body">abaplint</button>
-          <button type="button" data-insight="abap2ui5" class="insight-tab" role="tab"
-                  aria-selected="false" aria-controls="insight-body">abap2UI5 lint</button>
+          <!-- The two checkers' settings, one tab: with a tab each the strip
+               was eleven long and cut Log off at 1280px. Which checker is a
+               switch at the top of the tab (insight-config.mjs). -->
+          <button type="button" data-insight="config" class="insight-tab" role="tab"
+                  aria-selected="false" aria-controls="insight-body"
+                  title="What the two checkers check - abaplint and the abap2UI5 linter">Config</button>
         </div>
         <button type="button" id="insight-toggle" class="insight-tab insight-toggle"
                 aria-expanded="true" aria-controls="insight-body"

@@ -411,8 +411,8 @@ the write in `build-site.mjs` and `sample-pages.mjs`): this origin, the
 inline scripts by hash of the very text written, images from anywhere over
 https, nothing else. `tests/sample-pages.spec.js` reads every page kind back
 for a hash per inline script and for the inline handler no hash can allow.
-The playground's own document has none yet — module workers, WebAssembly,
-Monaco's blob workers and UI5 in a frame are a separate piece of work.
+The playground's own three documents carry one of their own since 2026-11
+(`playgroundPolicy( )`, [runtime.md](runtime.md)).
 
 **The catalogue draws first and writes second.** `render( )` runs on every
 keystroke; the URL and the position memory follow 200ms later, once, in a

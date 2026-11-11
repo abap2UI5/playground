@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { existsSync, readFileSync } from "node:fs";
-import { MAIN_FILE, openFiles, pickSample } from "./helpers.mjs";
+import { getSource, MAIN_FILE, openFiles, pickSample, setSource } from "./helpers.mjs";
 
 // Guided first steps (src/shell/guides.mjs): the hint strip a first visit
 // gets over the editor, and the lesson bar while the app is one of
@@ -174,4 +174,59 @@ test("the lesson bar steps through Start here and follows the app", async ({ pag
   // An app off the path and the bar is gone.
   await pickSample(page, "table");
   await expect(page.locator(".lesson")).toBeHidden();
+});
+
+// A lesson with an exercise (abap2UI5/samples, scripts/lib/exercises.json)
+// carries a Task button; Check runs the code and decides offline, and a solved
+// lesson is marked and remembered. Skipped on a samples pin from before the
+// exercises existed.
+const WITH_EXERCISE = LESSONS.filter((l) => l.exercise).length;
+
+test("a lesson's task is checked, solved, marked and remembered", async ({ page }) => {
+  test.skip(!LESSONS[1]?.exercise, "the pinned samples carry no exercises");
+  await boot(page);
+  await page.getByRole("button", { name: "Close the first steps" }).click();
+  await settle(page);
+  // Not opened by itself on the lesson the page opened on.
+  const card = page.locator("#lesson-card");
+  await expect(card).toBeHidden();
+  await page.locator(".lesson-task").click();
+  await expect(card).toBeVisible();
+  await expect(card).toContainText(LESSONS[1].exercise.task);
+
+  await card.getByRole("button", { name: "Check" }).click();
+  await expect(card.locator(".lesson-card-verdict")).toHaveText(/^Not yet: /, { timeout: 60000 });
+  await card.getByRole("button", { name: "Hint" }).click();
+  await expect(card.locator(".lesson-card-hint")).toHaveText(LESSONS[1].exercise.hint);
+
+  await setSource(page, (await getSource(page)).replace("greeting = |Hello { name }!|.", "greeting = |Good morning, { name }!|."));
+  await card.getByRole("button", { name: "Check" }).click();
+  await expect(card.locator(".lesson-card-verdict")).toHaveText(/^Solved/, { timeout: 60000 });
+  await expect(lesson(page)).toHaveText(`Lesson 2 of ${LESSONS.length} ✓`);
+
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText(/^running/, { timeout: 120000 });
+  await expect(lesson(page)).toHaveText(`Lesson 2 of ${LESSONS.length} ✓`, { timeout: 15000 });
+});
+
+test("a task about the view is decided on the view the linter rebuilt", async ({ page }) => {
+  test.skip(!LESSONS[0]?.exercise, "the pinned samples carry no exercises");
+  expect(WITH_EXERCISE).toBe(LESSONS.length);
+  await serveSamplesRepo(page);
+  await boot(page);
+  await page.getByRole("button", { name: "Close the first steps" }).click();
+  await page.getByRole("button", { name: `Previous lesson: ${LESSONS[0].title}` }).click();
+  await expect(lesson(page)).toHaveText(`Lesson 1 of ${LESSONS.length}`);
+  // Moved to by the reader, unsolved: the card opens by itself.
+  const card = page.locator("#lesson-card");
+  await expect(card).toBeVisible({ timeout: 30000 });
+  const file = `${LESSONS[0].class}.clas.abap`;
+  const source = await getSource(page, file);
+  const solved = source
+    .replace("v = `Hello World`", "v = `Hello Ada`")
+    .replace("      client->view_display( view->stringify( ) ).", "      page->tag( `Text` )->a( n = `text` v = `I am learning abap2UI5` ).\n      client->view_display( view->stringify( ) ).");
+  expect(solved).not.toBe(source);
+  await setSource(page, solved, file);
+  await card.getByRole("button", { name: "Check" }).click();
+  await expect(card.locator(".lesson-card-verdict")).toHaveText(/^Solved/, { timeout: 60000 });
 });

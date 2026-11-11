@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { clickEditor, getSource, MAIN_CLASS, MAIN_FILE, MAIN_MARK, open, setSource } from "./helpers.mjs";
+import { clickEditor, getSource, MAIN_CLASS, MAIN_FILE, MAIN_MARK, open, openConfig, setSource } from "./helpers.mjs";
 
 // Autofix, and the way back to code that came from a link.
 
@@ -8,7 +8,7 @@ test("abaplint's fixes are offered, applied, and undoable in one step", async ({
 
   // A rule with a fix, switched on through the config tab so the test does not
   // depend on the default set carrying a fixable rule.
-  await page.locator('[data-insight="abaplint"]').click();
+  await openConfig(page, "abaplint");
   const box = page.locator(".config-text");
   const config = JSON.parse(await box.inputValue());
   config.rules.sequential_blank = true;
@@ -120,7 +120,7 @@ test("linked code offers the way back to GitHub, and only code from somewhere do
 test("the fix bar says what it can fix, and which errors it leaves", async ({ page }) => {
   await open(page);
 
-  await page.locator('[data-insight="abaplint"]').click();
+  await openConfig(page, "abaplint");
   const box = page.locator(".config-text");
   const config = JSON.parse(await box.inputValue());
   config.rules.sequential_blank = { severity: "Warning", lines: 4 };

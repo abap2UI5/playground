@@ -1,0 +1,28 @@
+{
+ "_comment": "A worked example for the AI App Builder page without a key (chat.mjs, watchExample( )). Written by hand and checked by tests/ai.spec.js against the pinned framework - not a recording of a model, and the page says so.",
+ "prompt": "A to-do list where I can add, tick off and delete entries",
+ "steps": [
+  {
+   "role": "assistant",
+   "text": "A to-do list it is: an input with **Add**, the entries as a list with a checkbox each, and **Delete the done ones** to clear what is ticked.\n\nThe entries are a public table, `todos`, bound to the list - ticking a box changes `done` in the backend without a line of ABAP, and Add and Delete are two events in `main( )`."
+  },
+  {
+   "role": "did",
+   "text": "Wrote zcl_todo_list.clas.abap"
+  },
+  {
+   "role": "did",
+   "text": "Ran it - no errors, the app is running"
+  },
+  {
+   "role": "assistant",
+   "text": "It runs on the right. Type something and press **Add** (or Enter), tick an entry, then **Delete the done ones**.\n\nWhen it fits, **Download for abapGit** puts the class into a repository you can pull into your system."
+  }
+ ],
+ "files": [
+  {
+   "name": "zcl_todo_list.clas.abap",
+   "source": "CLASS zcl_todo_list DEFINITION PUBLIC.\n\n  PUBLIC SECTION.\n    INTERFACES z2ui5_if_app.\n\n    TYPES:\n      BEGIN OF ty_todo,\n        done TYPE abap_bool,\n        text TYPE string,\n      END OF ty_todo.\n\n    DATA todos    TYPE STANDARD TABLE OF ty_todo WITH EMPTY KEY.\n    DATA new_text TYPE string.\n\n  PROTECTED SECTION.\n    DATA client TYPE REF TO z2ui5_if_client.\n\n    METHODS view_display.\n\n  PRIVATE SECTION.\nENDCLASS.\n\n\nCLASS zcl_todo_list IMPLEMENTATION.\n\n  METHOD z2ui5_if_app~main.\n\n    me->client = client.\n    IF client->check_on_init( ).\n      todos = VALUE #( ( text = `Open the playground` done = abap_true )\n                       ( text = `Describe an app` )\n                       ( text = `Download it for abapGit` ) ).\n      view_display( ).\n    ELSEIF client->check_on_navigated( ).\n      view_display( ).\n    ELSEIF client->check_on_event( `ADD` ).\n      IF new_text IS INITIAL.\n        client->message_toast_display( `Type what there is to do first` ).\n        RETURN.\n      ENDIF.\n      INSERT VALUE #( text = new_text ) INTO TABLE todos.\n      CLEAR new_text.\n      client->view_model_update( ).\n    ELSEIF client->check_on_event( `CLEAR_DONE` ).\n      DELETE todos WHERE done = abap_true.\n      client->view_model_update( ).\n    ENDIF.\n\n  ENDMETHOD.\n\n\n  METHOD view_display.\n\n    DATA(view) = z2ui5_cl_ui5_view_builder=>factory(\n        )->ele( n = `View` ns = `mvc`\n            )->a( n = `displayBlock` v = `true`\n            )->a( n = `height`       v = `100%`\n            )->a( n = `xmlns`        v = `sap.m`\n            )->a( n = `xmlns:mvc`    v = `sap.ui.core.mvc` ).\n\n    DATA(page) = view->ele( `Shell`\n        )->ele( `Page`\n            )->a( n = `title` v = `My to-do list` ).\n\n    page->ele( `HBox`\n        )->a( n = `class` v = `sapUiSmallMargin`\n        )->tag( `Input`\n            )->a( n = `value`       v = client->_bind( new_text )\n            )->a( n = `placeholder` v = `What is there to do?`\n            )->a( n = `submit`      v = client->_event( `ADD` )\n            )->a( n = `width`       v = `20rem`\n        )->tag( `Button`\n            )->a( n = `text`  v = `Add`\n            )->a( n = `type`  v = `Emphasized`\n            )->a( n = `press` v = client->_event( `ADD` )\n            )->a( n = `class` v = `sapUiTinyMarginBegin`\n        )->tag( `Button`\n            )->a( n = `text`  v = `Delete the done ones`\n            )->a( n = `press` v = client->_event( `CLEAR_DONE` )\n            )->a( n = `class` v = `sapUiTinyMarginBegin` ).\n\n    page->ele( `List`\n        )->a( n = `items` v = client->_bind( todos )\n        )->a( n = `class` v = `sapUiSmallMargin`\n        )->ele( `CustomListItem`\n            )->ele( `HBox`\n                )->a( n = `alignItems` v = `Center`\n                )->tag( `CheckBox`\n                    )->a( n = `selected` v = `{DONE}`\n                )->tag( `Text`\n                    )->a( n = `text` v = `{TEXT}` ).\n\n    client->view_display( view->stringify( ) ).\n\n  ENDMETHOD.\n\nENDCLASS.\n"
+  }
+ ]
+}

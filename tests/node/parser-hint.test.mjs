@@ -4,7 +4,7 @@
 // same code through abaplint and the Problems list; these hold the shapes.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { borrowedSyntax, codeOf, explainDiagnostic, missingFullStop, statementAt } from "../../src/editor/parser-hint.mjs";
+import { borrowedSyntax, codeOf, explainDiagnostic, missingFullStop, statementAt, withoutInternals } from "../../src/editor/parser-hint.mjs";
 
 const NOT_A_STATEMENT = 'Statement does not exist in the configured ABAP version(or a parser error), "DATA"';
 const at = (line) => ({ code: "parser_error", message: NOT_A_STATEMENT, range: { start: { line, character: 4 } } });
@@ -94,4 +94,16 @@ test("a statement over several lines is read to its full stop, and nothing insid
   // The full stop comes first: a statement run into the next is asked about
   // the full stop, not about a word in the next one.
   assert.match(explainDiagnostic(refused("    DATA lv_a TYPE i"), ["    DATA lv_a TYPE i", "    lv_a++."]).message, /full stop/);
+});
+
+test("the name of the abaplint function that noticed is cut from a not-found message", () => {
+  assert.equal(withoutInternals('Method "shell" not found, methodCallChain'), 'Method "shell" not found');
+  assert.equal(withoutInternals('"lv_x" not found, findTop'), '"lv_x" not found');
+  assert.equal(withoutInternals('"<fs>" not found, FSTarget'), '"<fs>" not found');
+});
+
+test("a message that only looks like one keeps its words", () => {
+  assert.equal(withoutInternals('Method "shell" not found, check the spelling'), 'Method "shell" not found, check the spelling');
+  assert.equal(withoutInternals("Database table or view \"vbak\" not found"), "Database table or view \"vbak\" not found");
+  assert.equal(withoutInternals('Class "zcl_x" not found, methodCallChainX'), 'Class "zcl_x" not found, methodCallChainX');
 });

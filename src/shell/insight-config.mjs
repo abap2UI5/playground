@@ -1,4 +1,4 @@
-// The abaplint and abap2UI5 lint tabs: the two checkers' settings, as text
+// The Config tab - abaplint's and the abap2UI5 linter's settings: the two checkers' settings, as text
 // you can edit. JSON rather than a wall of switches: abaplint has 188 rules
 // and the playground runs nine of them, so a checkbox per rule would be a
 // screen nobody reads to reach a setting nobody wanted. What a reader
@@ -16,7 +16,7 @@ import {
 } from "../editor/registry.mjs";
 import { applyLinterSettings, linterDefaults, linterSettings, onLinterSettings } from "../editor/abap2ui5-lint.mjs";
 import { keepAbaplintSettings, keepLinterSettings } from "./checker-settings.mjs";
-import { problemsChanged } from "./insight-common.mjs";
+import { problemsChanged, redrawIf } from "./insight-common.mjs";
 
 function configEditor({ title, blurb, value, onApply, onKeep, onReset, extra, follow }) {
   const wrap = document.createElement("div");
@@ -140,7 +140,40 @@ function docsLink(href, text) {
   return p;
 }
 
-export function abaplintTab() {
+// The Config tab: the two checkers behind one tab, with a switch at its top.
+// Which one was last open is kept for the visit, not stored.
+const CHECKERS = [
+  { id: "abaplint", label: "abaplint", draw: () => abaplintTab() },
+  { id: "abap2ui5", label: "abap2UI5 lint", draw: () => linterTab() },
+];
+let checker = "abaplint";
+
+export function configTab() {
+  const wrap = document.createElement("div");
+  wrap.className = "config-switched";
+  const bar = document.createElement("div");
+  bar.className = "config-switch";
+  bar.setAttribute("role", "group");
+  bar.setAttribute("aria-label", "Which checker");
+  for (const c of CHECKERS) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.dataset.config = c.id;
+    b.className = "ghost";
+    b.textContent = c.label;
+    b.setAttribute("aria-pressed", String(c.id === checker));
+    b.addEventListener("click", () => {
+      if (checker === c.id) return;
+      checker = c.id;
+      redrawIf("config");
+    });
+    bar.append(b);
+  }
+  wrap.append(bar, (CHECKERS.find((c) => c.id === checker) ?? CHECKERS[0]).draw());
+  return wrap;
+}
+
+function abaplintTab() {
   const note = document.createElement("details");
   note.className = "config-more";
   const summary = document.createElement("summary");
@@ -172,7 +205,7 @@ export function abaplintTab() {
   });
 }
 
-export function linterTab() {
+function linterTab() {
   return configEditor({
     title: "abap2UI5 linter",
     blurb:
