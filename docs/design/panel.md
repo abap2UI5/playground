@@ -129,10 +129,46 @@ dashed and says that a new value there becomes a literal. The sheet is kept
 across the panel's redraws while the view and the pick are unchanged (a
 roundtrip landing redraws), and follows the new view after a write, the same
 control picked by its place. It does not make the editor read-only: a write
-is one edit, like Save. Not yet: picking by a click in the running app, the
-UI5 metadata's properties to choose from, binding to an attribute, adding a
-control - steps 1, 3, 4 and 5 of the concept. `tests/view-edit.spec.js`
-holds a value changed and one added with the binds intact, and a refused name.
+is one edit, like Save. `tests/view-edit.spec.js` holds a value changed and
+one added with the binds intact, and a refused name.
+
+The rest of the concept's loop, on the same sheet:
+
+- **Pick in app** (step 1): the bridge's `pick( )` (frontend-bridge.js)
+  catches the app's next click in the capture phase - nothing of the app runs
+  for it - finds the control under it (`Element.closestTo`), and says its tag
+  and its place among the controls of that tag in the main view, walked
+  through the PUBLIC aggregations' getters: a Page's back button lives in a
+  hidden aggregation, and a SimpleForm answers `getContent( )` from a list of
+  its own while the controls sit in an inner Form. `elementForPick( )` takes
+  the element of that tag and place in the reconstructed XML, and refuses
+  when the counts differ rather than guess. Escape, in the app or on the
+  page, stops picking.
+- **Bind instead of type** (step 3, `bind-options.mjs`): next to each
+  property, the app's public attributes (`publicAttributes( )`, read off the
+  class definition; references left out) as `_bind` or `_bind_edit`, the
+  editable one first for value-like properties, in the shape the chain
+  already calls the client by (`clientOf( )`). The value goes to
+  `sourceWithView( )` marked as ABAP (`ABAP_VALUE`, a private-use character,
+  view-edit.mjs) and is written as the expression, where any other changed
+  value becomes a literal; anything but a bind or an event call is refused.
+- **An event is a method arm** (step 4): "event - the name in the field"
+  writes `client->_event( \`NAME\` )` and, after the chain,
+  `withEventArm( )` puts an empty `ELSEIF client->check_on_event( \`NAME\` ).`
+  before the ENDIF of main( )'s dispatching IF, at its indentation, past
+  nested IFs; an event handled already gets none, and a main( ) without such
+  an IF is told in the status line what to add.
+- **The palette** (step 5): `PALETTE`, sap.m controls 1.71 has that show
+  something on their own, added after the picked control under its parent -
+  the one place sure to take it. The tree's shape changes, so this is the
+  full rewrite an inserted control in the XML takes, with the same refusals
+  (a comment in the chain, a variable used after it). The new control is
+  picked once the reconstruction has it, by tag and place.
+
+Still open: the UI5 metadata's properties to choose from (the linter's
+metadata is in its worker), popups and fragments, the split shape for the
+writer. `tests/node/bind-options.test.mjs` and `tests/view-edit.spec.js`
+hold the four.
 
 ## Unit tests and dumps
 

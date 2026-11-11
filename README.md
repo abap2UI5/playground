@@ -91,9 +91,13 @@ pipeline and moves the last step into the browser.
   and at run time they render nothing and log nothing.
 - **Editing the view instead of the chain.** The **View** tab shows the XML
   that reconstruction produces, coloured; **Properties** lists its controls as
-  a tree and the picked one's properties in a sheet - change a value or add
-  one, Apply, and the chain is patched where that value is; **Edit** turns
-  the whole XML around. Change the
+  a tree and the picked one's properties in a sheet - pick a control by
+  clicking it in the running app (**Pick in app**), change a value or add
+  one, bind it to a public attribute of the class instead of typing it,
+  make it raise an event (an empty `ELSEIF client->check_on_event( … )` arm
+  is added to `main( )` for you), or add a control from a small sap.m
+  palette after it; Apply, and the chain is patched where that value is.
+  **Edit** turns the whole XML around. Change the
   XML — move a control, add a property, insert a `Label` — press Save, and the
   builder chain is written again to build it, in the layout the abap2UI5
   repositories hold their chains in. An attribute you leave alone keeps the

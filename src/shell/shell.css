@@ -1173,7 +1173,10 @@ button.insight-row {
 .view-tree button[aria-current="true"] { background: var(--accent); color: var(--accent-fg); }
 .view-props { display: grid; gap: .35rem; align-content: start; font-size: 12px; }
 .view-props-title { margin: 0 0 .2rem; font: 600 13px var(--font-mono); }
-.view-prop { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: .5rem; align-items: center; }
+.view-prop { display: grid; grid-template-columns: 9rem minmax(0, 1fr) auto; gap: .5rem; align-items: center; }
+.view-prop-new { grid-template-columns: 9rem minmax(0, 1fr) auto; }
+.view-prop-bind { font-size: 12px; max-width: 9rem; }
+.view-prop input.is-abap { color: var(--accent); }
 .view-prop > span { font-family: var(--font-mono); color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; }
 .view-prop input { font: 12px var(--font-mono); padding: .2rem .4rem; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); min-width: 0; }
 .view-prop.is-bound input { border-style: dashed; }

@@ -78,8 +78,9 @@ read them before touching `tools/` or `src/runtime/`.
 | `roundtrips.mjs` | The recorded roundtrips (bounded at 200, cleared per Run) |
 | `insight.mjs` | The bottom panel: strip, folding, drag, redraw, empty-tab shrink |
 | `insight-common.mjs` | What a tab may ask of the panel (`empty()`, `blockHead()`, …) |
-| `insight-<tab>.mjs` | One module per tab: `problems` (+ Fix them bar, `fixableSaid()`), `outline`, `view` (`viewTab()`), `tests` (`testsTab()`), `roundtrips` (`roundtripsTab()`), `state` (app attributes per roundtrip), `console` (WRITE output, `#console-count`), `log` (and its one action, e.g. the rename offer), `config` (one tab, a switch between the two checkers); the Debugger tab is drawn by the `debugger.mjs` chunk |
+| `insight-<tab>.mjs` | One module per tab: `problems` (+ Fix them bar, `fixableSaid()`), `outline`, `view` (`viewTab()`, the Properties sheet, `elementForPick()`), `tests` (`testsTab()`), `roundtrips` (`roundtripsTab()`), `state` (app attributes per roundtrip), `console` (WRITE output, `#console-count`), `log` (and its one action, e.g. the rename offer), `config` (one tab, a switch between the two checkers); the Debugger tab is drawn by the `debugger.mjs` chunk |
 | `highlight.mjs`, `xml-pretty.mjs` | Colour for the panel's XML/JSON; XML one element per line |
+| `bind-options.mjs` | The Properties sheet's binds and events: `publicAttributes()`, `clientOf()`, `bindingAbap()`, `eventAbap()`, `withEventArm()` |
 | `chain-read.mjs`, `view-edit.mjs`, `chain-patch.mjs`, `chain-write.mjs` | View edit: chain read back by executing it; edited view matched to the shown one; change patched into the ABAP that is there; fallback rewrite in the house layout |
 | `chat.mjs` | AI App Builder on screen (chunk, its page only) |
 | `ai-agent.mjs` | AI App Builder's conversation and tools (`runTools()`, `inspect` - the debugger for one look), chunk on use |

@@ -572,3 +572,105 @@ test("Properties: a control picked, a value changed and one added - the chain is
   await expect(page.locator("#view-props-said")).toHaveText("not a name is not a property name.");
   expect(await getSource(page, APP)).toBe(abap);
 });
+
+// Bind instead of type, and an event as a method arm (steps 3 and 4 of the
+// visual builder): the sheet writes `client->_bind( … )` and
+// `client->_event( `…` )` as the ABAP they are, and a new event its empty
+// ELSEIF arm in main( ) - the class still compiles and runs.
+test("Properties: a property bound to an attribute, an event added with its arm in main( )", async ({ page }) => {
+  await open(page);
+  await runSample(page, SAMPLE);
+  await page.locator('[data-insight="view"]').click();
+  await expect(page.locator(".view-xml")).toContainText("<Button", { timeout: 30000 });
+  await page.locator("#view-properties").click();
+  await page.locator(".view-tree button").filter({ hasText: /^Button/ }).first().click();
+  await expect(page.locator(".view-props-title")).toHaveText("Button");
+
+  // text: bound to greeting, shown (not editable).
+  const bind = page.locator('.view-prop:has(input[data-attr="text"]) .view-prop-bind');
+  await expect(bind.locator("option")).toContainText(["bind…", "name", "name (editable)", "greeting", "greeting (editable)", "event - the name in the field"]);
+  await bind.selectOption("greeting|show");
+  await expect(page.locator('.view-prop input[data-attr="text"]')).toHaveValue("client->_bind( greeting )");
+
+  // A new property raising an event: the name typed, then "event".
+  await page.locator("#view-prop-new-name").fill("tooltip");
+  await page.locator("#view-prop-new-value").fill("say_hi");
+  await page.locator(".view-prop-new .view-prop-bind").selectOption("|event");
+  await expect(page.locator("#view-prop-new-value")).toHaveValue("client->_event( `SAY_HI` )");
+  await page.locator("#view-props-apply").click();
+  await expect(page.locator("#status")).toContainText("Button: written into the builder chain");
+
+  const abap = await getSource(page, APP);
+  expect(abap).toMatch(/n = `text`\s+v = client->_bind\( greeting \)/);
+  expect(abap).toMatch(/n = `tooltip`\s+v = client->_event\( `SAY_HI` \)/);
+  expect(abap).toContain("ELSEIF client->check_on_event( `SAY_HI` ).");
+  // The other binds stay what they were.
+  expect(abap).toContain("v = client->_bind( name )");
+  expect(abap).toContain("v = client->_event( `GREET` )");
+  // And the class still compiles and runs.
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+
+  // A name that is no event name is refused before anything is written.
+  await page.locator("#view-prop-new-name").fill("busyIndicatorDelay");
+  await page.locator("#view-prop-new-value").fill("not one");
+  await page.locator(".view-prop-new .view-prop-bind").selectOption("|event");
+  await expect(page.locator("#view-props-said")).toContainText("Type the event's name into the field first");
+});
+
+// Pick in app (step 1): the next click in the running app picks the control
+// under it in the sheet instead of pressing it - the app's own handler never
+// runs for that click.
+test("Properties: Pick in app picks the clicked control, and the click does not reach the app", async ({ page }) => {
+  await open(page);
+  await runSample(page, SAMPLE);
+  await page.locator('[data-insight="view"]').click();
+  await expect(page.locator(".view-xml")).toContainText("<Button", { timeout: 30000 });
+  await page.locator("#view-properties").click();
+  await expect(page.locator(".view-props-title")).not.toHaveText("Button");
+
+  await page.locator("#view-pick").click();
+  await expect(page.locator("#view-pick")).toHaveAttribute("aria-pressed", "true");
+  const app = page.frameLocator("#app");
+  await app.getByRole("button", { name: "Greet" }).click();
+  await expect(page.locator(".view-props-title")).toHaveText("Button");
+  await expect(page.locator('.view-prop input[data-attr="text"]')).toHaveValue("Greet");
+  await expect(page.locator("#status")).toHaveText("Button picked");
+  await expect(page.locator("#view-pick")).toHaveAttribute("aria-pressed", "false");
+  // The press did not happen: no roundtrip answered it with a message box.
+  await expect(app.locator(".sapMMessageBox")).toHaveCount(0);
+
+  // Escape stops picking; the next click presses again.
+  await page.locator("#view-pick").click();
+  await expect(page.locator("#view-pick")).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#status")).toHaveText("picking stopped");
+  await app.getByRole("button", { name: "Greet" }).click();
+  await expect(app.locator(".sapMMessageBox")).toBeVisible({ timeout: 30000 });
+});
+
+// The palette (step 5): a control added after the picked one. The shape of
+// the tree changes, so the chain is written again - with every bind and
+// event still the ABAP it was, and the app running with the new control.
+test("Properties: a control from the palette is added after the picked one, and the app shows it", async ({ page }) => {
+  await open(page);
+  await runSample(page, SAMPLE);
+  await page.locator('[data-insight="view"]').click();
+  await expect(page.locator(".view-xml")).toContainText("<Button", { timeout: 30000 });
+  await page.locator("#view-properties").click();
+  await page.locator(".view-tree button").filter({ hasText: /^Button/ }).first().click();
+  await page.locator("#view-palette").selectOption("MessageStrip");
+  await page.locator("#view-palette-add").click();
+  await expect(page.locator("#status")).toContainText("MessageStrip added after Button");
+
+  const abap = await getSource(page, APP);
+  expect(abap).toContain("`MessageStrip`");
+  expect(abap).toContain("v = `Message`");
+  expect(abap).toContain("v = client->_bind( name )");
+  expect(abap).toContain("v = client->_event( `GREET` )");
+  // The new control is the one picked now.
+  await expect(page.locator(".view-props-title")).toHaveText("MessageStrip", { timeout: 30000 });
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
+  await expect(page.frameLocator("#app").getByText("Message", { exact: true })).toBeVisible();
+});

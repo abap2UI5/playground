@@ -34,6 +34,14 @@ import { patchChain } from "./chain-patch.mjs";
 
 const no = (why) => ({ ok: false, why });
 
+// A value that is ABAP rather than text: an attribute of the edited document
+// whose value starts with this carries the expression after it -
+// `client->_bind( name )` chosen in the Properties sheet - and it is written
+// as that expression, where any other changed value becomes a literal. A
+// private-use character, which XML takes in an attribute and nobody types.
+export const ABAP_VALUE = "\uE000abap:";
+export const abapValue = (expression) => `${ABAP_VALUE}${expression}`;
+
 /**
  * Whether the view in `source` can be edited, and why not when it cannot.
  * `xml` is the view as the linter reconstructed it - the document the panel
@@ -208,6 +216,15 @@ function merge(wanted, was, node) {
       );
     }
     const before = node?.attrs.find((a) => a.name === attr.name);
+    // ABAP the sheet chose (a bind): written as the expression it is.
+    if (attr.value.startsWith(ABAP_VALUE)) {
+      const raw = attr.value.slice(ABAP_VALUE.length).trim();
+      if (!/^[a-z_][\w>-]*->_\w+\(\s*(?:[a-z_][\w>~-]*|`[A-Z][A-Z0-9_]*`)\s*\)$/i.test(raw)) {
+        return no(`\`${raw}\` is not a binding the sheet writes.`);
+      }
+      built.attrs.push({ name: attr.name, raw, boolean: false, key: "v", literal: undefined, from: before });
+      continue;
+    }
     // Untouched: the value reads exactly as it was shown, so whatever ABAP
     // produced it goes back unchanged - a bind stays a bind.
     const untouched = before !== undefined && was?.getAttribute(attr.name) === attr.value;
