@@ -64,6 +64,21 @@ pipeline and moves the last step into the browser.
   at a time), the **Console** (what the app `WRITE`s, per roundtrip), the log,
   and the configuration of each checker — editable, so "why is it not warning here?"
   has an answer you can try rather than only read.
+- **A debugger, as in SAP.** Click left of a line number (or press F9) to set a
+  breakpoint, or write `BREAK-POINT`; the next roundtrip that reaches it stops
+  there, with the line marked in the editor and the **Debugger** tab showing
+  the call stack, the locals and parameters, `me`'s attributes and the system
+  fields. F5 steps into, F6 over, F7 returns, F8 continues, Shift+F8 stops;
+  run to the cursor, Pause a program that is running, change a value with a
+  double-click, open a table as a grid, watch variables, stop when one changes
+  (a watchpoint), give a breakpoint a condition (`lv_x > 5`), stop at
+  `RAISE EXCEPTION`, hover a variable for its value. It stops in unit tests
+  and class constructors too, and the breakpoints are kept with the draft.
+  Stop ends the program and starts the app again. Only in your own classes;
+  an embedded demo has it only when its page asks for it (`data-debug`), and
+  the AI App Builder uses it too — when an app computes the wrong thing, the
+  model stops it at a line and reads the values instead of guessing
+  ([docs/design/debugger.md](docs/design/debugger.md)).
 - **A second opinion.** The [abap2UI5 linter](https://www.npmjs.com/package/@abap2ui5/linter)
   runs beside abaplint and answers a different question: abaplint says whether
   the ABAP compiles, the linter reconstructs the view your builder chain

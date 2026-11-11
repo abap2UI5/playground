@@ -14,7 +14,8 @@ import { carriedSampleFiles } from "../editor/samples.mjs";
 import { updateInsight } from "./insight.mjs";
 import { recordRoundtrip, roundtripList } from "./roundtrips.mjs";
 import { state } from "./state.mjs";
-import { RUNAWAY } from "./runtime-client.mjs";
+import { DEBUG_STOPPED, RUNAWAY } from "./runtime-client.mjs";
+import { lastStops } from "./debug.mjs";
 import { readStoredJson, removeStored } from "./storage.mjs";
 import { currentLog, setStatus, showOutput } from "./ui.mjs";
 import { aiPage, frame, pilotPage } from "./page.mjs";
@@ -97,7 +98,7 @@ export function offerFrameBridge({ room, chat, pilot }) {
         // Listed like an answer that failed: the AI's run waits for the
         // first roundtrip and read "none arrived within ten seconds",
         // with nothing in the status or the Log to say why.
-        const failed = { status: 500, body: `${e?.name === RUNAWAY ? "" : "JavaScript error in the app: "}${String(e?.message ?? e)}` };
+        const failed = { status: 500, body: `${e?.name === RUNAWAY || e?.name === DEBUG_STOPPED ? "" : "JavaScript error in the app: "}${String(e?.message ?? e)}` };
         if (e?.console) failed.console = e.console;
         recordRoundtrip({ request: body, response: failed, ms: performance.now() - started });
         // And to the AI Pilot's mirror of that tab, which otherwise never
@@ -256,6 +257,11 @@ export function setUpStudio(chat) {
       setFiles: (files) => replaceWith(checkFileSet(files), { asOpened: false }),
       run: () => runForAgent(),
       show: (name) => openFile(name),
+      // The debugger without its tab, for the `inspect` tool (ai-agent.mjs):
+      // a breakpoint set, the first stop waited for, the frame read, and the
+      // program let go again. BREAK-POINT in the model's code does not stop
+      // here - nobody would continue it.
+      debugger: studioDebugger(),
       // The last build this browser stored, for the welcome's "open it
       // again" - checked the way a draft is, so a set the editor cannot
       // hold is no build to offer.
@@ -290,6 +296,36 @@ export function setUpStudio(chat) {
     // under it to leave to.
     { startOpen: true },
   );
+}
+
+function studioDebugger() {
+  // Set up when the studio is, which can be before the runtime is up: the
+  // option goes with the first breakpoint, and is kept for a fresh worker.
+  const rt = () => state.runtime;
+  return {
+    stops: () => lastStops(),
+    arm: async (list) => {
+      await rt().debug("options", { raise: false, statements: false });
+      return rt().debug("breakpoints", { list });
+    },
+    // The next stop, or undefined after `ms`.
+    nextStop: (ms) =>
+      new Promise((resolve) => {
+        let off = () => {};
+        const timer = setTimeout(() => {
+          off();
+          resolve(undefined);
+        }, ms);
+        off = rt().onDebug((message) => {
+          if (message.event !== "paused") return;
+          clearTimeout(timer);
+          off();
+          resolve(message);
+        });
+      }),
+    watch: (paths) => rt().debug("watch", { paths }),
+    resume: () => rt().debug("resume", { how: "run" }),
+  };
 }
 
 // The AI Pilot (src/shell/pilot.mjs): the model operates the app in the

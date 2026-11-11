@@ -182,6 +182,9 @@ export function createEditor(container, files, options = {}) {
     tabSize: 2,
     renderWhitespace: "selection",
     theme: options.dark ? THEME_DARK : THEME_LIGHT,
+    // The debugger's breakpoints sit in the glyph margin, and only the
+    // playground's own page has a debugger (src/shell/debug.mjs).
+    glyphMargin: options.glyphMargin === true,
   });
   // A disposed file's markers go with it. Monaco clears them itself only for
   // its own URI schemes, not for file:/// - so every file closed, and every
@@ -238,8 +241,10 @@ export function setEditorTheme(dark) {
 // makes it visible: `.editor.is-readonly` in src/shell/shell.css greys the
 // source back and takes the caret away, the way a disabled control reads.
 // Typing was already refused; this is so nobody has to try it to find out.
+let viewReadOnly = false;
 export function setEditorReadOnly(readOnly) {
-  editor?.updateOptions({ readOnly: readOnly || locked });
+  viewReadOnly = readOnly;
+  editor?.updateOptions({ readOnly: readOnly || locked || debugLocked });
   editorContainer?.classList.toggle("is-readonly", readOnly);
 }
 
@@ -767,4 +772,169 @@ export function closeDiff() {
   diffEditor = undefined;
   for (const model of diffModels) model.dispose();
   diffModels = [];
+}
+
+// ---------------------------------------------------------------- debugger
+//
+// What the debugger (src/shell/debugger.mjs) shows in the editor: the
+// breakpoints in the glyph margin, the line the program stopped at, and the
+// value under the mouse while it is stopped. The shell decides; this only
+// draws, on the models, so a mark survives switching files and moves with
+// the text typed above it.
+
+const breakpointDecorations = new Map(); // file name -> decoration ids
+const breakpointOfDecoration = new Map(); // decoration id -> breakpoint id
+
+// [{ id, file, line, enabled, condition, verified }] - the whole set.
+export function showBreakpoints(list) {
+  const byFile = new Map();
+  for (const bp of list) {
+    if (!byFile.has(bp.file)) byFile.set(bp.file, []);
+    byFile.get(bp.file).push(bp);
+  }
+  for (const name of new Set([...breakpointDecorations.keys(), ...byFile.keys()])) {
+    const model = modelFor(name);
+    const old = breakpointDecorations.get(name) ?? [];
+    for (const id of old) breakpointOfDecoration.delete(id);
+    if (!model) {
+      breakpointDecorations.delete(name);
+      continue;
+    }
+    const wanted = (byFile.get(name) ?? []).filter((bp) => bp.line <= model.getLineCount());
+    const ids = model.deltaDecorations(old, wanted.map((bp) => ({
+      range: new monaco.Range(bp.line, 1, bp.line, 1),
+      options: {
+        stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+        glyphMarginClassName: `bp-glyph${bp.enabled ? "" : " is-off"}${bp.condition ? " is-conditional" : ""}${bp.verified === false ? " is-unverified" : ""}`,
+        glyphMarginHoverMessage: {
+          value: bp.verified === false
+            ? `Breakpoint - not stopped at: ${bp.reason ?? "no statement the debugger can stop at"}`
+            : bp.condition ? `Breakpoint if \`${bp.condition}\`` : bp.enabled ? "Breakpoint (F9 removes it)" : "Breakpoint, switched off",
+        },
+      },
+    })));
+    ids.forEach((id, i) => breakpointOfDecoration.set(id, wanted[i].id));
+    breakpointDecorations.set(name, ids);
+  }
+}
+
+// Where the breakpoints are now - lines move with edits above them.
+export function breakpointPositions() {
+  const out = [];
+  for (const [name, ids] of breakpointDecorations) {
+    const model = modelFor(name);
+    if (!model) continue;
+    for (const id of ids) {
+      const range = model.getDecorationRange(id);
+      const bp = breakpointOfDecoration.get(id);
+      if (range && bp !== undefined) out.push({ id: bp, file: name, line: range.startLineNumber });
+    }
+  }
+  return out;
+}
+
+// A click in the glyph margin, or F9 on the caret's line: the shell toggles.
+// `moved` is told whenever an edit may have moved one.
+export function onBreakpointGesture(toggle, moved) {
+  editor.onMouseDown((e) => {
+    if (e.target.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) return;
+    const line = e.target.position?.lineNumber;
+    const name = currentFile();
+    if (line && name) toggle(name, line);
+  });
+  editor.addCommand(monaco.KeyCode.F9, () => {
+    const name = currentFile();
+    const line = editor.getPosition()?.lineNumber;
+    if (line && name) toggle(name, line);
+  });
+  monaco.editor.onDidCreateModel((model) => model.onDidChangeContent(() => moved()));
+  for (const model of monaco.editor.getModels()) model.onDidChangeContent(() => moved());
+}
+
+// The caret, for "run to cursor".
+export const caretPosition = () => {
+  const line = editor?.getPosition()?.lineNumber;
+  const file = currentFile();
+  return line && file ? { file, line } : undefined;
+};
+
+// The line the program stopped at ("current") and, when the reader looks at
+// a frame further down the stack, that frame's line ("frame").
+let executionOn = new Map(); // model -> decoration ids
+export function markExecution(spots) {
+  for (const [model, ids] of executionOn) if (!model.isDisposed()) model.deltaDecorations(ids, []);
+  executionOn = new Map();
+  for (const spot of spots) {
+    const model = modelFor(spot.file);
+    if (!model || spot.line > model.getLineCount()) continue;
+    const current = spot.kind === "current";
+    const ids = model.deltaDecorations([], [{
+      range: new monaco.Range(spot.line, 1, spot.line, 1),
+      options: {
+        isWholeLine: true,
+        className: current ? "debug-line" : "debug-frame-line",
+        glyphMarginClassName: current ? "debug-arrow" : "debug-frame-arrow",
+        overviewRuler: { color: "rgba(233, 180, 0, .8)", position: monaco.editor.OverviewRulerLane.Full },
+      },
+    }]);
+    executionOn.set(model, [...(executionOn.get(model) ?? []), ...ids]);
+  }
+  const shown = spots.find((s) => s.reveal) ?? spots.find((s) => s.kind === "current");
+  if (shown && modelFor(shown.file)) {
+    if (currentFile() !== shown.file) openFile(shown.file);
+    editor.revealLineInCenterIfOutsideViewport(shown.line);
+  }
+}
+
+// While the program is stopped the text must not move under the marks.
+let debugLocked = false;
+export function setDebugLock(on) {
+  debugLocked = on;
+  editor?.updateOptions({
+    readOnly: on || viewReadOnly || locked,
+    readOnlyMessage: { value: on ? "The program is stopped - Continue (F8) or Stop (Shift+F8) to edit again." : locked ? "This example is read-only - open it in the playground to change it." : "" },
+  });
+}
+
+// The value under the mouse while stopped: `ask(path)` answers markdown.
+let debugHover;
+let hoverRegistered = false;
+export function setDebugHover(ask) {
+  debugHover = ask;
+  if (hoverRegistered) return;
+  hoverRegistered = true;
+  monaco.languages.registerHoverProvider("abap", {
+    async provideHover(model, position) {
+      if (!debugHover) return null;
+      const text = model.getLineContent(position.lineNumber);
+      const path = pathAt(text, position.column - 1);
+      if (!path) return null;
+      const value = await debugHover(path.text);
+      if (!value) return null;
+      return {
+        range: new monaco.Range(position.lineNumber, path.start + 1, position.lineNumber, path.end + 1),
+        contents: [{ value }],
+      };
+    },
+  });
+}
+
+// The variable under a column - `ls_s-comp`, `lo->attr`, `<fs>`, `sy-subrc`
+// - up to the end of the component under the mouse.
+function pathAt(text, column) {
+  const re = /<[\w/]+>(?:(?:->|-|=>)[\w/<>*~]+|\[\s*\d+\s*\])*|[\w/]+(?:(?:->|-|=>)[\w/<>*~]+|\[\s*\d+\s*\])*/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (column < m.index || column > m.index + m[0].length) continue;
+    // Cut after the component the mouse is on.
+    let end = m.index + m[0].length;
+    const rest = /(->|-|=>|\[)/g;
+    rest.lastIndex = column - m.index;
+    const after = rest.exec(m[0]);
+    if (after && after.index >= column - m.index) end = m.index + after.index;
+    const path = text.slice(m.index, end);
+    if (/^\d+$/.test(path)) return undefined;
+    return { text: path, start: m.index, end };
+  }
+  return undefined;
 }

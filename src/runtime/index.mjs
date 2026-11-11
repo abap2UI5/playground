@@ -11,6 +11,12 @@
 import "../../build/output/init.mjs";
 import { resetDatabase as reopenEmpty } from "./db-setup.mjs";
 import { snapshot } from "./app-state.mjs";
+import { installDebugger } from "./debug.mjs";
+
+// `abap.dbg`, which the debug build of the reader's classes calls
+// (src/runtime/debug.mjs). Installed before any of them is defined; the
+// framework's own classes are not instrumented and never call it.
+installDebugger(globalThis.abap);
 
 // A fresh database: the empty image again (db-setup.mjs), and in it the
 // user's own tables with the rows they start with (createUserTables( ) below).

@@ -115,7 +115,7 @@ function cut(node, count, budget) {
 // The type as ABAP would write it: the DDIC or global name it was declared
 // with where there is one (abap_bool, ztab, string_table), else the built-in
 // type with its length.
-function typeOf(t, data) {
+export function typeOf(t, data) {
   const named = qualified(data);
   if (data instanceof t.Table || data instanceof t.HashedTable) {
     const row = data.getRowType?.();

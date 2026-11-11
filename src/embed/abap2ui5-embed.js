@@ -32,6 +32,10 @@
 //   data-lines   lines to mark and scroll to, "12-18,25" - or "L42-L58", the
 //                address a sample page's line links write. In the app, the
 //                first file.
+//   data-debug   present (or "1") to give the demo the playground's debugger:
+//                breakpoints, BREAK-POINT, stepping, the variables. Off by
+//                default - without it a BREAK-POINT in the example does not
+//                stop. Ignored with data-view="app".
 //   data-reset   present to show a "Reset example" button under the demo once
 //                the reader has changed the code; it puts the page's code back
 //                (the change stays a Ctrl+Z away) and runs it.
@@ -47,7 +51,7 @@
 //                after each navigation in a framework that swaps pages without
 //                reloading - Docusaurus, VitePress and friends.
 //   url(opts)    the playground URL for `{ src, code, view, origin, readonly,
-//                lines }`, for a
+//                lines, debug }`, for a
 //                page that wants its own "open this in the playground" link
 //                rather than a frame. It is what mounting uses, so a link built
 //                with it cannot disagree with what the frame shows.
@@ -71,11 +75,14 @@
   // is what a page links when it wants "open this in the playground" next to
   // its own Run button, and it cannot get the fragment format wrong by writing
   // it itself.
-  async function playgroundUrl({ src, code, view, origin, readonly, lines }) {
+  async function playgroundUrl({ src, code, view, origin, readonly, lines, debug }) {
     const url = new URL(origin || defaultOrigin, window.location.href);
     url.searchParams.set("embed", "1");
     if (view === "app") url.searchParams.set("view", "app");
     if (readonly) url.searchParams.set("readonly", "1");
+    // The debugger, which an embed leaves out unless asked: a stop nobody
+    // expects would hold the demo. Not with view=app - there is no editor.
+    if (debug && view !== "app") url.searchParams.set("debug", "1");
     if (lines) url.searchParams.set("lines", String(lines).trim());
     for (const one of (src || "").split(/\s+/).filter(Boolean)) {
       url.searchParams.append("src", new URL(one, window.location.href).href);
@@ -98,6 +105,7 @@
     origin: el.dataset.origin,
     readonly: flag(el.dataset.readonly),
     lines: el.dataset.lines,
+    debug: flag(el.dataset.debug),
   });
 
   // What the ABAP has to be called. abapGit names a file after the object in

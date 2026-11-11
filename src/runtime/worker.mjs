@@ -26,6 +26,7 @@ import "./lockdown.mjs";
 // Then: says the script has arrived, before index.mjs starts its own work.
 import "./loaded.mjs";
 import * as runtime from "./index.mjs";
+import { debugCommand, operationEnded } from "./debug.mjs";
 
 export * from "./index.mjs";
 
@@ -52,8 +53,16 @@ if (inWorker) {
   // and resetDatabase used to land in the middle of a roundtrip still under
   // way - classes redefined and caches cleared under it, the database
   // reopened beneath its SQL. Each message now waits for the one before.
+  //
+  // Except the debugger's commands: they are answered at once, because the
+  // one moment they matter is while an operation is stopped at a breakpoint
+  // - queued behind it, a Continue would wait for ever (src/runtime/debug.mjs).
   let queue = Promise.resolve();
   self.addEventListener("message", (event) => {
+    if (event.data?.debug === true) {
+      debugCommand(event.data);
+      return;
+    }
     queue = queue.then(() => handle(event));
   });
 }
@@ -64,8 +73,10 @@ async function handle(event) {
   try {
     if (fn === undefined) throw new Error(`The ABAP runtime has no operation called ${op}.`);
     const value = await fn(...(args ?? []));
+    operationEnded(op);
     self.postMessage({ id, ok: true, value });
   } catch (e) {
+    operationEnded(op);
     // An Error does not survive structured cloning with its name and stack
     // intact in every browser, so the three fields the page reports are
     // sent as plain strings and put back together on the other side.

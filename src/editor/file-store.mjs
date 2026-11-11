@@ -143,3 +143,11 @@ export const canRedo = () => false;
 export async function applyFixes() {
   return 0;
 }
+// No editor, so no debugger marks: an app-only page offers no debugger.
+export function showBreakpoints() {}
+export const breakpointPositions = () => [];
+export function onBreakpointGesture() {}
+export const caretPosition = () => undefined;
+export function markExecution() {}
+export function setDebugLock() {}
+export function setDebugHover() {}

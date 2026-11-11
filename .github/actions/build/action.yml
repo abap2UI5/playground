@@ -47,6 +47,11 @@ runs:
     - run: node tools/check-size.mjs
       shell: bash
 
+    # The debugger's hooks over every sample and framework class
+    # (docs/design/debugger.md): each object's debug build must parse.
+    - run: node tools/check-instrument.mjs
+      shell: bash
+
     # The browser binary, keyed by the Playwright version that has to match it -
     # which is pinned in package-lock.json, so that file is the key. A hit turns
     # the download below into a no-op; a Playwright bump misses the key and

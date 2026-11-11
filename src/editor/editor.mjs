@@ -74,3 +74,12 @@ export const applyFixes = () => impl.applyFixes();
 // Compare with the original: Monaco's diff editor, from Monaco's chunk.
 export const showDiff = (container, name, originalSource) => impl.showDiff(container, name, originalSource);
 export const closeDiff = () => impl.closeDiff();
+// The debugger's marks in the editor (monaco-editor.mjs; nothing on a page
+// without one).
+export const showBreakpoints = (list) => impl.showBreakpoints(list);
+export const breakpointPositions = () => impl.breakpointPositions();
+export const onBreakpointGesture = (toggle, moved) => impl.onBreakpointGesture(toggle, moved);
+export const caretPosition = () => impl.caretPosition();
+export const markExecution = (spots) => impl.markExecution(spots);
+export const setDebugLock = (on) => impl.setDebugLock(on);
+export const setDebugHover = (ask) => impl.setDebugHover(ask);
