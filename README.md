@@ -664,7 +664,7 @@ npm ci
 npm run build     # pins deps, builds the framework, builds UI5, assembles dist/
 npm run serve     # serves dist/ on http://localhost:8080
 npm test          # Playwright, against a freshly built dist/
-npm run check     # build -> size budget -> tests, in the order that cannot go wrong
+npm run check     # build -> size budget -> debugger hooks -> tests, in the order that cannot go wrong
 npm run lint      # ESLint; with typecheck and test:unit: no build, no browser
 npm run typecheck # tsc over the modules that start with // @ts-check
 npm run test:unit # node:test over the pure modules in tests/node/
