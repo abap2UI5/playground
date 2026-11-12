@@ -46,6 +46,13 @@
   --fg-dim: #6a6d76;
   --line: #d9dbe0;
   --accent: #d03c4a;
+  /* The accent as TEXT on the sunken page (#f4f5f7): #d03c4a reads 4.35:1
+     there, under the 4.5:1 AA asks below 18.7px bold - on white it is 4.74:1,
+     which is where CONVENTION.md's table measured it. So text in the accent
+     on this page's grey takes the convention's own "accent strong", 5.83:1;
+     fills, borders and links on white keep the accent. Dark needs nothing:
+     #f0606d on #1e2024 clears AA as it is. */
+  --accent-text: #b02e3b;
   --accent-fg: #ffffff;
   --danger: #b5253a;
   --ok: #237a35;
@@ -84,6 +91,7 @@
     --fg-dim: #9a9da6;
     --line: #303338;
     --accent: #f0606d;
+    --accent-text: #f0606d;
     --accent-fg: #16171a;
     --danger: #ff8092;
     --ok: #5cc472;
@@ -101,6 +109,7 @@
   --fg-dim: #9a9da6;
   --line: #303338;
   --accent: #f0606d;
+  --accent-text: #f0606d;
   --accent-fg: #16171a;
   --danger: #ff8092;
   --ok: #5cc472;
@@ -2996,7 +3005,7 @@ body.is-pilot button.pilot-attach:hover { border-color: var(--pl-signal); }
   border-radius: 999px;
   list-style: none;
   cursor: pointer;
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -.01em;

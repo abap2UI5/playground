@@ -66,10 +66,10 @@ config rather than `tests/helpers.mjs`, because most specs open the page with
 - `a11y.spec.js` - axe-core's WCAG 2.x A/AA rules over the page's own markup
   (Monaco and the app frame left out): after boot, the samples, share and
   about dialogs, light and dark, and the phone's row and menu. Serious and
-  critical fail. One allowance, scoped to its node: the tool's name in the
-  family accent (#d03c4a on #f4f5f7, 4.34:1) - the accent is the family's to
-  change, not this page's. Its first run found the ⋯ menu's Reset and Compare
-  named differently from what they show (`label-content-name-mismatch`).
+  critical fail, with no allowance. Its first run found the ⋯ menu's Reset and
+  Compare named differently from what they show (`label-content-name-mismatch`),
+  and the tool's name in the accent at 4.35:1 on the sunken page - since
+  2026-11 it is `--accent-text` (one-site.md).
 - `ui5-floor.spec.js` - the bar's UI5 select and Config → abap2UI5 lint kept in step,
   stored, and the check run again.
 - `layout-editor.spec.js` - Open in Layout Editor's two hand-overs (`?src=`
