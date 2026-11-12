@@ -16,10 +16,10 @@ bold. So **text** in the accent on that grey (the tool's name in the three
 bars) takes `--accent-text`, which is the convention's own "accent strong"
 `#b02e3b` in light (5.83:1) and the accent itself in dark (`#f0606d` clears AA
 on `#1e2024`). Fills, borders and the logo keep `#d03c4a`. Both palettes carry
-the token (`shell.css`, `catalogue.css`). abap2UI5/layout-editor has the same
-grey (`--bg`) and the same tool name in `--accent` (`.tool-switch-name` in its
-`styles.css`) and wants the same token, its `--accent-strong` being this
-value already - not done from here yet. The documentation no longer borrows the bar, its script or
+the token (`shell.css`, `catalogue.css`), and so does abap2UI5/layout-editor's
+`styles.css`, which has the same grey and the same tool name - with
+`--accent-fg` beside it, where its dark buttons wrote white on `#f0606d`
+(3.18:1) instead of this page's dark text. The documentation no longer borrows the bar, its script or
 the stylesheets from this deployment, no longer reads the theme key or the
 site memory, and is no longer sent a dispatch after a deploy. What it still
 takes from here is a URL contract (the embed frame, `?src=`, share links) and
