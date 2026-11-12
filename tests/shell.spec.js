@@ -540,10 +540,14 @@ test("the header keeps to a few rows on a phone", async ({ page }) => {
   await page.keyboard.press("Escape");
 
   // Back at desk width the controls are in the row again, in their order.
+  // Waited for, not read once: the ⋯ button goes with the media query at
+  // once, the controls come back when the page hears the query change - in
+  // WebKit under CI load a moment later, and a single read found Format and
+  // Auto still in the menu (pages.yml on #176).
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(page.locator("#toolbar-more")).toBeHidden();
-  const order = await page.locator(".toolbar > [id]").evaluateAll((all) => all.map((c) => c.id));
-  expect(order.slice(0, 7)).toEqual(["undo", "redo", "format", "examples", "run", "autorun", "status"]);
+  await expect.poll(() => page.locator(".toolbar > [id]").evaluateAll((all) => all.map((c) => c.id).slice(0, 7)))
+    .toEqual(["undo", "redo", "format", "examples", "run", "autorun", "status"]);
   await expect(page.locator("#about")).toBeVisible();
 });
 
