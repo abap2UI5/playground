@@ -263,6 +263,9 @@ export const applyAbaplintFixes = (files) => call("applyFixes", files);
 export const loadLinter = () => call("loadLinter");
 export const useLinterSettings = (settings) => call("lintSettings", settings);
 export const applyLinterFixes = (source) => call("lintFix", source);
+// A control's properties (with their types) and events at the reader's UI5
+// floor, from the linter's metadata - the Properties sheet's choices.
+export const controlInfo = (name) => call("controlInfo", name);
 
 // Layout, over the files as they are open: abaplint's whitespace fixes and
 // then its pretty printer - see formatFiles( ) in registry-core.mjs.

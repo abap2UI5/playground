@@ -71,3 +71,22 @@ test("a new event's arm goes before the dispatching IF's own ENDIF, past a neste
   assert.equal(none.ok, false);
   assert.match(none.why, /ELSEIF client->check_on_event\( `GO` \)/);
 });
+
+test("an attribute is offered for a property whose type it fits", async () => {
+  const { bindsTo } = await import("../../src/shell/bind-options.mjs");
+  const [name, rows, flag, total] = publicAttributes(APP);
+  // A table never binds to a property.
+  assert.equal(bindsTo("string", rows), false);
+  assert.equal(bindsTo(undefined, rows), false);
+  // A boolean property: only the abap_bool.
+  assert.equal(bindsTo("boolean", flag), true);
+  assert.equal(bindsTo("boolean", name), false);
+  // A number: only a numeric type (total is LIKE sy-tabix - not a built-in, so not offered).
+  assert.equal(bindsTo("int", { name: "n", type: "i", table: false }), true);
+  assert.equal(bindsTo("float", { name: "n", type: "p LENGTH 10 DECIMALS 2", table: false }), true);
+  assert.equal(bindsTo("int", name), false);
+  assert.equal(bindsTo("int", total), false);
+  // Text-like and unknown types: any scalar.
+  assert.equal(bindsTo("sap.ui.core.URI", name), true);
+  assert.equal(bindsTo(undefined, flag), true);
+});

@@ -13,3 +13,8 @@
 // bundle like this one (its own test suite holds it to that).
 export { checkAbapSource } from "@abap2ui5/linter/check";
 export { applyFixes, isFixable } from "@abap2ui5/linter/fix";
+// The UI5 metadata snapshot the checks already carry (the same bundled
+// properties.json, read through the same fs shim - not a second copy), for
+// the View tab's Properties sheet: which properties and events a control has
+// at the reader's UI5 floor (controlInfo( ) in lint-core.mjs).
+export { loadSnapshot, withinUi5Floor } from "@abap2ui5/linter/properties";
