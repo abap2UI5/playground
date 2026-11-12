@@ -6,7 +6,12 @@
 // (transpile-core.mjs) - and this is where it shows before anybody meets it.
 //
 // It says how many methods and statements it
-// instrumented and fails on the first object that does not parse.
+// instrumented and fails on the first object that does not parse - and on
+// any statement that runs but got no hook (`blind`): the body of a CATCH or
+// CLEANUP block was one at @abaplint/transpiler 2.14.15, and a chained
+// call with a comment inside it until the comment stopped counting as a
+// statement. A breakpoint on such a line is refused, so a new kind of it
+// should be red here before a reader meets it.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -65,6 +70,7 @@ let objects = 0;
 let methods = 0;
 let statements = 0;
 const failed = [];
+const blind = [];
 for (const o of output.objects) {
   if (!o.chunk) continue;
   const code = o.chunk.getCode();
@@ -73,6 +79,7 @@ for (const o of output.objects) {
   objects++;
   methods += result.methods.length;
   statements += result.methods.reduce((n, m) => n + m.lines.length, 0);
+  for (const m of result.methods) for (const line of m.blind) blind.push(`${m.file}:${line} (${m.cls}=>${m.method})`);
   if (result.js.split("\n").length !== code.split("\n").length) failed.push(`${o.filename}: the line count changed`);
   // Only what the hooks broke counts: some of open-abap's kernel classes are
   // JavaScript the playground never evaluates this way (import.meta, an
@@ -94,5 +101,10 @@ console.log(`check-instrument: ${objects} objects, ${methods} methods, ${stateme
 if (failed.length > 0) {
   for (const f of failed.slice(0, 20)) console.error(`  ${f}`);
   console.error(`check-instrument: ${failed.length} object(s) would run without breakpoints`);
+  process.exit(1);
+}
+if (blind.length > 0) {
+  for (const b of blind.slice(0, 20)) console.error(`  ${b}`);
+  console.error(`check-instrument: ${blind.length} statement(s) the debugger cannot stop at`);
   process.exit(1);
 }

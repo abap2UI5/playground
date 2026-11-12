@@ -52,14 +52,14 @@ test("the stops are the statements, not ELSE, WHEN, CATCH or the declarations", 
   const run = linesOf(result, "RUN");
   // DO, APPEND, ENDDO, LOOP, the call in the loop, ENDLOOP, two statements on
   // line 46, WHILE … ENDWHILE, IF, BREAK-POINT, the branches, ENDIF, CASE and
-  // its branches, TRY and its statement, APPEND, WRITE, IF, RAISE, ENDIF, the
-  // static call, ENDMETHOD.
-  assert.deepEqual(run, [40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 54, 56, 57, 58, 60, 62, 64, 65, 71, 72, 73, 74, 75, 76, 77]);
+  // its branches, TRY and its statement, the statement in the CATCH block and
+  // the one in the CLEANUP block, APPEND, WRITE, IF, RAISE, ENDIF, the static
+  // call, ENDMETHOD.
+  assert.deepEqual(run, [40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 54, 56, 57, 58, 60, 62, 64, 65, 67, 69, 71, 72, 73, 74, 75, 76, 77]);
   for (const notOne of [36, 37, 39, 53, 55, 59, 61, 66, 68]) assert.ok(!run.includes(notOne), `line ${notOne}`);
-  // The CATCH and CLEANUP bodies run but have no line in the transpiler's
-  // output (yet): said, so a breakpoint there is not moved past them.
-  assert.deepEqual(result.methods.find((m) => m.method === "RUN").blind, [67, 69]);
-  assert.deepEqual(result.methods.find((m) => m.method === "TWICE").blind, []);
+  // No statement that runs is left without a line. The CATCH and CLEANUP
+  // bodies were, at @abaplint/transpiler 2.14.15; 2.14.29 keeps their mappings.
+  for (const m of result.methods) assert.deepEqual(m.blind, [], m.method);
   // A static method's body is the static one, not its instance forwarder.
   assert.deepEqual(linesOf(result, "TWICE"), [27, 28, 29]);
   assert.match(result.js, /static async twice\(INPUT\) \{ let \$dbg; try \{/);
@@ -70,6 +70,32 @@ test("the stops are the statements, not ELSE, WHEN, CATCH or the declarations", 
   // BREAK-POINT stops for itself; RAISE says it is one.
   assert.match(result.js, /await \$dbg\.stop\(51, 2\);/);
   assert.match(result.js, /if \(\$dbg\.hit\(74, 1\)\) await \$dbg\.stop\(74, 1\);/);
+});
+
+test("a comment is no statement, and a call over several generated lines stops on its first", async () => {
+  const { plain, result } = await build("zcl_dbg_gaps.clas.abap");
+  assert.equal(result.js.split("\n").length, plain.split("\n").length);
+  assert.doesNotThrow(() => new AsyncFunction("abap", result.js));
+  // The assignment, the chain with a comment between its links (it starts
+  // on 30, the comment is 31), the call with a COND, the call with a VALUE,
+  // the assignment, ENDMETHOD - and neither the TYPES, the DATA nor a comment.
+  assert.deepEqual(linesOf(result, "RUN"), [29, 30, 33, 36, 39, 40]);
+  for (const m of result.methods) assert.deepEqual(m.blind, [], m.method);
+  // Each hook stands in front of a whole statement: the class still runs,
+  // and stops are asked for in the order of the ABAP.
+  const asked = [];
+  const abap = new ABAP({ console: new MemoryConsole() });
+  abap.dbg = {
+    methods: (list) => list,
+    enter: () => ({ hit: (line) => (asked.push(line), false), stop: async () => {} }),
+    leave: () => {},
+  };
+  await new AsyncFunction("abap", `${result.js}\nreturn zcl_dbg_gaps;`)(abap).then(async (Clas) => {
+    const o = await new Clas().constructor_();
+    const out = await o.run({ iv_in: new abap.types.Integer().set(1) });
+    assert.equal(out.get(), "abonec");
+  });
+  assert.deepEqual(asked.filter((l) => l < 42), [29, 30, 33, 36, 39, 40]);
 });
 
 test("a call statement stops before the call, whatever its first mapping points at", async () => {

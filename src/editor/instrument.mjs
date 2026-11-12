@@ -37,7 +37,7 @@
 // or they have no line of their own in the output at all.
 const NOT_STOPPABLE = new Set([
   "Else", "ElseIf", "When", "WhenOthers", "WhenType", "Catch", "Cleanup", "EndTry", "EndCase", "EndAt",
-  "Data", "DataBegin", "DataEnd", "FieldSymbol", "Types", "TypeBegin", "TypeEnd", "TypeEnum", "TypeEnumBegin",
+  "Data", "DataBegin", "DataEnd", "FieldSymbol", "Type", "IncludeType", "TypeBegin", "TypeEnd", "TypeEnum", "TypeEnumBegin",
   "TypeEnumEnd", "Constant", "ConstantBegin", "ConstantEnd", "Static", "StaticBegin", "StaticEnd",
   "MethodImplementation", "ClassImplementation", "EndClass", "ClassDefinition", "Interface", "EndInterface",
   "Public", "Protected", "Private", "MethodDef", "ClassData", "ClassDataBegin", "ClassDataEnd", "Aliases",
@@ -70,7 +70,11 @@ export function instrument(code, mappings, statements) {
   // Each file's statements in order, to find the one a position is in.
   /** @type {Map<string, StatementStart[]>} */
   const byFile = new Map();
-  for (const [file, list] of statements) byFile.set(file, [...list].sort((a, b) => a.row - b.row || a.col - b.col));
+  // A comment is no statement here: one inside a chained call (a lint
+  // directive between two links) starts after the call does, and would
+  // be the "statement" the call's first mapping is looked up in - and
+  // found outside of, so the call got no hook at all.
+  for (const [file, list] of statements) byFile.set(file, list.filter((s) => s.type !== "Comment").sort((a, b) => a.row - b.row || a.col - b.col));
   const containing = (file, row, col) => {
     const list = byFile.get(file);
     if (!list) return undefined;
@@ -162,12 +166,36 @@ export function instrument(code, mappings, statements) {
       if (NOT_STOPPABLE.has(at.s.type) || at.s.kernel) continue;
       stops.push({ index: j, line: at.s.row, kind: at.s.type === "Raise" ? "raise" : "" });
     }
+    // A call whose argument is a COND or VALUE the transpiler writes over
+    // several lines (a function, a structure literal) has its first mapping
+    // on a LATER one of them (`})()))});`), which is no place for a hook.
+    // Its first line is found by walking up over lines that carry no mapping
+    // at all, to the unmapped `await …` no deeper than where the walk began
+    // and right after a line that ends a statement or opens a block - an
+    // `await`, so the hook's own await is certainly allowed there.
+    const beginsCall = (k, indent) => /^await\b/.test(lines[k].trimStart()) && indentOf(lines[k]) <= indent && /[;{}]$/.test(lines[k - 1].trimEnd());
+    for (let j = open + 1; j <= close; j++) {
+      const m = first.get(j + 1);
+      if (m === undefined) continue;
+      const file = String(m.source).replace(/^.*\//, "");
+      if (file !== head.file) continue;
+      const s = containing(file, m.original.line, m.original.column);
+      if (s === undefined || done.has(`${s.row}:${s.col}`) || NOT_STOPPABLE.has(s.type) || s.kernel || s.type === "EndMethod") continue;
+      const indent = indentOf(lines[j]);
+      let k = j - 1;
+      while (k > open && !first.has(k + 1) && !beginsCall(k, indent)) k--;
+      if (k <= open || first.has(k + 1) || !beginsCall(k, indent)) continue;
+      done.add(`${s.row}:${s.col}`);
+      stops.push({ index: k, line: s.row, kind: "" });
+    }
     const methodIndex = methods.length;
     const stopLines = [...new Set(stops.map((s) => s.line))].sort((a, b) => a - b);
     // Statements of the method that run but got no hook: the transpiler
-    // wrote them without a mapping (the body of a CATCH or CLEANUP block,
-    // before abaplint/transpiler kept those). A breakpoint there must not
-    // slide to a later line - it would stop somewhere else than asked.
+    // wrote them without a mapping. None today - the body of a CATCH or
+    // CLEANUP block was, at @abaplint/transpiler 2.14.15 (not at 2.14.29), and
+    // tools/check-instrument.mjs fails on the first one in the corpus.
+    // Kept for the reader's own code: a breakpoint there must not slide
+    // to a later line - it would stop somewhere else than asked.
     const hooked = new Set(stopLines);
     const blind = [...new Set((byFile.get(head.file) ?? [])
       .filter((st) => st.row > head.s.row && st.row < endLine && !st.kernel && !NOT_STOPPABLE.has(st.type) && st.type !== "EndMethod")

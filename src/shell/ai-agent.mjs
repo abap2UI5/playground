@@ -794,7 +794,7 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
       if (!method) return { error: `Line ${line} of ${file} is not inside a method - nothing runs there.` };
       if (!method.lines.includes(line)) {
         const near = method.lines.filter((l) => Math.abs(l - line) <= 6).join(", ");
-        return { error: `Line ${line} of ${file} is no statement the debugger can stop at (a declaration, a comment, ELSE, WHEN, CATCH, or a statement in a CATCH block). Lines nearby it can stop at: ${near || "none"}.` };
+        return { error: `Line ${line} of ${file} is no statement the debugger can stop at (a declaration, a comment, ELSE, WHEN or CATCH). Lines nearby it can stop at: ${near || "none"}.` };
       }
     }
     const condition = str(input.condition)?.trim() || undefined;

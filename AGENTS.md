@@ -166,7 +166,7 @@ read them before touching `tools/` or `src/runtime/`.
 | `tools/service-worker.mjs` | `writeServiceWorker()`: build id, hashes, precached chunks |
 | `tools/esbuild-plugins.mjs` | The load-bearing esbuild plugins (shims, stubs, Monaco CSS) |
 | `tools/check-size.mjs` | The size budget and the stack budget |
-| `tools/check-instrument.mjs` | The debug build over abap2UI5, the samples and open-abap: every object must parse instrumented |
+| `tools/check-instrument.mjs` | The debug build over abap2UI5, the samples and open-abap: every object must parse instrumented, and no statement that runs may be left without a stop |
 | `tools/serve.mjs` | Dev/test server; mounts `dist/` three ways, answers misses with `404.html` |
 | `tools/vendor-agent.mjs` | Vendors and checks `src/vendor/agent/` |
 | `tools/docs-examples-summary.mjs` | The documentation examples' measurement (Playwright's JSON report of `docs-examples.spec.js`) as the job summary's table; fails on an empty or red one |
@@ -351,10 +351,8 @@ Each bullet names the design doc that explains it. Keep them true.
   compiles an uncalled class lazily), and would make a catalogued sample that
   reaches one (`cl_abap_datfm`, `cl_abap_dyn_prg`) die with the stub's
   message where the gate cannot see it. Not worth it.
-- **The debugger stops in the reader's classes only**, and not inside a
-  CATCH or CLEANUP block until the transpiler pin carries the mappings for
-  them (fixed upstream; a breakpoint there is drawn hollow and says why).
-  Instrumenting the framework too was measured and left out
+- **The debugger stops in the reader's classes only.** Instrumenting the
+  framework too was measured and left out
   ([debugger.md](docs/design/debugger.md)).
 - **The `?src=` host allow list stays short.** The playground fetches on
   behalf of whoever opened the link and must not become a general-purpose
