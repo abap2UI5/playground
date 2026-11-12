@@ -167,16 +167,18 @@ ${foot(BASE)}
            ordinary prose, and "this" or "here" in an address would match it. */
         if (page[0].indexOf(word) >= 0 || starts(page[1], word)) pageHit += 4;
       }
-      if (pageHit) scored.push([pageHit + 1, page[0], page[1], page[2]]);
+      if (pageHit) { scored.push([pageHit + 1, page[0], page[1], page[2]]); byWord = true; }
     }
     for (var m = 0; m < rows.length; m++) {
       var hit = 0;
-      byWord = true;
       for (var w2 = 0; w2 < words.length; w2++) {
         if (starts(rows[m][1], words[w2])) hit += 3;
         else if (words[w2].length >= 4 && rows[m][0].indexOf(words[w2]) >= 0) hit += 1;
       }
-      if (hit) scored.push([hit, "samples/" + rows[m][0] + "/", rows[m][1], rows[m][0].toUpperCase()]);
+      /* Only a word that matched makes the scores word counts: an address
+         whose words matched nothing goes on to the closeness below, and is
+         cut there as a closeness. */
+      if (hit) { scored.push([hit, "samples/" + rows[m][0] + "/", rows[m][1], rows[m][0].toUpperCase()]); byWord = true; }
     }
   }
 

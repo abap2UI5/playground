@@ -184,7 +184,7 @@ npm ci
 npm run build      # deps -> framework + UI5 (together) -> catalogue -> site; first run takes minutes
 npm run serve      # dist/ on http://localhost:8080, also under a subpath
 npm test           # Playwright (chromium) against the built dist/
-npm run check      # build -> check:size -> test, what check.yml runs
+npm run check      # build -> check:size -> check:instrument -> test, what check.yml runs
 npm run lint       # ESLint
 npm run typecheck  # tsc over files that start with // @ts-check (jsconfig: checkJs off)
 npm run test:unit  # node:test over tests/node/*.test.mjs - no build, no browser
