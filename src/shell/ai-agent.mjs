@@ -9,6 +9,9 @@
 // the same editor, the same two checkers and the same Run a person uses:
 //
 //   write_file / edit_file / delete_file   the files in the editor
+//   write_table                            a database table of the app's own:
+//                                          its fields and rows, written as the
+//                                          two files "+ table" writes
 //   read_files                             what is in them now
 //   run_app                                Run, and what it said: the problems,
 //                                          the tests, the first roundtrip, a dump
@@ -38,7 +41,8 @@ import { catalogueEntries, clip as clipTo, count, DEFAULT_SPEED, isAbort, provid
 // transpiled from, so the API the guide describes is the API that runs here.
 import GUIDE from "../../deps/abap2ui5/docs/agents/building-apps.md";
 import { linterSettings } from "../editor/abap2ui5-lint.mjs";
-import { parseName } from "../editor/files.mjs";
+import { dependentsOf, parseName } from "../editor/files.mjs";
+import { MAX_ROWS, tableFiles } from "../editor/tables.mjs";
 import { UI5_LIBRARIES } from "./ui5-libraries.mjs";
 import { AgentError } from "../vendor/agent/appclient.mjs";
 import { createOperator, describeMirror, fitSnapshot, MAX_ERROR_TEXT } from "./ai-operator.mjs";
@@ -57,7 +61,7 @@ export { kindOf, MAX_FILES, MAX_MESSAGE_BYTES } from "./attachments.mjs";
 
 // The tools that change the editor, after which the page runs the app by
 // itself (see loop( )).
-const FILE_TOOLS = new Set(["write_file", "edit_file", "delete_file"]);
+const FILE_TOOLS = new Set(["write_file", "edit_file", "delete_file", "write_table"]);
 
 // The rounds of tool calls one message may take (runTurnLoop's maxRounds).
 // A build with a few fixes and a try of the app is ten or so; thirty is a
@@ -121,10 +125,17 @@ How the playground works, and what that means for you:
 - When the app runs but shows or computes the wrong thing, do not guess:
   inspect stops it at a line and shows the values there (and, with event,
   after a click). One inspect is cheaper than two rewrites.
-- There are no database tables here, no RFC, no files, no HTTP. You write
-  class files only, so when the app needs data, fill internal tables in the
-  code (VALUE #( ... ), or APPEND where the release has no VALUE) under a
-  ${TODO_MARK} line that says where the real SELECT would go.
+- Data: the app may have database tables of its OWN, made with
+  write_table (fields and rows; the page writes the two abapGit files and
+  creates the table afresh with its rows at every run). Use one when the
+  app keeps records - a list to add to, change, delete - and SELECT,
+  INSERT, UPDATE, DELETE it as a real app would; the download carries the
+  table and its rows to the person's system. Name it z/y, at most 16
+  characters. A table of SAP's (VBAK, MARA, a CDS view) is not here: never
+  write_table one of those - fill an internal table in the code instead
+  (VALUE #( ... ), or APPEND where the release has no VALUE) under a
+  ${TODO_MARK} line that says which SELECT it stands in for. No RFC, no
+  files, no HTTP either.
 - Only these UI5 libraries are loaded: ${UI5_LIBRARIES.filter((l) => l.startsWith("sap.")).join(", ")}.
   OpenUI5 only - no sap.ui.comp, sap.suite, sap.viz. The abap2UI5 linter
   checks the view against ${distribution === "sapui5" ? "SAPUI5" : "OpenUI5"} ${ui5} (the person's setting) -
@@ -134,6 +145,16 @@ How the playground works, and what that means for you:
 - The guide below covers the common patterns - write from it directly.
   Only when it does not cover what you need, search_samples finds a sample
   that does it and read_sample gives you its source.
+- Logic beyond the view - a calculation, a validation, a filter, a status
+  derived from data - gets an ABAP Unit test: the test include
+  <class>.clas.testclasses.abap with a local class
+  "CLASS ltcl_... DEFINITION FINAL FOR TESTING RISK LEVEL HARMLESS DURATION SHORT."
+  that tests the logic through methods the test can call (public ones, or
+  "CLASS <class> DEFINITION LOCAL FRIENDS ltcl_..." at the top of the
+  include for private ones). Test the logic, never the view or the
+  roundtrip. Every run runs the tests and reports them; a failing test is a
+  problem to fix like any other. A screen with no logic of its own needs
+  none - say so rather than write an empty one.
 - The editor may already hold code (a sample, or the person's own work).
   If the person asks for something new, write a new app class, make it the
   app and delete the files it does not need. If they ask for a change,
@@ -163,8 +184,9 @@ Talking to the person:
 - Keep messages short: what you built or changed, in a sentence or two, and
   anything the app does not do yet. They can read the code in the editor.
 - When the app is done, tell them they can download it for abapGit with
-  the button above the chat, and in one sentence what the ${TODO_MARK}
-  lines leave to connect on their system.
+  the button above the chat - the zip carries a HANDOVER.md that lists the
+  checks, the tests and what is left to connect - and in one sentence what
+  the ${TODO_MARK} lines leave to connect on their system.
 
 The abap2UI5 guide to building apps follows. Its sections on validation
 tooling (npm scripts, the MCP server, screenshots) do not apply here: in
@@ -230,6 +252,39 @@ const TOOLS = [
       type: "object",
       properties: { name: { type: "string" } },
       required: ["name"],
+    },
+  },
+  {
+    name: "write_table",
+    description:
+      "Create or replace a database table of the app's own, with the rows it starts with. The page writes it as " +
+      "abapGit writes a table (<name>.tabl.xml, the rows as <name>.tabu.json) and creates it afresh at every run, so " +
+      "the app can SELECT, INSERT, UPDATE and DELETE it; the download carries both. The client field MANDT is added " +
+      "by itself. Only for the app's own tables - never for SAP's (VBAK, MARA, ...).",
+    eager_input_streaming: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "The table's name, lower case, z or y first, at most 16 characters, e.g. zorders" },
+        description: { type: "string", description: "Its short text, e.g. Orders of the order app" },
+        fields: {
+          type: "array",
+          description: "The fields in order, at least one of them key",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "Field name, e.g. ORDER_ID" },
+              type: { type: "string", enum: ["CHAR", "NUMC", "DEC", "INT1", "INT2", "INT4", "INT8", "FLTP", "DATS", "TIMS", "STRG"] },
+              length: { type: "number", description: "CHAR, NUMC and DEC: the length; the others have their own" },
+              decimals: { type: "number", description: "DEC: the decimals" },
+              key: { type: "boolean" },
+            },
+            required: ["name", "type"],
+          },
+        },
+        rows: { type: "array", items: { type: "object" }, description: `The rows it starts with, { "FIELD": value } each - at most ${MAX_ROWS}` },
+      },
+      required: ["name", "fields"],
     },
   },
   {
@@ -699,6 +754,7 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
       case "write_file": return writeFile(input);
       case "edit_file": return editFile(input);
       case "delete_file": return deleteFile(input);
+      case "write_table": return writeTable(input);
       case "read_files": {
         const all = host.files();
         const names = Array.isArray(input.names) ? input.names.map((n) => str(n)?.trim()).filter(Boolean) : [];
@@ -815,7 +871,7 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
     const source = str(input.source);
     if (!name || source === undefined) return { error: "write_file needs a name and a source (both strings)." };
     if (!parseName(name)) {
-      return { error: `${name} is not a file name the playground takes: <name>.clas.abap, <name>.intf.abap or <class>.clas.testclasses.abap, lower case.` };
+      return { error: `${name} is not a file name the playground takes: <name>.clas.abap, <name>.intf.abap or <class>.clas.testclasses.abap, lower case - and a table is written with write_table.` };
     }
     const parsed = parseName(name);
     if (input.as_app === true && (parsed.kind !== "clas" || parsed.include)) {
@@ -884,11 +940,31 @@ export function createAgent({ apiKey, workspace, provider: settings, host, ui, s
     const files = host.files();
     if (!name || !files.some((f) => f.name === name)) return { error: `There is no file ${name} in the editor.` };
     if (files[0].name === name) return { error: `${name} is the app. Make another file the app first (write_file with as_app).` };
-    // A class's test include goes with it: alone, it would be a file of a
-    // class that is not there.
-    const tests = name.replace(/\.clas\.abap$/, ".clas.testclasses.abap");
-    host.setFiles(files.filter((f) => f.name !== name && f.name !== tests));
-    return { text: `Deleted ${name}.`, summary: `deleted ${name}`, changed: [name, tests] };
+    // A class's test include goes with it, and a table's rows: alone, each
+    // would be a file of an object that is not there.
+    const dependents = dependentsOf(name);
+    host.setFiles(files.filter((f) => f.name !== name && !dependents.includes(f.name)));
+    return { text: `Deleted ${name}.`, summary: `deleted ${name}`, changed: [name, ...dependents] };
+  }
+
+  function writeTable(input) {
+    const made = tableFiles(input);
+    if (made.error) return { error: made.error };
+    const { table, seed } = made;
+    const files = host.files();
+    const had = files.some((f) => f.name === table.name);
+    // Replaced where they are, added at the end: the app stays first.
+    let next = files.filter((f) => f.name !== table.name && f.name !== seed.name);
+    const at = files.findIndex((f) => f.name === table.name);
+    if (at === -1) next = [...next, table, seed];
+    else next.splice(Math.min(at, next.length), 0, table, seed);
+    host.setFiles(next);
+    host.show?.(table.name);
+    return {
+      text: `${had ? "Replaced" : "Created"} the table ${made.tabname} (${made.fields} fields, ${made.rows} rows): ${table.name} and ${seed.name}.`,
+      summary: `${had ? "rewrote" : "created"} table ${made.tabname.toLowerCase()} · ${made.rows} rows`,
+      changed: [table.name, seed.name],
+    };
   }
 
   return {
@@ -996,6 +1072,10 @@ export function pendingText(name, input) {
     }
     case "edit_file": return `editing ${file}…`;
     case "delete_file": return `deleting ${file}…`;
+    case "write_table": {
+      const rows = Array.isArray(input.rows) ? input.rows.length : 0;
+      return `writing table ${str(input.name) ?? ""}${rows ? ` · ${rows} row${rows === 1 ? "" : "s"}` : ""}…`;
+    }
     case "read_files": return "reading the editor…";
     case "run_app": return "running the app…";
     case "search_samples": return `searching samples${str(input.query) ? ` for "${input.query}"` : ""}…`;

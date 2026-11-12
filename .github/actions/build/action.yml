@@ -81,9 +81,25 @@ runs:
       # them. --with-deps only there - WebKit needs system libraries Chromium
       # does not, and installing them for a run that never launches it is a
       # minute nobody gets back.
+      #
+      # The system libraries come in a step of their own, bounded: on
+      # 2026-11-11 the WebKit shard's apt-get crawled at 127 kB/s for fifteen
+      # minutes and then lost azure.archive.ubuntu.com, which kept the deploy
+      # of #174 from happening. Ten minutes per try, a fresh apt index and a
+      # second try - a mirror that is down for longer than that fails the job
+      # in twenty minutes, not thirty, and says why.
       run: |
         if [ "${PW_WEBKIT:-}" = "1" ]; then
-          npx playwright install --with-deps chromium webkit
+          npx playwright install chromium webkit
+          for attempt in 1 2; do
+            if timeout 600 npx playwright install-deps webkit; then
+              exit 0
+            fi
+            echo "::warning::WebKit's system libraries did not install (attempt $attempt) - refreshing the apt index"
+            sudo apt-get update -o Acquire::Retries=3 || true
+          done
+          echo "::error::WebKit's system libraries could not be installed - an Ubuntu mirror is unreachable or slow"
+          exit 1
         else
           npx playwright install chromium
         fi

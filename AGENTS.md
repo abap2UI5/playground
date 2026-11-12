@@ -40,6 +40,7 @@ read them before touching `tools/` or `src/runtime/`.
 | `exercise-check.mjs` | Pure: `exercisesFrom()` (the build's read of abap2UI5/samples' `scripts/lib/exercises.json`) and `checkExercise()` (view, source, sourceNot, tests) |
 | `original.mjs`, `compare-dialog.mjs` | Compare (± Monaco diff dialog, chunk) and Reset (⟲) against the original; `unchangedRawUrl()` |
 | `layout-editor.mjs` | The Share dialog's "Open in Layout Editor" (`?src=` or clipboard + `#playground=`) |
+| `hand-off.mjs` | The files in another tool, in a new tab: the studio's "Open in…" (Playground, AI Agent), the Share dialog's "Open in AI Agent" |
 | `ui5-floor.mjs` | The bar's UI5 select: the linter's `ui5` floor, kept in step with Config → abap2UI5 lint |
 | `index.html` | The document; its inline script starts both workers, the wasm fetch and Monaco's preloads before the bundle arrives |
 | `shell.css` | The page's styles and the palette's original (`catalogue.css` copies it) |
@@ -77,13 +78,15 @@ read them before touching `tools/` or `src/runtime/`.
 | `roundtrips.mjs` | The recorded roundtrips (bounded at 200, cleared per Run) |
 | `insight.mjs` | The bottom panel: strip, folding, drag, redraw, empty-tab shrink |
 | `insight-common.mjs` | What a tab may ask of the panel (`empty()`, `blockHead()`, …) |
-| `insight-<tab>.mjs` | One module per tab: `problems` (+ Fix them bar, `fixableSaid()`), `outline`, `view` (`viewTab()`), `tests` (`testsTab()`), `roundtrips` (`roundtripsTab()`), `state` (app attributes per roundtrip), `console` (WRITE output, `#console-count`), `log` (and its one action, e.g. the rename offer), `config` (one tab, a switch between the two checkers); the Debugger tab is drawn by the `debugger.mjs` chunk |
+| `insight-<tab>.mjs` | One module per tab: `problems` (+ Fix them bar, `fixableSaid()`), `outline`, `view` (`viewTab()`, the Properties sheet, `elementForPick()`), `tests` (`testsTab()`), `roundtrips` (`roundtripsTab()`), `state` (app attributes per roundtrip), `console` (WRITE output, `#console-count`), `log` (and its one action, e.g. the rename offer), `config` (one tab, a switch between the two checkers); the Debugger tab is drawn by the `debugger.mjs` chunk |
 | `highlight.mjs`, `xml-pretty.mjs` | Colour for the panel's XML/JSON; XML one element per line |
+| `bind-options.mjs` | The Properties sheet's binds and events: `publicAttributes()`, `clientOf()`, `bindingAbap()`, `eventAbap()`, `withEventArm()` |
 | `chain-read.mjs`, `view-edit.mjs`, `chain-patch.mjs`, `chain-write.mjs` | View edit: chain read back by executing it; edited view matched to the shown one; change patched into the ABAP that is there; fallback rewrite in the house layout |
 | `chat.mjs` | AI App Builder on screen (chunk, its page only) |
 | `ai-agent.mjs` | AI App Builder's conversation and tools (`runTools()`, `inspect` - the debugger for one look), chunk on use |
 | `ai-starter.mjs` | The class the studio starts on |
 | `ai-demo.json` | The worked example the studio's welcome plays without a key ("Watch an example"): hand-written, says so, run through the model's own host |
+| `handover.mjs` | `handoverMarkdown()`: the HANDOVER.md the studio's download carries (asked for, checked, tried, left to connect) |
 | `target-system.mjs` | The studio's target system: `TARGETS` (abaplint releases the header offers, the rules the model is told), `systemTodos()` (the `" TODO(system):` lines the download lists), `functionCalls()`/`uncheckedCallsText()` (every CALL FUNCTION - nothing else here reports one) |
 | `pilot.mjs` | AI Agent on screen and the bridge's half (chunk) |
 | `pilot-agent.mjs` | AI Agent's conversation, mirror and tools (chunk) |
@@ -91,7 +94,7 @@ read them before touching `tools/` or `src/runtime/`.
 | `frame-drive.mjs` | One app frame as the AI's transport |
 | `chat-ui.mjs` | What both chats share on screen (`createChatRoom()`: log, key form, Send/Stop, speed, files, one submit) |
 | `markdown.mjs` | `renderMarkdown()`, `streamMarkdown()` (incremental) |
-| `ai-speeds.mjs` | `SPEEDS` and `DEFAULT_SPEED` - the one list both headers' selects are written from |
+| `ai-speeds.mjs` | `SPEEDS` and `DEFAULT_SPEED` - the one list both headers' selects are written from; `PRICES` and `PRICES_AS_OF` beside them |
 | `ai-common.mjs` | Prices, errors, `runTurnLoop()`, `followStream()`, `str/clip/echo/count`, `rankEntries()` |
 | `llm-provider.mjs` | Anthropic SDK or an OpenAI-compatible server; `httpUrl()`, `keyHost()` |
 | `llm-form.mjs` | The provider half of both key forms; `keyTarget()` |
@@ -109,7 +112,7 @@ read them before touching `tools/` or `src/runtime/`.
 | `files.mjs` | File naming and checks (abapGit names, test includes, tables) |
 | `analysis.mjs` | One analysis, three readers; applies `parser-hint.mjs` |
 | `parser-hint.mjs` | The missing-full-stop question on abaplint's `parser_error`, and `borrowedSyntax()`: the ABAP spelling of CDS/SQL/JavaScript shapes it refuses |
-| `tables.mjs` | Tables of your own: rows parser, table check, starter `zproducts`, abapGit data config |
+| `tables.mjs` | Tables of your own: rows parser, table check, starter `zproducts`, abapGit data config; `tableFiles()` (the studio's `write_table`) |
 | `app-from-table.mjs` | **→ App**: the class for a table - a list of its rows, a dialog to add, change, delete |
 | `registry.mjs` | The page's client of the registry worker |
 | `registry-worker.mjs` | The worker's entry: abaplint, the corpus, the transpiler |

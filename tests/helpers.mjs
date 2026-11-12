@@ -179,3 +179,26 @@ export async function openConfig(page, checker) {
   if ((await tab.getAttribute("aria-selected")) !== "true") await tab.click();
   await page.locator(`[data-config="${checker}"]`).click();
 }
+
+// The entries of a stored zip, read the way the format is written: a local
+// header per entry, name and bytes right behind it. Enough to check what the
+// Share dialog hands out without a zip library in the tests either.
+export function zipEntries(bytes) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const entries = [];
+  let at = 0;
+  while (at + 30 <= bytes.length && view.getUint32(at, true) === 0x04034b50) {
+    const size = view.getUint32(at + 18, true);
+    const nameLength = view.getUint16(at + 26, true);
+    const extraLength = view.getUint16(at + 28, true);
+    const name = new TextDecoder().decode(bytes.subarray(at + 30, at + 30 + nameLength));
+    const start = at + 30 + nameLength + extraLength;
+    // Both, because one of these files is asserted on at the byte level: a
+    // TextDecoder swallows a byte order mark by default, which is exactly the
+    // thing .abapgit.xml is checked for.
+    const data = bytes.subarray(start, start + size);
+    entries.push({ name, text: new TextDecoder().decode(data), bytes: data });
+    at = start + size;
+  }
+  return entries;
+}

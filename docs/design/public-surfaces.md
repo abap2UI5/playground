@@ -25,7 +25,12 @@ deploy — readers get the published playground, never your checkout.
   it before the list looks at it (`rawFor()`). Several `src` parameters open
   several files; **the first file is the
   app**. Classes the app needs are looked for beside it: siblings only, at most
-  6 files, 2 levels deep, silent when a name is not found.
+  6 files, 2 levels deep, silent when a name is not found. So are its own
+  tables (`usedTables( )`: a z/y name after FROM, JOIN, INSERT, UPDATE,
+  MODIFY, DELETE FROM or TYPE): the `.tabl.xml` beside the class, the
+  `.tabu.json` from `../data/` - where abapGit and the playground's export
+  keep rows - or beside it; a table counts as one of the six. A `src` may
+  also name a `.tabl.xml` or `.tabu.json` itself.
 - **`?gist=<id>`** (`src/shell/gist.mjs`): opens the ABAP files of a GitHub
   gist, read from `api.github.com/gists/<id>` without a token - an id, not a
   URL, so it widens nothing the allow list above keeps narrow. GitHub lists a

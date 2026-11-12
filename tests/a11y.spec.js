@@ -20,8 +20,14 @@ const ALLOWED = new Map([
   ["color-contrast", "only the tool's name in the accent, see above"],
 ]);
 // The one node the allowance is for: anything else failing color-contrast is
-// still red.
-const ALLOWED_NODES = { "color-contrast": [".toolbar-brand > details > summary"] };
+// still red. Matched by the element (axe's `html` of it), not by the
+// selector axe writes for it: axe picks the shortest unique selector, which
+// was `.toolbar-brand > details > summary` until the AI App Builder's "Open
+// in…" put a second <details><summary> on the page and it became
+// `.toolbar-brand > .tool-switch > .tool-switch-name` - the same node, and
+// a red test for a change nobody made to it.
+const ALLOWED_NODES = { "color-contrast": [/^<summary class="tool-switch-name"/] };
+const allowedNode = (id, node) => (ALLOWED_NODES[id] ?? []).some((pattern) => pattern.test(node.html));
 
 async function check(page, what) {
   const result = await new AxeBuilder({ page })
@@ -33,7 +39,7 @@ async function check(page, what) {
   const bad = result.violations
     .filter((v) => v.impact === "serious" || v.impact === "critical")
     .map((v) => ALLOWED.has(v.id)
-      ? { ...v, nodes: v.nodes.filter((n) => !(ALLOWED_NODES[v.id] ?? []).includes(n.target.join(" "))) }
+      ? { ...v, nodes: v.nodes.filter((n) => !allowedNode(v.id, n)) }
       : v)
     .filter((v) => v.nodes.length > 0);
   const said = bad.map((v) => `${v.id} (${v.impact}): ${v.help}\n  ${v.nodes.slice(0, 3).map((n) => n.target.join(" ")).join("\n  ")}`);

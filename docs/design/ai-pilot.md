@@ -1,4 +1,8 @@
-# The AI Pilot
+# The AI Agent (the Pilot)
+
+> On screen it is the **AI Agent**; the code and these notes call it the
+> Pilot (`pilot.mjs`, `is-pilot`, `/pilot/`) - see the note on names in
+> [ai-chat.md](ai-chat.md).
 
 > Design notes, moved out of `AGENTS.md`. Read this before touching `pilot.mjs`, `pilot-agent.mjs`, `ai-operator.mjs`, `frame-drive.mjs`, `attachments.mjs` or `src/vendor/agent/`.
 > The rules in short, and every other area, are in [AGENTS.md](../../AGENTS.md).
@@ -6,11 +10,11 @@
 ## The AI Pilot — `src/shell/pilot.mjs`, `src/shell/pilot-agent.mjs`
 
 **Claude operates the running app; the reader steers in the chat.** A page of
-its own and, like the studio, no door from the playground while it is being
-built: `pilot/index.html`, written by `writePilotPage( )` in
+its own, reached like the studio through the tool menu of every bar:
+`pilot/index.html`, written by `writePilotPage( )` in
 `tools/site-documents.mjs` exactly as `writeAiPage( )` writes the studio's -
-`<base href="../">`, `data-page="pilot"`, its own title, `noindex`, no
-canonical link. `page.mjs` reads `data-page` (`pilotPage`): the editor opens on what a link
+`<base href="../">`, `data-page="pilot"`, its own title and canonical
+(`…/playground/pilot/`), in the sitemap. `page.mjs` reads `data-page` (`pilotPage`): the editor opens on what a link
 carries (`#` fragment or `?src=`) or on the default sample, never on the
 stored draft, and nothing is stored over it; `setUpPilot( )` gets a small host
 from `setUpPilotHooks( )` in `agent-hooks.mjs` (Run as `runForAgent( )`, files in place of the open ones, a carried sample by

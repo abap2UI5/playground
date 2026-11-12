@@ -185,10 +185,13 @@ function readme(files, url) {
 //
 // `url` is the share link for exactly these files, when the caller has one -
 // the Share dialog has just built it - and is what the README points back at.
-export function abapGitEntries(files, url) {
+export function abapGitEntries(files, url, extra = []) {
   const entries = [
     { name: ".abapgit.xml", data: abapgitXml(appNameOf(files)) },
     { name: "README.md", data: readme(files, url) },
+    // At the root beside the README, outside src/ where abapGit looks:
+    // the AI App Builder's HANDOVER.md (handover.mjs).
+    ...extra,
   ];
   for (const file of files) {
     // Every file with a name this understands; a test include has no sidecar
@@ -234,8 +237,8 @@ export function abapGitEntries(files, url) {
 }
 
 // The zip, named after the app - the class in the first file.
-export function abapGitZip(files, url) {
-  return { name: `${appNameOf(files)}.zip`, bytes: zipStored(abapGitEntries(files, url)) };
+export function abapGitZip(files, url, extra = []) {
+  return { name: `${appNameOf(files)}.zip`, bytes: zipStored(abapGitEntries(files, url, extra)) };
 }
 
 // Hands the browser a file to save. An anchor with a download attribute and

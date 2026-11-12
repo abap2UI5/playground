@@ -722,7 +722,98 @@
     state: function () {
       return true;
     },
+    // The View tab's Properties sheet (insight-view.mjs): the next click in
+    // the app picks the control under it instead of pressing it. Answered at
+    // once; the pick arrives as a "picked" message, null for Escape.
+    pick: function (on) {
+      picking(on === true);
+      return true;
+    },
   };
+
+  // Pick mode: a click caught before any control sees it, the control under
+  // it found, and said as its tag and its place among the controls of that
+  // tag in the main view, in tree order - which is how the page finds the
+  // element in the XML it reconstructed (insight-view.mjs). Nothing of the
+  // app's own runs for that click.
+  var pickOn = false;
+  var pickStyle;
+  function picking(on) {
+    if (on === pickOn) return;
+    pickOn = on;
+    if (on) {
+      document.addEventListener("click", onPick, true);
+      document.addEventListener("keydown", onPickKey, true);
+      pickStyle = document.createElement("style");
+      pickStyle.textContent = "*{cursor:crosshair!important}";
+      document.head.appendChild(pickStyle);
+    } else {
+      document.removeEventListener("click", onPick, true);
+      document.removeEventListener("keydown", onPickKey, true);
+      if (pickStyle) pickStyle.remove();
+      pickStyle = undefined;
+    }
+  }
+  function onPickKey(e) {
+    if (e.key !== "Escape") return;
+    e.preventDefault();
+    e.stopPropagation();
+    picking(false);
+    post({ type: "picked", picked: null });
+  }
+  function onPick(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    picking(false);
+    post({ type: "picked", picked: pickedAt(e.target) });
+  }
+  function pickedAt(target) {
+    var require_ = window.sap && sap.ui && sap.ui.require;
+    var Element_ = require_ && require_("sap/ui/core/Element");
+    if (!Element_) return null;
+    var control = null;
+    if (typeof Element_.closestTo === "function") control = Element_.closestTo(target);
+    for (var el = target; !control && el && el !== document; el = el.parentNode) {
+      if (el.id && Element_.getElementById) control = Element_.getElementById(el.id) || null;
+    }
+    // The view the control is in: its first ancestor that is one.
+    var view = control;
+    while (view && !(view.getMetadata && view.getMetadata().isA("sap.ui.core.mvc.View"))) view = view.getParent && view.getParent();
+    if (!control || !view || control === view) return null;
+    var name = control.getMetadata().getName();
+    var tag = name.slice(name.lastIndexOf(".") + 1);
+    var same = [];
+    // The public aggregations only, which is what an XML view can fill: a
+    // Page's own back button sits in a hidden one (_navButton) and was
+    // counted as a second Button the XML does not have.
+    var childrenOf = function (c) {
+      var out = [];
+      var aggregations = c.getMetadata && c.getMetadata().getAllAggregations ? c.getMetadata().getAllAggregations() : {};
+      // Through each aggregation's public getter: a SimpleForm hands its
+      // content to an inner Form and answers getContent( ) from its own
+      // list - getAggregation("content") saw none of it.
+      for (var key in aggregations) {
+        var agg = aggregations[key];
+        var value = typeof agg.get === "function" ? agg.get(c) : c.getAggregation(key);
+        if (!value) continue;
+        out = out.concat(Array.isArray(value) ? value : [value]);
+      }
+      return out.filter(function (k) {
+        return k && k.getMetadata;
+      });
+    };
+    var walk = function (c) {
+      var kids = childrenOf(c);
+      for (var i = 0; i < kids.length; i++) {
+        var kid = kids[i];
+        var n = kid.getMetadata().getName();
+        if (n.slice(n.lastIndexOf(".") + 1) === tag) same.push(kid);
+        walk(kid);
+      }
+    };
+    walk(view);
+    return { tag: tag, library: name.slice(0, name.lastIndexOf(".")), ordinal: same.indexOf(control), count: same.length };
+  }
 
   // From the page that framed this one, and from nobody else: not another
   // frame, not a window this app opened, and not a page of another origin

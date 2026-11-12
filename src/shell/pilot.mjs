@@ -363,7 +363,11 @@ export function setUpPilot(pilotHost) {
   el.chat.hidden = false;
   // The narrow layout hides a pane by attribute; here the view decides.
   document.getElementById("pane-right").hidden = false;
-  setView("app");
+  // A phone starts on the chat, as the studio does: the welcome says what
+  // this page is and how to get a model to answer; the app it would show
+  // first is the sample everybody saw in the playground. The model's acts
+  // bring the app forward (`acting` below), the answer the chat again.
+  setView(narrow() ? "chat" : "app");
 
   addTab("1", host.mainFrame, host.appClass());
   el.tabs.hidden = false;
@@ -509,8 +513,12 @@ export function setUpPilot(pilotHost) {
   window.matchMedia("(max-width: 820px)").addEventListener("change", () => setView(document.body.dataset.view));
   setSees(readStored(SEES_STORAGE) === "open" && !narrow());
   sayWho();
-  if (!restoreConversation()) showWelcome();
-  room.showKeyForm(true);
+  const restored = restoreConversation();
+  if (!restored) showWelcome();
+  // Closed while the welcome offers it, open for a conversation taken up
+  // after a reload, which has no welcome and waits for the key; a message
+  // sent without a key opens it either way (chat-ui.mjs).
+  room.showKeyForm(restored && !room.hasKey());
 }
 
 // "What Claude sees" - or what the model sees, when it is not Claude.
@@ -680,11 +688,13 @@ function showWelcome() {
     });
     list.append(b);
   }
-  intro.append(title, lead, list);
-  // Without a key nothing here answers; a local model is the way in that
-  // costs nothing (chat-ui.mjs). Offered while no key is held.
+  intro.append(title, lead);
+  // Without a key nothing here answers: the key form on request, or a local
+  // model, which costs nothing (chat-ui.mjs). Offered while no key is held,
+  // above the examples so it is on screen.
   const local = room.localModelOffer();
   if (local) intro.append(local);
+  intro.append(list);
   el.log.append(intro);
 }
 

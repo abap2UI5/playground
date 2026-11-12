@@ -14,8 +14,16 @@ import { dirname } from "node:path";
 // AI_EVAL_ONLY (a task id, or several separated by commas), AI_EVAL_OUT (the
 // results file, one JSON line per task; test-results/ai-eval.jsonl by
 // default). Every task is a message the reader could type
-// (tests/fixtures/ai-eval-tasks.json), optionally with the target system the
-// header would be set to, and the texts the running app must show.
+// (tests/fixtures/ai-eval-tasks.json), optionally with
+//
+//   target     the target system the header is set to (v702, Cloud)
+//   attach     files sent with the message (paths, as the paperclip takes them)
+//   followUp   a second message once the first has ended - a change, the
+//              way a reader asks for one; the app is judged after it
+//   expect     texts the running app must show
+//   files      patterns a file name must match, one file each - a table
+//              (\\.tabl\\.xml$), a test include (\\.clas\\.testclasses\\.abap$)
+//   tried      the model must have typed or pressed something in the app
 //
 // Per task the line holds: whether the last run was clean (it started, no
 // error or warning), the requests sent (each is one model turn), the tool
@@ -23,7 +31,7 @@ import { dirname } from "node:path";
 // TODO(system) lines left in the code, the header's token count, and the
 // seconds it took. The test fails on a task that did not end clean, so the
 // report shows which; the line is written either way. Usage is billed to
-// the key - eight tasks at Balanced cost a few dollars.
+// the key - the twelve tasks at Balanced cost a few dollars.
 //
 // Compare two lines of the file, not two numbers: a model's answer varies
 // from run to run, so a change to the rules is measured over several runs
@@ -49,7 +57,8 @@ test.describe.configure({ mode: "default" });
 
 for (const task of TASKS) {
   test(`${task.id}${task.target ? ` (${task.target})` : ""}`, async ({ page }) => {
-    test.setTimeout(TASK_TIMEOUT + 3 * 60 * 1000);
+    // Each message gets its ten minutes; a follow-up is a second message.
+    test.setTimeout((task.followUp ? 2 : 1) * TASK_TIMEOUT + 3 * 60 * 1000);
     let requests = 0;
     page.on("request", (r) => {
       if (r.method() === "POST" && r.url().startsWith("https://api.anthropic.com/")) requests += 1;
@@ -57,6 +66,8 @@ for (const task of TASKS) {
 
     await page.goto("/ai/");
     await expect(page.locator("#status")).toHaveText("ready - describe the app you want", { timeout: 120000 });
+    // The key form starts closed; the welcome offers it.
+    await page.locator(".chat-key-open").click();
     await page.locator("#chat-key-input").fill(KEY);
     await page.locator("#chat-key button[type=submit]").click();
     await expect(page.locator("#chat-key")).toBeHidden();
@@ -67,10 +78,15 @@ for (const task of TASKS) {
     }
 
     const started = Date.now();
-    await page.locator("#chat-input").fill(task.prompt);
-    await page.locator("#chat-input").press("Enter");
-    await expect(page.locator("#chat")).toHaveClass(/is-busy/);
-    await expect(page.locator("#chat")).not.toHaveClass(/is-busy/, { timeout: TASK_TIMEOUT });
+    const say = async (text, files = []) => {
+      if (files.length) await page.locator("#chat-file-input").setInputFiles(files);
+      await page.locator("#chat-input").fill(text);
+      await page.locator("#chat-input").press("Enter");
+      await expect(page.locator("#chat")).toHaveClass(/is-busy/);
+      await expect(page.locator("#chat")).not.toHaveClass(/is-busy/, { timeout: TASK_TIMEOUT });
+    };
+    await say(task.prompt, task.attach ?? []);
+    if (task.followUp) await say(task.followUp);
     const seconds = Math.round((Date.now() - started) / 1000);
 
     const rows = await page.locator(".chat-tool").allTextContents();
@@ -80,6 +96,10 @@ for (const task of TASKS) {
     const files = await page.evaluate(() =>
       window.monaco.editor.getModels().map((m) => ({ name: m.uri.path.slice(1), source: m.getValue() })));
     const todos = files.reduce((n, f) => n + (f.source.match(/"\s*todo\(system\):/gi) ?? []).length, 0);
+    // The files the task asks for (a table, a test include), by name.
+    const wanted = (task.files ?? []).map((pattern) => ({ pattern, found: files.some((f) => new RegExp(pattern).test(f.name)) }));
+    // What the model did in the running app: the act rows ("typed …", "pressed …").
+    const tried = rows.filter((r) => /^(typed|pressed)\b/.test(r.trim())).length;
     const shows = [];
     for (const text of task.expect ?? []) {
       shows.push({ text, seen: await page.frameLocator("#app").getByText(text).first().isVisible().catch(() => false) });
@@ -98,6 +118,9 @@ for (const task of TASKS) {
       failedRuns: runs.filter((r) => !/^ran: /.test(r.trim()) || /\bproblems?\b/.test(r)).length,
       todos,
       shows,
+      files: wanted,
+      tried,
+      followUp: Boolean(task.followUp),
       errors,
       usage: (await page.locator("#chat-usage").textContent())?.trim() ?? "",
       seconds,
@@ -110,5 +133,7 @@ for (const task of TASKS) {
     expect(errors, "the chat said an error").toEqual([]);
     expect(clean, `the last run: ${last || "none"}`).toBe(true);
     for (const s of shows) expect(s.seen, `the app shows "${s.text}"`).toBe(true);
+    for (const w of wanted) expect(w.found, `a file matching ${w.pattern}`).toBe(true);
+    if (task.tried) expect(tried, "the model tried the app (act)").toBeGreaterThan(0);
   });
 }

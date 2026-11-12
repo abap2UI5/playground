@@ -163,8 +163,10 @@ what the last set shadowed.
 in the editor on every reset - after it, on the empty image - and whatever an
 app SELECTs, INSERTs, UPDATEs or DELETEs goes with the Run, exactly like its
 drafts. That is the "Run starts fresh" promise of the deliberate limits, and
-it holds for tables too. `?src=` still opens ABAP only; a gist carries both
-files; the abapGit zip puts the TABL in `src/` (with its BOM) and the rows in
+it holds for tables too. `?src=` takes `.tabl.xml` and `.tabu.json` as
+well, and follows a linked class to the z/y tables it uses
+(`usedTables( )` in `deep-link.mjs`, see public-surfaces.md); a gist carries
+both files; the abapGit zip puts the TABL in `src/` (with its BOM) and the rows in
 `data/` with their `.conf.json`, abapGit's own data layout. Closing a table
 closes its rows file, and the editor shows the two in Monaco's XML and JSON
 languages.

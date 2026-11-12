@@ -14,6 +14,7 @@
 // and whether the reader said they know code from a link ran in this page.
 import { abapGitZip, download, endingInOneNewline } from "./export.mjs";
 import { createGist } from "./gist.mjs";
+import { pilotSection } from "./hand-off.mjs";
 import { layoutEditorSection } from "./layout-editor.mjs";
 import { linkedCodeRan } from "./linked-code.mjs";
 import { copyToClipboard } from "./share.mjs";
@@ -190,6 +191,7 @@ export function openShare(files, url, copied = false) {
   frag.append(git);
   frag.append(gistSection(files));
   frag.append(layoutEditorSection(files, rawUrlOf(files[0])));
+  frag.append(pilotSection(files));
 
   body.replaceChildren(frag);
   // Share awaits the link and the clipboard before it gets here, so a second

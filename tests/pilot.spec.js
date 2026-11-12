@@ -73,6 +73,9 @@ async function openPilot(page) {
 }
 
 async function useKey(page) {
+  // Closed until asked for (the welcome's offer, the Key button, a message
+  // sent without one) - open after a reload that took a conversation up.
+  if (await page.locator("#pilot-key").isHidden()) await page.locator("#pilot-key-button").click();
   await expect(page.locator("#pilot-key")).toBeVisible();
   await page.locator("#pilot-key-input").fill(KEY);
   await page.locator("#pilot-key button[type=submit]").click();
@@ -89,6 +92,18 @@ const textOf = (message) =>
   (Array.isArray(message.content) ? message.content : [{ text: message.content }])
     .map((b) => (typeof b.content === "string" ? b.content : b.text ?? ""))
     .join("\n");
+
+// Published since it went into every bar's tool menu: indexed, with a
+// canonical of its own, and in the sitemap beside the studio.
+test("the AI Agent's page is published - title, canonical, no noindex, in the sitemap", async ({ page, request }) => {
+  await openPilot(page);
+  await expect(page).toHaveTitle("AI Agent · abap2UI5");
+  await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://abap2ui5.github.io/playground/pilot/");
+  const sitemap = await (await request.get("/sitemap.xml")).text();
+  expect(sitemap).toContain("<loc>https://abap2ui5.github.io/playground/pilot/</loc>");
+  expect(sitemap).toContain("<loc>https://abap2ui5.github.io/playground/ai/</loc>");
+});
 
 test("the Pilot types into the app on screen, presses its button and reads the answer", async ({ page }) => {
   const requests = await answerWith(page, [
@@ -606,9 +621,14 @@ test("What Claude sees shows the agent snapshot of the screen", async ({ page })
   await expect(page.locator("#pilot-sees-panel")).toBeHidden();
 });
 
-test("on a phone the app and the chat take turns", async ({ page }) => {
+test("on a phone the app and the chat take turns, the chat first, under a bar of one row", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 760 });
   await openPilot(page);
+  // The chat first, as in the studio: the welcome and its way to a model.
+  await expect(page.locator("#pilot")).toBeVisible();
+  await expect(page.locator("#app")).toBeHidden();
+  await expect(page.locator(".pilot-welcome h2")).toBeInViewport();
+  await page.locator('.pilot-view[data-view="app"]').click();
   await expect(page.locator("#app")).toBeVisible();
   await expect(page.locator("#pilot")).toBeHidden();
   await page.locator('.pilot-view[data-view="chat"]').click();
@@ -616,6 +636,12 @@ test("on a phone the app and the chat take turns", async ({ page }) => {
   await expect(page.locator("#app")).toBeHidden();
   const width = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(width).toBeLessThanOrEqual(390);
+  // The controls on one row: the tool's name, Change app, Restart and the
+  // theme switch share their top (the views and the status have rows of
+  // their own by design).
+  const tops = await page.evaluate(() =>
+    ["#pilot-bar .tool-switch", "#pilot-change", "#pilot-restart", "#pilot-theme"].map((s) => Math.round(document.querySelector(s).getBoundingClientRect().top)));
+  expect(Math.max(...tops) - Math.min(...tops)).toBeLessThan(12);
 });
 
 test("the vendored agent client is mcp-server's, unchanged", () => {

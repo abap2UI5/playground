@@ -18,11 +18,14 @@ const lines = existsSync(file)
 const cell = (s) => String(s).replace(/\|/g, "\\|");
 const out = [];
 const clean = lines.filter((l) => l.clean).length;
-out.push(`### AI Studio: ${clean} of ${lines.length} tasks ended clean${lines[0] ? ` (${lines[0].speed})` : ""}`, "");
-out.push("| task | target | clean | turns | tools | failed runs | TODO(system) | usage | seconds | last run |");
-out.push("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+out.push(`### AI App Builder: ${clean} of ${lines.length} tasks ended clean${lines[0] ? ` (${lines[0].speed})` : ""}`, "");
+out.push("| task | target | clean | shows | files | tried | turns | tools | failed runs | TODO(system) | usage | seconds | last run |");
+out.push("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+// "-" where the task asks nothing of that kind; lines from before a column
+// existed read as "-" too.
+const share = (list, ok) => (list?.length ? `${list.filter(ok).length}/${list.length}` : "-");
 for (const l of lines) {
-  out.push(`| ${cell(l.task)} | ${cell(l.target)} | ${l.clean ? "yes" : "**no**"} | ${l.requests} | ${l.tools} | ${l.failedRuns} | ${l.todos} | ${cell(l.usage)} | ${l.seconds} | ${cell(l.last || "none")} |`);
+  out.push(`| ${cell(l.task)} | ${cell(l.target)} | ${l.clean ? "yes" : "**no**"} | ${share(l.shows, (s) => s.seen)} | ${share(l.files, (f) => f.found)} | ${l.tried ?? "-"} | ${l.requests} | ${l.tools} | ${l.failedRuns} | ${l.todos} | ${cell(l.usage)} | ${l.seconds} | ${cell(l.last || "none")} |`);
 }
 const missing = tasks.filter((t) => !lines.some((l) => l.task === t.id)).map((t) => t.id);
 if (missing.length) out.push("", `**No result for:** ${missing.join(", ")} - the measurement broke there; see the Playwright report.`);
