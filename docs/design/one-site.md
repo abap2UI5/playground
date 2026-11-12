@@ -9,7 +9,15 @@ The playground, the documentation and the hub at https://abap2ui5.github.io/
 are separate sites now, joined by plain links and one family convention
 (CONVENTION.md in abap2UI5/abap2UI5.github.io): the brand top left goes home
 to the hub, the accent is the red of the logo (`#d03c4a`, `#f0606d` in dark),
-the type is Inter. The documentation no longer borrows the bar, its script or
+the type is Inter. One refinement here, inside the convention: the convention's
+table measured the accent on white (4.74:1), and this page sets it on its
+sunken grey `#f4f5f7`, where it is 4.35:1 - under AA for text below 18.7px
+bold. So **text** in the accent on that grey (the tool's name in the three
+bars) takes `--accent-text`, which is the convention's own "accent strong"
+`#b02e3b` in light (5.83:1) and the accent itself in dark (`#f0606d` clears AA
+on `#1e2024`). Fills, borders and the logo keep `#d03c4a`. Both palettes carry
+the token (`shell.css`, `catalogue.css`), and abap2UI5/layout-editor, which
+has the same grey and the same tool name, carries it too. The documentation no longer borrows the bar, its script or
 the stylesheets from this deployment, no longer reads the theme key or the
 site memory, and is no longer sent a dispatch after a deploy. What it still
 takes from here is a URL contract (the embed frame, `?src=`, share links) and
