@@ -11,22 +11,12 @@ import { open } from "./helpers.mjs";
 // listed in ALLOWED with the reason, so a new finding is red and a known one
 // is a sentence somebody can argue with.
 const ALLOWED = new Map([
-  // The tool's name beside "abap2UI5" (`.tool-switch-name`) is the family's
-  // one red accent, #d03c4a, at 15px bold on the sunken page #f4f5f7: 4.34:1,
-  // under the 4.5:1 AA asks of text below 18.7px bold. The accent is a
-  // family decision (CONVENTION.md in abap2UI5/abap2UI5.github.io, and the
-  // layout editor's styles.css carries the same value), not this page's to
-  // darken alone. Every other node is held to the rule.
-  ["color-contrast", "only the tool's name in the accent, see above"],
+  // None. Add as ["rule-id", "why it stays"], and its node to ALLOWED_NODES:
+  // the allowance is for that node only, matched by its element (axe's
+  // `html` of it) rather than by the selector axe picks, which changes when
+  // the page around it does.
 ]);
-// The one node the allowance is for: anything else failing color-contrast is
-// still red. Matched by the element (axe's `html` of it), not by the
-// selector axe writes for it: axe picks the shortest unique selector, which
-// was `.toolbar-brand > details > summary` until the AI App Builder's "Open
-// in…" put a second <details><summary> on the page and it became
-// `.toolbar-brand > .tool-switch > .tool-switch-name` - the same node, and
-// a red test for a change nobody made to it.
-const ALLOWED_NODES = { "color-contrast": [/^<summary class="tool-switch-name"/] };
+const ALLOWED_NODES = {};
 const allowedNode = (id, node) => (ALLOWED_NODES[id] ?? []).some((pattern) => pattern.test(node.html));
 
 async function check(page, what) {
