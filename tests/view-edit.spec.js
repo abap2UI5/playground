@@ -674,3 +674,27 @@ test("Properties: a control from the palette is added after the picked one, and 
   await expect(page.locator("#status")).toHaveText("running", { timeout: 60000 });
   await expect(page.frameLocator("#app").getByText("Message", { exact: true })).toBeVisible();
 });
+
+// The control's own properties and events, from the linter's UI5 metadata
+// at the reader's floor: offered for a new property, without the ones set.
+test("Properties: a new property is picked from the control's metadata at the UI5 floor", async ({ page }) => {
+  await open(page);
+  await runSample(page, SAMPLE);
+  await page.locator('[data-insight="view"]').click();
+  await expect(page.locator(".view-xml")).toContainText("<Button", { timeout: 30000 });
+  await page.locator("#view-properties").click();
+  await page.locator(".view-tree button").filter({ hasText: /^Button/ }).first().click();
+  await expect(page.locator("#view-prop-new-name")).toHaveAttribute("placeholder", /new property - \d+ at UI5 1\.71/, { timeout: 30000 });
+  const offered = await page.locator("#view-prop-names option").evaluateAll((all) => all.map((o) => o.value));
+  // Button's own and inherited ones, and an event; not what is set already,
+  // not what came after 1.71 (accessibleRole is 1.114).
+  expect(offered).toEqual(expect.arrayContaining(["icon", "type", "enabled", "visible", "width"]));
+  expect(offered).not.toContain("text");
+  expect(offered).not.toContain("press");
+  expect(offered).not.toContain("accessibleRole");
+  // A name the control does not have is still written, and said.
+  await page.locator("#view-prop-new-name").fill("colour");
+  await page.locator("#view-prop-new-value").fill("red");
+  await page.locator("#view-props-apply").click();
+  await expect(page.locator("#status")).toContainText("colour is no property or event of sap.m.Button at UI5 1.71");
+});

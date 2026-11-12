@@ -127,3 +127,22 @@ export function withEventArm(source, client, event) {
   }
   return { ok: false, why };
 }
+
+/**
+ * Whether `attribute` can be bound to a property of UI5 type `type`
+ * (sap.ui.base.DataType names as the metadata gives them): a table never to a
+ * property; a boolean property only an abap_bool-like attribute; a number
+ * only a numeric one; everything else - string, URI, CSSSize, an enum - any
+ * scalar, since it travels as text. An unknown type (no metadata yet, a
+ * property the snapshot does not have) rules nothing out but the tables.
+ * @param {string | undefined} type
+ * @param {Attribute} attribute
+ */
+export function bindsTo(type, attribute) {
+  if (attribute.table) return false;
+  const t = attribute.type.toLowerCase();
+  if (type === "boolean") return /\b(abap_bool|boolean|xfeld|flag|xsdboolean|boole_d|abap_boolean)\b/.test(t);
+  // A built-in numeric type, alone or with its LENGTH/DECIMALS.
+  if (type === "int" || type === "float") return /^(i|int1|int2|int4|int8|f|p|n|decfloat16|decfloat34)(\s|$)/.test(t);
+  return true;
+}

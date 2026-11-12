@@ -88,6 +88,9 @@ const OPS = {
   lintFix(source) {
     return lint.applyLinterFixes(source);
   },
+  controlInfo(name) {
+    return lint.controlInfo(name);
+  },
   applyFixes(files) {
     return core.applyAbaplintFixes(files);
   },

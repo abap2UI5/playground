@@ -78,8 +78,9 @@ read them before touching `tools/` or `src/runtime/`.
 | `roundtrips.mjs` | The recorded roundtrips (bounded at 200, cleared per Run) |
 | `insight.mjs` | The bottom panel: strip, folding, drag, redraw, empty-tab shrink |
 | `insight-common.mjs` | What a tab may ask of the panel (`empty()`, `blockHead()`, …) |
-| `insight-<tab>.mjs` | One module per tab: `problems` (+ Fix them bar, `fixableSaid()`), `outline`, `view` (`viewTab()`, the Properties sheet, `elementForPick()`), `tests` (`testsTab()`), `roundtrips` (`roundtripsTab()`), `state` (app attributes per roundtrip), `console` (WRITE output, `#console-count`), `log` (and its one action, e.g. the rename offer), `config` (one tab, a switch between the two checkers); the Debugger tab is drawn by the `debugger.mjs` chunk |
+| `insight-<tab>.mjs` | One module per tab: `problems` (+ Fix them bar, `fixableSaid()`), `outline`, `view` (`viewTab()`; the Properties sheet is `view-sheet.mjs`), `tests` (`testsTab()`), `roundtrips` (`roundtripsTab()`), `state` (app attributes per roundtrip), `console` (WRITE output, `#console-count`), `log` (and its one action, e.g. the rename offer), `config` (one tab, a switch between the two checkers); the Debugger tab is drawn by the `debugger.mjs` chunk |
 | `highlight.mjs`, `xml-pretty.mjs` | Colour for the panel's XML/JSON; XML one element per line |
+| `view-sheet.mjs` | The View tab's Properties sheet (chunk, on first use): tree, pick in app, properties from the UI5 metadata, binds, event arms, palette; `setUpSheet()` is handed what it needs |
 | `bind-options.mjs` | The Properties sheet's binds and events: `publicAttributes()`, `clientOf()`, `bindingAbap()`, `eventAbap()`, `withEventArm()` |
 | `chain-read.mjs`, `view-edit.mjs`, `chain-patch.mjs`, `chain-write.mjs` | View edit: chain read back by executing it; edited view matched to the shown one; change patched into the ABAP that is there; fallback rewrite in the house layout |
 | `chat.mjs` | AI App Builder on screen (chunk, its page only) |
@@ -121,7 +122,7 @@ read them before touching `tools/` or `src/runtime/`.
 | `instrument.mjs` | The debugger's hooks written into a chunk (pure): a frame per method, a hook per stoppable statement, `stops` |
 | `transpile.mjs` | The page's side of the compile |
 | `providers.mjs` | Monaco's language providers over the worker |
-| `lint-core.mjs` | The abap2UI5 linter in the worker |
+| `lint-core.mjs` | The abap2UI5 linter in the worker; `controlInfo()` (a control's properties and events at the UI5 floor, for the Properties sheet) |
 | `lint-entry.mjs` | The linter's bundle (`dist/editor/lint.mjs`) |
 | `abap2ui5-lint.mjs` | The linter's page half: settings, `settingsFor()`, `ruleUrl()` |
 | `sample-list.mjs` | Class names of the samples the page carries (Node-readable) |

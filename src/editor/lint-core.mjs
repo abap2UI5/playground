@@ -28,7 +28,13 @@ let lib;
 let loading;
 export function loadLinter() {
   loading ??= import(new URL(LINT_BUNDLE, self.location.href).href).then((mod) => {
-    lib = { checkAbapSource: mod.checkAbapSource, applyFixes: mod.applyFixes, isFixable: mod.isFixable };
+    lib = {
+      checkAbapSource: mod.checkAbapSource,
+      applyFixes: mod.applyFixes,
+      isFixable: mod.isFixable,
+      loadSnapshot: mod.loadSnapshot,
+      withinUi5Floor: mod.withinUi5Floor,
+    };
   });
   return loading;
 }
@@ -111,4 +117,39 @@ export function applyLinterFixes(source) {
   if (fixable.length === 0) return { source, fixed: 0 };
   const { output, applied } = lib.applyFixes(source, fixable);
   return { source: output, fixed: applied };
+}
+
+// What the View tab's Properties sheet offers for one control
+// (insight-view.mjs): its properties and events through the parent chain,
+// each only from the release the reader's floor allows (`ui5` of the
+// settings, 1.71 by default) and not deprecated, with each property's type -
+// what the sheet filters the attributes it offers for a binding by. `name`
+// is the control's full name (sap.m.Button) or its tag alone, which is looked
+// for in the libraries this page carries, sap.m first. null for a control
+// the snapshot does not know, or before the linter has arrived. Plain data.
+export function controlInfo(name) {
+  if (lib?.loadSnapshot === undefined) return null;
+  let data;
+  try {
+    data = lib.loadSnapshot();
+  } catch {
+    return null;
+  }
+  const floor = settings?.minUi5 ?? settings?.ui5 ?? "1.71";
+  const full = data[name] ? name : ["sap.m", "sap.f", "sap.ui.layout", "sap.ui.layout.form", "sap.ui.core", "sap.tnt", "sap.uxap", "sap.ui.table", "sap.ui.unified"]
+    .map((lib_) => `${lib_}.${name}`).find((n) => data[n]);
+  if (!full) return null;
+  const properties = new Map();
+  const events = new Set();
+  // The since of a member is on its declaration or, as the linter reads it,
+  // in the control's `members` table.
+  const usable = (decl, since) => decl && !decl.deprecated && (!since || lib.withinUi5Floor(since, floor));
+  for (let c = full, guard = 0; c && data[c] && guard < 30; c = data[c].parent, guard++) {
+    const members = data[c].members ?? {};
+    for (const [prop, decl] of Object.entries(data[c].properties ?? {})) {
+      if (!properties.has(prop) && usable(decl, decl.since ?? members[prop])) properties.set(prop, { name: prop, type: decl.type ?? "string" });
+    }
+    for (const [event, decl] of Object.entries(data[c].events ?? {})) if (usable(decl, decl.since ?? members[event])) events.add(event);
+  }
+  return { name: full, floor, properties: [...properties.values()], events: [...events] };
 }

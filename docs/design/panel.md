@@ -165,10 +165,29 @@ The rest of the concept's loop, on the same sheet:
   (a comment in the chain, a variable used after it). The new control is
   picked once the reconstruction has it, by tag and place.
 
-Still open: the UI5 metadata's properties to choose from (the linter's
-metadata is in its worker), popups and fragments, the split shape for the
-writer. `tests/node/bind-options.test.mjs` and `tests/view-edit.spec.js`
-hold the four.
+- **The control's own properties** (`controlInfo( )` in lint-core.mjs,
+  asked through the registry worker): the linter's UI5 metadata - already in
+  its bundle, not a second copy - walked up the parent chain for the picked
+  control's properties (with their types) and events, each only from the
+  release the reader's floor allows and not deprecated, the `since` read off
+  the declaration or the control's `members` table as the linter reads it.
+  The new-property field offers what the control does not set yet; a name it
+  does not have is still written and said in the status line (the linter
+  says it again in Problems). The bind select offers only attributes whose
+  type fits the property's (`bindsTo( )`: a boolean only an abap_bool-like
+  one, a number only a built-in numeric type, never a table). A changed floor
+  asks again.
+
+The sheet is a chunk of its own, `view-sheet.mjs`, loaded the first time
+Properties is pressed: in the shell it took `assets/shell.mjs` over its
+budget, and most visits never open it. It imports no shell module - what it
+needs (the editor's source, the panel's redraw, the frame link, the worker's
+`controlInfo`, `sourceWithView`, bind-options) is handed to `setUpSheet( )`
+by insight-view.mjs.
+
+Still open: popups and fragments, the split shape for the writer.
+`tests/node/bind-options.test.mjs` and `tests/view-edit.spec.js` hold all of
+it.
 
 ## Unit tests and dumps
 
