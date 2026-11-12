@@ -54,6 +54,25 @@ each statement gets the hook; later lines of the same statement (a LOOP's
 own (`} else if (`) only counts when its first mapping sits at the line's own
 indentation.
 
+Two shapes need more than that. A **comment** is a statement to abaplint and
+none here: one between two links of a chained call starts after the call
+does, so the call's first mapping was looked up in the comment, found
+outside of it, and the call got no hook. And a **call whose argument the
+transpiler writes over several lines** (a COND as a function, a VALUE as a
+structure literal) carries its first mapping on a later one of them
+(`})()))});`); its first line is found by walking up over lines without any
+mapping to the unmapped `await …` no deeper than that, right after a line
+that ends a statement.
+
+A statement that runs and still got no hook is reported per method
+(`blind`): a breakpoint on it is drawn hollow, and one above it is never
+moved past it - it would stop somewhere else than asked. The corpus has
+none, and `check-instrument.mjs` fails on the first. It had three kinds:
+the bodies of CATCH and CLEANUP blocks (the transpiler wrote them without
+mappings at 2.14.15, and keeps them at 2.14.29), 19 calls of the two shapes above, and - wrongly -
+every comment line and every local TYPES, 8,000 lines a breakpoint was
+refused on for a reason that was not theirs.
+
 Not stoppable: ELSE, ELSEIF, WHEN, CATCH, CLEANUP, ENDTRY, ENDCASE (their
 line begins with the `}` of the block before), declarations, and any
 `WRITE '@KERNEL …'` (that line is the reader's own JavaScript). ENDIF,
@@ -227,14 +246,6 @@ happens. `tests/ai.spec.js` holds it.
   planned as a stretch; `check-instrument.mjs` shows the hooks would hold
   for all of it. Not done: it is a second 5.5 MB runtime to build, cache and
   budget for, for stepping through code the reader did not write.
-- **Statements inside a CATCH or CLEANUP block cannot be stopped at** with
-  the pinned transpiler: it writes those blocks without mappings, so there
-  is no ABAP line to put a hook on. The build reports them per method
-  (`blind`); a breakpoint on one is drawn hollow and says why, and one on a
-  line above is never moved past them - it would stop somewhere else than
-  asked. Fixed upstream in abaplint/transpiler (`TryTranspiler` builds the
-  handlers as chunks); once a release carries it and the pin moves,
-  `blind` is empty and this limit goes.
 - **A runtime error is not stopped at** (a division by zero raised by the
   runtime, not by a RAISE): it is pointed at as a dump, as before.
 - **Watches and conditions are paths and comparisons**, not ABAP

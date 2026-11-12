@@ -252,7 +252,7 @@ test("a Pause with nothing running says it waits, and can be taken back", async 
   await expect(more).toContainText("Total 26", { timeout: 30000 });
 });
 
-test("a breakpoint in a CATCH block is drawn hollow and says why, and is not moved past it", async ({ page }) => {
+test("a breakpoint in a CATCH block stops there, as on any other statement", async ({ page }) => {
   await open(page);
   const catching = APP.replace("      total = add( 10 ).\n", "      TRY.\n          total = 1 / 0.\n        CATCH cx_sy_zerodivide.\n          total = add( 10 ).\n      ENDTRY.\n");
   await setSource(page, catching);
@@ -261,13 +261,22 @@ test("a breakpoint in a CATCH block is drawn hollow and says why, and is not mov
   await toggleBreakpoint(page, inCatch);
   await page.locator("#run").click();
   await stopped(page); // the BREAK-POINT of the app start
+  // Verified, on the line it was set on - not hollow and not moved. At
+  // @abaplint/transpiler 2.14.15 the body of a CATCH had no line to stop at.
   await page.evaluate((l) => window.monaco.editor.getEditors()[0].revealLineInCenter(l), inCatch);
-  await expect(page.locator(".bp-glyph.is-unverified")).toHaveCount(1);
-  await expect(page.locator(".debug-bp")).toHaveClass(/is-unverified/);
-  await expect(page.locator(".debug-bp .debug-problem")).toContainText("CATCH or CLEANUP block");
+  await expect(page.locator(".bp-glyph.is-unverified")).toHaveCount(0);
+  await expect(page.locator(".debug-bp")).not.toHaveClass(/is-unverified/);
   await expect(page.locator(".debug-bp .debug-link")).toHaveText(new RegExp(`:${inCatch}$`));
   await page.keyboard.press("F8");
   await running(page);
+
+  // The division by zero is caught, and the handler is where it stops.
+  const more = page.frameLocator("#app").locator('[id$="--more"]');
+  await more.click();
+  await stopped(page);
+  await expect(where(page)).toContainText(`breakpoint - line ${inCatch} of`);
+  await page.keyboard.press("F8");
+  await expect(more).toContainText("Total 16", { timeout: 30000 });
 });
 
 test("a breakpoint on a line with no statement moves to the next one, and is kept for the next visit", async ({ page }) => {

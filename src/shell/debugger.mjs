@@ -148,7 +148,7 @@ export function setUpDebugger(page) {
     const blind = method.blind ?? [];
     if (blind.includes(bp.line)) {
       bp.verified = false;
-      bp.reason = "a statement in a CATCH or CLEANUP block - the transpiler gives those no line yet, so the debugger cannot stop there";
+      bp.reason = "the transpiler gives this statement no line, so the debugger cannot stop there";
       return;
     }
     // Moved to the next statement, as SAP's does - but never over one that
@@ -161,7 +161,7 @@ export function setUpDebugger(page) {
     } else {
       bp.verified = false;
       bp.reason = skipped
-        ? "the next statement is in a CATCH or CLEANUP block, where the debugger cannot stop yet"
+        ? "the next statement has no line the debugger can stop at, and a stop further down would not be the one asked for"
         : "no statement the debugger can stop at on this line or below it in the method";
     }
   }
